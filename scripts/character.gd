@@ -135,7 +135,7 @@ func move_to(new_grid_pos: Vector2i) -> void:
 
 ## ダメージを受ける（防御力でダメージを軽減し、最低1ダメージは保証）
 func take_damage(raw_amount: int) -> void:
-	var actual := max(1, raw_amount - defense)
+	var actual: int = max(1, raw_amount - defense)
 	hp = max(0, hp - actual)
 	if hp <= 0:
 		die()
