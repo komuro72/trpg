@@ -200,6 +200,33 @@ scripts/
 
 ---
 
+### アセットディレクトリ構成リファクタリング ✅ 完了（Phase 2-1 と同タイミング）
+
+#### 変更内容
+- `assets/characters/` → `assets/images/characters/`（味方キャラクター画像）
+- `assets/images/enemies/`（敵キャラクター画像置き場）を新設
+- `assets/master/characters/`（味方JSONマスターデータ）を新設
+- `assets/master/enemies/`（敵JSONマスターデータ）を新設
+
+#### ファイル構成（変更後）
+```
+assets/
+  images/
+    characters/    味方キャラクター画像（hero_front.png 等）
+    enemies/       敵キャラクター画像（goblin_front.png 等、仮素材まだなし）
+  master/
+    characters/    hero.json
+    enemies/       goblin.json, enemies_list.json
+    maps/          dungeon_01.json
+```
+
+#### CharacterData のJSON化
+- ハードコードされたパラメータ・画像パスをすべて廃止
+- `static func load_from_json(path: String) -> CharacterData` を追加
+- `create_hero()` / `create_goblin()` はJSONパスへのラッパーとして残す
+
+---
+
 ### Phase 2-1: キャラクターステータス基盤 ✅ 完了
 
 #### 変更ファイル
@@ -288,6 +315,8 @@ scripts/game_map.gd                  JSON読み込み・_setup_enemies() 追加
 - `_setup_hero()` → `map_data.player_parties[0]` からスポーン座標を取得
 - `_setup_enemies()` → `EnemyManager` を生成・追加、`enemy_manager.setup()` 呼び出し
 - `_setup_camera()` / `_draw()` → `MapData.MAP_WIDTH/HEIGHT` 定数から `map_data.map_width/height` インスタンス変数に変更
+
+---
 
 ### Phase 2-3: LLMによるAI行動生成（未実装）
 - GodotからAnthropicのAPIを呼び出す基盤
