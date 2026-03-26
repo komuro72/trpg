@@ -37,12 +37,16 @@
 - 仕様書はClaude Codeが作成・更新、人間が確認する運用
 
 ## フェーズ
-- [ ] Phase 1: 主人公1人の移動・画像表示
+- [x] Phase 1: 主人公1人の移動・画像表示
 - [ ] Phase 2: 戦闘基盤（HP・攻撃・当たり判定）
 - [ ] Phase 3: 仲間AI・操作切替
 - [ ] Phase 4: 指示システム
 - [ ] Phase 5: ステージ・UI・バランス調整
 - [ ] Phase 6: Steam配布準備
+
+## リポジトリ
+- GitHub: https://github.com/komuro72/trpg
+- ブランチ: master
 
 ## 参照ファイル
 - docs/spec.md：詳細仕様書（実装前に参照すること）
