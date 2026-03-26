@@ -15,6 +15,10 @@ config/features=PackedStringArray("4.6", "Mobile")
 config/icon="res://icon.svg"
 run/main_scene="res://scenes/game_map.tscn"
 
+[autoload]
+
+GlobalConstants="*res://scripts/global_constants.gd"
+
 [physics]
 
 3d/physics_engine="Jolt Physics"

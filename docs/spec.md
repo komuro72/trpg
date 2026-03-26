@@ -19,10 +19,10 @@ scripts/
   party.gd               パーティー管理
 ```
 
-#### グリッド定数（game_map.gd / character.gd）
+#### グリッド定数（Phase 1-1 時点 / GlobalConstants導入前）
 | 定数 | 値 | 説明 |
 |------|-----|------|
-| CELL_SIZE | 48px | 1グリッドセルのピクセルサイズ |
+| CELL_SIZE | 48px | ※Phase 1-2 で GRID_SIZE=64 に変更済み |
 | MAP_WIDTH | 20 | マップ横幅（セル数） |
 | MAP_HEIGHT | 15 | マップ縦幅（セル数） |
 
@@ -51,28 +51,49 @@ scripts/
 
 ---
 
-### Phase 1-2: グラフィック表示（スプライト・4方向アニメーション）
+### Phase 1-2: グラフィック表示（スプライト・4方向切替） ✅ 完了
 
-#### 概要
-仮の四角形をスプライトに差し替え、4方向・歩行アニメーションを実装する。
-
-#### 追加・変更予定ファイル
+#### 実装済みファイル
 ```
 scripts/
-  character_data.gd      画像パス・アニメーション定義の一元管理（新規）
-assets/characters/       スプライトシート格納ディレクトリ（新規）
+  global_constants.gd    GRID_SIZE等のグローバル定数（Autoload）
+  character_data.gd      画像パス一元管理リソースクラス
+assets/characters/       スプライト素材格納ディレクトリ（仮素材なし→プレースホルダー表示）
 ```
+変更ファイル: `character.gd`, `game_map.gd`, `project.godot`
 
-#### 実装内容
-- `character.gd` の `_draw()` を `AnimatedSprite2D` に置き換え
-- `CharacterData` リソースクラスで画像パスを管理（CLAUDE.md 方針）
-- アニメーション名の規則: `walk_down` / `walk_up` / `walk_left` / `walk_right`
-- 待機アニメーション: `idle_down` / `idle_up` / `idle_left` / `idle_right`
-- Phase 1 はプロトタイプ素材（AI生成 or 仮矩形）。配布前に差し替え前提
+#### GlobalConstants（global_constants.gd / Autoload）
+| 定数 | 値 | 説明 |
+|------|-----|------|
+| GRID_SIZE | 64px | グリッド1マスのピクセルサイズ（旧 CELL_SIZE=48 から変更） |
+| SPRITE_SOURCE_WIDTH | 512px | スプライト素材の元サイズ（横） |
+| SPRITE_SOURCE_HEIGHT | 1024px | スプライト素材の元サイズ（縦） |
 
-#### 留意点
-- スプライトは正面向き（ドラクエ風）→ 斜め見下ろしマップ上では `y_sort_enabled` での Zオーダー制御が必要（Phase 1-3 と連携）
-- `CharacterData.gd` のパスを変えるだけで素材差し替えができる設計にする
+- スケール自動計算: `GRID_SIZE / SPRITE_SOURCE_WIDTH` = 0.125
+- 表示サイズ: 64 × 128px（GRID_SIZE × GRID_SIZE*2 の縦長 1:2 比率）
+
+#### CharacterData（character_data.gd）
+- `class_name CharacterData extends Resource`
+- フィールド: `character_id`, `sprite_front`, `sprite_back`, `sprite_left`, `sprite_right`
+- `static func create_hero() -> CharacterData` でヒーロー用データを生成
+- 画像パス規則: `res://assets/characters/{id}_front.png` など
+
+#### キャラクター向き（character.gd）
+- enum 変更: `Direction { FRONT, BACK, LEFT, RIGHT }`（旧 DOWN→FRONT, UP→BACK）
+- 移動方向マッピング:
+  - delta.y > 0 → FRONT, delta.y < 0 → BACK
+  - delta.x > 0 → RIGHT, delta.x < 0 → LEFT
+
+#### スプライト表示（character.gd）
+- `Sprite2D` を `_ready()` 内でコード生成（`add_child`）
+- `character_data` に有効な画像パスがあれば `Sprite2D.texture` に設定
+- 画像ファイルが存在しない場合: `Sprite2D` を非表示にし `_draw()` プレースホルダーを表示
+- 向き変更時（`move_to()` → `_apply_direction_texture()`）にテクスチャを切り替え
+- `CELL_SIZE` 参照をすべて `GlobalConstants.GRID_SIZE` に変更
+
+#### game_map.gd の変更点
+- `const CELL_SIZE` を廃止し `GlobalConstants.GRID_SIZE` を参照
+- ヒーロー生成時に `CharacterData.create_hero()` を設定
 
 ---
 
@@ -99,7 +120,7 @@ scripts/
 - Phase 1 はプロトタイプタイルで可（単色 or 仮素材）
 
 #### 留意点
-- `CELL_SIZE = 48` はタイルサイズと一致させる
+- `GlobalConstants.GRID_SIZE`（=64）はタイルサイズと一致させる
 - 斜め見下ろし視点では将来的にアイソメトリック対応が必要になる可能性があるが、Phase 1 は真上見下ろしで進める
 
 ---

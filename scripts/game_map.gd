@@ -1,9 +1,8 @@
 extends Node2D
 
-## グリッドマップ（Phase 1）
+## グリッドマップ
 ## グリッド描画 + キャラクター生成 + プレイヤー入力制御
 
-const CELL_SIZE: int = 48
 const MAP_WIDTH: int = 20
 const MAP_HEIGHT: int = 15
 
@@ -24,7 +23,8 @@ func _ready() -> void:
 func _setup_hero() -> void:
 	hero = Character.new()
 	hero.grid_pos = Vector2i(MAP_WIDTH / 2, MAP_HEIGHT / 2)
-	hero.char_color = Color(0.3, 0.7, 1.0)  # 水色
+	hero.placeholder_color = Color(0.3, 0.7, 1.0)  # 水色（素材がない場合）
+	hero.character_data = CharacterData.create_hero()
 	hero.name = "Hero"
 	add_child(hero)
 	hero.sync_position()
@@ -42,8 +42,9 @@ func _setup_controller() -> void:
 
 
 func _draw() -> void:
-	var total_w := MAP_WIDTH * CELL_SIZE
-	var total_h := MAP_HEIGHT * CELL_SIZE
+	var gs := GlobalConstants.GRID_SIZE
+	var total_w := MAP_WIDTH * gs
+	var total_h := MAP_HEIGHT * gs
 
 	# 背景
 	draw_rect(Rect2(0, 0, total_w, total_h), COLOR_BG)
@@ -51,8 +52,8 @@ func _draw() -> void:
 	# グリッド線
 	for x in range(MAP_WIDTH + 1):
 		var color := COLOR_GRID_ACCENT if x % 5 == 0 else COLOR_GRID
-		draw_line(Vector2(x * CELL_SIZE, 0), Vector2(x * CELL_SIZE, total_h), color)
+		draw_line(Vector2(x * gs, 0), Vector2(x * gs, total_h), color)
 
 	for y in range(MAP_HEIGHT + 1):
 		var color := COLOR_GRID_ACCENT if y % 5 == 0 else COLOR_GRID
-		draw_line(Vector2(0, y * CELL_SIZE), Vector2(total_w, y * CELL_SIZE), color)
+		draw_line(Vector2(0, y * gs), Vector2(total_w, y * gs), color)
