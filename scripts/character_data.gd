@@ -1,48 +1,65 @@
 class_name CharacterData
 extends Resource
 
-## キャラクター画像パス一元管理リソース
-## 素材差し替え時はここのパスを変えるだけでよい
+## キャラクターデータ管理リソース
+## パラメータ・画像パスはJSONから読み込む。素材差し替え時はJSONを変更するだけでよい。
 
-@export var character_id: String = ""
-@export var sprite_front: String = ""
-@export var sprite_back: String = ""
-@export var sprite_left: String = ""
-@export var sprite_right: String = ""
+var character_id: String = ""
+var character_name: String = ""
+var sprite_front: String = ""
+var sprite_back: String = ""
+var sprite_left: String = ""
+var sprite_right: String = ""
 
 ## 基本ステータス
-@export var max_hp: int = 1
-@export var attack: int = 1
-@export var defense: int = 0
+var max_hp: int = 1
+var attack: int = 1
+var defense: int = 0
 
 ## LLM行動生成用：自然言語でキャラクターの行動傾向を記述する
-@export var behavior_description: String = ""
+var behavior_description: String = ""
 
 
-## ヒーロー用データを生成する
+## JSONファイルからCharacterDataを生成する
+static func load_from_json(path: String) -> CharacterData:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		push_error("CharacterData: JSONファイルが見つかりません: " + path)
+		return null
+	var json_text := file.get_as_text()
+	file.close()
+
+	var parsed: Variant = JSON.parse_string(json_text)
+	if parsed == null or not parsed is Dictionary:
+		push_error("CharacterData: JSONのパースに失敗しました: " + path)
+		return null
+	var d := parsed as Dictionary
+
+	var data := CharacterData.new()
+	data.character_id         = d.get("id", "")
+	data.character_name       = d.get("name", "")
+	data.max_hp               = int(d.get("hp", 1))
+	data.attack               = int(d.get("attack", 1))
+	data.defense              = int(d.get("defense", 0))
+	data.behavior_description = d.get("behavior_description", "")
+
+	var sprites: Dictionary = d.get("sprites", {})
+	data.sprite_front = sprites.get("front", "")
+	data.sprite_back  = sprites.get("back", "")
+	data.sprite_left  = sprites.get("left", "")
+	data.sprite_right = sprites.get("right", "")
+
+	return data
+
+
+## ヒーロー用データをJSONから生成する
 static func create_hero() -> CharacterData:
-	var data := CharacterData.new()
-	data.character_id = "hero"
-	data.sprite_front = "res://assets/characters/hero_front.png"
-	data.sprite_back  = "res://assets/characters/hero_back.png"
-	data.sprite_left  = "res://assets/characters/hero_left.png"
-	data.sprite_right = "res://assets/characters/hero_right.png"
-	data.max_hp  = 100
-	data.attack  = 10
-	data.defense = 5
-	data.behavior_description = ""
-	return data
+	return load_from_json("res://assets/master/characters/hero.json")
 
 
-## ゴブリン用データを生成する
+## ゴブリン用データをJSONから生成する
 static func create_goblin() -> CharacterData:
-	var data := CharacterData.new()
-	data.character_id = "goblin"
-	data.max_hp  = 30
-	data.attack  = 5
-	data.defense = 2
-	data.behavior_description = "集団で行動する。臆病な性格で強いと思った相手からはすぐ逃げる。"
-	return data
+	return load_from_json("res://assets/master/enemies/goblin.json")
 
 
 ## 指定した向きの画像パスを返す

@@ -1,0 +1,14 @@
+{
+  "id": "goblin",
+  "name": "ゴブリン",
+  "hp": 30,
+  "attack": 5,
+  "defense": 2,
+  "behavior_description": "集団で行動する。臆病な性格で強いと思った相手からはすぐ逃げる。",
+  "sprites": {
+    "front": "res://assets/images/enemies/goblin_front.png",
+    "back":  "res://assets/images/enemies/goblin_back.png",
+    "left":  "res://assets/images/enemies/goblin_left.png",
+    "right": "res://assets/images/enemies/goblin_right.png"
+  }
+}
