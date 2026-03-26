@@ -240,9 +240,54 @@ assets/images/characters/               画像移動元: assets/characters/
 
 ---
 
-### Phase 2-2: 敵の配置（未実装）
-- 敵パーティーの固定配置（テスト用、将来ランダム配置に拡張予定）
-- プレイヤーが近づいたらアクティブ化
+### Phase 2-2: 敵の配置 ✅ 完了
+
+#### 新規・変更ファイル
+```
+assets/master/maps/dungeon_01.json   マップ定義（タイル・スポーン情報）（新規）
+scripts/map_data.gd                  load_from_json()・スポーン情報フィールド追加
+scripts/enemy_manager.gd             敵スポーン・アクティブ化管理（新規）
+scripts/game_map.gd                  JSON読み込み・_setup_enemies() 追加
+```
+
+#### dungeon_01.json の構造
+| フィールド | 内容 |
+|-----------|------|
+| `id` | マップID |
+| `width` / `height` | マップサイズ（20×15） |
+| `tiles` | 2次元配列（0=FLOOR, 1=WALL）。外周WALL・内側FLOOR |
+| `player_parties` | `[{party_id, members: [{character_id, x, y}]}]` |
+| `enemy_parties` | 同形式。party_id:1 にゴブリン3体 |
+
+#### スポーン配置（dungeon_01.json）
+| キャラクター | 座標 |
+|------------|------|
+| 主人公（hero） | (2, 2) |
+| ゴブリン1 | (10, 5) |
+| ゴブリン2 | (11, 5) |
+| ゴブリン3 | (10, 6) |
+
+#### MapData の変更点
+- `map_width` / `map_height` をインスタンス変数に昇格（JSON上書き対応）
+- `player_parties` / `enemy_parties` 配列を追加
+- `static func load_from_json(path) -> MapData`：JSON読み込みファクトリ。失敗時はデフォルトマップにフォールバック
+- `get_tile()` / `is_walkable()` のサイズ参照を `map_width`/`map_height` に変更
+- `MAP_WIDTH`/`MAP_HEIGHT` 定数は `player_controller.gd` フォールバック用に残す
+
+#### EnemyManager（enemy_manager.gd）
+- `class_name EnemyManager extends Node`
+- `const ACTIVATION_RANGE = 5`（ユークリッド距離）
+- `setup(spawn_list, player)` — JSONのmembersリストから敵をスポーン
+- `_spawn_enemy(char_id, grid_pos)` — `get_parent().add_child()` でGameMapに追加
+- `_process()` — 未アクティブ時のみ距離チェック。5マス以内で `_activated = true`
+- アクティブ化後の行動は Phase 2-3（LLM）で実装予定
+- 敵死亡時は `_on_enemy_died()` で `_enemies` と `enemy_party` から除去
+
+#### game_map.gd の変更点
+- `_setup_map()` → `MapData.load_from_json(MAP_JSON_PATH)` に変更
+- `_setup_hero()` → `map_data.player_parties[0]` からスポーン座標を取得
+- `_setup_enemies()` → `EnemyManager` を生成・追加、`enemy_manager.setup()` 呼び出し
+- `_setup_camera()` / `_draw()` → `MapData.MAP_WIDTH/HEIGHT` 定数から `map_data.map_width/height` インスタンス変数に変更
 
 ### Phase 2-3: LLMによるAI行動生成（未実装）
 - GodotからAnthropicのAPIを呼び出す基盤

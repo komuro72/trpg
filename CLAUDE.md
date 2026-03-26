@@ -28,9 +28,47 @@
 ## アセット方針
 - キャラクター画像：AI生成（プロトタイプは仮素材・差し替え前提）
 - 配布前に商用利用可能な素材に差し替える
-- 画像パスはCharacterData.gdで一元管理
 - スプライト：4方向（前後左右）、512x1024px
 - 表示サイズはGRID_SIZEから自動計算（1:2の縦長を維持）
+
+## ファイル構成
+- assets/master/characters/：味方キャラクターのマスターデータ（JSON）
+- assets/master/enemies/：敵キャラクターのマスターデータ（JSON、種類ごとにファイルを分ける）
+- assets/master/enemies/enemies_list.json：読み込む敵ファイルのリスト
+- assets/master/maps/：マップデータ（JSON、マップごとにファイルを分ける）
+- assets/images/characters/：味方キャラクターの画像
+- assets/images/enemies/：敵キャラクターの画像
+- JSONに画像ファイルパスを含めて一元管理
+
+## マップデータ仕様
+- タイルデータ（壁・床）、プレイヤーパーティー初期配置、敵パーティー初期配置をひとまとめに管理
+- プレイヤー・敵ともにパーティー単位で配置情報を記述（将来の複数パーティー対応を考慮）
+```json
+{
+  "map_id": "dungeon_01",
+  "width": 20,
+  "height": 15,
+  "tiles": [...],
+  "player_parties": [
+    {
+      "party_id": 1,
+      "members": [
+        { "character_id": "hero", "x": 2, "y": 2 }
+      ]
+    }
+  ],
+  "enemy_parties": [
+    {
+      "party_id": 1,
+      "members": [
+        { "enemy_id": "goblin", "x": 10, "y": 5 },
+        { "enemy_id": "goblin", "x": 11, "y": 5 },
+        { "enemy_id": "goblin", "x": 10, "y": 6 }
+      ]
+    }
+  ]
+}
+```
 
 ## グリッド・表示設定
 - GRID_SIZEを定数で一元管理（GlobalConstants.gdなど）
@@ -80,8 +118,10 @@
     - HP・攻撃力・防御力などの基本パラメータ
     - キャラクターデータに自然言語の行動説明フィールドを追加
     - 死亡処理
-  - [ ] Phase 2-2: 敵の配置
-    - 敵パーティーの固定配置（テスト用、将来ランダム配置に拡張予定）
+  - [x] Phase 2-2: 敵の配置
+    - マップデータ（dungeon_01.json）からタイル・プレイヤー・敵の配置を読み込む
+    - 敵パーティーをパーティー単位で配置（将来の複数パーティー対応を考慮）
+    - テスト構成：ゴブリン3体（party_id: 1）を固定位置に配置
     - プレイヤーが近づいたらアクティブ化
   - [ ] Phase 2-3: LLMによるAI行動生成
     - GodotからAnthropicのAPIを呼び出す基盤
