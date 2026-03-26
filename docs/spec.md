@@ -140,29 +140,38 @@ scripts/
 
 ---
 
-### Phase 1-4: カメラ・スクロール（追従・範囲制限）
+### Phase 1-4: カメラ・スクロール（追従・範囲制限） ✅ 完了
 
-#### 概要
-主人公の移動に追従する `Camera2D` を実装し、マップ端でのクリッピングを行う。
-
-#### 追加・変更予定ファイル
+#### 実装済みファイル
 ```
-scenes/
-  game_map.tscn          Camera2D ノードを Hero の子に追加
 scripts/
-  game_map.gd            カメラ範囲制限の設定
+  camera_controller.gd   デッドゾーン追従カメラ制御（新規）
 ```
+変更ファイル: `game_map.gd`
 
-#### 実装内容
-- `Camera2D` を `Hero` ノードの子として配置（自動追従）
-- カメラ範囲制限（`limit_left` / `limit_right` / `limit_top` / `limit_bottom`）をマップサイズに合わせて設定
-  - `limit_right = MAP_WIDTH * CELL_SIZE`
-  - `limit_bottom = MAP_HEIGHT * CELL_SIZE`
-- スムーズ追従: `position_smoothing_enabled = true`（任意）
+#### CameraController（camera_controller.gd）
+- `class_name CameraController extends Node`
+- `var character: Character` / `var camera: Camera2D` の参照を保持
+- `_process()` でキャラクターのグリッド座標変化を検知、変化時に `_update()` を呼ぶ
 
-#### 留意点
-- マップがウィンドウサイズより小さい場合はカメラ追従不要（範囲制限のみ）
-- 将来のマップ拡張を見越して、マップサイズは定数から動的に取得する設計にする
+#### デッドゾーン方式
+- `DEAD_ZONE_RATIO = 0.70`（画面サイズの70%）
+- デッドゾーンは `(viewport_size × 0.70)` ピクセルの矩形。カメラ中心に対して±half_cells 以内なら固定
+- `_dead_zone_half_cells()`: `floor(viewport × 0.70 / 2 / GRID_SIZE)` でグリッドセル数に変換（最小1）
+- キャラクターがデッドゾーンを超えたら `_cam_grid` をスナップ（グリッド単位）
+- なめらかスクロールは将来のアニメーション実装時に追加
+
+#### マップ端制限・マップ外の黒表示
+- `Camera2D.limit_*` をマップピクセルサイズに設定 → Godot が自動でカメラをクランプ
+  - `limit_left = 0`, `limit_right = MAP_WIDTH × GRID_SIZE`
+  - `limit_top = 0`, `limit_bottom = MAP_HEIGHT × GRID_SIZE`
+- マップが画面より小さい場合: Camera2D の limit が自動でマップを中央表示
+- マップ外の背景色: `RenderingServer.set_default_clear_color(Color.BLACK)` で黒に設定
+
+#### game_map.gd の変更点
+- `_setup_camera()` を追加（Camera2D + CameraController の生成・設定）
+- `_ready()` の末尾で `_setup_camera()` を呼び出す
+- 視界システム・探索状態管理は実装しない（将来のフェーズで追加予定）
 
 ---
 

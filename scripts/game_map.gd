@@ -12,12 +12,14 @@ var map_data: MapData
 var party: Party
 var player_controller: PlayerController
 var hero: Character
+var camera_controller: CameraController
 
 
 func _ready() -> void:
 	_setup_map()
 	_setup_hero()
 	_setup_controller()
+	_setup_camera()
 
 
 func _setup_map() -> void:
@@ -43,6 +45,27 @@ func _setup_controller() -> void:
 	player_controller.map_data = map_data
 	player_controller.name = "PlayerController"
 	add_child(player_controller)
+
+
+func _setup_camera() -> void:
+	# マップ外を黒で表示
+	RenderingServer.set_default_clear_color(Color.BLACK)
+
+	var gs := GlobalConstants.GRID_SIZE
+	var cam := Camera2D.new()
+	cam.name = "Camera"
+	# マップ端でカメラを止める（Godot の limit 機能で自動クランプ）
+	cam.limit_left   = 0
+	cam.limit_right  = MapData.MAP_WIDTH  * gs
+	cam.limit_top    = 0
+	cam.limit_bottom = MapData.MAP_HEIGHT * gs
+	add_child(cam)
+
+	camera_controller = CameraController.new()
+	camera_controller.character = hero
+	camera_controller.camera    = cam
+	camera_controller.name      = "CameraController"
+	add_child(camera_controller)
 
 
 func _draw() -> void:
