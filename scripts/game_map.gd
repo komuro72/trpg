@@ -1,29 +1,33 @@
 extends Node2D
 
 ## グリッドマップ
-## グリッド描画 + キャラクター生成 + プレイヤー入力制御
+## タイル描画 + キャラクター生成 + プレイヤー入力制御
 
-const MAP_WIDTH: int = 20
-const MAP_HEIGHT: int = 15
+## タイル色（将来タイル画像に差し替える場合はここを変更する）
+const COLOR_FLOOR       := Color(0.40, 0.40, 0.40)       # 床: グレー
+const COLOR_WALL        := Color(0.20, 0.20, 0.20)       # 壁: 暗いグレー
+const COLOR_GRID_LINE   := Color(0.30, 0.30, 0.30, 0.5)  # グリッド線: 半透明
 
-const COLOR_BG := Color(0.10, 0.14, 0.10)
-const COLOR_GRID := Color(0.25, 0.30, 0.25)
-const COLOR_GRID_ACCENT := Color(0.35, 0.42, 0.35)  # 5セルごとの補助線
-
+var map_data: MapData
 var party: Party
 var player_controller: PlayerController
 var hero: Character
 
 
 func _ready() -> void:
+	_setup_map()
 	_setup_hero()
 	_setup_controller()
 
 
+func _setup_map() -> void:
+	map_data = MapData.new()
+
+
 func _setup_hero() -> void:
 	hero = Character.new()
-	hero.grid_pos = Vector2i(MAP_WIDTH / 2, MAP_HEIGHT / 2)
-	hero.placeholder_color = Color(0.3, 0.7, 1.0)  # 水色（素材がない場合）
+	hero.grid_pos = Vector2i(MapData.MAP_WIDTH / 2, MapData.MAP_HEIGHT / 2)
+	hero.placeholder_color = Color(0.3, 0.7, 1.0)
 	hero.character_data = CharacterData.create_hero()
 	hero.name = "Hero"
 	add_child(hero)
@@ -36,24 +40,21 @@ func _setup_hero() -> void:
 func _setup_controller() -> void:
 	player_controller = PlayerController.new()
 	player_controller.character = hero
-	player_controller.map_size = Vector2i(MAP_WIDTH, MAP_HEIGHT)
+	player_controller.map_data = map_data
 	player_controller.name = "PlayerController"
 	add_child(player_controller)
 
 
 func _draw() -> void:
 	var gs := GlobalConstants.GRID_SIZE
-	var total_w := MAP_WIDTH * gs
-	var total_h := MAP_HEIGHT * gs
 
-	# 背景
-	draw_rect(Rect2(0, 0, total_w, total_h), COLOR_BG)
+	for y in range(MapData.MAP_HEIGHT):
+		for x in range(MapData.MAP_WIDTH):
+			var tile := map_data.get_tile(Vector2i(x, y))
+			var fill_color := COLOR_FLOOR if tile == MapData.TileType.FLOOR else COLOR_WALL
+			var rect := Rect2(x * gs, y * gs, gs, gs)
 
-	# グリッド線
-	for x in range(MAP_WIDTH + 1):
-		var color := COLOR_GRID_ACCENT if x % 5 == 0 else COLOR_GRID
-		draw_line(Vector2(x * gs, 0), Vector2(x * gs, total_h), color)
-
-	for y in range(MAP_HEIGHT + 1):
-		var color := COLOR_GRID_ACCENT if y % 5 == 0 else COLOR_GRID
-		draw_line(Vector2(0, y * gs), Vector2(total_w, y * gs), color)
+			# タイル塗りつぶし
+			draw_rect(rect, fill_color)
+			# グリッド線（アウトライン）
+			draw_rect(rect, COLOR_GRID_LINE, false)

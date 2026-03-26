@@ -19,6 +19,7 @@ var _has_texture: bool = false
 
 
 func _ready() -> void:
+	z_index = 1  # タイル（z_index=0）より手前に表示
 	_setup_sprite()
 	sync_position()
 

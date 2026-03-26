@@ -5,7 +5,7 @@ extends Node
 ## Character ノードに差し替え可能なコントローラー設計
 
 var character: Character = null
-var map_size: Vector2i = Vector2i(20, 15)
+var map_data: MapData = null
 
 # キー長押し時の移動間隔（秒）
 const MOVE_INTERVAL_INITIAL: float = 0.20
@@ -29,12 +29,10 @@ func _process(delta: float) -> void:
 		return
 
 	if not _holding:
-		# 最初のキー入力：即座に移動
 		_try_move(dir)
 		_holding = true
 		_move_timer = MOVE_INTERVAL_INITIAL
 	elif _move_timer <= 0.0:
-		# 長押し：一定間隔で移動
 		_try_move(dir)
 		_move_timer = MOVE_INTERVAL_REPEAT
 
@@ -53,9 +51,14 @@ func _get_input_direction() -> Vector2i:
 
 func _try_move(dir: Vector2i) -> void:
 	var new_pos := character.grid_pos + dir
-	if _is_within_map(new_pos):
+	if _can_move_to(new_pos):
 		character.move_to(new_pos)
 
 
-func _is_within_map(pos: Vector2i) -> bool:
-	return pos.x >= 0 and pos.x < map_size.x and pos.y >= 0 and pos.y < map_size.y
+## 移動可否を判定する（WALL・範囲外は不可）
+func _can_move_to(pos: Vector2i) -> bool:
+	if map_data != null:
+		return map_data.is_walkable(pos)
+	# map_data未設定時のフォールバック（境界チェックのみ）
+	return pos.x >= 0 and pos.x < MapData.MAP_WIDTH \
+		and pos.y >= 0 and pos.y < MapData.MAP_HEIGHT
