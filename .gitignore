@@ -1,0 +1,15 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# エクスポート成果物
+/export/
+*.apk
+*.aab
+*.ipa
+*.exe
+*.x86_64
+
+# OS
+.DS_Store
+Thumbs.db
