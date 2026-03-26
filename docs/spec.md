@@ -187,11 +187,65 @@ scripts/
 
 ---
 
-## Phase 2: 戦闘基盤（未実装）
-- HP・攻撃・当たり判定
-- ダメージ計算
-- 敵キャラクター（仮）
-- `AIController` の基礎実装
+## Phase 2: 戦闘基盤
+
+### テスト構成
+- 味方：プレイヤー操作の主人公1人
+- 敵：ゴブリン3体（固定配置）
+- クリア条件は未実装（Phase 2 は動作確認のみ）
+
+---
+
+### Phase 2-1: キャラクターステータス基盤 ✅ 完了
+
+#### 変更ファイル
+```
+scripts/
+  character_data.gd   ステータスフィールド・create_goblin() 追加
+  character.gd        ステータス変数・take_damage()・die() 追加
+  game_map.gd         died シグナル接続・_on_character_died() 追加
+```
+
+#### CharacterData の追加フィールド
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `max_hp` | int | 最大HP |
+| `attack` | int | 攻撃力 |
+| `defense` | int | 防御力 |
+| `behavior_description` | String | LLM行動生成用の自然言語説明 |
+
+#### テスト用ステータス
+| キャラクター | max_hp | attack | defense | behavior_description |
+|------------|--------|--------|---------|----------------------|
+| 主人公（hero） | 100 | 10 | 5 | （空欄） |
+| ゴブリン（goblin） | 30 | 5 | 2 | "集団で行動する。臆病な性格で強いと思った相手からはすぐ逃げる。" |
+
+#### Character の追加仕様
+- `signal died(character: Character)` — 死亡時に発火
+- `var hp / max_hp / attack / defense` — `_ready()` で `character_data` から初期化
+- `take_damage(raw_amount: int)` — ダメージ計算: `max(1, raw_amount - defense)` を HP から減算。HP が 0 以下で `die()` を呼ぶ
+- `die()` — `died` シグナルを emit し `queue_free()` でフィールドから除去
+
+#### game_map.gd の変更点
+- `hero.died.connect(_on_character_died)` でシグナル接続
+- `_on_character_died(character)` で `party.remove_member(character)` を呼ぶ
+
+---
+
+### Phase 2-2: 敵の配置（未実装）
+- 敵パーティーの固定配置（テスト用、将来ランダム配置に拡張予定）
+- プレイヤーが近づいたらアクティブ化
+
+### Phase 2-3: LLMによるAI行動生成（未実装）
+- GodotからAnthropicのAPIを呼び出す基盤
+- 自然言語の行動説明＋現在の状況をLLMに送信し行動を決定
+- まずゴブリン1種類でテスト
+- リアルタイムLLM判断 vs ルール事前生成は検証結果を踏まえて判断
+
+### Phase 2-4: 移動・攻撃の実装（未実装）
+- AI行動生成に基づく敵の移動・攻撃
+- プレイヤーの攻撃
+- 当たり判定・ダメージ処理
 
 ## Phase 3: 仲間AI・操作切替（未実装）
 - `AIController` の本実装

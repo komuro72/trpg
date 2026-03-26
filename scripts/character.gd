@@ -3,13 +3,23 @@ extends Node2D
 
 ## キャラクター基底クラス
 ## Phase 1-2: Sprite2D による4方向画像切替。素材がない場合はプレースホルダー表示。
+## Phase 2-1: HP・攻撃力・防御力・死亡処理を追加。
 
 ## 向き定義（ドラクエ風：FRONT=手前, BACK=奥, LEFT=左, RIGHT=右）
 enum Direction { FRONT, BACK, LEFT, RIGHT }
 
+## キャラクターが死亡してフィールドから除去されたときに発火する
+signal died(character: Character)
+
 var grid_pos: Vector2i = Vector2i(0, 0)
 var facing: Direction = Direction.FRONT
 var character_data: CharacterData = null
+
+## 基本ステータス（character_data から _ready() で初期化）
+var hp: int = 1
+var max_hp: int = 1
+var attack: int = 1
+var defense: int = 0
 
 ## プレースホルダー色（素材がない場合に使用）
 var placeholder_color: Color = Color(0.3, 0.7, 1.0)
@@ -20,8 +30,19 @@ var _has_texture: bool = false
 
 func _ready() -> void:
 	z_index = 1  # タイル（z_index=0）より手前に表示
+	_init_stats()
 	_setup_sprite()
 	sync_position()
+
+
+## character_data からステータスを初期化する
+func _init_stats() -> void:
+	if character_data == null:
+		return
+	max_hp  = character_data.max_hp
+	hp      = max_hp
+	attack  = character_data.attack
+	defense = character_data.defense
 
 
 func _setup_sprite() -> void:
@@ -110,3 +131,17 @@ func move_to(new_grid_pos: Vector2i) -> void:
 	grid_pos = new_grid_pos
 	sync_position()
 	_apply_direction_texture()
+
+
+## ダメージを受ける（防御力でダメージを軽減し、最低1ダメージは保証）
+func take_damage(raw_amount: int) -> void:
+	var actual := max(1, raw_amount - defense)
+	hp = max(0, hp - actual)
+	if hp <= 0:
+		die()
+
+
+## 死亡処理：シグナルを発火してフィールドから除去する
+func die() -> void:
+	died.emit(self)
+	queue_free()

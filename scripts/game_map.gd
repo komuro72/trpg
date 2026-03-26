@@ -37,6 +37,7 @@ func _setup_hero() -> void:
 
 	party = Party.new()
 	party.add_member(hero)
+	hero.died.connect(_on_character_died)
 
 
 func _setup_controller() -> void:
@@ -66,6 +67,11 @@ func _setup_camera() -> void:
 	camera_controller.camera    = cam
 	camera_controller.name      = "CameraController"
 	add_child(camera_controller)
+
+
+## キャラクターの死亡シグナルを受け取り、パーティーから除去する
+func _on_character_died(character: Character) -> void:
+	party.remove_member(character)
 
 
 func _draw() -> void:
