@@ -19,3 +19,6 @@ Thumbs.db
 
 # APIキー（絶対にコミットしない）
 api_key.txt
+
+# LLM生成ダンジョン（実行時生成、コミットしない）
+assets/master/maps/dungeon_generated.json
