@@ -22,6 +22,10 @@ func _process(delta: float) -> void:
 	if character == null:
 		return
 
+	# 攻撃（スペースキー）：移動とは独立して処理
+	if Input.is_action_just_pressed("ui_accept"):
+		_attack()
+
 	_move_timer -= delta
 
 	var dir := _get_input_direction()
@@ -56,6 +60,18 @@ func _try_move(dir: Vector2i) -> void:
 	var new_pos := character.grid_pos + dir
 	if _can_move_to(new_pos):
 		character.move_to(new_pos)
+
+
+## 向いている方向の隣接マスにいる敵を攻撃する
+func _attack() -> void:
+	var attack_pos := character.grid_pos + Character.dir_to_vec(character.facing)
+	for blocker: Character in blocking_characters:
+		if attack_pos in blocker.get_occupied_tiles():
+			var multiplier := Character.get_direction_multiplier(character, blocker)
+			blocker.take_damage(character.attack, multiplier)
+			print("[Player] → %s  %.1fx  HP:%d/%d" % \
+				[blocker.name, multiplier, blocker.hp, blocker.max_hp])
+			return
 
 
 ## 移動可否を判定する（WALL・範囲外・キャラクター占有は不可）

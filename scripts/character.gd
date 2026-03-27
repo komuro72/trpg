@@ -139,12 +139,35 @@ func move_to(new_grid_pos: Vector2i) -> void:
 	_apply_direction_texture()
 
 
-## ダメージを受ける（防御力でダメージを軽減し、最低1ダメージは保証）
-func take_damage(raw_amount: int) -> void:
-	var actual: int = max(1, raw_amount - defense)
+## ダメージを受ける（方向倍率 × 攻撃力 − 防御力、最低1ダメージ保証）
+func take_damage(raw_amount: int, multiplier: float = 1.0) -> void:
+	var actual: int = max(1, int(float(raw_amount) * multiplier) - defense)
 	hp = max(0, hp - actual)
 	if hp <= 0:
 		die()
+
+
+## 攻撃者から対象を攻撃したときの方向ダメージ倍率を返す
+## 正面：1.0倍 / 側面：1.5倍 / 背面：2.0倍
+static func get_direction_multiplier(attacker: Character, target: Character) -> float:
+	# targetから見たattackerの位置 = 攻撃が来る方向
+	var attack_from := attacker.grid_pos - target.grid_pos
+	var target_fwd  := dir_to_vec(target.facing)
+	if attack_from == target_fwd:
+		return 1.0  # 正面
+	elif attack_from == -target_fwd:
+		return 2.0  # 背面
+	return 1.5      # 側面
+
+
+## Direction enum → グリッド方向ベクトル
+static func dir_to_vec(dir: Direction) -> Vector2i:
+	match dir:
+		Direction.FRONT: return Vector2i( 0,  1)
+		Direction.BACK:  return Vector2i( 0, -1)
+		Direction.LEFT:  return Vector2i(-1,  0)
+		Direction.RIGHT: return Vector2i( 1,  0)
+	return Vector2i.ZERO
 
 
 ## 死亡処理：シグナルを発火してフィールドから除去する
