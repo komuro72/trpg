@@ -19,6 +19,10 @@ var defense: int = 0
 ## LLM行動生成用：自然言語でキャラクターの行動傾向を記述する
 var behavior_description: String = ""
 
+## 攻撃クールタイム（秒）
+var pre_delay: float = 0.3   # 攻撃前の溜め時間
+var post_delay: float = 0.5  # 攻撃後の硬直時間
+
 
 ## JSONファイルからCharacterDataを生成する
 static func load_from_json(path: String) -> CharacterData:
@@ -42,6 +46,8 @@ static func load_from_json(path: String) -> CharacterData:
 	data.attack               = int(d.get("attack", 1))
 	data.defense              = int(d.get("defense", 0))
 	data.behavior_description = d.get("behavior_description", "")
+	data.pre_delay            = float(d.get("pre_delay", 0.3))
+	data.post_delay           = float(d.get("post_delay", 0.5))
 
 	var sprites: Dictionary = d.get("sprites", {})
 	data.sprite_front = sprites.get("front", "")

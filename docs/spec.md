@@ -318,11 +318,54 @@ scripts/game_map.gd                  JSON読み込み・_setup_enemies() 追加
 
 ---
 
-### Phase 2-3: LLMによるAI行動生成（未実装）
-- GodotからAnthropicのAPIを呼び出す基盤
-- 自然言語の行動説明＋現在の状況をLLMに送信し行動を決定
-- まずゴブリン1種類でテスト
-- リアルタイムLLM判断 vs ルール事前生成は検証結果を踏まえて判断
+### Phase 2-3: LLMによるAI行動生成 ✅ 完了
+
+#### 新規・変更ファイル
+```
+scripts/llm_client.gd      Anthropic API HTTPラッパー（新規）
+scripts/enemy_ai.gd        アクションキュー管理・LLM呼び出し制御（新規）
+scripts/enemy_manager.gd   アクティブ化後に EnemyAI を起動するよう変更
+scripts/character_data.gd  pre_delay / post_delay フィールド追加
+assets/master/enemies/goblin.json  pre_delay / post_delay 追加
+```
+
+#### LLMClient（llm_client.gd）
+- `class_name LLMClient extends Node`
+- APIキー: `res://api_key.txt` から読み込み（.gitignore済み）
+- モデル: `claude-haiku-4-5-20251001` / max_tokens: 1024
+- `request(prompt)` — HTTPRequest で非同期送信。`is_requesting` フラグで多重送信防止
+- シグナル `response_received(result: Dictionary)` — パース済みDictionaryを返す
+- シグナル `request_failed(error: String)` — エラー内容を返す
+- LLMが ` ```json ... ``` ` で囲んで返した場合も `_extract_json()` で中身を取り出す
+
+#### EnemyAI（enemy_ai.gd）
+- `class_name EnemyAI extends Node`
+- `setup(enemies, player, behavior_description)` — アクティブ化後に EnemyManager から呼び出す
+- `_queues: Dictionary` — メンバーIDごとのアクションキュー `{ "Goblin0": [{...}, ...] }`
+- `_current: Dictionary` — 現在実行中のアクション（Phase 2-4 で使用）
+- `QUEUE_REFILL_THRESHOLD = 1` — キューがこの数以下で再リクエスト
+- `_force_regen: bool` — 攻撃を受けたなど状況変化時の強制再生成フラグ
+- `notify_situation_changed()` — 外部から状況変化を通知（`_force_regen = true`）
+- `pop_next_action(enemy_id)` / `complete_action(enemy_id)` — Phase 2-4 用インターフェース
+
+#### CharacterData の追加フィールド
+| フィールド | 型 | デフォルト | 説明 |
+|-----------|-----|----------|------|
+| `pre_delay` | float | 0.3 | 攻撃前の溜め時間（秒） |
+| `post_delay` | float | 0.5 | 攻撃後の硬直時間（秒） |
+
+#### goblin.json の追加値
+- `pre_delay: 0.3` / `post_delay: 0.5`
+
+#### 動作確認
+- プレイヤーが5マス以内に近づくと `EnemyAI.setup()` → LLMリクエスト開始
+- レスポンス受信後 `[EnemyAI] キュー更新:` をコンソール出力
+- Phase 2-4 で `pop_next_action()` が呼ばれてキューが消費されると自動補充される
+
+#### LLM呼び出し設計上の決定事項
+- LLMへのプロンプトはパーティー単位（3体まとめて1回のAPI呼び出し）
+- 返答は行動シーケンス形式（`relative_position` で移動先を指定）
+- リアルタイム判断方式（ルール事前生成ではなく）を採用
 
 ### Phase 2-4: 移動・攻撃の実装（未実装）
 - AI行動生成に基づく敵の移動・攻撃

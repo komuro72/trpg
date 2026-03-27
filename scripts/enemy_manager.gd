@@ -3,12 +3,13 @@ extends Node
 
 ## 敵の生成・アクティブ化を管理する
 ## Phase 2-2: マップJSONの配置情報に基づいてスポーン。プレイヤーが近づいたらアクティブ化。
-## Phase 2-3: アクティブ化後の行動（移動・攻撃）はLLMによるAI行動生成で実装予定。
+## Phase 2-3: アクティブ化後に EnemyAI を起動してLLMによる行動生成を開始する。
 
 ## プレイヤーがこのマス数（ユークリッド距離）以内に入ったらアクティブ化
 const ACTIVATION_RANGE: int = 5
 
 var enemy_party: Party
+var enemy_ai: EnemyAI
 var _player: Character
 var _enemies: Array[Character] = []
 var _activated: bool = false
@@ -49,7 +50,20 @@ func _process(_delta: float) -> void:
 	for enemy: Character in _enemies:
 		if float((enemy.grid_pos - _player.grid_pos).length()) <= float(ACTIVATION_RANGE):
 			_activated = true
+			_start_ai()
 			break
+
+
+## EnemyAI を生成してLLMによる行動生成を開始する
+func _start_ai() -> void:
+	var behavior := ""
+	if not _enemies.is_empty() and _enemies[0].character_data != null:
+		behavior = _enemies[0].character_data.behavior_description
+
+	enemy_ai = EnemyAI.new()
+	enemy_ai.name = "EnemyAI"
+	add_child(enemy_ai)
+	enemy_ai.setup(_enemies, _player, behavior)
 
 
 func _on_enemy_died(character: Character) -> void:
