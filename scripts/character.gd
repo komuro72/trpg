@@ -107,6 +107,12 @@ func _get_indicator_offset() -> Vector2:
 	return Vector2.ZERO
 
 
+## このキャラクターが占有するグリッド座標の一覧を返す
+## 将来的に複数マスを占有するキャラクターはこのメソッドをオーバーライドする
+func get_occupied_tiles() -> Array[Vector2i]:
+	return [grid_pos]
+
+
 ## グリッド座標をワールド座標に同期する
 func sync_position() -> void:
 	var gs := GlobalConstants.GRID_SIZE

@@ -340,13 +340,13 @@ assets/master/enemies/goblin.json  pre_delay / post_delay 追加
 
 #### EnemyAI（enemy_ai.gd）
 - `class_name EnemyAI extends Node`
-- `setup(enemies, player, behavior_description)` — アクティブ化後に EnemyManager から呼び出す
+- `setup(enemies, player, behavior_description, map_data)` — アクティブ化後に EnemyManager から呼び出す
 - `_queues: Dictionary` — メンバーIDごとのアクションキュー `{ "Goblin0": [{...}, ...] }`
-- `_current: Dictionary` — 現在実行中のアクション（Phase 2-4 で使用）
+- `_current: Dictionary` — 現在実行中のアクション
 - `QUEUE_REFILL_THRESHOLD = 1` — キューがこの数以下で再リクエスト
 - `_force_regen: bool` — 攻撃を受けたなど状況変化時の強制再生成フラグ
 - `notify_situation_changed()` — 外部から状況変化を通知（`_force_regen = true`）
-- `pop_next_action(enemy_id)` / `complete_action(enemy_id)` — Phase 2-4 用インターフェース
+- `complete_action(enemy_id)` — アクション完了を通知（`_current` から除去）
 
 #### CharacterData の追加フィールド
 | フィールド | 型 | デフォルト | 説明 |
@@ -367,9 +367,55 @@ assets/master/enemies/goblin.json  pre_delay / post_delay 追加
 - 返答は行動シーケンス形式（`relative_position` で移動先を指定）
 - リアルタイム判断方式（ルール事前生成ではなく）を採用
 
-### Phase 2-4: 移動・攻撃の実装（未実装）
-- AI行動生成に基づく敵の移動・攻撃
+### Phase 2-4: 移動・攻撃の実装（進行中）
+
+#### 実装済み：敵の移動 + 占有チェック
+
+##### 変更ファイル
+```
+scripts/enemy_ai.gd          ステートマシン・移動実行ロジックを追加
+scripts/enemy_manager.gd     setup() に map_data 追加、get_enemies() 追加
+scripts/game_map.gd          enemy_manager.setup() に map_data を渡す
+scripts/character.gd         get_occupied_tiles() を追加
+scripts/player_controller.gd blocking_characters・占有チェックを追加
+```
+
+##### EnemyAI ステートマシン（Phase 2-4 追加分）
+| 定数 | 値 | 説明 |
+|------|-----|------|
+| `MOVE_INTERVAL` | 0.4秒 | タイル移動の間隔 |
+| `WAIT_DURATION` | 1.0秒 | wait アクションの待機時間 |
+
+```
+IDLE → キューからアクションを取り出す
+  "move"  → MOVING（MOVE_INTERVAL 秒ごとに1タイル移動、目標到達で IDLE へ）
+  "wait"  → WAITING（WAIT_DURATION 秒後に IDLE へ）
+  "attack"等 → 即 IDLE（Phase 2-4 後半で実装予定）
+```
+
+##### 移動アルゴリズム
+- `_resolve_goal()`: `relative_position`（front/back/left_side/right_side/adjacent）をプレイヤーの向き基準でグリッド座標に変換
+- `_step_toward_goal()`: マンハッタン距離が大きい軸を優先するグリーディー移動
+- `_is_passable()`: マップ通行可否 + `get_occupied_tiles()` で全キャラ占有チェック
+
+##### relative_position → オフセット変換（プレイヤーの向き基準）
+| プレイヤーの向き | front | back | left_side | right_side |
+|----------------|-------|------|-----------|------------|
+| FRONT (+Y)     | (0,+1)| (0,-1)| (-1,0)  | (+1,0)     |
+| BACK (-Y)      | (0,-1)| (0,+1)| (+1,0)  | (-1,0)     |
+| RIGHT (+X)     | (+1,0)| (-1,0)| (0,-1)  | (0,+1)     |
+| LEFT (-X)      | (-1,0)| (+1,0)| (0,+1)  | (0,-1)     |
+
+##### 占有チェック設計（複数マスキャラ対応）
+- `Character.get_occupied_tiles() -> Array[Vector2i]` — 現在は `[grid_pos]` を返す
+- 将来の複数マスキャラはこのメソッドをオーバーライドするだけで対応
+- `PlayerController.blocking_characters: Array[Character]` に敵リストを渡す
+  - `EnemyManager.get_enemies()` が `_enemies` の参照を返すため、敵の死亡が自動反映される
+- `EnemyAI._is_passable()` も同メソッドで統一
+
+#### 未実装
 - プレイヤーの攻撃
+- 敵の攻撃（attack アクション実行）
 - 当たり判定・ダメージ処理
 
 ## Phase 3: 仲間AI・操作切替（未実装）

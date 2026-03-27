@@ -131,9 +131,14 @@
     - APIキーはres://api_key.txt（.gitignore済み）から読み込む
     - 動作確認済み：ゴブリンに近づくとLLMが行動シーケンスを生成
   - [ ] Phase 2-4: 移動・攻撃の実装
-    - AI行動生成に基づく敵の移動・攻撃
-    - プレイヤーの攻撃
-    - 当たり判定・ダメージ処理
+    - [x] 敵の移動：LLMが生成したmove/waitシーケンスに基づいて0.4秒/タイルで移動
+    - [x] 占有チェック：プレイヤー・敵同士の同一マス進入を禁止
+      - Character.get_occupied_tiles() で抽象化（将来の複数マスキャラ対応済み）
+      - PlayerController に blocking_characters を追加
+      - EnemyAI._is_passable() も同メソッドで統一
+    - [ ] プレイヤーの攻撃
+    - [ ] 敵の攻撃（attackアクション実行）
+    - [ ] 当たり判定・ダメージ処理
 - [ ] Phase 3: 仲間AI・操作切替
 - [ ] Phase 4: 指示システム
 - [ ] Phase 5: ステージ・UI・バランス調整

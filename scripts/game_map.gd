@@ -60,13 +60,16 @@ func _setup_enemies() -> void:
 	enemy_manager = EnemyManager.new()
 	enemy_manager.name = "EnemyManager"
 	add_child(enemy_manager)
-	enemy_manager.setup(members, hero)
+	enemy_manager.setup(members, hero, map_data)
 
 
 func _setup_controller() -> void:
 	player_controller = PlayerController.new()
 	player_controller.character = hero
 	player_controller.map_data = map_data
+	# 敵をブロッキング対象として登録（参照渡しなので敵の死亡が自動反映される）
+	if enemy_manager != null:
+		player_controller.blocking_characters = enemy_manager.get_enemies()
 	player_controller.name = "PlayerController"
 	add_child(player_controller)
 

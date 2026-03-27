@@ -15,10 +15,14 @@ var _enemies: Array[Character] = []
 var _activated: bool = false
 
 
+var _map_data: MapData
+
+
 ## 敵をスポーンしてパーティーを構成する
 ## spawn_list: [{character_id, x, y}] の配列（dungeon_01.json の enemy_parties[n].members）
-func setup(spawn_list: Array, player: Character) -> void:
-	_player = player
+func setup(spawn_list: Array, player: Character, map_data: MapData) -> void:
+	_player   = player
+	_map_data = map_data
 	enemy_party = Party.new()
 	for spawn_info: Variant in spawn_list:
 		var info := spawn_info as Dictionary
@@ -63,7 +67,13 @@ func _start_ai() -> void:
 	enemy_ai = EnemyAI.new()
 	enemy_ai.name = "EnemyAI"
 	add_child(enemy_ai)
-	enemy_ai.setup(_enemies, _player, behavior)
+	enemy_ai.setup(_enemies, _player, behavior, _map_data)
+
+
+## 敵リストへの参照を返す（PlayerController の blocking_characters 等で利用）
+## 配列は参照渡しなので敵が死亡して _enemies から削除されると自動で反映される
+func get_enemies() -> Array[Character]:
+	return _enemies
 
 
 func _on_enemy_died(character: Character) -> void:

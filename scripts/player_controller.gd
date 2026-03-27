@@ -7,6 +7,9 @@ extends Node
 var character: Character = null
 var map_data: MapData = null
 
+## 移動先の占有チェック対象。get_occupied_tiles() で判定するため複数マスキャラにも対応
+var blocking_characters: Array[Character] = []
+
 # キー長押し時の移動間隔（秒）
 const MOVE_INTERVAL_INITIAL: float = 0.20
 const MOVE_INTERVAL_REPEAT: float = 0.10
@@ -55,10 +58,19 @@ func _try_move(dir: Vector2i) -> void:
 		character.move_to(new_pos)
 
 
-## 移動可否を判定する（WALL・範囲外は不可）
+## 移動可否を判定する（WALL・範囲外・キャラクター占有は不可）
 func _can_move_to(pos: Vector2i) -> bool:
 	if map_data != null:
-		return map_data.is_walkable(pos)
-	# map_data未設定時のフォールバック（境界チェックのみ）
-	return pos.x >= 0 and pos.x < MapData.MAP_WIDTH \
-		and pos.y >= 0 and pos.y < MapData.MAP_HEIGHT
+		if not map_data.is_walkable(pos):
+			return false
+	else:
+		# map_data未設定時のフォールバック（境界チェックのみ）
+		if not (pos.x >= 0 and pos.x < MapData.MAP_WIDTH \
+				and pos.y >= 0 and pos.y < MapData.MAP_HEIGHT):
+			return false
+
+	for blocker: Character in blocking_characters:
+		if pos in blocker.get_occupied_tiles():
+			return false
+
+	return true
