@@ -137,6 +137,92 @@
 - [ ] Phase 5: ステージ・UI・バランス調整
 - [ ] Phase 6: Steam配布準備
 
+## 戦闘仕様
+
+### 視界システム
+- 当面：全方位・全範囲（距離無制限）
+- 将来：通常時は前方のみ、警戒時（攻撃を受けた・仲間がやられたなど）は全方位
+- 不意打ちなどの演出に活用予定
+
+### 情報管理
+- 敵はパーティー単位で情報を共有（個別管理ではない）
+- LLMへの問い合わせもパーティーで1回
+
+### HP・状態
+- 当面：敵味方ともに正確な数値を共有
+- 将来：視界内の敵は大まかな状態のみ（healthy／wounded／critical）
+
+### 攻撃仕様
+- 種類：近接／遠距離、単体／範囲（当面は近接・単体のみ）
+- 攻撃タイプ：physical／magic（当面はphysicalのみ）
+- クールタイム：事前（ため・詠唱）・事後（硬直）の両方あり
+- キャラクターデータにpre_delay・post_delayとして持つ
+
+### 方向とダメージ
+- 攻撃方向によってダメージ倍率が変わる
+  - 正面：1.0倍
+  - 側面：1.5倍
+  - 背面：2.0倍
+- 将来：装備で防御効果が変わる
+  - 鎧：全方向有効
+  - 盾：正面・側面のみ有効
+- 当面は倍率で管理、将来は装備ごとの防御値に移行
+
+### LLMへ渡すデータ構造
+```json
+{
+  "party": {
+    "members": [
+      {
+        "id": "goblin_1",
+        "position": {"x": 10, "y": 5},
+        "facing": "left",
+        "hp": 30,
+        "condition": "healthy",
+        "status": "ready"
+      }
+    ]
+  },
+  "visible_characters": [
+    {
+      "type": "player",
+      "position": {"x": 5, "y": 3},
+      "facing": "right",
+      "hp": 80,
+      "condition": "healthy"
+    }
+  ],
+  "current_actions": { },
+  "remaining_queue": [ ]
+}
+```
+
+### LLMの返答形式
+- パーティー単位で行動シーケンスを返す
+- 移動は絶対座標ではなく目標キャラクターへの相対位置で指定
+```json
+{
+  "actions": [
+    {
+      "id": "goblin_1",
+      "sequence": [
+        { "action": "move", "target": "player", "relative_position": "right_side" },
+        { "action": "attack", "target": "player", "attack_type": "physical" },
+        { "action": "move", "target": "player", "relative_position": "back" }
+      ]
+    }
+  ]
+}
+```
+- relative_positionの種類：front／back／left_side／right_side／adjacent
+
+### LLM呼び出し方針
+- LLMは非同期で常に動かし続ける
+- キューが残り少なくなったタイミングでリクエスト送信
+- 返ってきたシーケンスは現在実行中のアクションが終わってから切り替え
+- 攻撃を受けたなど状況が大きく変わった場合は現在のアクション完了後に強制再生成
+- LLMには現在の状況に加えて実行中・キュー残りのアクションも渡す
+
 ## リポジトリ
 - GitHub: https://github.com/komuro72/trpg
 - ブランチ: master
