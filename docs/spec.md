@@ -449,23 +449,33 @@ attack_from == -target_fwd  → 背面 → 2.0倍
   - `EnemyManager.get_enemies()` が `_enemies` の参照を返すため、敵の死亡が自動反映される
 - `EnemyAI._is_passable()` も同メソッドで統一
 
-#### 未実装
-- プレイヤーの攻撃
-- 敵の攻撃（attack アクション実行）
-- 当たり判定・ダメージ処理
+## Phase 3: フィールド生成（未実装）
+- 壁・通路・複数部屋のバリエーション
+- ランダム生成または手作りマップ
 
-## Phase 3: 仲間AI・操作切替（未実装）
+## Phase 4: 攻撃バリエーション（未実装）
+- 遠距離・範囲攻撃
+- 既存の `pre_delay` / `post_delay` / `attack_type` 設計を活用
+
+## Phase 5: 敵のバリエーション（未実装）
+- ゴブリン以外の敵を追加
+- `behavior_description` の自然言語説明で行動パターンをLLMに伝える
+
+## Phase 6: UIまわり（未実装）
+- HPバー・攻撃エフェクトなど
+
+## Phase 7: 仲間AI・操作切替（未実装）
 - `AIController` の本実装
 - `Party.set_active()` を使ったプレイヤー操作キャラクターの切替
 - 切替時: 旧キャラ → `AIController`、新キャラ → `PlayerController`
 
-## Phase 4: 指示システム（未実装）
+## Phase 8: 指示システム（未実装）
 - 攻撃 / 防衛 / 待機 / 追従 / 撤退
 - 指示 UI（コマンドメニュー）
 
-## Phase 5: ステージ・UI・バランス調整（未実装）
+## Phase 9: ステージ・バランス調整（未実装）
 
-## Phase 6: Steam配布準備（未実装）
+## Phase 10: Steam配布準備（未実装）
 
 ---
 
