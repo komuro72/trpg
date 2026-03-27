@@ -10,7 +10,7 @@ signal request_failed(error: String)
 const API_URL     := "https://api.anthropic.com/v1/messages"
 const API_VERSION := "2023-06-01"
 const MODEL       := "claude-haiku-4-5-20251001"
-const MAX_TOKENS  := 1024
+var max_tokens: int = 1024
 
 var _api_key: String = ""
 var _http: HTTPRequest
@@ -46,7 +46,7 @@ func request(prompt: String) -> void:
 
 	var body := JSON.stringify({
 		"model": MODEL,
-		"max_tokens": MAX_TOKENS,
+		"max_tokens": max_tokens,
 		"messages": [
 			{"role": "user", "content": prompt}
 		]
@@ -93,7 +93,8 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 	text = _extract_json(text)
 	var action_data: Variant = JSON.parse_string(text)
 	if action_data == null or not action_data is Dictionary:
-		request_failed.emit("LLM返答のJSONパース失敗: " + text)
+		push_error("LLMClient: JSONパース失敗 (先頭200文字): " + text.substr(0, 200))
+		request_failed.emit("LLM返答のJSONパース失敗")
 		return
 
 	response_received.emit(action_data as Dictionary)

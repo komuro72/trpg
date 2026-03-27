@@ -449,9 +449,89 @@ attack_from == -target_fwd  → 背面 → 2.0倍
   - `EnemyManager.get_enemies()` が `_enemies` の参照を返すため、敵の死亡が自動反映される
 - `EnemyAI._is_passable()` も同メソッドで統一
 
-## Phase 3: フィールド生成（未実装）
-- 壁・通路・複数部屋のバリエーション
-- ランダム生成または手作りマップ
+## Phase 3: フィールド生成 ✅ 完了
+
+### 新規・変更ファイル
+```
+scripts/dungeon_generator.gd              LLMでダンジョン構造JSONを生成・保存（新規）
+scripts/dungeon_builder.gd               構造JSONからMapDataをビルド（新規）
+scripts/game_map.gd                      非同期ダンジョン読み込み・F5再生成対応
+scripts/map_data.gd                      init_all_walls() / set_tile() 追加
+scripts/llm_client.gd                    max_tokens を var に変更（外部から変更可能に）
+scripts/enemy_manager.gd                 enemy_id / character_id の両キーに対応
+assets/master/maps/dungeon_generated.json  実行時生成（.gitignore済み）
+.gitignore                               dungeon_generated.json を追加
+```
+
+### DungeonGenerator（dungeon_generator.gd）
+- `class_name DungeonGenerator extends Node`
+- `FLOOR_COUNT = 3`（一度に生成するフロア数。10にすると4096トークンでギリギリ）
+- `MAX_TOKENS = 4096`（LLMClientの`max_tokens`をこの値に設定）
+- `generate()` — LLMにプロンプトを送信。毎回 `randi()` のシード値をプロンプトに含めることで異なるマップを生成
+- `_on_response_received()` — `{"dungeon":{"floors":[...]}}` と `{"floors":[...]}` 両形式に対応。保存は常に前者の正規化形式
+- `SAVE_PATH = "res://assets/master/maps/dungeon_generated.json"`
+- シグナル: `generation_completed(dungeon_data)` / `generation_failed(error)`
+
+### DungeonBuilder（dungeon_builder.gd）
+- `class_name DungeonBuilder extends RefCounted`（静的メソッドのみ）
+- `static func build_floor(floor_data: Dictionary) -> MapData`
+  1. 全部屋の外接矩形からマップサイズを計算（+余白2タイル）
+  2. `init_all_walls()` で全タイルをWALL初期化
+  3. 各部屋を `_carve_room()`（外周1タイルをWALL残しで内部FLOOR展開）
+  4. 各通路を `_carve_corridor()`（L字形、3タイル幅 = `CORRIDOR_HALF_WIDTH=1`）
+  5. スポーン情報を `_build_spawn_data()` で構築
+- `_carve_corridor()` — 部屋中心点間をL字で繋ぐ（横→縦の順）
+- `_build_spawn_data()` — 入口部屋の中心をプレイヤースポーンに、各部屋の `enemy_party.members` を `enemy_parties` に設定
+
+### game_map.gd の変更点
+- `DUNGEON_JSON_PATH = "res://assets/master/maps/dungeon_generated.json"` をプライマリパスに
+- `FALLBACK_JSON_PATH = "res://assets/master/maps/dungeon_01.json"` を静的フォールバックとして保持
+- `CURRENT_FLOOR = 0`（表示するフロアのインデックス）
+- `_ready()`:
+  - JSONが存在 → `_load_generated_dungeon()` で即時読み込み
+  - 存在しない → `_start_generation()` でLLM生成開始
+- `_input()` でF5キーを検知 → `DirAccess.remove_absolute()` でJSON削除 → `reload_current_scene()`
+- `_on_generation_completed()` → `reload_current_scene()`（保存済みJSONを次回起動で読む）
+- `_on_generation_failed()` → フォールバックでダンジョン01を使用
+- `_setup_enemies()` — 全 `enemy_parties` のメンバーをフラット化して1つのEnemyManagerに渡す
+- 生成中は「ダンジョン生成中...」ラベルをCanvasLayerで表示
+
+### MapData の追加メソッド
+| メソッド | 説明 |
+|---------|------|
+| `init_all_walls(w, h)` | 指定サイズで全WALL初期化（DungeonBuilderが使用） |
+| `set_tile(pos, tile)` | 指定座標のタイルを書き込む（DungeonBuilderが使用） |
+
+### LLMClient の変更点
+- `const MAX_TOKENS := 1024` → `var max_tokens: int = 1024`（DungeonGeneratorが4096に上書き）
+- JSONパース失敗時に先頭200文字を `push_error` で出力（デバッグ用）
+
+### EnemyManager の変更点
+- `info.get("character_id", "")` → `info.get("enemy_id", info.get("character_id", ""))`
+  - 生成マップは `enemy_id` キー、静的マップは `character_id` キーを使うため両対応
+
+### 動作フロー
+```
+初回起動:
+  dungeon_generated.json なし
+  → DungeonGenerator.generate() → LLMリクエスト（最大4096トークン）
+  → 受信 → dungeon_generated.json 保存
+  → reload_current_scene()
+  → _load_generated_dungeon() → DungeonBuilder.build_floor(floors[0])
+  → _finish_setup()
+
+2回目以降:
+  dungeon_generated.json あり
+  → _load_generated_dungeon() → 即時起動
+
+F5キー:
+  dungeon_generated.json を削除 → reload_current_scene() → 初回起動フローへ
+```
+
+### 既知の制約・将来の拡張
+- 現在は `CURRENT_FLOOR = 0` の1フロアのみ表示。フロア遷移は Phase 9 以降で実装予定
+- `FLOOR_COUNT = 3` → 将来的に増やす場合、フロアごとに難易度を変えるプロンプトも追加
+- 通路形状はL字固定。将来はより複雑な通路パターンも対応予定
 
 ## Phase 4: 攻撃バリエーション（未実装）
 - 遠距離・範囲攻撃

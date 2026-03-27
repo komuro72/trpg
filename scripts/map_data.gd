@@ -72,6 +72,24 @@ static func load_from_json(path: String) -> MapData:
 	return data
 
 
+## 全タイルをWALLで初期化する（DungeonBuilderが使用）
+func init_all_walls(w: int, h: int) -> void:
+	map_width  = w
+	map_height = h
+	_tiles = []
+	for y in range(h):
+		var row: Array = []
+		for x in range(w):
+			row.append(TileType.WALL)
+		_tiles.append(row)
+
+
+## 指定座標のタイルを書き込む（DungeonBuilderが使用）
+func set_tile(pos: Vector2i, tile: TileType) -> void:
+	if pos.x >= 0 and pos.x < map_width and pos.y >= 0 and pos.y < map_height:
+		_tiles[pos.y][pos.x] = tile
+
+
 ## 指定座標のタイル種別を返す。範囲外はWALLとして扱う
 func get_tile(pos: Vector2i) -> TileType:
 	if pos.x < 0 or pos.x >= map_width or pos.y < 0 or pos.y >= map_height:

@@ -26,7 +26,8 @@ func setup(spawn_list: Array, player: Character, map_data: MapData) -> void:
 	enemy_party = Party.new()
 	for spawn_info: Variant in spawn_list:
 		var info := spawn_info as Dictionary
-		var char_id: String = info.get("character_id", "")
+		# "enemy_id"（生成マップ）と "character_id"（静的マップ）の両方に対応
+		var char_id: String = info.get("enemy_id", info.get("character_id", ""))
 		var pos := Vector2i(int(info.get("x", 0)), int(info.get("y", 0)))
 		var enemy := _spawn_enemy(char_id, pos)
 		enemy_party.add_member(enemy)
