@@ -367,20 +367,20 @@ assets/master/enemies/goblin.json  pre_delay / post_delay 追加
 - 返答は行動シーケンス形式（`relative_position` で移動先を指定）
 - リアルタイム判断方式（ルール事前生成ではなく）を採用
 
-### Phase 2-4: 移動・攻撃の実装（進行中）
+### Phase 2-4: 移動・攻撃の実装 ✅ 完了
 
-#### 実装済み：敵の移動 + 占有チェック
-
-##### 変更ファイル
+#### 新規・変更ファイル
 ```
-scripts/enemy_ai.gd          ステートマシン・移動実行ロジックを追加
+scripts/enemy_ai.gd          ステートマシン・移動・攻撃実行ロジック
 scripts/enemy_manager.gd     setup() に map_data 追加、get_enemies() 追加
-scripts/game_map.gd          enemy_manager.setup() に map_data を渡す
-scripts/character.gd         get_occupied_tiles() を追加
-scripts/player_controller.gd blocking_characters・占有チェックを追加
+scripts/game_map.gd          map_data を渡す・HUD セットアップ追加
+scripts/character.gd         get_occupied_tiles() / dir_to_vec() / get_direction_multiplier() 追加
+                             take_damage() に multiplier 引数追加
+scripts/player_controller.gd 攻撃入力・blocking_characters・占有チェック追加
+scripts/hud.gd               ステータスHUD（新規）
 ```
 
-##### EnemyAI ステートマシン（Phase 2-4 追加分）
+#### EnemyAI ステートマシン（完成版）
 | 定数 | 値 | 説明 |
 |------|-----|------|
 | `MOVE_INTERVAL` | 0.4秒 | タイル移動の間隔 |
@@ -388,15 +388,51 @@ scripts/player_controller.gd blocking_characters・占有チェックを追加
 
 ```
 IDLE → キューからアクションを取り出す
-  "move"  → MOVING（MOVE_INTERVAL 秒ごとに1タイル移動、目標到達で IDLE へ）
-  "wait"  → WAITING（WAIT_DURATION 秒後に IDLE へ）
-  "attack"等 → 即 IDLE（Phase 2-4 後半で実装予定）
+  "move"   → MOVING（MOVE_INTERVAL 秒ごとに1タイル移動、目標到達で IDLE）
+  "wait"   → WAITING（WAIT_DURATION 秒後に IDLE）
+  "attack" → ATTACKING_PRE（pre_delay 秒）
+               → _execute_attack()（方向倍率付きダメージ）
+             → ATTACKING_POST（post_delay 秒）→ IDLE
 ```
 
-##### 移動アルゴリズム
-- `_resolve_goal()`: `relative_position`（front/back/left_side/right_side/adjacent）をプレイヤーの向き基準でグリッド座標に変換
-- `_step_toward_goal()`: マンハッタン距離が大きい軸を優先するグリーディー移動
-- `_is_passable()`: マップ通行可否 + `get_occupied_tiles()` で全キャラ占有チェック
+- 攻撃の隣接判定: `abs(dx) + abs(dy) == 1`（マンハッタン距離=1 のみ）
+- 隣接していない場合はアクションをスキップして次へ
+
+#### 方向ダメージ倍率（Character.get_direction_multiplier）
+```
+attack_from = attacker.grid_pos - target.grid_pos  # targetから見た攻撃方向
+target_fwd  = Character.dir_to_vec(target.facing)
+
+attack_from == target_fwd   → 正面 → 1.0倍
+attack_from == -target_fwd  → 背面 → 2.0倍
+それ以外                    → 側面 → 1.5倍
+```
+
+#### プレイヤーの攻撃（PlayerController）
+- スペース / Enter キー（ui_accept）で発動
+- 向いている方向の隣接マスを `blocking_characters` から検索
+- ヒットした敵に `get_direction_multiplier` の倍率付きで `take_damage` を呼ぶ
+- 移動と独立して処理（移動中でも攻撃可能）
+
+#### 占有チェック設計（Character.get_occupied_tiles）
+- `Character.get_occupied_tiles() -> Array[Vector2i]` — 現在は `[grid_pos]` を返す
+- 将来の複数マスキャラはオーバーライドで対応
+- `PlayerController.blocking_characters` / `EnemyAI._is_passable()` の両方で使用
+- `EnemyManager.get_enemies()` が `_enemies` の参照を返すため、敵の死亡が自動反映
+
+#### ステータスHUD（hud.gd）
+- `class_name HUD extends CanvasLayer`（layer=10、常に最前面）
+- 半透明背景パネル + Label で左上に表示
+- `setup(player, enemies)` — GameMap から呼び出す。enemies は参照渡し
+- 毎フレーム `is_instance_valid()` でチェックし、死亡した敵は自動で非表示
+- 表示形式:
+  ```
+  ■ Player  HP: 80 / 100  [healthy]
+
+  ▲ Goblin0  HP: 30 / 30  [healthy]
+  ▲ Goblin1  HP: 15 / 30  [wounded]
+  ▲ Goblin2  HP: 8 / 30   [critical]
+  ```
 
 ##### relative_position → オフセット変換（プレイヤーの向き基準）
 | プレイヤーの向き | front | back | left_side | right_side |

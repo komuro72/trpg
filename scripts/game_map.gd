@@ -17,6 +17,7 @@ var player_controller: PlayerController
 var hero: Character
 var camera_controller: CameraController
 var enemy_manager: EnemyManager
+var hud: HUD
 
 
 func _ready() -> void:
@@ -25,6 +26,7 @@ func _ready() -> void:
 	_setup_enemies()
 	_setup_controller()
 	_setup_camera()
+	_setup_hud()
 
 
 func _setup_map() -> void:
@@ -93,6 +95,16 @@ func _setup_camera() -> void:
 	camera_controller.camera    = cam
 	camera_controller.name      = "CameraController"
 	add_child(camera_controller)
+
+
+func _setup_hud() -> void:
+	hud = HUD.new()
+	hud.name = "HUD"
+	add_child(hud)
+	var enemies: Array[Character] = []
+	if enemy_manager != null:
+		enemies = enemy_manager.get_enemies()
+	hud.setup(hero, enemies)
 
 
 ## キャラクターの死亡シグナルを受け取り、パーティーから除去する

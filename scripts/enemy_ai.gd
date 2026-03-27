@@ -9,7 +9,7 @@ const QUEUE_REFILL_THRESHOLD := 1
 const MOVE_INTERVAL  := 0.4   # タイル移動の間隔（秒）
 const WAIT_DURATION  := 1.0   # wait アクションの待機時間（秒）
 
-enum _State { IDLE, MOVING, WAITING }
+enum _State { IDLE, MOVING, WAITING, ATTACKING_PRE, ATTACKING_POST }
 
 var _enemies: Array[Character] = []
 var _player: Character
@@ -25,9 +25,11 @@ var _current: Dictionary = {}
 ## 各敵のステートマシン状態
 var _states: Dictionary = {}   # enemy_id -> _State
 ## 移動中の目標グリッド座標
-var _goals: Dictionary = {}    # enemy_id -> Vector2i
-## タイマー（移動間隔 / 待機時間）
-var _timers: Dictionary = {}   # enemy_id -> float
+var _goals: Dictionary = {}          # enemy_id -> Vector2i
+## タイマー（移動間隔 / 待機時間 / 攻撃前後）
+var _timers: Dictionary = {}         # enemy_id -> float
+## 攻撃対象（ATTACKING_PRE/POST 中に保持）
+var _attack_targets: Dictionary = {} # enemy_id -> Character
 
 var _force_regen: bool = false
 
@@ -101,6 +103,20 @@ func _tick_enemy(enemy: Character, delta: float) -> void:
 				_states[id] = _State.IDLE
 				complete_action(id)
 
+		_State.ATTACKING_PRE:
+			_timers[id] -= delta
+			if _timers[id] <= 0.0:
+				_execute_attack(enemy)
+				_states[id] = _State.ATTACKING_POST
+				var post := enemy.character_data.post_delay if enemy.character_data else 0.5
+				_timers[id] = post
+
+		_State.ATTACKING_POST:
+			_timers[id] -= delta
+			if _timers[id] <= 0.0:
+				_states[id] = _State.IDLE
+				complete_action(id)
+
 
 func _start_action(enemy: Character, action: Dictionary) -> void:
 	var id := enemy.name
@@ -116,8 +132,20 @@ func _start_action(enemy: Character, action: Dictionary) -> void:
 		"wait":
 			_states[id] = _State.WAITING
 			_timers[id] = WAIT_DURATION
+		"attack":
+			var target := _player
+			if target == null or not is_instance_valid(target):
+				complete_action(id)
+				return
+			# 隣接していなければスキップ
+			var d := target.grid_pos - enemy.grid_pos
+			if abs(d.x) + abs(d.y) != 1:
+				complete_action(id)
+				return
+			_attack_targets[id] = target
+			_states[id] = _State.ATTACKING_PRE
+			_timers[id] = enemy.character_data.pre_delay if enemy.character_data else 0.3
 		_:
-			# attack 等は Phase 2-4 後半で実装。今は完了扱い
 			complete_action(id)
 
 
@@ -182,7 +210,7 @@ func _is_passable(pos: Vector2i) -> bool:
 
 ## target の向きを基準に relative_position のオフセットを返す
 func _relative_offset(facing: Character.Direction, rel_pos: String) -> Vector2i:
-	var fwd := _dir_to_vec(facing)
+	var fwd := Character.dir_to_vec(facing)
 	match rel_pos:
 		"front":      return fwd
 		"back":       return Vector2i(-fwd.x, -fwd.y)
@@ -202,13 +230,16 @@ func _relative_offset(facing: Character.Direction, rel_pos: String) -> Vector2i:
 	return Vector2i.ZERO
 
 
-func _dir_to_vec(dir: Character.Direction) -> Vector2i:
-	match dir:
-		Character.Direction.FRONT: return Vector2i( 0,  1)
-		Character.Direction.BACK:  return Vector2i( 0, -1)
-		Character.Direction.LEFT:  return Vector2i(-1,  0)
-		Character.Direction.RIGHT: return Vector2i( 1,  0)
-	return Vector2i.ZERO
+## 攻撃を実行する（ATTACKING_PRE 完了時に呼ばれる）
+func _execute_attack(enemy: Character) -> void:
+	var id     := enemy.name
+	var target := _attack_targets.get(id) as Character
+	if target == null or not is_instance_valid(target):
+		return
+	var multiplier := Character.get_direction_multiplier(enemy, target)
+	target.take_damage(enemy.attack, multiplier)
+	print("[EnemyAI] %s → %s  %.1fx  HP:%d/%d" % \
+		[id, target.name, multiplier, target.hp, target.max_hp])
 
 
 ## キューから次のアクションを取り出す（内部用）
@@ -343,3 +374,5 @@ func _dir_to_str(dir: Character.Direction) -> String:
 		Character.Direction.LEFT:  return "left"
 		Character.Direction.RIGHT: return "right"
 	return "front"
+
+
