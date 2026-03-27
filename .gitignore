@@ -16,3 +16,6 @@ Thumbs.db
 
 # 作業用メモ・個人ファイル
 指示文.txt
+
+# APIキー（絶対にコミットしない）
+api_key.txt
