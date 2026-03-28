@@ -48,6 +48,11 @@ static func build_floor(floor_data: Dictionary) -> MapData:
 		var from_id := c.get("from", "") as String
 		var to_id   := c.get("to",   "") as String
 		if room_map.has(from_id) and room_map.has(to_id):
+			# 通路名をエリア名テーブルに登録（タイル展開前に設定）
+			var corr_area_id := "corridor_%s_%s" % [from_id, to_id]
+			var corr_name := c.get("name", "") as String
+			if not corr_name.is_empty():
+				data.set_area_name(corr_area_id, corr_name)
 			_carve_corridor(data, room_map[from_id] as Dictionary, room_map[to_id] as Dictionary)
 
 	# スポーン情報を構築
@@ -62,10 +67,17 @@ static func _carve_room(data: MapData, room: Dictionary) -> void:
 	var ry: int = int(room.get("y",      0))
 	var rw: int = int(room.get("width",  10))
 	var rh: int = int(room.get("height", 10))
+	var area_id := room.get("id", "") as String
 	# 部屋の内側（外周1タイルを壁として残す）
 	for y in range(ry + 1, ry + rh - 1):
 		for x in range(rx + 1, rx + rw - 1):
-			data.set_tile(Vector2i(x, y), MapData.TileType.FLOOR)
+			var pos := Vector2i(x, y)
+			data.set_tile(pos, MapData.TileType.FLOOR)
+			data.set_tile_area(pos, area_id)
+	# 部屋名をエリア名テーブルに登録
+	var room_name := room.get("name", "") as String
+	if not room_name.is_empty():
+		data.set_area_name(area_id, room_name)
 
 
 ## 2部屋間をL字通路で接続する
@@ -76,20 +88,27 @@ static func _carve_corridor(data: MapData, from_room: Dictionary, to_room: Dicti
 	var ty: int = int(to_room.get("y",   0)) + int(to_room.get("height",  10)) / 2
 
 	var hw := CORRIDOR_HALF_WIDTH
+	var area_id := "corridor_%s_%s" % [from_room.get("id", ""), to_room.get("id", "")]
 
 	# 横方向（fx → tx）をまず伸ばす
 	var min_x := mini(fx, tx)
 	var max_x := maxi(fx, tx)
 	for x in range(min_x, max_x + 1):
 		for dy in range(-hw, hw + 1):
-			data.set_tile(Vector2i(x, fy + dy), MapData.TileType.FLOOR)
+			var pos := Vector2i(x, fy + dy)
+			if data.get_tile(pos) != MapData.TileType.FLOOR:
+				data.set_tile(pos, MapData.TileType.CORRIDOR)
+				data.set_tile_area(pos, area_id)
 
 	# 縦方向（fy → ty）を伸ばす
 	var min_y := mini(fy, ty)
 	var max_y := maxi(fy, ty)
 	for y in range(min_y, max_y + 1):
 		for dx in range(-hw, hw + 1):
-			data.set_tile(Vector2i(tx + dx, y), MapData.TileType.FLOOR)
+			var pos := Vector2i(tx + dx, y)
+			if data.get_tile(pos) != MapData.TileType.FLOOR:
+				data.set_tile(pos, MapData.TileType.CORRIDOR)
+				data.set_tile_area(pos, area_id)
 
 
 ## 部屋ID → 部屋データの辞書を作る

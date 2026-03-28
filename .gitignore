@@ -17,6 +17,12 @@ Thumbs.db
 # 作業用メモ・個人ファイル
 指示文.txt
 
+# Claude Code 内部ディレクトリ
+.claude/
+
+# 作業用ファイル置き場（AI生成元画像・参考資料など）
+work/
+
 # APIキー（絶対にコミットしない）
 api_key.txt
 

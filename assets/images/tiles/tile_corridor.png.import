@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b162hgq1eti3h"
-path="res://.godot/imported/hero_front.png-83e756d6f2ce4634812ba1f63f37482e.ctex"
+uid="uid://ibduhida6s75"
+path="res://.godot/imported/tile_corridor.png-f3fc5d1a3548550f2f23baff2015a54d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/characters/src/hero_front.png"
-dest_files=["res://.godot/imported/hero_front.png-83e756d6f2ce4634812ba1f63f37482e.ctex"]
+source_file="res://assets/images/tiles/tile_corridor.png"
+dest_files=["res://.godot/imported/tile_corridor.png-f3fc5d1a3548550f2f23baff2015a54d.ctex"]
 
 [params]
 

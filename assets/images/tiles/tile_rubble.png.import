@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c7t538dv3dmp"
-path="res://.godot/imported/hero_left.png-2993b7803a828fe187286cbc3380ae34.ctex"
+uid="uid://bemhp4jnf5fso"
+path="res://.godot/imported/tile_rubble.png-9d764218ef8e3cf8f1f2a5b337b2d4d1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/characters/src/hero_left.png"
-dest_files=["res://.godot/imported/hero_left.png-2993b7803a828fe187286cbc3380ae34.ctex"]
+source_file="res://assets/images/tiles/tile_rubble.png"
+dest_files=["res://.godot/imported/tile_rubble.png-9d764218ef8e3cf8f1f2a5b337b2d4d1.ctex"]
 
 [params]
 

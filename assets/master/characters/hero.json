@@ -4,11 +4,11 @@
   "hp": 100,
   "attack": 10,
   "defense": 5,
+  "is_flying": false,
   "behavior_description": "",
   "sprites": {
-    "front": "res://assets/images/characters/hero_front.png",
-    "back":  "res://assets/images/characters/hero_back.png",
-    "left":  "res://assets/images/characters/hero_left.png",
-    "right": "res://assets/images/characters/hero_right.png"
+    "top":       "res://assets/images/characters/hero_top.png",
+    "top_ready": "res://assets/images/characters/hero_top_ready.png",
+    "front":     "res://assets/images/characters/hero_front.png"
   }
 }

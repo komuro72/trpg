@@ -4,13 +4,13 @@
   "hp": 30,
   "attack": 5,
   "defense": 2,
+  "is_flying": false,
   "behavior_description": "集団で行動する。臆病な性格で強いと思った相手からはすぐ逃げる。",
   "pre_delay": 0.3,
   "post_delay": 0.5,
   "sprites": {
-    "front": "res://assets/images/enemies/goblin_front.png",
-    "back":  "res://assets/images/enemies/goblin_back.png",
-    "left":  "res://assets/images/enemies/goblin_left.png",
-    "right": "res://assets/images/enemies/goblin_right.png"
+    "top":       "res://assets/images/enemies/goblin_top.png",
+    "front":     "res://assets/images/enemies/goblin_front.png",
+    "top_ready": "res://assets/images/enemies/goblin_top_ready.png"
   }
 }

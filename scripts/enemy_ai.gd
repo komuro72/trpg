@@ -107,6 +107,7 @@ func _tick_enemy(enemy: Character, delta: float) -> void:
 			_timers[id] -= delta
 			if _timers[id] <= 0.0:
 				_execute_attack(enemy)
+				enemy.is_attacking = false  # ダメージ発生と同時に通常画像に戻す
 				_states[id] = _State.ATTACKING_POST
 				var post := enemy.character_data.post_delay if enemy.character_data else 0.5
 				_timers[id] = post
@@ -137,6 +138,10 @@ func _start_action(enemy: Character, action: Dictionary) -> void:
 			if target == null or not is_instance_valid(target):
 				complete_action(id)
 				return
+			# 飛行ターゲットへの近接攻撃は不可
+			if target.is_flying:
+				complete_action(id)
+				return
 			# 隣接していなければスキップ
 			var d := target.grid_pos - enemy.grid_pos
 			if abs(d.x) + abs(d.y) != 1:
@@ -145,6 +150,7 @@ func _start_action(enemy: Character, action: Dictionary) -> void:
 			_attack_targets[id] = target
 			_states[id] = _State.ATTACKING_PRE
 			_timers[id] = enemy.character_data.pre_delay if enemy.character_data else 0.3
+			enemy.is_attacking = true
 		_:
 			complete_action(id)
 
@@ -158,18 +164,23 @@ func _resolve_goal(enemy: Character, action: Dictionary) -> Vector2i:
 	var goal   := _player.grid_pos + offset
 
 	# 目標が歩行不可なら隣接タイルを探す
-	if _map_data != null and not _map_data.is_walkable(goal):
+	if _map_data != null and not _map_data.is_walkable_for(goal, enemy.is_flying):
 		for adj: Vector2i in [Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0)]:
 			var alt := _player.grid_pos + adj
-			if _map_data.is_walkable(alt):
+			if _map_data.is_walkable_for(alt, enemy.is_flying):
 				return alt
 
 	return goal
 
 
 ## 目標方向へ1タイル進む。まだ移動中なら true、到達またはスタックなら false
+## 毎タイル移動後にゴールを再計算してターゲット追従する
 func _step_toward_goal(enemy: Character) -> bool:
-	var id   := enemy.name
+	var id := enemy.name
+	# ターゲット追従：_current に move アクションがあれば毎タイルゴールを再計算
+	var action := _current.get(id, {}) as Dictionary
+	if not action.is_empty() and _player != null and is_instance_valid(_player):
+		_goals[id] = _resolve_goal(enemy, action)
 	var goal := _goals.get(id, enemy.grid_pos) as Vector2i
 	if enemy.grid_pos == goal:
 		return false
@@ -188,23 +199,27 @@ func _step_toward_goal(enemy: Character) -> bool:
 
 	for step: Vector2i in candidates:
 		var next := enemy.grid_pos + step
-		if _is_passable(next):
+		if _is_passable(next, enemy):
 			enemy.move_to(next)
 			return enemy.grid_pos != goal  # 到達したら false
 
 	return false  # スタック（壁や他キャラで塞がれている）
 
 
-## 歩行可能かつ他キャラが占有していないか確認する
+## 歩行可能かつ同レイヤーの他キャラが占有していないか確認する
 ## get_occupied_tiles() を使うため将来の複数マスキャラにも対応
-func _is_passable(pos: Vector2i) -> bool:
-	if _map_data != null and not _map_data.is_walkable(pos):
+func _is_passable(pos: Vector2i, moving_enemy: Character) -> bool:
+	if _map_data != null and not _map_data.is_walkable_for(pos, moving_enemy.is_flying):
 		return false
 	for other: Character in _enemies:
+		# 飛行属性が異なるキャラクターとはすり抜け可能
+		if other.is_flying != moving_enemy.is_flying:
+			continue
 		if pos in other.get_occupied_tiles():
 			return false
-	if _player != null and pos in _player.get_occupied_tiles():
-		return false
+	if _player != null:
+		if _player.is_flying == moving_enemy.is_flying and pos in _player.get_occupied_tiles():
+			return false
 	return true
 
 
@@ -212,18 +227,18 @@ func _is_passable(pos: Vector2i) -> bool:
 func _relative_offset(facing: Character.Direction, rel_pos: String) -> Vector2i:
 	var fwd := Character.dir_to_vec(facing)
 	match rel_pos:
-		"front":      return fwd
-		"back":       return Vector2i(-fwd.x, -fwd.y)
+		"down_side":  return fwd
+		"up_side":    return Vector2i(-fwd.x, -fwd.y)
 		"left_side":
 			match facing:
-				Character.Direction.FRONT: return Vector2i(-1,  0)
-				Character.Direction.BACK:  return Vector2i( 1,  0)
+				Character.Direction.DOWN: return Vector2i(-1,  0)
+				Character.Direction.UP:  return Vector2i( 1,  0)
 				Character.Direction.RIGHT: return Vector2i( 0, -1)
 				Character.Direction.LEFT:  return Vector2i( 0,  1)
 		"right_side":
 			match facing:
-				Character.Direction.FRONT: return Vector2i( 1,  0)
-				Character.Direction.BACK:  return Vector2i(-1,  0)
+				Character.Direction.DOWN: return Vector2i( 1,  0)
+				Character.Direction.UP:  return Vector2i(-1,  0)
 				Character.Direction.RIGHT: return Vector2i( 0,  1)
 				Character.Direction.LEFT:  return Vector2i( 0, -1)
 		"adjacent":   return fwd
@@ -299,6 +314,15 @@ func _build_situation() -> Dictionary:
 			"condition": _condition(_player)
 		})
 
+	# 現在のエリアID（視界システム用）
+	var player_area := ""
+	var enemy_area  := ""
+	if _map_data != null:
+		if _player != null:
+			player_area = _map_data.get_area(_player.grid_pos)
+		if not _enemies.is_empty():
+			enemy_area = _map_data.get_area(_enemies[0].grid_pos)
+
 	var remaining: Array = []
 	for enemy: Character in _enemies:
 		var q: Array = _queues.get(enemy.name, [])
@@ -318,7 +342,7 @@ func _build_prompt(situation: Dictionary) -> String:
 	p += "キャラクターの行動傾向: " + _behavior_description + "\n\n"
 	p += "現在の状況:\n" + JSON.stringify(situation, "  ") + "\n\n"
 	p += "上記の状況を踏まえて、各メンバーの行動シーケンスをJSONで返してください。\n"
-	p += "relative_position の種類: front / back / left_side / right_side / adjacent\n"
+	p += "relative_position の種類: down_side / up_side / left_side / right_side / adjacent\n"
 	p += "説明文は不要です。以下の形式のJSONのみ返してください:\n"
 	p += '{"actions":[{"id":"...","sequence":[{"action":"move"|"attack"|"wait","target":"player","relative_position":"...（moveのみ）","attack_type":"physical"（attackのみ）}]}]}'
 	return p
@@ -336,11 +360,19 @@ func _on_response_received(result: Dictionary) -> void:
 		var sequence: Array = e.get("sequence", [])
 		if id.is_empty() or sequence.is_empty():
 			continue
-		if not _queues.has(id):
-			_queues[id] = []
-		(_queues[id] as Array).append_array(sequence)
+		# 既存キューと実行中アクションを即座に置き換える
+		_queues[id] = sequence.duplicate()
+		_current.erase(id)
+		# 攻撃モーション中なら is_attacking をリセットして IDLE へ
+		for enemy: Character in _enemies:
+			if enemy.name == id:
+				var cur_state := _states.get(id, _State.IDLE) as _State
+				if cur_state == _State.ATTACKING_PRE or cur_state == _State.ATTACKING_POST:
+					enemy.is_attacking = false
+				_states[id] = _State.IDLE
+				break
 
-	print("[EnemyAI] キュー更新: ", _queues)
+	print("[EnemyAI] キュー置き換え: ", _queues)
 
 
 func _on_request_failed(error: String) -> void:
@@ -369,10 +401,10 @@ func _condition(c: Character) -> String:
 
 func _dir_to_str(dir: Character.Direction) -> String:
 	match dir:
-		Character.Direction.FRONT: return "front"
-		Character.Direction.BACK:  return "back"
+		Character.Direction.DOWN:  return "down"
+		Character.Direction.UP:    return "up"
 		Character.Direction.LEFT:  return "left"
 		Character.Direction.RIGHT: return "right"
-	return "front"
+	return "down"
 
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cuef1llbf86oq"
-path="res://.godot/imported/four_views.png-81963632f18fe8024ae0ce20fc42b490.ctex"
+uid="uid://c1ttpmwq0c0w5"
+path="res://.godot/imported/hero_top.png-dd3058ed17c61c2a1d51151dadf96a96.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/characters/src/four_views.png"
-dest_files=["res://.godot/imported/four_views.png-81963632f18fe8024ae0ce20fc42b490.ctex"]
+source_file="res://assets/images/characters/hero_top.png"
+dest_files=["res://.godot/imported/hero_top.png-dd3058ed17c61c2a1d51151dadf96a96.ctex"]
 
 [params]
 

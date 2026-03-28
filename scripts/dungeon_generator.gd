@@ -45,13 +45,16 @@ func _build_prompt(seed_val: int) -> String:
 	p += "- 部屋はX/Y座標で配置し、重なりがないようにすること\n"
 	p += "- 各部屋の座標はフロア全体に余裕をもって分散させること（各部屋間に最低4タイルの間隔）\n"
 	p += "- 部屋は通路（corridors）でつながり、フロア内で分岐があること\n"
+	p += "- タイル種別：FLOOR(0)=部屋の床、WALL(1)=壁、RUBBLE(2)=瓦礫、CORRIDOR(3)=通路\n"
+	p += "- 通路はCorridorsで部屋間の接続情報のみ記述する（タイルデータはエンジン側で生成）\n"
 	p += "- 階段（stairs）は各フロアに2〜3か所（1層目にはdown階段のみ、最下層にはup階段のみ）\n"
 	p += "- 敵：goblinのみ、各部屋に2〜4体配置（入口部屋を除く）\n"
 	p += "- 入口部屋にはenemyを配置しない、is_entrance: trueを設定する\n"
 	p += "- 1層目の入口部屋にプレイヤーを配置（is_entranceをtrueにする）\n"
-	p += "- 敵のx/y座標は部屋の絶対座標で指定する\n\n"
+	p += "- 敵のx/y座標は部屋の絶対座標で指定する\n"
+	p += "- 各部屋・通路に name フィールドを追加する（ダークファンタジーの雰囲気に合わせた日本語名。例：「古びた礼拝堂」「血塗られた回廊」「処刑場跡」「骸骨の間」など）\n\n"
 	p += "【出力フォーマット（このJSONのみ返すこと、説明文不要）】\n"
-	p += '{"dungeon":{"floors":[{"floor":1,"entrance_room":"r1_1","rooms":[{"id":"r1_1","x":2,"y":2,"width":12,"height":10,"type":"normal","is_entrance":true,"enemy_party":{"members":[]}},{"id":"r1_2","x":20,"y":2,"width":14,"height":12,"type":"normal","is_entrance":false,"enemy_party":{"members":[{"enemy_id":"goblin","x":22,"y":4},{"enemy_id":"goblin","x":24,"y":6}]}}],"corridors":[{"from":"r1_1","to":"r1_2"}],"stairs":[{"room":"r1_2","direction":"down"}]}]}}'
+	p += '{"dungeon":{"floors":[{"floor":1,"entrance_room":"r1_1","rooms":[{"id":"r1_1","name":"廃墟の入口","x":2,"y":2,"width":12,"height":10,"type":"normal","is_entrance":true,"enemy_party":{"members":[]}},{"id":"r1_2","name":"古びた礼拝堂","x":20,"y":2,"width":14,"height":12,"type":"normal","is_entrance":false,"enemy_party":{"members":[{"enemy_id":"goblin","x":22,"y":4},{"enemy_id":"goblin","x":24,"y":6}]}}],"corridors":[{"from":"r1_1","to":"r1_2","name":"血塗られた回廊"}],"stairs":[{"room":"r1_2","direction":"down"}]}]}}'
 	return p
 
 

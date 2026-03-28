@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c0joe1k2a301k"
-path="res://.godot/imported/hero_back.png-3a867a77c8cc3e0dd0187e4d49c783a3.ctex"
+uid="uid://3krmuxnjoijn"
+path="res://.godot/imported/goblin_front.png-246bd88ebde16375da6a550b26fc4a55.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/characters/src/hero_back.png"
-dest_files=["res://.godot/imported/hero_back.png-3a867a77c8cc3e0dd0187e4d49c783a3.ctex"]
+source_file="res://assets/images/enemies/goblin_front.png"
+dest_files=["res://.godot/imported/goblin_front.png-246bd88ebde16375da6a550b26fc4a55.ctex"]
 
 [params]
 

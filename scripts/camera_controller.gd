@@ -52,11 +52,14 @@ func _update(char_grid: Vector2i) -> void:
 
 
 ## デッドゾーンの半径をグリッドセル数で返す
+## X方向はサイドパネル分を除いたフィールド幅を基準にする
 func _dead_zone_half_cells() -> Vector2i:
-	var vp_size := get_viewport().get_visible_rect().size
-	var gs := float(GlobalConstants.GRID_SIZE)
+	var vp_size  := get_viewport().get_visible_rect().size
+	var gs       := float(GlobalConstants.GRID_SIZE)
+	var panel_px := float(GlobalConstants.PANEL_TILES * GlobalConstants.GRID_SIZE)
+	var field_w  := vp_size.x - 2.0 * panel_px
 	return Vector2i(
-		maxi(1, int(vp_size.x * DEAD_ZONE_RATIO / 2.0 / gs)),
+		maxi(1, int(field_w * DEAD_ZONE_RATIO / 2.0 / gs)),
 		maxi(1, int(vp_size.y * DEAD_ZONE_RATIO / 2.0 / gs))
 	)
 
