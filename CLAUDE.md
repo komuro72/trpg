@@ -553,5 +553,9 @@ assets/images/enemies/
 - GitHub: https://github.com/komuro72/trpg
 - ブランチ: master
 
+## 作業ルール
+- セッション終了時（「今日はここまで」など）にコミットを依頼された場合は、`git commit` に加えて `git push` まで行う
+  - 理由：毎日新しいセッションで作業しており、別PCで作業再開することもあるため
+
 ## 参照ファイル
 - docs/spec.md：詳細仕様書（実装前に参照すること）
