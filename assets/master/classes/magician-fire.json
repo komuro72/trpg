@@ -1,0 +1,43 @@
+{
+  "id": "magician-fire",
+  "name": "魔法使い(火)",
+  "weapon_type": "staff",
+  "base_hp": 70,
+  "base_attack": 15,
+  "base_defense": 2,
+  "pre_delay": 0.5,
+  "post_delay": 0.6,
+  "is_flying": false,
+  "behavior_description": "炎の魔法で遠距離攻撃する。後方に位置し、広範囲を焼き払う。",
+  "slots": {
+    "Z": {
+      "name": "火弾",
+      "action": "ranged",
+      "type": "magic",
+      "range": 5,
+      "damage_mult": 1.0,
+      "pre_delay": 0.4,
+      "post_delay": 0.5
+    },
+    "X": {
+      "name": "火炎",
+      "action": "ranged",
+      "type": "magic",
+      "range": 5,
+      "damage_mult": 2.0,
+      "pre_delay": 0.8,
+      "post_delay": 0.6
+    },
+    "C": {
+      "name": "火炎範囲",
+      "action": "ranged_area",
+      "type": "magic",
+      "range": 4,
+      "area_radius": 2,
+      "damage_mult": 1.5,
+      "pre_delay": 1.0,
+      "post_delay": 0.8
+    },
+    "V": null
+  }
+}

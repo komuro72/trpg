@@ -3,14 +3,26 @@ extends Resource
 
 ## キャラクターデータ管理リソース
 ## パラメータ・画像パスはJSONから読み込む。素材差し替え時はJSONを変更するだけでよい。
-## Phase 5: トップビュー対応。sprite_top（フィールド表示）・sprite_front（UI表示）に変更。
-##          is_flying フラグを追加。
+## Phase 5:   トップビュー対応。sprite_top（フィールド表示）・sprite_front（UI表示）に変更。
+##             is_flying フラグを追加。
+## Phase 6-0: クラスシステム対応。class_id / image_set / sprite_face / sex / age / build を追加。
 
 var character_id: String = ""
 var character_name: String = ""
-var sprite_top: String = ""        # フィールド表示用（真上から見た画像）
+
+## クラス情報（Phase 6-0〜）
+var class_id: String = ""   # クラスID（例: "fighter-sword"）
+var sex:      String = ""   # 性別（male / female）
+var age:      String = ""   # 年齢（young / adult / elder）
+var build:    String = ""   # 体格（slim / medium / muscular）
+
+## 画像セット（Phase 6-0〜）
+## フォルダパス（例: "res://assets/images/characters/fighter-sword_male_young_slim_01"）
+var image_set:        String = ""
+var sprite_top:       String = ""  # フィールド表示用（真上から見た画像）
 var sprite_top_ready: String = ""  # ターゲット選択中の構え画像（未設定時は sprite_top を使用）
-var sprite_front: String = ""      # UI・ステータス画面用（正面画像）
+var sprite_front:     String = ""  # UI・ステータス画面用（全身正面画像）
+var sprite_face:      String = ""  # 顔アイコン（LeftPanel 表示用）
 
 ## 基本ステータス
 var max_hp: int = 1
@@ -23,8 +35,8 @@ var is_flying: bool = false
 ## LLM行動生成用：自然言語でキャラクターの行動傾向を記述する
 var behavior_description: String = ""
 
-## 敵ランク（S/A/B/C/D/E/F）。右パネルでのランク色分け表示に使用
-var rank: String = "D"
+## キャラクターランク（S/A/B/C）。右パネルでのランク色分け表示・ステータス計算に使用
+var rank: String = "C"
 
 ## 攻撃クールタイム（秒）
 var pre_delay: float = 0.3   # 攻撃前の溜め時間
@@ -56,11 +68,19 @@ static func load_from_json(path: String) -> CharacterData:
 	data.behavior_description = d.get("behavior_description", "")
 	data.pre_delay            = float(d.get("pre_delay", 0.3))
 	data.post_delay           = float(d.get("post_delay", 0.5))
-	data.rank                 = d.get("rank", "D")
+	data.rank                 = d.get("rank", "C")
+
+	# クラス情報（Phase 6-0〜）
+	data.class_id = d.get("class_id", "")
+	data.sex      = d.get("sex",      "")
+	data.age      = d.get("age",      "")
+	data.build    = d.get("build",    "")
 
 	var sprites: Dictionary = d.get("sprites", {})
-	data.sprite_top       = sprites.get("top",   "")
-	data.sprite_front     = sprites.get("front", "")
+	data.image_set        = sprites.get("image_set",  "")
+	data.sprite_top       = sprites.get("top",        "")
+	data.sprite_front     = sprites.get("front",      "")
+	data.sprite_face      = sprites.get("face",       "")
 	# 構え画像: sprites.top_ready を優先し、なければトップレベルの ready_image を使用
 	var ready := sprites.get("top_ready", "") as String
 	if ready.is_empty():

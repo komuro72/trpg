@@ -1,7 +1,10 @@
 class_name GoblinAI
 extends BaseAI
 
-## ゴブリンAI
+## [レガシー] 旧ゴブリンAI
+## Phase 6-0 のリファクタリングにより GoblinUnitAI + GoblinLeaderAI に移行しました。
+## このクラスは後方互換のために残していますが、新しいコードでは使用しないでください。
+##
 ## behavior_description: "集団で行動する。臆病な性格で強いと思った相手からはすぐ逃げる。"
 ##
 ## 戦略決定ロジック:

@@ -1,0 +1,42 @@
+{
+  "id": "healer",
+  "name": "ヒーラー",
+  "weapon_type": "staff",
+  "base_hp": 90,
+  "base_attack": 0,
+  "base_defense": 4,
+  "pre_delay": 0.4,
+  "post_delay": 0.5,
+  "is_flying": false,
+  "behavior_description": "仲間を回復・強化する支援専門家。自ら攻撃はしない。",
+  "slots": {
+    "Z": {
+      "name": "回復(小)",
+      "action": "heal",
+      "type": "support",
+      "range": 1,
+      "heal_mult": 0.3,
+      "pre_delay": 0.4,
+      "post_delay": 0.4
+    },
+    "X": {
+      "name": "回復(大)",
+      "action": "heal",
+      "type": "support",
+      "range": 1,
+      "heal_mult": 0.6,
+      "pre_delay": 0.8,
+      "post_delay": 0.5
+    },
+    "C": {
+      "name": "防御バフ",
+      "action": "buff_defense",
+      "type": "support",
+      "range": 1,
+      "buff_duration": 10.0,
+      "pre_delay": 0.5,
+      "post_delay": 0.5
+    },
+    "V": null
+  }
+}

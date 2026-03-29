@@ -78,13 +78,16 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 			Color(0.4, 0.6, 1.0, 0.8), false, 2)
 
 	# フェイスアイコン（正方形、左側）
+	# sprite_face（face.png）を優先し、なければ sprite_front（front.png）を使用
 	var icon_size := mini(mini(int(fh) - pad * 2, int(fw * 0.42)), 88)
 	var icon_rect := Rect2(fx + pad, fy + pad, icon_size, icon_size)
 	var drew_icon := false
-	if c.character_data != null and not c.character_data.sprite_front.is_empty():
-		var path := c.character_data.sprite_front
-		if ResourceLoader.exists(path):
-			_control.draw_texture_rect(load(path) as Texture2D, icon_rect, false)
+	if c.character_data != null:
+		var icon_path := c.character_data.sprite_face
+		if icon_path.is_empty():
+			icon_path = c.character_data.sprite_front
+		if not icon_path.is_empty() and ResourceLoader.exists(icon_path):
+			_control.draw_texture_rect(load(icon_path) as Texture2D, icon_rect, false)
 			drew_icon = true
 	if not drew_icon:
 		_control.draw_rect(icon_rect, c.placeholder_color)

@@ -1,0 +1,35 @@
+{
+  "id": "scout",
+  "name": "斥候",
+  "weapon_type": "dagger",
+  "base_hp": 85,
+  "base_attack": 11,
+  "base_defense": 3,
+  "pre_delay": 0.25,
+  "post_delay": 0.4,
+  "is_flying": false,
+  "behavior_description": "素早い動きで死角から急所を突く。ヒット＆アウェイが得意。",
+  "slots": {
+    "Z": {
+      "name": "刺突",
+      "action": "melee",
+      "type": "physical",
+      "range": 1,
+      "damage_mult": 0.9,
+      "pre_delay": 0.25,
+      "post_delay": 0.35
+    },
+    "X": {
+      "name": "急所狙い",
+      "action": "melee",
+      "type": "physical",
+      "range": 1,
+      "damage_mult": 2.5,
+      "can_crit": true,
+      "pre_delay": 0.5,
+      "post_delay": 0.5
+    },
+    "C": null,
+    "V": null
+  }
+}

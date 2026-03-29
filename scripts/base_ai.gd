@@ -1,7 +1,11 @@
 class_name BaseAI
 extends Node
 
-## ルールベース敵AIの基底クラス
+## [レガシー] 旧ルールベース敵AI基底クラス
+## Phase 6-0 のリファクタリングにより UnitAI + PartyLeaderAI の2層構造に移行しました。
+## このクラスは後方互換のために残していますが、新しいコードでは使用しないでください。
+## 新しい構造: UnitAI（個体）/ PartyLeaderAI（パーティー）/ PartyManager（管理）
+##
 ## ステートマシン・移動（直進/A*/A*回り込み）・攻撃実行・キュー管理・定期再評価を担う
 ## 種類固有AIはこのクラスを継承し _evaluate_strategy/_select_target/_select_path_method をオーバーライドする
 

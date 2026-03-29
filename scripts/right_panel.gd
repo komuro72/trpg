@@ -162,6 +162,20 @@ func _draw_debug_section(px: int, pw: int, start_y: float, end_y: float, gs: int
 		if not is_instance_valid(em) or em.enemy_ai == null:
 			continue
 
+		# パーティーヘッダー行：リーダー戦略 + 生存数/初期数
+		var lh_party := float(fs_name) * 1.5
+		if row_y + lh_party <= end_y:
+			var pinfo       := em.enemy_ai.get_party_debug_info()
+			var p_strat     := int(pinfo.get("party_strategy", int(BaseAI.Strategy.WAIT)))
+			var alive_count := int(pinfo.get("alive_count",   0))
+			var init_count  := int(pinfo.get("initial_count", 0))
+			var header_str  := "▶ %s  %d/%d" % [_strategy_str(p_strat), alive_count, init_count]
+			_control.draw_string(_font,
+				Vector2(mx, row_y + lh_party * 0.75),
+				header_str, HORIZONTAL_ALIGNMENT_LEFT, float(pw) - 8.0, fs_name,
+				_strategy_color(p_strat))
+			row_y += lh_party
+
 		for info_var: Variant in em.enemy_ai.get_debug_info():
 			var info := info_var as Dictionary
 			if row_y + lh_name + lh_queue + 4.0 > end_y:
@@ -174,22 +188,25 @@ func _draw_debug_section(px: int, pw: int, start_y: float, end_y: float, gs: int
 					if _map_data.get_area(gp as Vector2i) != current_area:
 						continue
 
-			var e_name   := info.get("name", "?") as String
-			var strat    := int(info.get("strategy", int(BaseAI.Strategy.WAIT)))
-			var t_name   := info.get("target_name", "-") as String
-			var cur_act  := info.get("current_action", {}) as Dictionary
-			var queue    := info.get("queue", []) as Array
+			var e_name          := info.get("name", "?") as String
+			var strat           := int(info.get("strategy",         int(BaseAI.Strategy.WAIT)))
+			var ordered_strat   := int(info.get("ordered_strategy", strat))
+			var t_name          := info.get("target_name", "-") as String
+			var cur_act         := info.get("current_action", {}) as Dictionary
+			var queue           := info.get("queue", []) as Array
+			var overriding      := strat != ordered_strat  # 個体がリーダー指示を上書き中
 
-			# 行1: キャラ名  戦略  →ターゲット
+			# 行1: キャラ名  戦略（上書き時は * 付き）  →ターゲット
 			_control.draw_string(_font,
-				Vector2(mx, row_y + lh_name * 0.75),
+				Vector2(mx + 8.0, row_y + lh_name * 0.75),
 				e_name, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_name, Color(0.85, 0.85, 0.85))
+			var strat_label := _strategy_str(strat) + ("*" if overriding else "")
 			_control.draw_string(_font,
-				Vector2(mx + 52.0, row_y + lh_name * 0.75),
-				_strategy_str(strat), HORIZONTAL_ALIGNMENT_LEFT, -1, fs_name, _strategy_color(strat))
+				Vector2(mx + 60.0, row_y + lh_name * 0.75),
+				strat_label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_name, _strategy_color(strat))
 			_control.draw_string(_font,
-				Vector2(mx + 92.0, row_y + lh_name * 0.75),
-				"→" + t_name, HORIZONTAL_ALIGNMENT_LEFT, float(pw) - 98.0, fs_name,
+				Vector2(mx + 102.0, row_y + lh_name * 0.75),
+				"→" + t_name, HORIZONTAL_ALIGNMENT_LEFT, float(pw) - 108.0, fs_name,
 				Color(0.60, 0.60, 0.70))
 			row_y += lh_name
 

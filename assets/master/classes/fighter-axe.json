@@ -1,0 +1,34 @@
+{
+  "id": "fighter-axe",
+  "name": "斧戦士",
+  "weapon_type": "axe",
+  "base_hp": 110,
+  "base_attack": 13,
+  "base_defense": 4,
+  "pre_delay": 0.4,
+  "post_delay": 0.6,
+  "is_flying": false,
+  "behavior_description": "斧で豪快に振り回す。重い一撃が持ち味。",
+  "slots": {
+    "Z": {
+      "name": "振り下ろし",
+      "action": "melee",
+      "type": "physical",
+      "range": 1,
+      "damage_mult": 1.1,
+      "pre_delay": 0.4,
+      "post_delay": 0.6
+    },
+    "X": {
+      "name": "大振り",
+      "action": "melee",
+      "type": "physical",
+      "range": 1,
+      "damage_mult": 2.0,
+      "pre_delay": 0.7,
+      "post_delay": 0.7
+    },
+    "C": null,
+    "V": null
+  }
+}

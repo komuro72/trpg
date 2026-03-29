@@ -501,6 +501,178 @@ attack_from == -target_fwd  → 背面 → 2.0倍
   - `other == moving_enemy` のスキップで自分自身をブロックしない
   - `is_instance_valid(other)` で解放済みノードをスキップ
 
+## AIアーキテクチャ仕様（2層構造）✅ Phase 6-0 で実装済み
+
+> BaseAI/GoblinAI/EnemyManager を以下の構造に移行完了。
+> 目標：敵・NPC・プレイヤーパーティーを統一的に扱えるAI基盤。
+
+### ファイル構成
+```
+scripts/
+  party_manager.gd        パーティー管理（汎用。旧EnemyManagerの後継）
+  party_leader_ai.gd      リーダーAI基底クラス
+  goblin_leader_ai.gd     ゴブリン用リーダーAI
+  unit_ai.gd              個体AI基底クラス
+  goblin_unit_ai.gd       ゴブリン用個体AI
+  enemy_manager.gd        ★後方互換ラッパー（class EnemyManager extends PartyManager）
+  base_ai.gd              ★レガシー（[レガシー]コメント追加済み・将来削除）
+  goblin_ai.gd            ★レガシー（[レガシー]コメント追加済み・将来削除）
+```
+
+---
+
+### PartyManager（party_manager.gd）
+
+`class_name PartyManager extends Node`
+
+**旧EnemyManagerからの変更点:**
+- `party_type: String`（"enemy" / "npc" / "player"）
+- リーダー管理（`_elect_leader()` / `_create_leader_ai()`）を追加
+- `enemy_ai: PartyLeaderAI` プロパティ（get: _leader_ai を返す、後方互換）
+- `set_all_enemies()` / `get_enemies()` を後方互換エイリアスとして保持
+
+**主要フィールド:**
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `_members: Array[Character]` | Array | パーティー全メンバー |
+| `_leader: Character` | Character | 現在のリーダー |
+| `_leader_ai: PartyLeaderAI` | Node | リーダーAIインスタンス（AI起動後） |
+| `enemy_ai` | PartyLeaderAI | `_leader_ai` へのアクセサ（後方互換） |
+| `party_type: String` | String | "enemy" / "npc" / "player" |
+| `_all_members: Array[Character]` | Array | 全パーティー合算（AI起動時に渡す） |
+
+**主要メソッド:**
+- `setup(spawn_list, player, map_data)` — スポーン・ダイシグナル接続
+- `set_all_members(all)` / `set_all_enemies(all)` — 全パーティー合算リストを設定
+- `get_members()` / `get_enemies()` — メンバーリストを返す（後者は後方互換エイリアス）
+- `set_vision_controlled()` / `update_visibility()` — 視界制御（旧EnemyManagerから移行）
+- `_elect_leader()` — 生存メンバーの先頭をリーダーに選出
+- `_create_leader_ai(leader)` — キャラ種に応じた PartyLeaderAI を生成（ファクトリ）
+- `_start_ai()` — エリア入室時に呼ばれ PartyLeaderAI を生成・起動
+- `_on_member_died(character)` — メンバー死亡通知・リーダー再選出・AI通知
+
+---
+
+### PartyLeaderAI（party_leader_ai.gd）
+
+`class_name PartyLeaderAI extends Node`
+
+**役割:** パーティー全体の戦略決定・各メンバーへの指示出し
+
+**主要フィールド:**
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `_party_members: Array[Character]` | Array | PartyManager._members の参照（同一配列） |
+| `_unit_ais: Dictionary` | Dict | member.name → UnitAI |
+| `_party_strategy: Strategy` | enum | 現在のパーティー戦略 |
+| `_reeval_timer: float` | float | 定期再評価タイマー |
+| `_initial_count: int` | int | 初期メンバー数（逃走判定の基準） |
+
+**enum Strategy:** `{ ATTACK=0, FLEE=1, WAIT=2, DEFEND=3 }`
+- ATTACK/FLEE/WAIT は UnitAI.Strategy と int 値が一致（オーダー経由で渡すため）
+
+**主要メソッド:**
+- `setup(members, player, map_data, all_members)` — 初期化・全メンバー分の UnitAI を生成して `_assign_orders()`
+- `set_all_members(all_members)` — 各 UnitAI に反映
+- `_process(delta)` — 定期再評価（REEVAL_INTERVAL=1.5秒）
+- `_assign_orders()` — `_evaluate_party_strategy()` を呼び、各 UnitAI に `receive_order()` を発行
+- `notify_situation_changed()` — 再評価タイマーをリセット・`_assign_orders()` 即時実行・全 UnitAI に伝播
+- `get_debug_info()` → Array — 各 UnitAI の `get_debug_info()` を収集（旧 BaseAI と同形式）
+
+**サブクラスフック（オーバーライド）:**
+- `_create_unit_ai(member)` → UnitAI — メンバーの種別に応じた UnitAI を返す
+- `_evaluate_party_strategy()` → Strategy
+- `_select_target_for(member)` → Character
+
+---
+
+### GoblinLeaderAI（goblin_leader_ai.gd）
+
+`class_name GoblinLeaderAI extends PartyLeaderAI`
+
+- `_create_unit_ai()`: `GoblinUnitAI.new()` を返す
+- `_evaluate_party_strategy()`:
+  - `FLEE`: 生存メンバー < 初期数の50%
+  - `ATTACK`: プレイヤーが生存
+  - `WAIT`: それ以外
+- `_select_target_for()`: プレイヤー
+
+---
+
+### UnitAI（unit_ai.gd）
+
+`class_name UnitAI extends Node`
+
+**役割:** リーダーの指示を受けて個体の行動を実行。1インスタンス = 1キャラクター担当
+
+**旧BaseAIとの主な違い:**
+- 辞書ベースの多体管理 → 1体専用のシンプルなフィールド
+- パーティー戦略判断をリーダーに移譲。自己保存のみ担当
+- `receive_order(order)` でリーダーからオーダーを受け取る
+- `_fallback_evaluate()` でオーダーなし時の自律行動（後方互換用）
+
+**obedience（従順度）による行動:**
+| 従順度 | 挙動 |
+|--------|------|
+| 1.0（人間NPC） | リーダーの指示を忠実に実行 |
+| 0.5（ゴブリン） | 自己HP危機時のみ逃走に切替。それ以外はリーダー指示に従う |
+| 0.0（ゾンビ） | リーダー指示を無視。常に最近傍の人間を追跡 |
+
+**主要フィールド:**
+- `_member: Character` — 担当キャラクター（1体）
+- `_order: Dictionary` — 最後に受け取ったオーダー `{ "strategy": int, "target": Character }`
+- `_queue: Array` — アクションキュー
+- `_current_action: Dictionary` — 実行中アクション
+- `_all_members: Array[Character]` — 全パーティー合算（_is_passable 用）
+
+**オーダー形式:**
+```gdscript
+{
+  "strategy": int,        # UnitAI.Strategy と同じ int 値（ATTACK=0, FLEE=1, WAIT=2）
+  "target":   Character,  # 攻撃/追従対象
+}
+```
+
+**主要メソッド:**
+- `setup(member, player, map_data, all_members)` — 初期化
+- `receive_order(order)` — オーダーを受け取り、自己保存フック後にキューを再構築
+- `notify_situation_changed()` — フォールバック再評価タイマーをリセット
+- `get_debug_info()` → Dictionary — RightPanel 用（旧 BaseAI.get_debug_info() と同形式）
+- `_astar()` / `_find_adjacent_goal()` / `_is_passable()` — 旧 BaseAI から移植
+
+**ステートマシン:** 旧BaseAIと同一（IDLE / MOVING / WAITING / ATTACKING_PRE / ATTACKING_POST）
+
+**サブクラスフック（オーバーライド）:**
+- `_resolve_strategy(ordered_strategy)` → Strategy — 自己保存による指示上書き
+- `_evaluate_strategy()` — フォールバック用（オーダーなし時）
+- `_get_path_method()` → PathMethod
+
+---
+
+### GoblinUnitAI（goblin_unit_ai.gd）
+
+`class_name GoblinUnitAI extends UnitAI`
+
+- `obedience = 0.5`
+- `_should_override_order()`: HP < 30% のとき逃走に切替（リーダー指示を上書き）
+- `_select_path_method()`: ASTAR
+
+---
+
+### 旧クラスとの対応
+| 旧クラス | 新クラス | 状態 |
+|---------|---------|------|
+| `BaseAI` | `UnitAI` + `PartyLeaderAI` | 移行完了。[レガシー]コメント付きで残存 |
+| `GoblinAI` | `GoblinUnitAI` + `GoblinLeaderAI` | 移行完了。[レガシー]コメント付きで残存 |
+| `EnemyManager` | `PartyManager` | `class EnemyManager extends PartyManager` として後方互換ラッパーに変更 |
+
+### 後方互換の仕組み
+- `EnemyManager extends PartyManager` により `game_map.gd` / `vision_system.gd` / `right_panel.gd` は無変更
+- `PartyManager.enemy_ai` プロパティが `_leader_ai`（PartyLeaderAI）を返すため `em.enemy_ai.get_debug_info()` が動作
+- `right_panel.gd` が使用する `BaseAI.Strategy.*` の int 値と `UnitAI.Strategy.*` の int 値は一致（ATTACK=0, FLEE=1, WAIT=2）
+
+---
+
 ## Phase 3: フィールド生成 ✅ 完了
 
 ### 新規・変更ファイル
@@ -655,6 +827,26 @@ F5キー:
 - ターゲットが死亡したら自動的に候補から除外し、全滅なら自動キャンセル
 - 壁による遮断チェックは将来実装（現時点は射程のみ判定）
 - 実行時点で射程外になっていたら空振り（飛翔体は飛ぶ）
+
+### ターゲット選択中のpre_delay進行（未実装・仕様確定）
+- Z/X キー押下時点から `pre_delay_timer` のカウントを開始する
+- ターゲット選択中も `pre_delay_timer` は進行し続ける（選択操作でリセットしない）
+- 選択確定時：`pre_delay_timer >= pre_delay` なら即発動、未満なら残り時間を待ってから発動
+- 実装イメージ（PlayerController）:
+  ```
+  _enter_targeting() 内:
+    _pre_delay_elapsed = 0.0  # タイマー開始
+
+  _process(delta) 内（TARGETING中）:
+    _pre_delay_elapsed += delta
+
+  _confirm_attack() 内:
+    var remaining = character_data.pre_delay - _pre_delay_elapsed
+    if remaining > 0:
+      await get_tree().create_timer(remaining).timeout
+    _execute_attack()
+  ```
+- 効果：プレイヤーが慌てずにターゲットを選べる。素早く選べばほぼ待ち時間なし
 
 ### PlayerController ステートマシン
 ```
@@ -944,8 +1136,9 @@ scripts/hit_effect.gd       ヒットエフェクト（AnimatedSprite2D / フォ
 - `CanvasLayer` (layer=10) → `Control` → `draw` シグナル
 - `enemy.visible == true` の敵を character_id ごとに集計
 - 表示: "種類名 ×N" + ランク文字
-- ランク色: S/A=赤, B/C=オレンジ, D/E/F=黄
-- `CharacterData.rank: String`（デフォルト "D"、JSON の `"rank"` キーから読み込み）
+- ランク色: S/A=赤, B/C=オレンジ
+- `CharacterData.rank: String`（デフォルト "C"、JSON の `"rank"` キーから読み込み）
+- ランクはS/A/B/Cの4段階（Phase 6-0でD/E/Fを廃止・統一）
 
 #### MessageWindow（message_window.gd）
 - `CanvasLayer` (layer=12) → `Control` → `draw` シグナル
@@ -967,25 +1160,165 @@ scripts/hit_effect.gd       ヒットエフェクト（AnimatedSprite2D / フォ
 
 ---
 
-## Phase 6: 敵のバリエーション（未実装）
+## クラスシステム
+
+### クラス定義
+| クラス | ファイル名表記 | 武器タイプ | Z（通常） | X（ため） | C（第3） |
+|--------|--------------|-----------|----------|----------|---------|
+| 剣士 | fighter-sword | 剣 | 近接物理：斬撃 | 強斬撃 | — |
+| 斧戦士 | fighter-axe | 斧 | 近接物理：振り下ろし | 大振り | — |
+| 弓使い | archer | 弓 | 遠距離物理：速射 | 狙い撃ち | — |
+| 魔法使い(火) | magician-fire | 杖 | 遠距離魔法：火弾(単体) | 火炎(単体高威力) | 火炎範囲 |
+| ヒーラー | healer | 杖 | 支援：回復(単体小) | 回復(単体大) | 防御バフ(単体) |
+| 斥候 | scout | ダガー | 近接物理：刺突 | 急所狙い | — |
+
+### 設計メモ
+- 攻撃スロット ZXCV（最大4）。C/V は Phase 4 時点で空き
+- ヒーラーは攻撃スロットに攻撃アクションを持たない（支援専用）
+- クラスデータは `assets/master/classes/{class_id}.json` に定義（Phase 6-0で作成）
+- 将来拡張：魔法使いの属性分化（水・土・風）、槍兵・飛翔系・両手武器系、状態異常回復
+
+---
+
+## キャラクター生成システム
+
+### 生成フロー
+1. 利用可能なグラフィックセット一覧から対象クラスに合うものをランダム選出
+2. `assets/master/names.json` から性別に合う名前をランダム選出
+3. ランク（S/A/B/C）をランダム決定（グラフィックとは独立）
+4. `最終ステータス = クラス基準値 × ランク補正 × 体格補正 × 性別補正 × 年齢補正` で計算
+
+### ステータス決定構造
+| 要素 | 補正幅 | 方向性 |
+|------|--------|--------|
+| ランク（S〜C） | 約2倍差 | 見た目に非依存。純粋な強さ |
+| 体格（slim/medium/muscular） | 約2倍差 | サブクラス的機能。muscular=高火力低回避、slim=低火力高回避 |
+| 性別（male/female） | ±20% | male=近接攻撃力・HP高め、female=速度・回避・魔法系高め |
+| 年齢（young/adult/elder） | ±20% | young=速度・回避高め、adult=バランス、elder=魔法・耐性高め |
+
+### グラフィックセット（CharacterData の画像パス）
+```
+assets/images/characters/{class}_{sex}_{age}_{build}_{id}/
+  top.png      フィールド表示（rotationで方向対応）
+  ready.png    構えポーズ（ターゲット選択中・攻撃モーション中）
+  front.png    全身正面（UI表示用）
+  face.png     顔アイコン（LeftPanel表示用）
+```
+- `character_data.gd` で `sprite_top`, `sprite_top_ready`, `sprite_front`, `sprite_face` として管理
+- セットフォルダパスを `image_set` フィールドに持ち、各パスは `image_set + "/top.png"` 等で構成
+
+### names.json フォーマット
+```json
+{
+  "male": ["アルフォンス", "ベルナール", ...],
+  "female": ["アリシア", "ベアトリス", ...]
+}
+```
+
+---
+
+## NPC仕様
+
+### 配置
+- ダンジョンのNPC配置はマップJSONの `npc_parties` に記述（enemy_parties と同構造）
+- LLM生成ダンジョンでは DungeonGenerator がNPCパーティーも生成（Phase 6-1で追加）
+
+### 行動
+- NPC用AIController：敵AIと同構造、ターゲットは敵
+- NPCはプレイヤーエリアに入ったタイミングでアクティブ化
+
+### 仲間加入（Phase 6-2で詳細決定）
+- 加入条件・会話トリガー・UIは Phase 6-2 で設計
+
+---
+
+## Phase 6: 仲間AI・操作切替
+
+### Phase 6-0: 準備（実装済み）
+
+#### AIアーキテクチャのリファクタリング（実装済み）
+- `BaseAI` / `GoblinAI` / `EnemyManager` → `PartyManager` + `PartyLeaderAI` + `UnitAI` に移行
+- 詳細仕様: 本ファイルの「AIアーキテクチャ仕様（2層構造）」セクション参照
+- 移行後もゴブリン3体の既存動作を維持
+
+#### クラス・キャラクター生成（実装済み）
+
+##### クラスJSONファイル
+- `assets/master/classes/{class_id}.json` に各クラスのデータを定義（6クラス）
+- フィールド: `id`, `name`, `weapon_type`, `base_hp`, `base_attack`, `base_defense`,
+  `pre_delay`, `post_delay`, `is_flying`, `behavior_description`, `slots`
+- `slots` はスロットキー（Z/X/C/V）ごとに `{name, action, type, range, damage_mult, pre_delay, post_delay}` を定義
+  - `action`: melee / ranged / ranged_area / heal / buff_defense
+  - `type`: physical / magic / support
+  - ヒーラーのみ `heal_mult`, `buff_duration` を使用
+  - `null` は未実装スロット
+
+##### CharacterGenerator（character_generator.gd）
+- `CharacterGenerator.generate_character(class_id: String = "") -> CharacterData`
+  - `assets/images/characters/` を走査してグラフィックセット一覧を取得
+  - ランク: C=50%, B=30%, A=15%, S=5% でランダム決定
+  - `assets/master/names.json` から性別に合う名前をランダム選択
+  - ステータス = クラス基準値 × ランク × 体格 × 性別 × 年齢
+- `CharacterGenerator.scan_graphic_sets(class_id: String = "") -> Array[Dictionary]`
+  - フォルダ名をパースして `{class, sex, age, build, id, folder}` を返す
+
+##### ステータス補正値（実装値）
+| 要素 | S | A | B | C |
+|------|---|---|---|---|
+| ランク | 2.0 | 1.5 | 1.2 | 1.0 |
+
+| 体格 | hp | attack | defense |
+|------|-----|--------|---------|
+| slim | 0.85 | 0.80 | 0.90 |
+| medium | 1.00 | 1.00 | 1.00 |
+| muscular | 1.15 | 1.25 | 1.10 |
+
+| 性別 | hp | attack |
+|------|-----|--------|
+| male | 1.10 | 1.10 |
+| female | 0.90 | 0.90 |
+
+| 年齢 | hp | attack | defense |
+|------|-----|--------|---------|
+| young | 0.90 | 1.00 | 0.90 |
+| adult | 1.00 | 1.00 | 1.00 |
+| elder | 1.05 | 0.95 | 1.10 |
+
+##### CharacterData の追加フィールド（Phase 6-0〜）
+- `class_id: String` — クラスID（例: "fighter-sword"）
+- `image_set: String` — グラフィックセットフォルダパス
+- `sprite_face: String` — 顔アイコン（face.png）パス。LeftPanel表示に使用
+- `sex: String` — 性別（male / female）
+- `age: String` — 年齢（young / adult / elder）
+- `build: String` — 体格（slim / medium / muscular）
+- `rank: String` — デフォルト "C"（旧: "D"。S/A/B/C の4段階に統一）
+
+##### LeftPanel の更新（Phase 6-0〜）
+- フェイスアイコン表示を `sprite_face` 優先に変更（なければ `sprite_front` を使用）
+
+### Phase 6-1: 仲間NPCの配置と基本AI行動（未実装）
+- ダンジョンにNPCパーティーを配置
+- NPC用AIController実装
+
+### Phase 6-2: 仲間の加入の仕組み（未実装）
+- プレイヤーパーティーへのNPC加入フロー
+- 加入UI・会話トリガー
+
+### Phase 6-3: 操作キャラの切替（未実装）
+- `AIController` の本実装
+- `Party.set_active()` を使ったプレイヤー操作キャラクターの切替
+
+## Phase 7: 指示システム（未実装）
+- 攻撃 / 防衛 / 待機 / 追従 / 撤退
+- 指示UI（コマンドメニュー）
+
+## Phase 8: 敵のバリエーション（未実装）
 - ゴブリン以外の敵を追加
 - `behavior_description` の自然言語説明で行動パターンをLLMに伝える
 
-## Phase 7: UIまわり（未実装）
-- HPバー・攻撃エフェクトなど
+## Phase 9: ステージ・バランス調整（未実装）
 
-## Phase 8: 仲間AI・操作切替（未実装）
-- `AIController` の本実装
-- `Party.set_active()` を使ったプレイヤー操作キャラクターの切替
-- 切替時: 旧キャラ → `AIController`、新キャラ → `PlayerController`
-
-## Phase 9: 指示システム（未実装）
-- 攻撃 / 防衛 / 待機 / 追従 / 撤退
-- 指示 UI（コマンドメニュー）
-
-## Phase 10: ステージ・バランス調整（未実装）
-
-## Phase 11: Steam配布準備（未実装）
+## Phase 10: Steam配布準備（未実装）
 
 ---
 
