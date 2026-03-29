@@ -99,7 +99,7 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	data.is_flying          = bool(class_json.get("is_flying",  false))
 	data.behavior_description = str(class_json.get("behavior_description", ""))
 
-	var folder := GRAPHIC_SET_DIR + chosen_set.get("folder", "")
+	var folder: String = GRAPHIC_SET_DIR + str(chosen_set.get("folder", ""))
 	data.image_set        = folder
 	data.sprite_top       = folder + "/top.png"
 	data.sprite_top_ready = folder + "/ready.png"
