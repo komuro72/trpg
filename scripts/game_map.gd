@@ -135,7 +135,9 @@ func _setup_hero() -> void:
 	hero = Character.new()
 	hero.grid_pos = spawn_pos
 	hero.placeholder_color = Color(0.3, 0.7, 1.0)
-	hero.character_data = CharacterData.create_hero()
+	# ランダム生成：グラフィックセット走査 → ランク・名前・ステータスをランダム決定
+	var generated_data := CharacterGenerator.generate_character()
+	hero.character_data = generated_data if generated_data != null else CharacterData.create_hero()
 	hero.name = "Hero"
 	add_child(hero)
 	hero.sync_position()
