@@ -19,6 +19,7 @@ const PLAYER_PARTY_ID := 1
 var _player: Character
 var _map_data: MapData
 var _enemy_managers: Array = []
+var _npc_managers: Array = []
 var _current_area: String = ""
 
 ## パーティー単位の訪問済みエリア管理
@@ -48,6 +49,14 @@ func setup(player: Character, map_data: MapData) -> void:
 
 func add_enemy_manager(em: EnemyManager) -> void:
 	_enemy_managers.append(em)
+
+
+func add_npc_manager(nm: NpcManager) -> void:
+	_npc_managers.append(nm)
+
+
+func remove_npc_manager(nm: NpcManager) -> void:
+	_npc_managers.erase(nm)
 
 
 func get_current_area() -> String:
@@ -80,12 +89,16 @@ func _process(_delta: float) -> void:
 		if _has_area_data and not area.is_empty() and not is_area_visited(area):
 			_visit_area(PLAYER_PARTY_ID, area)
 
-	# 敵マネージャーに可視性を通知
+	# 敵・NPC マネージャーに可視性を通知
 	var visited := _visited_by_party.get(PLAYER_PARTY_ID, {}) as Dictionary
 	for em_var: Variant in _enemy_managers:
 		var em := em_var as EnemyManager
 		if is_instance_valid(em):
 			em.update_visibility(_current_area, _map_data, visited)
+	for nm_var: Variant in _npc_managers:
+		var nm := nm_var as NpcManager
+		if is_instance_valid(nm):
+			nm.update_visibility(_current_area, _map_data, visited)
 
 
 ## 指定パーティーがエリアを訪問する

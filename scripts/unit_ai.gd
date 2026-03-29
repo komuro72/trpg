@@ -63,7 +63,11 @@ func set_all_members(all_members: Array[Character]) -> void:
 func receive_order(order: Dictionary) -> void:
 	_order = order
 	var ordered_strategy := order.get("strategy", Strategy.WAIT) as Strategy
-	var ordered_target   := order.get("target",   null)          as Character
+	# キュー再適用時に target が既にfreeされている場合に備えて安全にキャストする
+	var raw_target: Variant = order.get("target", null)
+	var ordered_target: Character = null
+	if raw_target != null and is_instance_valid(raw_target):
+		ordered_target = raw_target as Character
 
 	# リーダーから受け取った指示戦略を保持（デバッグ・上書き検出用）
 	_ordered_strategy = ordered_strategy

@@ -10,6 +10,9 @@ var _active_character: Character
 var _control: Control
 var _font: Font
 
+## フェイスアイコン用 TextureRect ノードのキャッシュ（Character → TextureRect）
+var _icon_nodes: Dictionary = {}
+
 
 func setup(party: Party) -> void:
 	_party = party
@@ -30,7 +33,77 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	if _control != null:
+		_update_icon_nodes()
 		_control.queue_redraw()
+
+
+## TextureRect ノードをパーティーに合わせて作成・更新・削除する
+func _update_icon_nodes() -> void:
+	if _party == null:
+		return
+	var gs        := GlobalConstants.GRID_SIZE
+	var pw        := GlobalConstants.PANEL_TILES * gs
+	var vh        := _control.size.y
+	var minimap_h := int(vh * 0.25)
+	var ally_h    := vh - minimap_h
+	var members   := _party.members
+	var count     := members.size()
+	var pad       := 6
+
+	# 現在のメンバーセット
+	var current_set: Dictionary = {}
+	for m: Variant in members:
+		current_set[m] = true
+
+	# 不要ノードを削除
+	for key: Variant in _icon_nodes.keys():
+		if not current_set.has(key) or not is_instance_valid(key as Object):
+			(_icon_nodes[key] as TextureRect).queue_free()
+			_icon_nodes.erase(key)
+
+	if count == 0:
+		return
+
+	var card_h := ally_h / count
+	for i: int in range(count):
+		var member := members[i] as Character
+		if not is_instance_valid(member):
+			continue
+
+		var icon_size := mini(mini(int(float(card_h)) - pad * 2, int(float(pw) * 0.42)), 88)
+		var icon_x    := pad
+		var icon_y    := i * card_h + pad
+
+		# ノードを取得または新規作成
+		var tr: TextureRect
+		if _icon_nodes.has(member):
+			tr = _icon_nodes[member] as TextureRect
+		else:
+			tr = TextureRect.new()
+			tr.stretch_mode  = TextureRect.STRETCH_SCALE
+			tr.expand_mode   = TextureRect.EXPAND_IGNORE_SIZE
+			tr.mouse_filter  = Control.MOUSE_FILTER_IGNORE
+			_control.add_child(tr)
+			_icon_nodes[member] = tr
+
+		# 位置・サイズを更新
+		tr.position = Vector2(float(icon_x), float(icon_y))
+		tr.size     = Vector2(float(icon_size), float(icon_size))
+
+		# テクスチャを更新
+		var icon_path: String = ""
+		if member.character_data != null:
+			icon_path = member.character_data.sprite_face
+			if icon_path.is_empty():
+				icon_path = member.character_data.sprite_front
+		if not icon_path.is_empty():
+			var tex := load(icon_path) as Texture2D
+			if tex != null:
+				tr.texture = tex
+				tr.visible = true
+				continue
+		# テクスチャなし → 非表示（カスタムドローでプレースホルダー色を描画）
+		tr.visible = false
 
 
 func _on_draw() -> void:
@@ -77,21 +150,11 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 		_control.draw_rect(Rect2(fx, fy, fw, fh),
 			Color(0.4, 0.6, 1.0, 0.8), false, 2)
 
-	# フェイスアイコン（正方形、左側）
-	# sprite_face（face.png）を優先し、なければ sprite_front（front.png）を使用
+	# フェイスアイコン領域（TextureRect が非表示の場合はプレースホルダー色を描画）
 	var icon_size := mini(mini(int(fh) - pad * 2, int(fw * 0.42)), 88)
 	var icon_rect := Rect2(fx + pad, fy + pad, icon_size, icon_size)
-	var drew_icon := false
-	if c.character_data != null:
-		var icon_path: String = c.character_data.sprite_face
-		if icon_path.is_empty():
-			icon_path = c.character_data.sprite_front
-		if not icon_path.is_empty():
-			var tex := load(icon_path) as Texture2D
-			if tex != null:
-				_control.draw_texture_rect(tex, icon_rect, false)
-				drew_icon = true
-	if not drew_icon:
+	var has_icon  := _icon_nodes.has(c) and (_icon_nodes[c] as TextureRect).visible
+	if not has_icon:
 		_control.draw_rect(icon_rect, c.placeholder_color)
 
 	if _font == null:

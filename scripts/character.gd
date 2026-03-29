@@ -23,6 +23,8 @@ var max_hp: int = 1
 var attack: int = 1
 var defense: int = 0
 var is_flying: bool = false
+## フレンドリーフラグ（NPC など味方側キャラクターに設定。緑のリングで表示）
+var is_friendly: bool = false
 
 ## プレースホルダー色（素材がない場合に使用）
 var placeholder_color: Color = Color(0.3, 0.7, 1.0)
@@ -161,7 +163,7 @@ func _draw() -> void:
 	if _has_texture:
 		return
 
-	var gs := GlobalConstants.GRID_SIZE
+	var gs   := GlobalConstants.GRID_SIZE
 	var half := gs * 0.5
 	var margin := 8
 

@@ -39,13 +39,19 @@ assets/images/characters/
     ready.png    (1024x1024, 構えポーズ・ターゲット選択中・攻撃モーション中)
     front.png    (1024x1024, 全身正面・UI表示用)
     face.png     (256x256, frontから顔切り出し・左パネル表示用)
+
+assets/images/enemies/
+  {enemy_type}_{sex}_{age}_{build}_{id}/
+    top.png / ready.png / front.png / face.png  （味方と同じ4ファイル構成）
 ```
-- class: fighter-sword, fighter-axe, archer, magician-fire, healer, scout
+- 味方: class = fighter-sword, fighter-axe, archer, magician-fire, healer, scout
+- 敵: enemy_type = goblin, goblin-archer, goblin-mage, hobgoblin, dark-knight, dark-mage, dark-priest, wolf, zombie, harpy, salamander 等
 - sex: male, female
 - age: young, adult, elder
 - build: slim, medium, muscular
 - id: 01〜99
 - view名にアンダーバー不使用（将来のアニメーション拡張: walk1, walk2, attack1 等）
+- 画像がない敵はJSONのフラットパス指定またはプレースホルダー色にフォールバック
 
 ## 使用アセットとライセンス
 | アセット | 用途 | ライセンス | 帰属表示 |
@@ -110,8 +116,9 @@ assets/images/characters/
 
 ## キー操作（開発中）
 - 矢印キー：移動
-- Z：近接攻撃（ターゲット選択）
-- X：遠距離攻撃（ターゲット選択）
+- Z ホールド：近接攻撃（ホールド中 = ターゲット選択モード、離して発動）
+- X ホールド：遠距離攻撃（同上）
+- ターゲット選択中の矢印キー：ターゲット循環（右/下=次、左/上=前）
 - F1：AIデバッグパネルON/OFF
 - F5：ダンジョン再生成
 - Esc：ゲーム終了
@@ -193,7 +200,8 @@ assets/images/characters/
 - ダンジョン内にNPCがパーティー単位で配置される
 - 単独NPCも、スタート時から複数人でパーティーを組んでいるNPCもいる
 - 行動生成は敵と同様にパーティー単位
-- NPCは仲間に加入できる（加入の仕組みはPhase 6-2で詳細決定）
+- NPCは仲間に加入できる（加入の仕組みはPhase 6-2で実装予定）
+- 加入形態は2種類：プレイヤーがリーダー維持で相手を引き入れる／相手パーティーのリーダーに自分が加わる
 
 ## ドキュメント運用
 - CLAUDE.md：人間・AI共通の概要・方針・フェーズ進捗。ここでの相談をもとに更新する
@@ -293,16 +301,17 @@ assets/images/characters/
     - Z：近接攻撃（マンハッタン距離1、旧スペースキーから移行）
     - X：遠距離攻撃（射程5タイル、ユークリッド距離）
     - C/V：空（将来用）
-  - ターゲット選択モード
-    - ZXCVキー押下でターゲット選択モードに入る（プレイヤー移動停止）
-    - 矢印キーで対象を循環選択：敵1 → 敵2 → キャンセル → 敵1…
-    - 同じキーを再度押して決定・攻撃実行（キャンセル選択中に押すとキャンセル）
-    - 射程外の敵は選択肢に出ない（壁チェックは将来実装、現時点は射程のみ）
-    - 実行時点で射程外になっていたら空振り（弾は飛ぶ）
+  - ターゲット選択モード（Phase 6-1で**ホールド方式**に変更済み）
+    - 攻撃キーをホールドしている間がターゲット選択モード（離して発動）
+    - ホールド開始時点から pre_delay カウントを開始
+    - ターゲットリストをリアルタイム更新（敵の出入りに対応）
+    - 矢印キーで循環選択：前方±45°の敵を距離順 → それ以外を距離順
+    - キーを離す：フォーカスあり→攻撃発動、キャンセルor敵なし→ノーコストキャンセル
+    - 空振りなし（発動時は必ずヒット）
   - 飛翔体エフェクト
     - 図形（仮素材）で直線飛行、斜め方向対応
     - 速度：2000px/秒（移動での回避不可）
-    - 当たるかどうかは発射時点で決定済み（現時点は常にヒット）
+    - 発射時に命中確定（常にヒット）
   - [x] 飛行キャラ対応
     - 近接攻撃：地上→飛行は不可、飛行→地上は可能、飛行同士は不可
     - 遠距離攻撃：双方向で有効
@@ -327,6 +336,7 @@ assets/images/characters/
   - UI
     - [x] 3カラムレイアウト（左パネル=味方・中央=フィールド・右パネル=敵）
     - [x] 左パネル（LeftPanel.gd）：フェイスアイコン・名前・HPバー・MPバー・状態
+      - フェイスアイコンは face.png（なければ front.png）を TextureRect ノードで表示
     - [x] 右パネル（RightPanel.gd）：可視敵の種類・数・ランク（ランク色分け）
     - [x] AIデバッグパネル（RightPanel下半分）：現在エリアの敵の戦略・ターゲット・キューをリアルタイム表示。F1でON/OFF。デフォルトON（リリース版ではOFF予定）
     - [x] メッセージウィンドウ（MessageWindow.gd）：将来のシステムメッセージ用に保持（現在呼び出し元なし）
@@ -341,15 +351,56 @@ assets/images/characters/
       - assets/master/classes/{class_id}.json（6クラス）作成
       - CharacterGenerator.gd 実装（グラフィックセット走査・ステータス計算・名前生成）
       - CharacterData に class_id / image_set / sprite_face / sex / age / build フィールド追加
-    - [x] 画像フォルダ構成を新フォーマットに移行（20キャラ分配置済み）
+    - [x] 画像フォルダ構成を新フォーマットに移行（味方20セット・敵22セット配置済み）
+      - CharacterGenerator に scan_enemy_graphic_sets() / apply_enemy_graphics() を追加
+      - PartyManager._spawn_member() が apply_enemy_graphics() を呼び出し、敵に画像を自動割り当て
+      - 敵フォルダのパース: "_male_" / "_female_" 境界で enemy_type を検出（"-" を含む型名に対応）
     - [x] names.json作成（男性・女性それぞれ20名）
     - [x] 敵ランクをS/A/B/Cの4段階に統一
-  - [ ] Phase 6-1: 仲間NPCの配置と基本AI行動 ← 次
-    - ダンジョンにNPCパーティーを配置
-    - NPC用AIController実装（敵AIとほぼ同構造、ターゲットが敵）
-  - [ ] Phase 6-2: 仲間の加入の仕組み
-    - プレイヤーパーティーへのNPC加入フロー
-    - 加入UI・会話トリガー
+  - [x] Phase 6-1: 仲間NPCの配置と基本AI行動
+    - [x] 手作りダンジョン（dungeon_handcrafted.json）：15部屋・8敵パーティー・5NPCパーティー
+      - 起動優先順位：LLM生成済み → 手作り → LLM新規生成
+    - [x] MapData に npc_parties フィールド追加
+    - [x] DungeonBuilder が npc_party を rooms から収集
+    - [x] NpcManager.gd：CharacterGenerator でランダム生成・is_friendly=true・緑プレースホルダー
+    - [x] NpcLeaderAI.gd：敵リストから最近傍をターゲット。生存敵あり→ATTACK、なし→WAIT
+    - [x] NpcUnitAI.gd：従順度1.0・A*経路探索
+    - [x] Character.is_friendly フラグ追加（プレースホルダー色を緑に設定。アウトラインリングなし）
+    - [x] VisionSystem：add_npc_manager() 追加・NPC の表示制御・AI アクティブ化
+    - [x] game_map：_setup_npcs()・handcrafted読み込み・visionへのNPC登録
+    - [x] game_map：_link_all_character_lists() 追加・敵＋NPC 合算リストを全マネージャーに配布（NPC-敵重複防止）
+    - [x] player_controller.blocking_characters に NPC メンバーを追加（プレイヤー-NPC 重複防止）
+    - [x] party_manager.gd：ノード名衝突修正（マネージャー名をプレフィックスに追加）
+    - [x] unit_ai.gd：freed オブジェクトキャストクラッシュ修正（is_instance_valid チェック追加）
+  - [x] Phase 6-2: 仲間の加入の仕組み
+    - [x] DialogueTrigger.gd：隣接チェック・エリア敵全滅チェック・NPC自発申し出検出
+    - [x] DialogueWindow.gd：会話UI（メンバー一覧・選択肢・↑↓/Z/Esc操作）
+    - [x] NpcLeaderAI：wants_to_initiate() / will_accept() / get_party_strength() 追加
+    - [x] player_controller.gd：is_blocked フラグ追加（会話中は移動・攻撃入力を無効化）
+    - [x] vision_system.gd：remove_npc_manager() 追加
+    - [x] game_map.gd：_setup_dialogue_system() / 合流処理 / 敵入室による会話中断
+    - [x] game_map.gd：会話中は対象 NpcManager の process_mode を DISABLED に設定（NPC 停止）
+    - [x] player_controller.gd：_get_valid_targets() で is_friendly チェック追加（合流後の仲間を攻撃対象から除外）
+    - [x] dialogue_window.gd：画面下部ポップアップ方式・GRID_SIZE 連動フォントサイズに変更
+    - 会話トリガー条件
+      - 部屋内の敵が全滅していること
+      - プレイヤーと NPC メンバーが隣接（マンハッタン距離1）
+      - 通路（エリアIDなし）では会話しない
+    - 会話UI
+      - NPCパーティーの情報を表示（名前・クラス・ランク・状態）
+      - プレイヤーから話しかけた場合の選択肢
+        - 「仲間になってほしい」：NPC がプレイヤー傘下に加入、プレイヤーがリーダー維持
+        - 「一緒に連れて行ってほしい」：プレイヤーが NPC 傘下に加入、NPC リーダーがリーダー
+        - （立ち去る）
+      - NPC 側からの申し出（wants_to_initiate=true）：承諾/断る の2択
+      - NPCの申し出ロジック：重傷者が過半数（HP<50%）なら申し出
+      - NPCリーダーAIの承諾/拒否：プレイヤー総合力 × 1.5 < NPC 総合力なら拒否
+    - 合流処理
+      - 合流メンバーを party に追加・常時表示
+      - VisionSystem・npc_managers から除外（再会話防止）
+      - 「連れて行ってほしい」はNPCリーダーをアクティブキャラとして左パネルでハイライト
+      - プレイヤーの操作キャラ（hero）は変わらない
+    - 会話中断：敵が部屋に入ってきたら game_map._process() が検出して即中断
   - [ ] Phase 6-3: 操作キャラの切替
     - AIControllerの本実装
     - Party.set_active() を使ったプレイヤー操作キャラクターの切替
@@ -427,9 +478,9 @@ assets/images/characters/
 - キャラクターデータにpre_delay・post_delayとして持つ
 
 ### ターゲット選択中のpre_delay進行
-- 攻撃ボタン（Z/X）押下時点からpre_delayのカウントを開始する
-- ターゲット選択中も時間が進行し、pre_delayが消化される
-- 選択決定時、残りのpre_delayがあればそれを待って発動。残り0以下なら即発動
+- 攻撃ボタン（Z/X）ホールド開始時点からpre_delayのカウントを開始する
+- ホールド中も時間が進行し、pre_delayが消化される
+- キーリリース時に残りのpre_delayがあればFIRINGステートで消化してから発動。残り0以下なら即発動
 - これによりプレイヤーが慌てずにターゲットを選べる（素早く選べば待ち時間なし）
 
 ### 方向とダメージ

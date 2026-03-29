@@ -6,7 +6,8 @@ extends RefCounted
 ## クラス・ランク・ステータスをランダム決定して CharacterData を生成する。
 ## Phase 6-0 実装。
 
-const GRAPHIC_SET_DIR := "res://assets/images/characters/"
+const GRAPHIC_SET_DIR       := "res://assets/images/characters/"
+const ENEMY_GRAPHIC_SET_DIR := "res://assets/images/enemies/"
 const NAMES_JSON_PATH := "res://assets/master/names.json"
 const CLASS_JSON_DIR  := "res://assets/master/classes/"
 
@@ -109,6 +110,45 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	return data
 
 
+## assets/images/enemies/ を走査して利用可能な敵グラフィックセット情報を返す
+## enemy_type が空ならすべてのセットを返す
+static func scan_enemy_graphic_sets(enemy_type: String = "") -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var folders := DirAccess.get_directories_at(ENEMY_GRAPHIC_SET_DIR)
+	for folder: String in folders:
+		var info := _parse_enemy_folder_name(folder)
+		if info.is_empty():
+			continue
+		if enemy_type.is_empty() or info.get("enemy_type") == enemy_type:
+			info["folder"] = folder
+			result.append(info)
+	return result
+
+
+## 敵 CharacterData に画像フォルダのパスを割り当てる
+## character_id に対応するフォルダが見つかれば sprite_* を上書きする
+## 見つからなければ JSON 指定のパス（またはプレースホルダー）をそのまま維持する
+static func apply_enemy_graphics(data: CharacterData) -> void:
+	if data == null:
+		return
+	var enemy_type := data.character_id
+	if enemy_type.is_empty():
+		return
+	var sets := scan_enemy_graphic_sets(enemy_type)
+	if sets.is_empty():
+		return
+	var chosen_set: Dictionary = sets[randi() % sets.size()]
+	var folder: String = ENEMY_GRAPHIC_SET_DIR + str(chosen_set.get("folder", ""))
+	data.image_set        = folder
+	data.sprite_top       = folder + "/top.png"
+	data.sprite_top_ready = folder + "/ready.png"
+	data.sprite_front     = folder + "/front.png"
+	data.sprite_face      = folder + "/face.png"
+	data.sex   = str(chosen_set.get("sex",   data.sex))
+	data.age   = str(chosen_set.get("age",   data.age))
+	data.build = str(chosen_set.get("build", data.build))
+
+
 ## assets/images/characters/ を走査して利用可能なグラフィックセット情報を返す
 ## class_id が空ならすべてのセットを返す
 static func scan_graphic_sets(class_id: String = "") -> Array[Dictionary]:
@@ -144,6 +184,31 @@ static func _parse_folder_name(folder: String) -> Dictionary:
 					"build": parts[2],
 					"id":    parts[3] if parts.size() >= 4 else "01",
 				}
+	return {}
+
+
+## 敵フォルダ名を {enemy_type, sex, age, build, id} に解析する
+## フォーマット: {enemy_type}_{sex}_{age}_{build}_{id}
+## enemy_type には "-" が含まれるため "_male_" / "_female_" でセックス境界を検出する
+static func _parse_enemy_folder_name(folder: String) -> Dictionary:
+	for sex_str: String in ["male", "female"]:
+		var sep := "_" + sex_str + "_"
+		var idx := folder.find(sep)
+		if idx < 0:
+			continue
+		var enemy_type := folder.substr(0, idx)
+		if enemy_type.is_empty():
+			continue
+		var rest  := folder.substr(idx + sep.length())
+		var parts := rest.split("_")
+		if parts.size() >= 2:
+			return {
+				"enemy_type": enemy_type,
+				"sex":        sex_str,
+				"age":        parts[0],
+				"build":      parts[1],
+				"id":         parts[2] if parts.size() >= 3 else "01",
+			}
 	return {}
 
 

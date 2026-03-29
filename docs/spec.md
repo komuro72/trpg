@@ -818,49 +818,55 @@ F5キー:
 | X | 遠距離攻撃 | ユークリッド距離 5タイル以内 |
 | C/V | 未実装（将来用） | — |
 
-### ターゲット選択モード
-- Z/X キー押下で TARGETING モードに入る（移動停止）
+### ターゲット選択モード（ホールド方式 / Phase 6-1 で変更）
+- 攻撃キーをホールドしている間が TARGETING モード（移動停止）
+- ホールド開始時点から `pre_delay` のカウントダウンを開始
+- ホールド中、ターゲットリストをリアルタイム更新（敵の移動・死亡に対応）
+- ターゲットソート優先度（`_sort_targets()`）:
+  1. 前方±45°（`cos(45°) ≒ 0.707` による dot 積判定）の敵を距離順
+  2. それ以外の敵を距離順
 - 矢印キー（右/下 = 次、左/上 = 前）で循環選択：敵1 → 敵2 → キャンセル → 敵1…
-- 同じキーを再押しで確定・攻撃実行
-- キャンセルを選択して同キーを押すと NORMAL モードに戻る（Escape キーは使わない）
-- 有効なターゲットが0体なら TARGETING モードに入らない
-- ターゲットが死亡したら自動的に候補から除外し、全滅なら自動キャンセル
+- 先頭の敵が自動選択される（敵1体なら即フォーカス）
+- キーリリース時の処理:
+  - フォーカスあり → `_commit_attack()` → FIRING または即発動
+  - キャンセル選択 / 敵なし → ノーコストキャンセル
 - 壁による遮断チェックは将来実装（現時点は射程のみ判定）
-- 実行時点で射程外になっていたら空振り（飛翔体は飛ぶ）
+- 空振りなし（キーリリース時に対象が射程外でもヒット確定）
 
-### ターゲット選択中のpre_delay進行（未実装・仕様確定）
-- Z/X キー押下時点から `pre_delay_timer` のカウントを開始する
-- ターゲット選択中も `pre_delay_timer` は進行し続ける（選択操作でリセットしない）
-- 選択確定時：`pre_delay_timer >= pre_delay` なら即発動、未満なら残り時間を待ってから発動
-- 実装イメージ（PlayerController）:
-  ```
-  _enter_targeting() 内:
-    _pre_delay_elapsed = 0.0  # タイマー開始
-
-  _process(delta) 内（TARGETING中）:
-    _pre_delay_elapsed += delta
-
-  _confirm_attack() 内:
-    var remaining = character_data.pre_delay - _pre_delay_elapsed
-    if remaining > 0:
-      await get_tree().create_timer(remaining).timeout
-    _execute_attack()
-  ```
+### ターゲット選択中のpre_delay進行 ✅ 実装済み（Phase 6-1）
+- ホールド開始時点から `_pre_delay_remaining` のカウントダウンを開始する
+- TARGETING 中も毎フレームカウントダウンし続ける（選択操作でリセットしない）
+- キーリリース時（`_commit_attack()`）:
+  - `_pre_delay_remaining <= 0` → 即 `_execute_pending()`
+  - `_pre_delay_remaining > 0` → Mode.FIRING へ移行し、消化後に `_execute_pending()`
 - 効果：プレイヤーが慌てずにターゲットを選べる。素早く選べばほぼ待ち時間なし
 
-### PlayerController ステートマシン
+### PlayerController ステートマシン（Phase 6-1 版）
 ```
 NORMAL:
-  Z キー → _enter_targeting(MELEE)  ※有効ターゲットなしなら何もしない
-  X キー → _enter_targeting(RANGED)
-  矢印キー → 移動（従来どおり）
+  Z ホールド → _enter_targeting(Z)  ※有効ターゲットなしでも TARGETING に入る
+  X ホールド → _enter_targeting(X)
+  矢印キー   → 移動（従来どおり）
 
 TARGETING:
+  毎フレーム: _pre_delay_remaining -= delta
+  毎フレーム: _refresh_targets()（リアルタイムリスト更新）
   右/下 矢印キー → _cycle_target(+1)
   左/上 矢印キー → _cycle_target(-1)
-  同スロットキー → _confirm_attack()（キャンセル選択中なら _exit_targeting()）
-  全ターゲット死亡 → 自動 _exit_targeting()
+  攻撃キーリリース → フォーカスあり: _commit_attack() / なし: _exit_targeting()
+
+FIRING:
+  毎フレーム: _pre_delay_remaining -= delta
+  _pre_delay_remaining <= 0 → _execute_pending() → NORMAL
 ```
+
+**PlayerController の主要フィールド（Phase 6-1 追加分）:**
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `_pre_delay_remaining` | float | ホールド開始からのpre_delayカウントダウン |
+| `_pending_target` | Character | FIRINGステート用・発動待ちターゲット |
+| `_pending_slot_data` | Dictionary | FIRINGステート用・発動待ちスロットデータ |
+| `FORWARD_CONE_DOT` | float | 前方判定しきい値（cos45° = 0.707） |
 
 ### 飛翔体（Projectile）
 - `class_name Projectile extends Node2D`
@@ -882,7 +888,8 @@ scripts/target_cursor.gd   ターゲット選択カーソル
 
 ### 変更ファイル
 ```
-scripts/player_controller.gd  NORMAL/TARGETINGステートマシン・Z/Xキー対応（全面改修）
+scripts/player_controller.gd  NORMAL/TARGETINGステートマシン・Z/Xキー対応（Phase 4）
+                               ホールド方式・FIRINGステート・ターゲットソート（Phase 6-1で全面改修）
 scripts/character.gd          face_toward(target_grid_pos) 追加
 scripts/game_map.gd           player_controller.map_node = self を追加
 ```
@@ -1132,6 +1139,14 @@ scripts/hit_effect.gd       ヒットエフェクト（AnimatedSprite2D / フォ
   - MPバー: 常に空（将来実装）
 - 下25%: ミニマップ予約エリア（"MAP" テキスト表示）
 
+**フェイスアイコン表示（Phase 6-0/6-1で実装）:**
+- `sprite_face`（face.png）を優先し、未設定なら `sprite_front`（front.png）を使用
+- **TextureRect ノード方式**: `draw_texture_rect()` はカスタム描画コールバック内で白く表示される Godot 4 の制限があるため、`TextureRect` ノードを子として追加する方式を採用
+- `_icon_nodes: Dictionary`（`Character → TextureRect`）でメンバーごとにノードをキャッシュ
+- `_update_icon_nodes()` を毎フレーム呼び出し、位置・サイズ・テクスチャを更新
+- テクスチャなし（画像未設定・ロード失敗）の場合はカスタムドローで `placeholder_color` を描画
+- `expand_mode = TextureRect.EXPAND_IGNORE_SIZE`: テクスチャの元サイズを無視してセット済みの `size` で表示
+
 #### RightPanel（right_panel.gd）
 - `CanvasLayer` (layer=10) → `Control` → `draw` シグナル
 - `enemy.visible == true` の敵を character_id ごとに集計
@@ -1219,16 +1234,51 @@ assets/images/characters/{class}_{sex}_{age}_{build}_{id}/
 
 ## NPC仕様
 
-### 配置
-- ダンジョンのNPC配置はマップJSONの `npc_parties` に記述（enemy_parties と同構造）
-- LLM生成ダンジョンでは DungeonGenerator がNPCパーティーも生成（Phase 6-1で追加）
+### 配置（Phase 6-1〜）
+- マップJSON の rooms[] 内の `npc_party` フィールドに記述
+  - メンバーは `{ "class_id": "fighter-sword", "x": int, "y": int }` 形式
+- DungeonBuilder が `npc_party` を収集し `MapData.npc_parties` に格納
+- game_map の `_setup_npcs()` が各パーティーの `NpcManager` を生成・起動
 
-### 行動
-- NPC用AIController：敵AIと同構造、ターゲットは敵
-- NPCはプレイヤーエリアに入ったタイミングでアクティブ化
+### フィールド表示
+- `Character.is_friendly = true` を設定（将来の識別用フラグ。現在は視覚的差別化なし）
+- テクスチャあり：通常のキャラクタースプライトをそのまま表示（アウトラインなし）
+- テクスチャなし：緑（Color(0.2, 0.9, 0.3)）のプレースホルダー円（アウトラインリングなし）
 
-### 仲間加入（Phase 6-2で詳細決定）
-- 加入条件・会話トリガー・UIは Phase 6-2 で設計
+### AI（NpcLeaderAI + NpcUnitAI）
+- `NpcManager` が `CharacterGenerator.generate_character(class_id)` でメンバーをランダム生成
+- `NpcLeaderAI._evaluate_party_strategy()`: 生存敵あり → ATTACK、なし → WAIT
+- `NpcLeaderAI._select_target_for()`: 担当メンバーに最近傍の生存敵を割り当て
+- `NpcUnitAI`: 従順度 1.0（完全にリーダー指示に従う）、A* 経路探索
+- 敵リストは `NpcManager.set_enemy_list(enemies)` で game_map から渡す
+- VisionSystem がプレイヤーと同エリアに入った瞬間にAIをアクティブ化
+
+### 仲間加入（Phase 6-2で実装）
+
+#### 会話トリガー
+- **前提条件**: 現在の部屋内の敵が全滅していること
+- プレイヤーとNPC（いずれのメンバー）が隣接したら会話開始
+  - 話しかける相手はリーダーでなくてもよい（パーティー内で情報共有されている前提）
+  - どちらから近づいてもよい（NPC 側から近寄ってくることもある）
+- 会話中もリアルタイム進行を継続（ポーズなし）
+- 敵が部屋に侵入したら会話を即座に中断
+
+#### 会話UI
+- NPCパーティー情報を表示：メンバーの名前・クラス・ランク
+- **プレイヤーから話しかけた場合の選択肢**
+  | 選択肢 | 効果 |
+  |--------|------|
+  | 「仲間になってほしい」 | 相手パーティー全員がプレイヤー側に加入。プレイヤーがリーダー維持 |
+  | 「一緒に連れて行ってほしい」 | プレイヤー側が相手パーティーに加入。NPCリーダーがリーダーになる |
+- **NPCから話しかけてくる場合**: 上記2択のどちらかで申し出、プレイヤーが承諾/拒否を選択
+- **NPCの申し出ロジック（当面）**: パーティーに重傷者が多い場合、相手パーティーの傘下に入る形で申し出
+- **NPCリーダーAIの承諾/拒否判断（当面）**: 双方のパーティー総合力を比較して判断
+
+#### 合流処理
+- 承諾された場合、NPC パーティー全員が合流
+- 合流後の元NPCはプレイヤーパーティーのメンバーとしてAI行動
+- 左パネルに合流メンバーを追加表示
+- プレイヤーがリーダーでなくなった場合も、プレイヤーが直接操作するキャラは変わらない
 
 ---
 
@@ -1296,13 +1346,142 @@ assets/images/characters/{class}_{sex}_{age}_{build}_{id}/
 ##### LeftPanel の更新（Phase 6-0〜）
 - フェイスアイコン表示を `sprite_face` 優先に変更（なければ `sprite_front` を使用）
 
-### Phase 6-1: 仲間NPCの配置と基本AI行動（未実装）
-- ダンジョンにNPCパーティーを配置
-- NPC用AIController実装
+### Phase 6-1: 仲間NPCの配置と基本AI行動（実装済み）
 
-### Phase 6-2: 仲間の加入の仕組み（未実装）
-- プレイヤーパーティーへのNPC加入フロー
-- 加入UI・会話トリガー
+#### 手作りダンジョン（dungeon_handcrafted.json）
+- 15部屋・8敵パーティー（ゴブリン計21体）・5NPCパーティー（10体）
+- 4列×4行 + 1部屋のグリッドレイアウト（14×12 タイルルーム）
+- 起動優先順位: dungeon_generated.json → dungeon_handcrafted.json → LLM新規生成
+
+#### 新規ファイル
+| ファイル | 役割 |
+|---------|------|
+| `scripts/npc_manager.gd` | NPC 生成・管理（CharacterGenerator 使用） |
+| `scripts/npc_leader_ai.gd` | リーダーAI（敵をターゲット） |
+| `scripts/npc_unit_ai.gd` | 個体AI（従順度1.0、A*）|
+| `assets/master/maps/dungeon_handcrafted.json` | 手作りダンジョン |
+
+#### 変更ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `scripts/map_data.gd` | `npc_parties: Array = []` 追加 |
+| `scripts/dungeon_builder.gd` | `_build_spawn_data()` で `npc_party` 収集 |
+| `scripts/character.gd` | `is_friendly: bool` フラグ追加（アウトラインリングなし） |
+| `scripts/vision_system.gd` | `add_npc_manager()` / NPC visibility 更新 |
+| `scripts/game_map.gd` | `_setup_npcs()` / `_load_handcrafted_dungeon()` / NPC 登録 / `_link_all_character_lists()` 追加 |
+| `scripts/party_manager.gd` | `_spawn_member()` のノード名にマネージャー名プレフィックスを追加（名前衝突防止） |
+| `scripts/unit_ai.gd` | `receive_order()` 内で freed オブジェクトへのキャストを `is_instance_valid()` でガード |
+
+#### バグ修正メモ
+- **ノード名衝突（`@Node2D@N` キャラ出現）**: 複数の NpcManager が同名ノードをシーンツリーに追加すると Godot が自動リネームする。`party_manager.gd._spawn_member()` でノード名に `self.name`（マネージャー名）をプレフィックスとして付与することで解消。
+- **freed オブジェクトクラッシュ**: `unit_ai.gd._process()` がキュー空時に `receive_order(_order)` を再呼び出しする際、`_order` 内に保存済みのターゲット参照が既に `queue_free()` されている場合にキャストでクラッシュ。`is_instance_valid()` チェックを追加して `null` 扱いに変更。
+- **NPC-プレイヤー重複**: `player_controller.blocking_characters` に NPC メンバーが含まれていなかった。`game_map._setup_controller()` で NPC メンバーも追加。
+- **NPC-敵重複**: `_all_members`（AI の `_is_passable()` 占有チェック用）に自パーティーのみが入っており、双方が相手の座標を無視して重複。`game_map._link_all_character_lists()` を追加し、敵全員＋NPC全員の合算リストを全マネージャーに配布することで解消。
+
+### Phase 6-2: 仲間の加入の仕組み（実装済み）
+
+#### 新規ファイル
+| ファイル | 役割 |
+|---------|------|
+| `scripts/dialogue_trigger.gd` | 隣接チェック・エリア敵全滅確認・NPC 自発申し出検出 |
+| `scripts/dialogue_window.gd` | 会話UI（画面下部ポップアップ・GRID_SIZE 連動フォント） |
+
+#### 変更ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `scripts/npc_leader_ai.gd` | `wants_to_initiate()` / `get_party_strength()` / `will_accept()` 追加 |
+| `scripts/vision_system.gd` | `remove_npc_manager()` 追加（合流後に管理から除外） |
+| `scripts/player_controller.gd` | `is_blocked` フラグ追加・`_get_valid_targets()` で `is_friendly` チェック追加 |
+| `scripts/game_map.gd` | `_setup_dialogue_system()` / 合流処理 / 敵入室中断 / NPC 一時停止 |
+
+#### 実装詳細
+
+**DialogueTrigger**
+- `_process()` で毎フレーム監視。条件: 現エリアに生存敵なし + プレイヤーと NPC 隣接（距離1）+ 通路でない
+- `is_area_enemy_free(area)` はゲームマップの敵入室中断チェックでも共用
+- `_npc_wants_to_initiate()` で NpcLeaderAI の `wants_to_initiate()` を呼び、結果を `dialogue_requested` シグナルで通知
+
+**DialogueWindow（CanvasLayer layer=15）**
+- 画面下部ポップアップ（`vp_h - panel_h - 16px` に配置）
+- パネル幅: フィールド幅 - 32px（左右パネルの内側いっぱい）
+- フォントサイズ: GRID_SIZE 連動（1080p基準: タイトル≈18px、本文≈16px、ヒント≈13px）
+- プレイヤー起点: 3択（仲間に / 連れて行って / 立ち去る）
+- NPC 起点: 2択（承諾する / 断る）＋ NPC の申し出セリフ表示
+- `show_rejected()` で拒否メッセージを 1.8 秒表示後に自動クローズ
+- 操作: ↑↓ 選択 / Z・Enter 決定 / Esc キャンセル
+
+**NpcLeaderAI の新メソッド**
+| メソッド | 説明 |
+|---------|------|
+| `wants_to_initiate() -> bool` | 重傷者（HP<50%）が過半数なら true |
+| `get_party_strength() -> float` | 全メンバーの max_hp 合計 |
+| `will_accept(offer_type, player_strength) -> bool` | "join_us": NPC 総合力 ≤ プレイヤー総合力×1.5 なら承諾。"join_them": 常に承諾 |
+
+**合流処理（game_map.gd）**
+- 会話開始時: `nm.set_process_mode(DISABLED)` で NPC AI を一時停止（会話中に動き回らないようにする）
+- 会話終了時: `set_process_mode(INHERIT)` で AI を再開
+- 合流後: NPC メンバーを `party` に追加・`visible = true`・VisionSystem と `npc_managers` から除外（再会話防止）
+- "連れて行ってほしい": NPC 先頭メンバーを `left_panel.set_active_character()` でハイライト
+- `player_controller._get_valid_targets()` に `is_friendly` チェックを追加し、合流後の仲間は攻撃不可
+
+#### バグ修正メモ（Phase 6-2）
+- **合流後に仲間を攻撃できる**: `blocking_characters` に NPC が残るため。`_get_valid_targets()` で `is_friendly == true` のキャラをスキップすることで解消。
+- **会話中に NPC が動き回る**: 会話開始時に `nm.set_process_mode(PROCESS_MODE_DISABLED)` で NPC 全体を一時停止。
+- **Array[String] クラッシュ**: `show_dialogue()` 内でリテラル配列（型なし `Array`）を `Array[String]` に直接代入するとランタイムエラー。`.assign()` で解消。
+
+### 敵キャラクター画像対応（Phase 6-0 拡張 / Phase 6-2 完了後に実装）
+
+#### 変更ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `scripts/character_generator.gd` | 敵画像スキャン・適用メソッドを追加 |
+| `scripts/party_manager.gd` | `_spawn_member()` で `apply_enemy_graphics()` を呼び出し |
+
+#### フォルダ構成
+```
+assets/images/enemies/
+  {enemy_type}_{sex}_{age}_{build}_{id}/
+    top.png      フィールド表示用
+    ready.png    構え（ターゲット選択中・攻撃中）
+    front.png    UI表示用
+    face.png     右パネル等のアイコン用（将来）
+```
+- 味方（`characters/`）と同一ファイル構成
+- `enemy_type` には `-` が含まれる（例: `goblin-archer`、`dark-knight`）
+
+#### CharacterGenerator の追加メソッド
+
+**`scan_enemy_graphic_sets(enemy_type: String = "") -> Array[Dictionary]`**
+- `assets/images/enemies/` 内のフォルダを走査
+- `_parse_enemy_folder_name()` でフォルダ名を解析
+- `enemy_type` が空なら全セット、指定があれば一致するセットのみ返す
+
+**`_parse_enemy_folder_name(folder: String) -> Dictionary`**
+- フォーマット: `{enemy_type}_{sex}_{age}_{build}_{id}`
+- `enemy_type` に `-` が含まれるため、味方の `KNOWN_CLASSES` プレフィックスマッチは使えない
+- 代わりに `"_male_"` / `"_female_"` を検索して境界を検出（最初に見つかった方を採用）
+- 解析結果: `{ "enemy_type", "sex", "age", "build", "id", "folder" }`
+
+**`apply_enemy_graphics(data: CharacterData) -> void`**
+- `data.character_id`（例: `"goblin"`、`"dark-knight"`）で対応フォルダを検索
+- 複数ヒットした場合はランダムに1つ選択
+- `data.sprite_top / sprite_top_ready / sprite_front / sprite_face / image_set` を上書き
+- `data.sex / age / build` もフォルダ情報で更新
+- フォルダが見つからない場合は何もしない（JSON 指定パスまたはプレースホルダーを維持）
+
+#### party_manager._spawn_member() の変更
+```gdscript
+member.character_data = CharacterData.load_from_json(...)
+# 敵画像フォルダが存在すればランダムに選択して適用する（なければ JSON パスを維持）
+CharacterGenerator.apply_enemy_graphics(member.character_data)
+```
+
+#### フォールバック優先順位
+1. `assets/images/enemies/{enemy_type}_*/` フォルダが存在 → フォルダ内の画像を使用
+2. フォルダなし + JSON に `sprites.top` 等が指定されている → JSON のパスを使用
+3. JSON にもパスなし → `_has_texture = false` でプレースホルダー（橙色矩形）表示
+
+---
 
 ### Phase 6-3: 操作キャラの切替（未実装）
 - `AIController` の本実装

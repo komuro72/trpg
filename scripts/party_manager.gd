@@ -65,7 +65,10 @@ func _spawn_member(char_id: String, grid_pos: Vector2i) -> Character:
 	member.character_data = CharacterData.load_from_json(
 		"res://assets/master/enemies/" + char_id + ".json"
 	)
-	member.name = char_id.capitalize() + str(_members.size())
+	# 敵画像フォルダが存在すればランダムに選択して適用する（なければ JSON パスを維持）
+	CharacterGenerator.apply_enemy_graphics(member.character_data)
+	# name（例: "EnemyManager0"）をプレフィックスにして複数マネージャー間の名前衝突を防ぐ
+	member.name = name + "_" + char_id.capitalize() + str(_members.size())
 	get_parent().add_child(member)
 	member.sync_position()
 	member.died.connect(_on_member_died)

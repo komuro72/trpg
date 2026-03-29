@@ -141,19 +141,27 @@ static func _build_spawn_data(data: MapData, floor_data: Dictionary, rooms: Arra
 
 	# 敵スポーン（各部屋のenemy_partyから収集、party_idは部屋ごと）
 	data.enemy_parties = []
+	data.npc_parties   = []
 	var party_id := 1
 	for room: Variant in rooms:
 		var r := room as Dictionary
 		if r.get("is_entrance", false):
 			continue
 		var ep: Variant = r.get("enemy_party")
-		if ep == null or not ep is Dictionary:
-			continue
-		var members: Array = (ep as Dictionary).get("members", [])
-		if members.is_empty():
-			continue
-		data.enemy_parties.append({
-			"party_id": party_id,
-			"members":  members
-		})
-		party_id += 1
+		if ep != null and ep is Dictionary:
+			var members: Array = (ep as Dictionary).get("members", [])
+			if not members.is_empty():
+				data.enemy_parties.append({
+					"party_id": party_id,
+					"members":  members
+				})
+				party_id += 1
+		var np: Variant = r.get("npc_party")
+		if np != null and np is Dictionary:
+			var members: Array = (np as Dictionary).get("members", [])
+			if not members.is_empty():
+				data.npc_parties.append({
+					"party_id": party_id,
+					"members":  members
+				})
+				party_id += 1

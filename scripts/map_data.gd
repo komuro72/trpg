@@ -23,6 +23,7 @@ var _tiles: Array = []
 ## [{party_id: int, members: [{character_id: String, x: int, y: int}]}]
 var player_parties: Array = []
 var enemy_parties: Array = []
+var npc_parties: Array = []
 
 ## エリアマップ（グリッド座標 → エリアID文字列）
 ## DungeonBuilderが部屋・通路ごとにIDを設定する
@@ -78,6 +79,7 @@ static func load_from_json(path: String) -> MapData:
 
 	data.player_parties = d.get("player_parties", [])
 	data.enemy_parties  = d.get("enemy_parties",  [])
+	data.npc_parties    = d.get("npc_parties",    [])
 	return data
 
 
