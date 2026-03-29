@@ -83,12 +83,14 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 	var icon_rect := Rect2(fx + pad, fy + pad, icon_size, icon_size)
 	var drew_icon := false
 	if c.character_data != null:
-		var icon_path := c.character_data.sprite_face
+		var icon_path: String = c.character_data.sprite_face
 		if icon_path.is_empty():
 			icon_path = c.character_data.sprite_front
-		if not icon_path.is_empty() and ResourceLoader.exists(icon_path):
-			_control.draw_texture_rect(load(icon_path) as Texture2D, icon_rect, false)
-			drew_icon = true
+		if not icon_path.is_empty():
+			var tex := load(icon_path) as Texture2D
+			if tex != null:
+				_control.draw_texture_rect(tex, icon_rect, false)
+				drew_icon = true
 	if not drew_icon:
 		_control.draw_rect(icon_rect, c.placeholder_color)
 
