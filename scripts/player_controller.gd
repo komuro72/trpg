@@ -219,8 +219,8 @@ func _get_valid_targets(slot: AttackSlot) -> Array[Character]:
 			# 飛行ターゲットへの近接攻撃は不可（地上→飛行・飛行→飛行）
 			if c.is_flying:
 				continue
-			var dx := abs(c.grid_pos.x - character.grid_pos.x)
-			var dy := abs(c.grid_pos.y - character.grid_pos.y)
+			var dx: int = abs(c.grid_pos.x - character.grid_pos.x)
+			var dy: int = abs(c.grid_pos.y - character.grid_pos.y)
 			if dx + dy <= range_val:
 				result.append(c)
 		elif action == "ranged" or action == "ranged_area":
