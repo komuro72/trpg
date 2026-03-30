@@ -1,0 +1,18 @@
+{
+  "id": "zombie",
+  "name": "ゾンビ",
+  "hp": 35,
+  "attack": 6,
+  "defense": 2,
+  "is_flying": false,
+  "attack_type": "melee",
+  "attack_range": 1,
+  "rank": "C",
+  "pre_delay": 0.7,
+  "post_delay": 0.8,
+  "behavior_description": "死者が蘇った不死の怪物。低速だが止まらない。近くの人間に向かって直進する。絶対に逃げない。",
+  "sprites": {
+    "top":   "res://assets/images/enemies/zombie_top.png",
+    "front": "res://assets/images/enemies/zombie_front.png"
+  }
+}

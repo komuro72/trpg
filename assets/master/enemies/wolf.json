@@ -1,0 +1,18 @@
+{
+  "id": "wolf",
+  "name": "ウルフ",
+  "hp": 22,
+  "attack": 9,
+  "defense": 2,
+  "is_flying": false,
+  "attack_type": "melee",
+  "attack_range": 1,
+  "rank": "C",
+  "pre_delay": 0.3,
+  "post_delay": 0.4,
+  "behavior_description": "群れで行動する獰猛な狼。高速移動して側面から奇襲する。仲間の半数が倒れると逃走する。",
+  "sprites": {
+    "top":   "res://assets/images/enemies/wolf_top.png",
+    "front": "res://assets/images/enemies/wolf_front.png"
+  }
+}

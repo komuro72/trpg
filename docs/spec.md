@@ -1769,9 +1769,59 @@ Character.current_order
   "heal_power": 10, "heal_mp_cost": 5, "buff_mp_cost": 8, ... }
 ```
 
-## Phase 8 Step 2: 敵のバリエーション追加（未実装）
-- ゴブリン以外の敵をダンジョンに配置
-- `behavior_description` の自然言語説明で行動パターンをLLMに伝える
+## Phase 8 Step 2+3: 種族別AIルーチン・ダンジョン生成組み込み ✅ 実装済み
+
+### UnitAI への追加（unit_ai.gd）
+- `_get_move_interval() -> float`: 移動間隔の仮想メソッド（デフォルト=MOVE_INTERVAL=0.4秒）
+- `_on_after_attack() -> void`: 攻撃後フック（MP消費などに使用）
+- `_execute_attack()` から `_on_after_attack()` を呼び出すよう修正
+
+### 新規 LeaderAI ファイル
+| ファイル | 種族 | 特徴 |
+|---------|------|------|
+| default_leader_ai.gd | 汎用（ゴブリン以外） | 逃走しない。_create_unit_ai() でcharacter_idから種別UnitAIを生成 |
+| hobgoblin_leader_ai.gd | hobgoblin | 絶対逃走しない。混成パーティー（hobgoblin+goblin）対応 |
+| wolf_leader_ai.gd | wolf | 50%生存割れで逃走。WolfUnitAI を生成 |
+
+### 新規 UnitAI ファイル
+| ファイル | 種族 | 主な特徴 |
+|---------|------|---------|
+| hobgoblin_unit_ai.gd | hobgoblin | 絶対逃走しない、melee正面突進 |
+| goblin_archer_unit_ai.gd | goblin-archer | HP<30%逃走、MIN_CLOSE_RANGE(2)以下で後退 |
+| goblin_mage_unit_ai.gd | goblin-mage | HP<30%逃走、MP消費(2/攻撃)、MP不足でWAIT |
+| zombie_unit_ai.gd | zombie | 逃走しない、DIRECT経路、移動2倍遅い |
+| wolf_unit_ai.gd | wolf | ASTAR_FLANK(側面回り込み)、移動0.67倍速い |
+| harpy_unit_ai.gd | harpy | 逃走しない、dive攻撃（UnitAI基底で処理済み） |
+| salamander_unit_ai.gd | salamander | 逃走しない、MIN_CLOSE_RANGE(2)以下で後退 |
+| dark_knight_unit_ai.gd | dark-knight | 逃走しない、melee正面突進 |
+| dark_mage_unit_ai.gd | dark-mage | 逃走しない、MP消費(2/攻撃)、MP不足でWAIT |
+| dark_priest_unit_ai.gd | dark-priest | 逃走しない（WAIT維持）、heal/buffはUnitAI基底で自動処理 |
+
+### 新規 JSON マスターデータ
+| ファイル | id | rank | 特徴 |
+|---------|-----|------|------|
+| hobgoblin.json | hobgoblin | A | HP:45 ATK:12 DEF:4 melee |
+| goblin_archer.json | goblin-archer | C | HP:18 ATK:6 ranged range:5 |
+| goblin_mage.json | goblin-mage | C | HP:15 ATK:9 MP:20 ranged range:5 |
+| zombie.json | zombie | C | HP:35 ATK:6 melee（遅・直進） |
+| wolf.json | wolf | C | HP:22 ATK:9 melee（速・側面） |
+| salamander.json | salamander | B | HP:28 ATK:10 ranged range:4 |
+| dark_knight.json | dark-knight | A | HP:55 ATK:14 DEF:6 melee |
+| dark_mage.json | dark-mage | B | HP:22 ATK:12 MP:30 ranged range:5 |
+
+### party_manager._create_leader_ai() 更新
+```gdscript
+match char_id:
+    "goblin"    → GoblinLeaderAI
+    "hobgoblin" → HobgoblinLeaderAI
+    "wolf"      → WolfLeaderAI
+    _           → DefaultLeaderAI（goblin-archer, goblin-mage, zombie, harpy, salamander, dark-knight, dark-mage, dark-priest）
+```
+
+### DungeonGenerator プロンプト更新
+- 11種の敵を使用可能として列挙（種族ごとの特性・パーティー構成例）
+- フロア別配置ガイドライン（浅い層：goblin/zombie/wolf中心、深い層：dark系中心）
+- dungeon_handcrafted.json 削除・game_map.gd からhandcrafted読み込み処理を削除
 
 ## Phase 9: ステージ・バランス調整（未実装）
 

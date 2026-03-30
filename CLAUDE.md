@@ -475,9 +475,16 @@ assets/images/enemies/
   - 回復行動（ヒーラー・ダークプリースト）：HP50%以下の味方を優先して回復、MP消費
   - バフ行動（ダークプリースト）：バフが切れた味方に防御力アップを付与、MP消費
   - harpy.json / dark_priest.json 作成、enemies_list.json に追加
-- [ ] Phase 8 Step 2: 敵のバリエーション追加（ダンジョン生成への組み込み）
-  - ゴブリン以外の敵をダンジョンに配置
-  - LLMへの自然言語説明（behavior_description）で行動パターンを表現
+- [x] Phase 8 Step 2+3: 種族別AIルーチンの追加・ダンジョン生成への組み込み
+  - UnitAI に `_get_move_interval()`・`_on_after_attack()` 仮想メソッド追加（速度変更・MP消費フック）
+  - 種族別 LeaderAI: HobgoblinLeaderAI（混成パーティー管理）/ WolfLeaderAI（群れ戦術）/ DefaultLeaderAI（汎用）
+  - 種族別 UnitAI: HobgoblinUnitAI / GoblinArcherUnitAI / GoblinMageUnitAI / ZombieUnitAI / WolfUnitAI / HarpyUnitAI / SalamanderUnitAI / DarkKnightUnitAI / DarkMageUnitAI / DarkPriestUnitAI
+  - 特徴実装: ゾンビ低速2倍・直進経路 / 狼高速1.5倍・側面回り込み / 近距離後退（弓・サラマンダー）/ MP消費（メイジ系）
+  - 欠けていたJSONマスターデータ8種作成（hobgoblin / goblin_archer / goblin_mage / zombie / wolf / salamander / dark_knight / dark_mage）
+  - enemies_list.json に11種全て追加
+  - party_manager._create_leader_ai() ファクトリを11種に対応（match文で正確にルーティング）
+  - DungeonGenerator プロンプトを11種対応に更新（種族特性・フロア別配置ガイドライン付き）
+  - dungeon_handcrafted.json 削除・game_map.gd からhandcrafted読み込み処理を削除（LLM生成に一本化）
 - [ ] Phase 9: ステージ・バランス調整
 - [ ] Phase 10: Steam配布準備
 

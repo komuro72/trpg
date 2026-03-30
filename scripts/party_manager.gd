@@ -168,13 +168,25 @@ func _create_leader_ai(leader: Character) -> PartyLeaderAI:
 	var char_id := ""
 	if leader != null and leader.character_data != null:
 		char_id = leader.character_data.character_id
-	if char_id.begins_with("goblin") or char_id.is_empty():
-		var ai := GoblinLeaderAI.new()
-		ai.name = "GoblinLeaderAI"
-		return ai
-	# 将来の種別追加: hobgoblin, zombie, wolf などはここで分岐する
-	var ai := GoblinLeaderAI.new()
-	ai.name = "GoblinLeaderAI"
+
+	match char_id:
+		"goblin":
+			var ai := GoblinLeaderAI.new()
+			ai.name = "GoblinLeaderAI"
+			return ai
+		"hobgoblin":
+			var ai := HobgoblinLeaderAI.new()
+			ai.name = "HobgoblinLeaderAI"
+			return ai
+		"wolf":
+			var ai := WolfLeaderAI.new()
+			ai.name = "WolfLeaderAI"
+			return ai
+
+	# goblin-archer, goblin-mage, zombie, harpy, salamander,
+	# dark-knight, dark-mage, dark_priest, dark-priest など
+	var ai := DefaultLeaderAI.new()
+	ai.name = "DefaultLeaderAI"
 	return ai
 
 

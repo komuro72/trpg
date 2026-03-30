@@ -18,9 +18,8 @@ const COLOR_RUBBLE      := Color(0.55, 0.45, 0.35)
 const COLOR_CORRIDOR    := Color(0.30, 0.30, 0.35)
 const COLOR_GRID_LINE   := Color(0.0, 0.0, 0.0, 0.15)
 
-const DUNGEON_JSON_PATH      := "res://assets/master/maps/dungeon_generated.json"
-const HANDCRAFTED_JSON_PATH  := "res://assets/master/maps/dungeon_handcrafted.json"
-const FALLBACK_JSON_PATH     := "res://assets/master/maps/dungeon_01.json"
+const DUNGEON_JSON_PATH  := "res://assets/master/maps/dungeon_generated.json"
+const FALLBACK_JSON_PATH := "res://assets/master/maps/dungeon_01.json"
 
 ## 表示するフロア番号（0-indexed）
 const CURRENT_FLOOR := 0
@@ -70,8 +69,6 @@ func _ready() -> void:
 
 	if FileAccess.file_exists(DUNGEON_JSON_PATH):
 		_load_generated_dungeon()
-	elif FileAccess.file_exists(HANDCRAFTED_JSON_PATH):
-		_load_handcrafted_dungeon()
 	else:
 		_start_generation()
 
@@ -105,20 +102,6 @@ func _load_generated_dungeon() -> void:
 	map_data = MapData.load_from_json(FALLBACK_JSON_PATH)
 	_finish_setup()
 
-
-## 手作りダンジョンJSON（dungeon_handcrafted.json）を読み込む
-func _load_handcrafted_dungeon() -> void:
-	var raw: Variant = JSON.parse_string(_read_file(HANDCRAFTED_JSON_PATH))
-	if raw != null and raw is Dictionary:
-		var floors: Array = ((raw as Dictionary).get("dungeon", {}) as Dictionary).get("floors", [])
-		if CURRENT_FLOOR < floors.size():
-			map_data = DungeonBuilder.build_floor(floors[CURRENT_FLOOR] as Dictionary)
-			_finish_setup()
-			return
-
-	push_error("game_map: dungeon_handcrafted.json のパースに失敗しました。フォールバック使用")
-	map_data = MapData.load_from_json(FALLBACK_JSON_PATH)
-	_finish_setup()
 
 
 ## LLMでダンジョン生成を開始し、生成中ラベルを表示する

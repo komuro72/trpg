@@ -1,0 +1,18 @@
+{
+  "id": "goblin-archer",
+  "name": "ゴブリンアーチャー",
+  "hp": 18,
+  "attack": 6,
+  "defense": 1,
+  "is_flying": false,
+  "attack_type": "ranged",
+  "attack_range": 5,
+  "rank": "C",
+  "pre_delay": 0.4,
+  "post_delay": 0.5,
+  "behavior_description": "弓を持つゴブリン。後方から遠距離攻撃する。敵が近づきすぎると後退して射程を確保する。",
+  "sprites": {
+    "top":   "res://assets/images/enemies/goblin-archer_top.png",
+    "front": "res://assets/images/enemies/goblin-archer_front.png"
+  }
+}

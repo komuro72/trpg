@@ -179,7 +179,7 @@ func _process(delta: float) -> void:
 			if _timer <= 0.0:
 				var still_moving := _step_toward_goal()
 				if still_moving:
-					_timer = MOVE_INTERVAL
+					_timer = _get_move_interval()
 				else:
 					_state = _State.IDLE
 					_complete_action()
@@ -194,6 +194,7 @@ func _process(delta: float) -> void:
 			_timer -= delta
 			if _timer <= 0.0:
 				_execute_attack()
+				_on_after_attack()
 				_member.is_attacking = false
 				_state = _State.ATTACKING_POST
 				var post := _member.character_data.post_delay if _member.character_data else 0.5
@@ -218,7 +219,7 @@ func _start_action(action: Dictionary) -> void:
 				return
 			_goal  = goal
 			_state = _State.MOVING
-			_timer = MOVE_INTERVAL
+			_timer = _get_move_interval()
 
 		"move_to_formation":
 			var fgoal := _formation_move_goal()
@@ -227,7 +228,7 @@ func _start_action(action: Dictionary) -> void:
 				return
 			_goal  = fgoal
 			_state = _State.MOVING
-			_timer = MOVE_INTERVAL
+			_timer = _get_move_interval()
 
 		"move_to_explore":
 			var goal_var: Variant = action.get("goal", null)
@@ -240,7 +241,7 @@ func _start_action(action: Dictionary) -> void:
 				return
 			_goal  = goal
 			_state = _State.MOVING
-			_timer = MOVE_INTERVAL
+			_timer = _get_move_interval()
 
 		"flee":
 			if _target == null or not is_instance_valid(_target):
@@ -252,7 +253,7 @@ func _start_action(action: Dictionary) -> void:
 				return
 			_goal  = goal
 			_state = _State.MOVING
-			_timer = MOVE_INTERVAL
+			_timer = _get_move_interval()
 
 		"attack":
 			if _target == null or not is_instance_valid(_target):
@@ -283,7 +284,7 @@ func _start_action(action: Dictionary) -> void:
 				return
 			_goal  = goal
 			_state = _State.MOVING
-			_timer = MOVE_INTERVAL
+			_timer = _get_move_interval()
 
 		"heal":
 			var tgt_var: Variant = action.get("target", null)
@@ -939,3 +940,14 @@ func _get_path_method() -> PathMethod:
 	match _battle_formation:
 		"rear": return PathMethod.ASTAR_FLANK
 		_:      return PathMethod.ASTAR
+
+
+## 移動間隔（秒/タイル）。サブクラスで上書きして速度変更可能
+## zombie=遅い(MOVE_INTERVAL*2.0) / wolf=速い(MOVE_INTERVAL*0.67) など
+func _get_move_interval() -> float:
+	return MOVE_INTERVAL
+
+
+## 攻撃実行後に呼ばれるフック。MP消費などはここで行う（サブクラスでオーバーライド）
+func _on_after_attack() -> void:
+	pass

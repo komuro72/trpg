@@ -1,7 +1,15 @@
 {
   "enemies": [
     "res://assets/master/enemies/goblin.json",
+    "res://assets/master/enemies/goblin_archer.json",
+    "res://assets/master/enemies/goblin_mage.json",
+    "res://assets/master/enemies/hobgoblin.json",
+    "res://assets/master/enemies/zombie.json",
+    "res://assets/master/enemies/wolf.json",
     "res://assets/master/enemies/harpy.json",
+    "res://assets/master/enemies/salamander.json",
+    "res://assets/master/enemies/dark_knight.json",
+    "res://assets/master/enemies/dark_mage.json",
     "res://assets/master/enemies/dark_priest.json"
   ]
 }
