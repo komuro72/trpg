@@ -1,5 +1,7 @@
 {
   "enemies": [
-    "res://assets/master/enemies/goblin.json"
+    "res://assets/master/enemies/goblin.json",
+    "res://assets/master/enemies/harpy.json",
+    "res://assets/master/enemies/dark_priest.json"
   ]
 }

@@ -6,6 +6,7 @@ extends Node2D
 ## Phase 2-1: HP・攻撃力・防御力・死亡処理を追加。
 ## Phase 5:   トップビュー対応。rotation で方向を表現。is_flying フラグを追加。
 ##             フィールド画像（sprite_top）は下向き基準。DOWN = 0°
+## Phase 8:   MP・バフ（defense_up）フィールド追加。use_mp()/heal()/apply_defense_buff() 追加。
 
 ## 向き定義（トップビュー基準：DOWN=画面下, UP=画面上, LEFT=左, RIGHT=右）
 enum Direction { DOWN, UP, LEFT, RIGHT }
@@ -25,9 +26,18 @@ var is_player_controlled: bool = false
 ## 基本ステータス（character_data から _ready() で初期化）
 var hp: int = 1
 var max_hp: int = 1
+var mp: int = 0
+var max_mp: int = 0
 var attack: int = 1
 var defense: int = 0
 var is_flying: bool = false
+
+## バフ状態（一時的な防御力アップ。0=なし、>0=残り秒数）
+var defense_buff_timer: float = 0.0
+## バフ中の防御ボーナス
+const DEFENSE_BUFF_BONUS: int = 3
+## バフ持続時間（秒）
+const DEFENSE_BUFF_DURATION: float = 10.0
 ## フレンドリーフラグ（NPC など味方側キャラクターに設定。緑のリングで表示）
 var is_friendly: bool = false
 
@@ -85,8 +95,13 @@ func _ready() -> void:
 	sync_position()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_update_modulate()
+	# バフタイマーを消化する
+	if defense_buff_timer > 0.0:
+		defense_buff_timer -= delta
+		if defense_buff_timer <= 0.0:
+			defense_buff_timer = 0.0
 
 
 ## HP・モードに応じてスプライトの色を更新する
@@ -121,6 +136,8 @@ func _init_stats() -> void:
 		return
 	max_hp    = character_data.max_hp
 	hp        = max_hp
+	max_mp    = character_data.max_mp
+	mp        = max_mp
 	attack    = character_data.attack
 	defense   = character_data.defense
 	is_flying = character_data.is_flying
@@ -264,9 +281,36 @@ func face_toward(target_grid_pos: Vector2i) -> void:
 	_apply_direction_rotation()
 
 
-## ダメージを受ける（方向倍率 × 攻撃力 − 防御力、最低1ダメージ保証）
+## MP を消費する。消費可能なら true を返す
+func use_mp(cost: int) -> bool:
+	if cost <= 0:
+		return true
+	if mp < cost:
+		return false
+	mp -= cost
+	return true
+
+
+## HP を回復する（最大HP を超えない）
+func heal(amount: int) -> void:
+	hp = mini(hp + amount, max_hp)
+
+
+## 防御バフを付与する（重複時はタイマーをリセット）
+func apply_defense_buff() -> void:
+	defense_buff_timer = DEFENSE_BUFF_DURATION
+
+
+## バフ込みの防御力を返す
+func get_effective_defense() -> int:
+	if defense_buff_timer > 0.0:
+		return defense + DEFENSE_BUFF_BONUS
+	return defense
+
+
+## ダメージを受ける（方向倍率 × 攻撃力 − 有効防御力、最低1ダメージ保証）
 func take_damage(raw_amount: int, multiplier: float = 1.0) -> void:
-	var actual: int = max(1, int(float(raw_amount) * multiplier) - defense)
+	var actual: int = max(1, int(float(raw_amount) * multiplier) - get_effective_defense())
 	hp = max(0, hp - actual)
 	_spawn_hit_effect(actual)
 	if hp <= 0:

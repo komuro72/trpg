@@ -122,12 +122,18 @@ func _assign_orders() -> void:
 		if _party_strategy == Strategy.FLEE:
 			effective_strat = int(Strategy.FLEE)
 		else:
-			# 個別の戦闘指示から変換
-			match combat:
-				"aggressive": effective_strat = int(Strategy.ATTACK)
-				"support":    effective_strat = int(Strategy.WAIT)
-				"standby":    effective_strat = int(Strategy.WAIT)
-				_:            effective_strat = int(_party_strategy)
+			# 回復・バフ専用キャラ（heal_power > 0）は常に WAIT を渡す
+			# UnitAI._generate_queue() の先頭で heal/buff キューが自動生成される
+			var cd := member.character_data
+			if cd != null and (cd.heal_power > 0 or cd.buff_mp_cost > 0):
+				effective_strat = int(Strategy.WAIT)
+			else:
+				# 個別の戦闘指示から変換
+				match combat:
+					"aggressive": effective_strat = int(Strategy.ATTACK)
+					"support":    effective_strat = int(Strategy.WAIT)
+					"standby":    effective_strat = int(Strategy.WAIT)
+					_:            effective_strat = int(_party_strategy)
 
 		# 2. 個別低HP条件（on_low_hp）：HP50%未満で処理
 		if member.max_hp > 0 and float(member.hp) / float(member.max_hp) < 0.5:

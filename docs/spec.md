@@ -1678,8 +1678,99 @@ Character.current_order
 ### 未実装（今後）
 - 統率力・従順度パラメータの実際の影響（値は保持済み）
 
-## Phase 8: 敵のバリエーション（未実装）
-- ゴブリン以外の敵を追加
+## Phase 8 Step 1: 未実装行動の追加 ✅ 実装済み
+
+### 新規ファイル
+| ファイル | 役割 |
+|---------|------|
+| `scripts/dive_effect.gd` | 降下攻撃エフェクト（空色→白フラッシュ円アニメーション） |
+| `assets/master/enemies/harpy.json` | ハーピーのマスターデータ（dive・is_flying=true） |
+| `assets/master/enemies/dark_priest.json` | ダークプリーストのマスターデータ（ranged・回復・バフ） |
+
+### 変更ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `scripts/character_data.gd` | `max_mp`, `attack_type`, `attack_range`, `heal_power`, `heal_mp_cost`, `buff_mp_cost` フィールド追加 |
+| `scripts/character.gd` | `mp`, `max_mp`, `defense_buff_timer` フィールド追加。`use_mp()`, `heal()`, `apply_defense_buff()`, `get_effective_defense()` メソッド追加。`take_damage()` がバフ込み防御力を使用 |
+| `scripts/unit_ai.gd` | 攻撃タイプ対応・飛行移動・回復/バフ行動実装 |
+| `scripts/party_leader_ai.gd` | 回復/バフ専用キャラに Strategy.WAIT を渡すロジック追加 |
+| `assets/master/enemies/enemies_list.json` | harpy, dark_priest を追加 |
+
+### 飛行移動仕様
+
+飛行キャラ（`is_flying = true`）は WALL・RUBBLE・地上キャラ占有タイルを通過できる。
+飛行同士はブロックし合う（`_is_passable()` 内でレイヤー一致のみ占有チェック）。
+
+### 攻撃タイプ（CharacterData.attack_type）
+
+| タイプ | 区分 | カウンター | 攻撃可能な対象 |
+|--------|------|-----------|-------------|
+| `melee` | 近接 | 有効 | 地上のみ（地上→飛行NG、飛行→飛行NG）|
+| `ranged` | 遠距離 | 無効 | 飛行・地上両方（射程: attack_range タイル） |
+| `dive` | 降下 | 有効 | 地上のみ・飛行キャラが使用（方向倍率なし） |
+
+カウンター実装は将来予定。現在はタイプ区別のみ。
+
+### UnitAI の攻撃タイプ対応
+
+- `_get_attack_type()`: CharacterData.attack_type を返す
+- `_can_attack_target(target, atype)`: タイプ別の攻撃可否判定
+  - melee: 隣接距離1 かつ target.is_flying == false
+  - ranged: マンハッタン距離 ≤ attack_range
+  - dive: 隣接距離1 かつ target.is_flying == false（攻撃者は飛行）
+- `_calc_attack_goal()`: ranged の場合は `_find_ranged_goal()` で射程内最近傍へ
+- `_execute_attack()`: タイプに応じてダメージ計算
+  - melee: 方向倍率あり
+  - ranged: Projectile を生成
+  - dive: 方向倍率なし + DiveEffect 表示
+
+### 回復・バフ行動
+
+`_generate_queue()` の先頭で `_generate_heal_queue()` → `_generate_buff_queue()` を評価し、
+発動条件を満たしていれば戦略より優先してキューに積む。
+
+**回復行動（heal_power > 0 のキャラ）**
+- 発動条件: パーティー内に HP50% 以下のメンバーがいる かつ mp >= heal_mp_cost
+- 対象: is_friendly == true のメンバーで最もHPが低いキャラ
+- 射程: attack_range タイル（隣接 or 遠距離は JSON で設定）
+- アクション: `move_to_heal` → `heal`（MPを消費してtgt.heal(heal_power)）
+
+**バフ行動（buff_mp_cost > 0 のキャラ）**
+- 発動条件: バフが切れているメンバーがいる かつ mp >= buff_mp_cost
+- 対象: defense_buff_timer <= 0.0 の is_friendly == true メンバー
+- アクション: `move_to_buff` → `buff`（MPを消費してtgt.apply_defense_buff()）
+
+**防御バフの仕様（Character クラス）**
+- `DEFENSE_BUFF_BONUS = 3`（加算）
+- `DEFENSE_BUFF_DURATION = 10.0`（秒）
+- `take_damage()` が `get_effective_defense()` を呼び、バフ込み防御力でダメージ計算
+
+**LeaderAI の扱い**
+- `heal_power > 0` または `buff_mp_cost > 0` のキャラは `_assign_orders()` で常に `Strategy.WAIT` を渡す
+- UnitAI._generate_queue() の先頭チェックが回復/バフを優先実行する
+
+### DiveEffect（降下攻撃エフェクト）
+
+空色→白のフラッシュ円が上から落下して 0.4 秒で消えるアニメーション。
+羽ばたきを表す斜め線2本も描画。`z_index = 3`。
+
+### ハーピーのマスターデータ
+
+```json
+{ "attack_type": "dive", "is_flying": true, "attack_range": 1, ... }
+```
+
+グラフィックは仮素材（後で差し替え予定）。飛行中は地上からの近接攻撃を受けない。
+
+### ダークプリーストのマスターデータ
+
+```json
+{ "attack_type": "ranged", "attack_range": 4, "mp": 30,
+  "heal_power": 10, "heal_mp_cost": 5, "buff_mp_cost": 8, ... }
+```
+
+## Phase 8 Step 2: 敵のバリエーション追加（未実装）
+- ゴブリン以外の敵をダンジョンに配置
 - `behavior_description` の自然言語説明で行動パターンをLLMに伝える
 
 ## Phase 9: ステージ・バランス調整（未実装）

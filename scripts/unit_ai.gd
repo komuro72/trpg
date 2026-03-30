@@ -5,6 +5,7 @@ extends Node
 ## PartyLeaderAI からオーダーを受け取り、担当キャラクター1体の行動を実行する
 ## ステートマシン・A*経路探索・アクションキュー管理を担う
 ## サブクラスは _resolve_strategy() をオーバーライドして自己保存ロジックを実装する
+## Phase 8: 攻撃タイプ（melee/ranged/dive）対応・飛行移動・回復/バフ行動追加
 
 enum Strategy   { ATTACK, FLEE, WAIT }
 enum PathMethod { DIRECT, ASTAR, ASTAR_FLANK }
@@ -257,17 +258,67 @@ func _start_action(action: Dictionary) -> void:
 			if _target == null or not is_instance_valid(_target):
 				_complete_action()
 				return
-			if _target.is_flying:
-				_complete_action()
-				return
-			var d := _target.grid_pos - _member.grid_pos
-			if abs(d.x) + abs(d.y) != 1:
+			var atype := _get_attack_type()
+			if not _can_attack_target(_target, atype):
 				_complete_action()
 				return
 			_attack_target = _target
 			_state = _State.ATTACKING_PRE
 			_timer = _member.character_data.pre_delay if _member.character_data else 0.3
 			_member.is_attacking = true
+
+		"move_to_heal", "move_to_buff":
+			var tgt_var: Variant = action.get("target", null)
+			if tgt_var == null or not is_instance_valid(tgt_var as Object):
+				_complete_action()
+				return
+			var tgt := tgt_var as Character
+			var range_val := _member.character_data.attack_range if _member.character_data else 1
+			if _manhattan(_member.grid_pos, tgt.grid_pos) <= range_val:
+				_complete_action()
+				return
+			var goal := _find_adjacent_goal(tgt)
+			if goal == _member.grid_pos:
+				_complete_action()
+				return
+			_goal  = goal
+			_state = _State.MOVING
+			_timer = MOVE_INTERVAL
+
+		"heal":
+			var tgt_var: Variant = action.get("target", null)
+			if tgt_var == null or not is_instance_valid(tgt_var as Object):
+				_complete_action()
+				return
+			var tgt := tgt_var as Character
+			var range_val := _member.character_data.attack_range if _member.character_data else 1
+			if _manhattan(_member.grid_pos, tgt.grid_pos) > range_val:
+				_complete_action()
+				return
+			# 回復実行
+			var cost := _member.character_data.heal_mp_cost if _member.character_data else 0
+			if _member.use_mp(cost):
+				var power := _member.character_data.heal_power if _member.character_data else 0
+				tgt.heal(power)
+			_state = _State.WAITING
+			_timer = _member.character_data.post_delay if _member.character_data else 0.5
+
+		"buff":
+			var tgt_var: Variant = action.get("target", null)
+			if tgt_var == null or not is_instance_valid(tgt_var as Object):
+				_complete_action()
+				return
+			var tgt := tgt_var as Character
+			var range_val := _member.character_data.attack_range if _member.character_data else 1
+			if _manhattan(_member.grid_pos, tgt.grid_pos) > range_val:
+				_complete_action()
+				return
+			# バフ付与
+			var cost := _member.character_data.buff_mp_cost if _member.character_data else 0
+			if _member.use_mp(cost):
+				tgt.apply_defense_buff()
+			_state = _State.WAITING
+			_timer = _member.character_data.post_delay if _member.character_data else 0.5
 
 		"wait":
 			_state = _State.WAITING
@@ -355,14 +406,22 @@ func _fallback_evaluate() -> void:
 # --------------------------------------------------------------------------
 
 func _generate_queue(strategy: Strategy, target: Character) -> Array:
+	# 回復・バフ行動は戦略に関わらず最優先でキューに積む
+	var heal_q := _generate_heal_queue()
+	if not heal_q.is_empty():
+		return heal_q
+	var buff_q := _generate_buff_queue()
+	if not buff_q.is_empty():
+		return buff_q
+
 	match strategy:
 		Strategy.ATTACK:
 			if target == null or not is_instance_valid(target):
 				return [{"action": "wait"}]
-			# standby: 隣接のみ攻撃、移動しない
+			var atype := _get_attack_type()
+			# standby: 隣接のみ攻撃、移動しない（ranged/dive は射程内なら攻撃）
 			if _move_policy == "standby":
-				var dv := target.grid_pos - _member.grid_pos
-				if abs(dv.x) + abs(dv.y) <= 1:
+				if _can_attack_target(target, atype):
 					return [{"action": "attack"}]
 				return [{"action": "wait"}]
 			# 隊形が満たされていない場合はリーダーに向かってから攻撃
@@ -472,8 +531,36 @@ func _complete_action() -> void:
 func _execute_attack() -> void:
 	if _attack_target == null or not is_instance_valid(_attack_target):
 		return
-	var multiplier := Character.get_direction_multiplier(_member, _attack_target)
-	_attack_target.take_damage(_member.attack, multiplier)
+	var atype := _get_attack_type()
+	match atype:
+		"ranged":
+			# 遠距離攻撃：飛翔体を生成して命中確定ダメージ
+			_member.face_toward(_attack_target.grid_pos)
+			var map_node := _member.get_parent()
+			if map_node != null:
+				var proj := Projectile.new()
+				proj.z_index = 2
+				map_node.add_child(proj)
+				proj.setup(_member.position, _attack_target.position,
+						true, _attack_target, _member.attack, 1.0)
+		"dive":
+			# 降下攻撃：方向倍率なし（飛行中の奇襲）、降下エフェクト表示
+			_attack_target.take_damage(_member.attack, 1.0)
+			_spawn_dive_effect()
+		_:
+			# melee（近接攻撃）
+			var multiplier := Character.get_direction_multiplier(_member, _attack_target)
+			_attack_target.take_damage(_member.attack, multiplier)
+
+
+## 降下攻撃エフェクトを生成する（簡易：黄色→白のフラッシュ円）
+func _spawn_dive_effect() -> void:
+	var map_node := _member.get_parent()
+	if map_node == null:
+		return
+	var effect := DiveEffect.new()
+	effect.position = _member.position
+	map_node.add_child(effect)
 
 
 # --------------------------------------------------------------------------
@@ -481,9 +568,36 @@ func _execute_attack() -> void:
 # --------------------------------------------------------------------------
 
 func _calc_attack_goal(target: Character, method: PathMethod) -> Vector2i:
+	var atype := _get_attack_type()
+	if atype == "ranged":
+		# 遠距離：射程内ならその場で攻撃。射程外なら射程内の最近傍タイルへ
+		var range_val := _member.character_data.attack_range if _member.character_data else 5
+		var dist := _manhattan(_member.grid_pos, target.grid_pos)
+		if dist <= range_val:
+			return _member.grid_pos
+		return _find_ranged_goal(target, range_val)
 	if method == PathMethod.ASTAR_FLANK:
 		return _find_flank_goal(target)
 	return _find_adjacent_goal(target)
+
+
+## 遠距離攻撃用：ターゲットから range_val タイル以内で最近傍の通行可能タイルを返す
+func _find_ranged_goal(target: Character, range_val: int) -> Vector2i:
+	var best      := _member.grid_pos
+	var best_dist := 999999
+	var r := range_val
+	for dy: int in range(-r, r + 1):
+		for dx: int in range(-r, r + 1):
+			var candidate := target.grid_pos + Vector2i(dx, dy)
+			if _manhattan(candidate, target.grid_pos) > r:
+				continue
+			if not _is_passable(candidate):
+				continue
+			var d := _manhattan(_member.grid_pos, candidate)
+			if d < best_dist:
+				best_dist = d
+				best      = candidate
+	return best
 
 
 ## ターゲットに隣接する最近傍の空きタイルを返す（他のキャラが占有していないもの）
@@ -685,11 +799,13 @@ func _formation_move_goal() -> Vector2i:
 func _is_passable(pos: Vector2i) -> bool:
 	if _map_data != null and not _map_data.is_walkable_for(pos, _member.is_flying):
 		return false
+	# 飛行キャラは地上キャラの占有タイルを通過できる（同レイヤーのみブロック）
 	for other: Character in _all_members:
 		if not is_instance_valid(other):
 			continue
 		if other == _member:
 			continue
+		# 飛行同士はブロックし合う。地上同士もブロックし合う。飛行↔地上は通過可能
 		if other.is_flying != _member.is_flying:
 			continue
 		if pos in other.get_occupied_tiles():
@@ -699,6 +815,107 @@ func _is_passable(pos: Vector2i) -> bool:
 		if _player.is_flying == _member.is_flying and pos in _player.get_occupied_tiles():
 			return false
 	return true
+
+
+# --------------------------------------------------------------------------
+# 攻撃タイプヘルパー
+# --------------------------------------------------------------------------
+
+## キャラデータの attack_type を返す（未設定時は "melee"）
+func _get_attack_type() -> String:
+	if _member != null and _member.character_data != null:
+		return _member.character_data.attack_type
+	return "melee"
+
+
+## 指定ターゲットに攻撃タイプで攻撃可能か判定する
+## melee: 隣接かつターゲットが地上（飛行→地上OK、地上→飛行NG、飛行→飛行NG）
+## ranged: 射程内かつ double-layer 無関係
+## dive:  隣接かつターゲットが地上（地上→飛行NG。飛行→飛行NGは仕様）
+func _can_attack_target(target: Character, atype: String) -> bool:
+	if target == null or not is_instance_valid(target):
+		return false
+	match atype:
+		"ranged":
+			var range_val := _member.character_data.attack_range if _member.character_data else 5
+			return _manhattan(_member.grid_pos, target.grid_pos) <= range_val
+		"dive":
+			# 降下攻撃：飛行キャラが地上キャラに隣接して攻撃（ターゲットは地上のみ）
+			if target.is_flying:
+				return false
+			var d := target.grid_pos - _member.grid_pos
+			return abs(d.x) + abs(d.y) == 1
+		_:  # melee
+			# 地上→飛行・飛行→飛行は不可
+			if target.is_flying:
+				return false
+			var d := target.grid_pos - _member.grid_pos
+			return abs(d.x) + abs(d.y) == 1
+
+
+# --------------------------------------------------------------------------
+# 回復・バフキュー生成
+# --------------------------------------------------------------------------
+
+## 回復行動キューを返す。回復すべき状況でなければ空配列
+func _generate_heal_queue() -> Array:
+	if _member == null or _member.character_data == null:
+		return []
+	if _member.character_data.heal_power <= 0:
+		return []
+	var cost := _member.character_data.heal_mp_cost
+	if _member.mp < cost:
+		return []
+	# パーティーメンバーで HP50% 以下のキャラを探す
+	var heal_target := _find_heal_target()
+	if heal_target == null:
+		return []
+	return [{"action": "move_to_heal", "target": heal_target},
+			{"action": "heal", "target": heal_target}]
+
+
+## バフ行動キューを返す。バフを付与すべき状況でなければ空配列
+func _generate_buff_queue() -> Array:
+	if _member == null or _member.character_data == null:
+		return []
+	if _member.character_data.buff_mp_cost <= 0:
+		return []
+	if _member.mp < _member.character_data.buff_mp_cost:
+		return []
+	# バフが切れているパーティーメンバーを探す
+	var buff_target := _find_buff_target()
+	if buff_target == null:
+		return []
+	return [{"action": "move_to_buff", "target": buff_target},
+			{"action": "buff", "target": buff_target}]
+
+
+## 回復対象（パーティー内で HP50% 以下かつ最もHPが低いキャラ）を返す
+func _find_heal_target() -> Character:
+	var best: Character = null
+	var best_ratio := 0.51  # 50% 以下のみ対象
+	for ch: Character in _all_members:
+		if not is_instance_valid(ch) or ch.hp <= 0:
+			continue
+		if not ch.is_friendly:
+			continue
+		var ratio := float(ch.hp) / float(maxi(ch.max_hp, 1))
+		if ratio < best_ratio:
+			best_ratio = ratio
+			best = ch
+	return best
+
+
+## バフ対象（パーティー内でバフが切れているキャラ）を返す
+func _find_buff_target() -> Character:
+	for ch: Character in _all_members:
+		if not is_instance_valid(ch) or ch.hp <= 0:
+			continue
+		if not ch.is_friendly:
+			continue
+		if ch.defense_buff_timer <= 0.0:
+			return ch
+	return null
 
 
 # --------------------------------------------------------------------------
