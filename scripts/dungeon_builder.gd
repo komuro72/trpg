@@ -127,17 +127,21 @@ static func _build_spawn_data(data: MapData, floor_data: Dictionary, rooms: Arra
 	var entrance_id := floor_data.get("entrance_room", "") as String
 	var room_map    := _build_room_map(rooms)
 
-	# プレイヤースポーン（入口部屋の中心）
+	# プレイヤースポーン（入口部屋の player_party があれば使用、なければ中心1人）
 	if room_map.has(entrance_id):
 		var er := room_map[entrance_id] as Dictionary
-		var px: int = int(er.get("x", 2)) + int(er.get("width",  10)) / 2
-		var py: int = int(er.get("y", 2)) + int(er.get("height", 10)) / 2
-		data.player_parties = [
-			{
-				"party_id": 1,
-				"members": [{"character_id": "hero", "x": px, "y": py}]
-			}
-		]
+		var pp: Variant = er.get("player_party")
+		var pp_members: Array = []
+		if pp != null and pp is Dictionary:
+			pp_members = (pp as Dictionary).get("members", [])
+		if not pp_members.is_empty():
+			data.player_parties = [{"party_id": 1, "members": pp_members}]
+		else:
+			var px: int = int(er.get("x", 2)) + int(er.get("width",  10)) / 2
+			var py: int = int(er.get("y", 2)) + int(er.get("height", 10)) / 2
+			data.player_parties = [
+				{"party_id": 1, "members": [{"character_id": "hero", "x": px, "y": py}]}
+			]
 
 	# 敵スポーン（各部屋のenemy_partyから収集、party_idは部屋ごと）
 	data.enemy_parties = []

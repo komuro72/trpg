@@ -53,14 +53,14 @@ func is_area_enemy_free(current_area: String) -> bool:
 
 
 func _process(_delta: float) -> void:
+	# NPC が自発的に話しかけてくる場合のみ自動トリガー
+	# プレイヤー起点の会話は矢印キーバンプ経由で try_trigger_for_member() を呼ぶ
 	if _dialogue_active or _player == null:
 		return
 
 	var current_area := _vision_system.get_current_area() if _vision_system != null else ""
-	# 通路（エリアIDなし）では会話しない
 	if current_area.is_empty():
 		return
-	# 現在エリアに生存敵がいれば会話不可
 	if not is_area_enemy_free(current_area):
 		return
 
@@ -69,10 +69,31 @@ func _process(_delta: float) -> void:
 			continue
 		if not _has_adjacent_visible_member(nm):
 			continue
-		var npc_initiates := _npc_wants_to_initiate(nm)
+		if not _npc_wants_to_initiate(nm):
+			continue  # NPC 自発でない場合はスキップ
 		set_dialogue_active(true)
-		dialogue_requested.emit(nm, npc_initiates)
+		dialogue_requested.emit(nm, true)
 		return
+
+
+## 矢印キーで NPC に接触したときに PlayerController 経由で呼ばれる
+## エリア条件を確認してから dialogue_requested を発火する
+func try_trigger_for_member(member: Character) -> void:
+	if _dialogue_active or _player == null:
+		return
+	var current_area := _vision_system.get_current_area() if _vision_system != null else ""
+	if current_area.is_empty():
+		return
+	if not is_area_enemy_free(current_area):
+		return
+	for nm: NpcManager in _npc_managers:
+		if not is_instance_valid(nm):
+			continue
+		if nm.get_members().has(member):
+			var npc_initiates := _npc_wants_to_initiate(nm)
+			set_dialogue_active(true)
+			dialogue_requested.emit(nm, npc_initiates)
+			return
 
 
 ## NpcManager の生存・可視メンバーがプレイヤーに隣接しているか確認する

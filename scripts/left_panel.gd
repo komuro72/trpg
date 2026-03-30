@@ -46,9 +46,10 @@ func _update_icon_nodes() -> void:
 	var vh        := _control.size.y
 	var minimap_h := int(vh * 0.25)
 	var ally_h    := vh - minimap_h
-	var members   := _party.members
-	var count     := members.size()
-	var pad       := 6
+	# ソート済みメンバーリストを使用（リーダー先頭・加入順）
+	var members := _party.sorted_members()
+	var count   := members.size()
+	var pad     := 6
 
 	# 現在のメンバーセット
 	var current_set: Dictionary = {}
@@ -121,8 +122,8 @@ func _on_draw() -> void:
 	# セパレーター（右端ライン）
 	_control.draw_line(Vector2(pw, 0), Vector2(pw, vh), Color(0.3, 0.3, 0.4, 0.8), 1)
 
-	# 味方カードを描画
-	var members := _party.members
+	# 味方カードを描画（リーダー先頭・加入順）
+	var members := _party.sorted_members()
 	var count   := members.size()
 	if count > 0:
 		var card_h := ally_h / count
@@ -193,6 +194,36 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 	_control.draw_string(_font,
 		Vector2(tx, mp_bar_y + bar_h + 10.0),
 		cond, HORIZONTAL_ALIGNMENT_LEFT, tw, 10, cond_col)
+
+	# 指示状態（5項目を1文字略称で2行表示）
+	# 行1: 移動+戦闘+標的  行2: 隊形+低HP
+	# 移動: 探=explore 室=same_room 密=cluster 守=guard_room 待=standby
+	# 戦闘: 積=aggressive 援=support 待=standby
+	# 標的: 近=nearest 弱=weakest 同=same_as_leader
+	# 隊形: 囲=surround 前=front 後=rear 同=same_as_leader
+	# 低HP: 継=keep_fighting 退=retreat 逃=flee
+	var ord: Dictionary = c.current_order
+	var move_a: String  = {"explore": "探", "same_room": "室", "cluster": "密",
+		"guard_room": "守", "standby": "待"}.get(
+		ord.get("move",             "same_room") as String, "室") as String
+	var bform_a: String = {"surround": "囲", "front": "前", "rear": "後",
+		"same_as_leader": "同"}.get(
+		ord.get("battle_formation", "surround")  as String, "囲") as String
+	var combat_a: String = {"aggressive": "積", "support": "援", "standby": "待"}.get(
+		ord.get("combat",           "aggressive") as String, "積") as String
+	var target_a: String = {"nearest": "近", "weakest": "弱", "same_as_leader": "同"}.get(
+		ord.get("target",           "nearest")   as String, "近") as String
+	var lowh_a: String   = {"keep_fighting": "継", "retreat": "退", "flee": "逃"}.get(
+		ord.get("on_low_hp",        "retreat")   as String, "退") as String
+	var ord_color := Color(0.55, 0.90, 0.65)
+	_control.draw_string(_font,
+		Vector2(tx, mp_bar_y + bar_h + 22.0),
+		"%s %s %s" % [move_a, combat_a, target_a],
+		HORIZONTAL_ALIGNMENT_LEFT, tw, 10, ord_color)
+	_control.draw_string(_font,
+		Vector2(tx, mp_bar_y + bar_h + 34.0),
+		"%s %s" % [bform_a, lowh_a],
+		HORIZONTAL_ALIGNMENT_LEFT, tw, 10, ord_color)
 
 	# カード下区切り線
 	_control.draw_line(

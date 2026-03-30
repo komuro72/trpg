@@ -135,6 +135,16 @@ func get_area_name(area_id: String) -> String:
 	return _area_names.get(area_id, "")
 
 
+## マップ内に存在するエリアIDの一覧を返す（UnitAI の探索行動に使用）
+func get_all_area_ids() -> Array[String]:
+	var result: Array[String] = []
+	for pos: Variant in _area_map.keys():
+		var area := _area_map[pos] as String
+		if not result.has(area):
+			result.append(area)
+	return result
+
+
 ## 指定エリアIDに属する全タイル座標を返す（VisionSystem の視界計算に使用）
 func get_tiles_in_area(area_id: String) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []

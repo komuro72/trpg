@@ -64,6 +64,15 @@ func _dead_zone_half_cells() -> Vector2i:
 	)
 
 
+## 追従対象を切り替え、カメラ位置を即座に新しいキャラクターに合わせる
+func set_follow_target(new_character: Character) -> void:
+	character = new_character
+	if new_character != null and is_instance_valid(new_character):
+		_cam_grid = new_character.grid_pos
+		_apply()
+	_last_char_grid = Vector2i(-9999, -9999)  # 次フレームで強制更新
+
+
 ## カメラ座標を Camera2D に反映する
 ## Camera2D.limit_* がマップ端制限を担うため、ここでは直接セットするだけ
 func _apply() -> void:

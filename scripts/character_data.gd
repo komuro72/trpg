@@ -42,6 +42,11 @@ var rank: String = "C"
 var pre_delay: float = 0.3   # 攻撃前の溜め時間
 var post_delay: float = 0.5  # 攻撃後の硬直時間
 
+## 統率力（リーダー側）：高いほど無理な指示でも従わせやすい。クラス・ランクから算出して確定後不変。当面は値のみ保持
+var leadership: int = 5
+## 従順度（個体側）：高いほど指示に素直に従う（0.0〜1.0）。クラス・種族・ランクから算出して確定後不変。当面は値のみ保持
+var obedience: float = 0.5
+
 
 ## JSONファイルからCharacterDataを生成する
 static func load_from_json(path: String) -> CharacterData:
@@ -69,6 +74,8 @@ static func load_from_json(path: String) -> CharacterData:
 	data.pre_delay            = float(d.get("pre_delay", 0.3))
 	data.post_delay           = float(d.get("post_delay", 0.5))
 	data.rank                 = d.get("rank", "C")
+	data.leadership           = int(d.get("leadership", 5))
+	data.obedience            = float(d.get("obedience", 0.5))
 
 	# クラス情報（Phase 6-0〜）
 	data.class_id = d.get("class_id", "")

@@ -17,6 +17,11 @@ var grid_pos: Vector2i = Vector2i(0, 0)
 var facing: Direction = Direction.DOWN
 var character_data: CharacterData = null
 
+## パーティー加入順インデックス（Party.add_member() が設定。ソート表示に使用）
+var join_index: int = 0
+## プレイヤーが直接操作中のキャラクターであることを示すフラグ（UnitAI は処理をスキップする）
+var is_player_controlled: bool = false
+
 ## 基本ステータス（character_data から _ready() で初期化）
 var hp: int = 1
 var max_hp: int = 1
@@ -26,8 +31,35 @@ var is_flying: bool = false
 ## フレンドリーフラグ（NPC など味方側キャラクターに設定。緑のリングで表示）
 var is_friendly: bool = false
 
+## 個別指示（OrderWindow で設定）
+## move:             explore=探索 / same_room=同室追従 / cluster=密集 / guard_room=部屋を守る / standby=待機
+## battle_formation: surround=包囲 / front=前衛 / rear=後衛 / same_as_leader=リーダーと同じ
+## combat:           aggressive=積極攻撃 / support=援護 / standby=待機
+## target:           nearest=最近傍 / weakest=最弱 / same_as_leader=リーダーと同じ
+## on_low_hp:        keep_fighting=戦い続ける / retreat=後退 / flee=逃走
+var current_order: Dictionary = {
+	"move":             "same_room",
+	"battle_formation": "surround",
+	"combat":           "aggressive",
+	"target":           "nearest",
+	"on_low_hp":        "retreat",
+}
+
 ## プレースホルダー色（素材がない場合に使用）
 var placeholder_color: Color = Color(0.3, 0.7, 1.0)
+
+## パーティーカラーリング（TRANSPARENT=非表示、WHITE=プレイヤーパーティー、その他=NPCパーティー）
+## 敵パーティーは TRANSPARENT のままにしてリングを表示しない
+var party_color: Color = Color.TRANSPARENT:
+	set(value):
+		party_color = value
+		queue_redraw()
+
+## パーティーリーダーフラグ（true のとき二重リングで表示）
+var is_leader: bool = false:
+	set(value):
+		is_leader = value
+		queue_redraw()
 
 ## 状態フラグ（modulate制御用）
 ## is_targeting_mode は setter で構えスプライトへの切替を行う
@@ -57,26 +89,30 @@ func _process(_delta: float) -> void:
 	_update_modulate()
 
 
-## HP・モードに応じてキャラクターの色を更新する
+## HP・モードに応じてスプライトの色を更新する
+## Character ノード自体の modulate は WHITE のまま維持し、
+## _draw() で描くリングが HP 色の影響を受けないようにする
 func _update_modulate() -> void:
+	if _sprite == null:
+		return
 	var t := Time.get_ticks_msec() / 1000.0
 
 	# ターゲットとして選択中：白く輝かせる
 	if is_targeted:
-		modulate = Color(1.5, 1.5, 1.5, 1.0)
+		_sprite.modulate = Color(1.5, 1.5, 1.5, 1.0)
 		return
 
 	# HP状態による色
 	var ratio := float(hp) / float(max_hp) if max_hp > 0 else 1.0
 	if ratio > 0.6:
-		modulate = Color.WHITE
+		_sprite.modulate = Color.WHITE
 	elif ratio > 0.3:
-		modulate = Color(1.0, 1.0, 0.65)      # 軽傷：やや黄色
+		_sprite.modulate = Color(1.0, 1.0, 0.65)      # 軽傷：やや黄色
 	elif ratio > 0.1:
-		modulate = Color(1.0, 0.65, 0.25)     # 重傷：オレンジ
+		_sprite.modulate = Color(1.0, 0.65, 0.25)     # 重傷：オレンジ
 	else:
 		var pulse := (sin(t * TAU * 3.0) + 1.0) * 0.5
-		modulate = Color.WHITE.lerp(Color(1.0, 0.15, 0.15), pulse)  # 瀕死：赤く点滅
+		_sprite.modulate = Color.WHITE.lerp(Color(1.0, 0.15, 0.15), pulse)  # 瀕死：赤く点滅
 
 
 ## character_data からステータスを初期化する
@@ -158,20 +194,32 @@ static func _direction_to_rotation(dir: Direction) -> float:
 	return 0.0
 
 
-## 素材がない場合のプレースホルダー描画（ローカル座標 = 回転前）
+## 素材がない場合のプレースホルダー描画 + パーティーカラーリング描画（ローカル座標 = 回転前）
 func _draw() -> void:
-	if _has_texture:
-		return
-
 	var gs   := GlobalConstants.GRID_SIZE
 	var half := gs * 0.5
-	var margin := 8
 
-	# キャラクター本体（円形）
-	draw_circle(Vector2.ZERO, half - margin, placeholder_color)
+	if not _has_texture:
+		var margin := 8
+		# キャラクター本体（円形）
+		draw_circle(Vector2.ZERO, half - margin, placeholder_color)
+		# 向きインジケーター（ローカル上方向 = 前方、回転で向きが変わる）
+		draw_rect(Rect2(-4, -(half - margin - 2), 8, 10), Color.WHITE)
 
-	# 向きインジケーター（ローカル上方向 = 前方、回転で向きが変わる）
-	draw_rect(Rect2(-4, -(half - margin - 2), 8, 10), Color.WHITE)
+	# パーティーカラーリング（TRANSPARENT でなければ常に描画）
+	if party_color != Color.TRANSPARENT:
+		_draw_party_ring(float(gs))
+
+
+## パーティーカラーのリングを描画する
+## 通常メンバー：外周に1本、リーダー：外周＋内周の2本（二重リング）
+func _draw_party_ring(gs: float) -> void:
+	const RING_WIDTH := 3.0
+	const OUTER_RATIO := 0.46
+	const INNER_RATIO := 0.34
+	draw_arc(Vector2.ZERO, gs * OUTER_RATIO, 0.0, TAU, 64, party_color, RING_WIDTH, true)
+	if is_leader:
+		draw_arc(Vector2.ZERO, gs * INNER_RATIO, 0.0, TAU, 64, party_color, RING_WIDTH, true)
 
 
 ## このキャラクターが占有するグリッド座標の一覧を返す

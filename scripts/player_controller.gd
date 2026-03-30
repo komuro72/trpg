@@ -25,6 +25,9 @@ var map_node: Node2D = null
 ## 会話中など入力を一時的に無効化するフラグ
 var is_blocked: bool = false
 
+## 移動先に友好的キャラクターがいたときに発火するシグナル（会話トリガー用）
+signal npc_bumped(npc_member: Character)
+
 const MOVE_INTERVAL_INITIAL: float = 0.20
 const MOVE_INTERVAL_REPEAT:  float = 0.10
 const CLASS_JSON_DIR := "res://assets/master/classes/"
@@ -425,6 +428,16 @@ func _try_move(dir: Vector2i) -> void:
 	var new_pos := character.grid_pos + dir
 	if _can_move_to(new_pos):
 		character.move_to(new_pos)
+	else:
+		# 移動先に友好的キャラクターがいれば npc_bumped を発火する
+		for blocker: Character in blocking_characters:
+			if not is_instance_valid(blocker):
+				continue
+			if blocker.is_flying != character.is_flying:
+				continue
+			if new_pos in blocker.get_occupied_tiles() and blocker.is_friendly:
+				npc_bumped.emit(blocker)
+				break
 
 
 ## 移動可否を判定する（WALL・範囲外・同レイヤーキャラクター占有は不可）

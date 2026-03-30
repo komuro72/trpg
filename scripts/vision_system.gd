@@ -17,6 +17,7 @@ signal tiles_revealed()
 const PLAYER_PARTY_ID := 1
 
 var _player: Character
+var _party: Party = null   ## パーティー全員の探索に使用（set_party() で設定）
 var _map_data: MapData
 var _enemy_managers: Array = []
 var _npc_managers: Array = []
@@ -45,6 +46,11 @@ func setup(player: Character, map_data: MapData) -> void:
 	if _has_area_data:
 		_visit_area(PLAYER_PARTY_ID, start_area)
 		_current_area = start_area
+
+
+## パーティーをセットする（メンバー全員の移動を探索トリガーとして使用）
+func set_party(party: Party) -> void:
+	_party = party
 
 
 func add_enemy_manager(em: EnemyManager) -> void:
@@ -88,6 +94,16 @@ func _process(_delta: float) -> void:
 		# 未訪問エリアに入ったら訪問済みにしてタイルを開示
 		if _has_area_data and not area.is_empty() and not is_area_visited(area):
 			_visit_area(PLAYER_PARTY_ID, area)
+
+	# パーティーメンバーの移動も探索判定に加える
+	if _party != null:
+		for m: Variant in _party.members:
+			var ch := m as Character
+			if not is_instance_valid(ch) or ch == _player:
+				continue
+			var member_area := _map_data.get_area(ch.grid_pos)
+			if _has_area_data and not member_area.is_empty() and not is_area_visited(member_area):
+				_visit_area(PLAYER_PARTY_ID, member_area)
 
 	# 敵・NPC マネージャーに可視性を通知
 	var visited := _visited_by_party.get(PLAYER_PARTY_ID, {}) as Dictionary

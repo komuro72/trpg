@@ -10,7 +10,14 @@
             "x": 2, "y": 2, "width": 14, "height": 12,
             "name": "入口の間",
             "type": "entrance",
-            "is_entrance": true
+            "is_entrance": true,
+            "player_party": {
+              "members": [
+                { "class_id": "fighter-sword", "x": 9, "y": 8 },
+                { "class_id": "archer",        "x": 8, "y": 8 },
+                { "class_id": "healer",        "x": 10, "y": 8 }
+              ]
+            }
           },
           {
             "id": "R02",

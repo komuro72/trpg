@@ -119,6 +119,7 @@ assets/images/enemies/
 - Z ホールド：近接攻撃（ホールド中 = ターゲット選択モード、離して発動）
 - X ホールド：遠距離攻撃（同上）
 - ターゲット選択中の矢印キー：ターゲット循環（右/下=次、左/上=前）
+- Tab：パーティー指示ウィンドウ ON/OFF（プレイヤーがリーダーのときのみ有効）
 - F1：AIデバッグパネルON/OFF
 - F5：ダンジョン再生成
 - Esc：ゲーム終了
@@ -206,6 +207,11 @@ assets/images/enemies/
 ## ドキュメント運用
 - CLAUDE.md：人間・AI共通の概要・方針・フェーズ進捗。ここでの相談をもとに更新する
 - docs/spec.md：AI管理用の詳細仕様・実装メモ。Claude Codeが作成・更新する
+
+## ツール運用
+- claude.ai（チャット）：仕様の相談・設計の議論を行う。コードの実装・ファイルの編集は行わない
+- Claude Code：CLAUDE.mdの更新・仕様書（docs/spec.md）の更新・GDScriptの実装・コミット/プッシュを行う
+- 仕様相談はclaude.aiで行い、確定した仕様をもとに Claude Code が CLAUDE.md を更新してから実装する
 
 ## フェーズ
 - [x] Phase 1: 主人公1人の移動・画像表示・フィールド表示
@@ -365,15 +371,24 @@ assets/images/enemies/
     - [x] NpcManager.gd：CharacterGenerator でランダム生成・is_friendly=true・緑プレースホルダー
     - [x] NpcLeaderAI.gd：敵リストから最近傍をターゲット。生存敵あり→ATTACK、なし→WAIT
     - [x] NpcUnitAI.gd：従順度1.0・A*経路探索
-    - [x] Character.is_friendly フラグ追加（プレースホルダー色を緑に設定。アウトラインリングなし）
+    - [x] Character.is_friendly フラグ追加（プレースホルダー色を緑に設定）
+    - [x] Character.party_color / is_leader フラグ追加（パーティーカラーリング・リーダー二重リングで所属表示）
+    - [x] NpcManager.set_party_color()：NPC パーティーに色を割り当て、合流時に白リングに統一
+    - [x] PartyManager.activate()：VisionSystem 経由ではなく直接 AI を起動するパブリックメソッド
     - [x] VisionSystem：add_npc_manager() 追加・NPC の表示制御・AI アクティブ化
     - [x] game_map：_setup_npcs()・handcrafted読み込み・visionへのNPC登録
     - [x] game_map：_link_all_character_lists() 追加・敵＋NPC 合算リストを全マネージャーに配布（NPC-敵重複防止）
     - [x] player_controller.blocking_characters に NPC メンバーを追加（プレイヤー-NPC 重複防止）
     - [x] party_manager.gd：ノード名衝突修正（マネージャー名をプレフィックスに追加）
     - [x] unit_ai.gd：freed オブジェクトキャストクラッシュ修正（is_instance_valid チェック追加）
+    - [x] dungeon_handcrafted.json：入口部屋（R01）に player_party を追加（fighter-sword / archer / healer の 3 人スタート）
+    - [x] game_map._setup_initial_allies()：初期パーティーの追加メンバーを NpcManager 経由でスポーン → activate() で即時 AI 起動 → 合流処理
   - [x] Phase 6-2: 仲間の加入の仕組み
     - [x] DialogueTrigger.gd：隣接チェック・エリア敵全滅チェック・NPC自発申し出検出
+    - [x] DialogueTrigger.gd：NPC 自発（wants_to_initiate=true）のみ自動トリガーに変更。プレイヤー起点は矢印キーバンプ経由
+    - [x] DialogueTrigger.try_trigger_for_member()：矢印キーバンプ用の直接トリガーメソッド
+    - [x] PlayerController.gd：npc_bumped シグナル追加（矢印キーで NPC 方向に入力すると発火）
+    - [x] game_map._on_npc_bumped()：npc_bumped を受け取り DialogueTrigger.try_trigger_for_member() を呼ぶ
     - [x] DialogueWindow.gd：会話UI（メンバー一覧・選択肢・↑↓/Z/Esc操作）
     - [x] NpcLeaderAI：wants_to_initiate() / will_accept() / get_party_strength() 追加
     - [x] player_controller.gd：is_blocked フラグ追加（会話中は移動・攻撃入力を無効化）
@@ -386,6 +401,8 @@ assets/images/enemies/
       - 部屋内の敵が全滅していること
       - プレイヤーと NPC メンバーが隣接（マンハッタン距離1）
       - 通路（エリアIDなし）では会話しない
+      - プレイヤー起点：矢印キーで NPC 方向に入力（バンプ検出）
+      - NPC 自発：wants_to_initiate=true のとき毎フレーム自動チェック
     - 会話UI
       - NPCパーティーの情報を表示（名前・クラス・ランク・状態）
       - プレイヤーから話しかけた場合の選択肢
@@ -401,12 +418,52 @@ assets/images/enemies/
       - 「連れて行ってほしい」はNPCリーダーをアクティブキャラとして左パネルでハイライト
       - プレイヤーの操作キャラ（hero）は変わらない
     - 会話中断：敵が部屋に入ってきたら game_map._process() が検出して即中断
-  - [ ] Phase 6-3: 操作キャラの切替
-    - AIControllerの本実装
-    - Party.set_active() を使ったプレイヤー操作キャラクターの切替
-- [ ] Phase 7: 指示システム
-  - 攻撃 / 防衛 / 待機 / 追従 / 撤退
-  - 指示UI（コマンドメニュー）
+  - [x] Phase 6-3: 操作キャラの切替
+    - 指示ウィンドウ内の「操作」列でパーティーメンバーへの操作切替
+    - 切替先キャラのフィールドにカメラを即座に移動
+    - 旧操作キャラは AI 制御（UnitAI）に戻る（is_player_controlled フラグで制御）
+    - Character.is_player_controlled フラグ追加：UnitAI._process でチェックして処理スキップ
+    - Character.join_index 追加：Party.add_member() が付与し、表示ソートに使用
+    - Party.sorted_members()：リーダー先頭＋加入順で並べた表示用リストを返す
+    - 左パネル・指示ウィンドウとも sorted_members() で表示順を統一（リーダー固定）
+    - 操作中のキャラは左パネルで青ハイライト、指示ウィンドウで緑「[操作中]」表示
+    - リーダーは変わらない（指示ウィンドウは Tab でリーダー操作中のみ開ける）
+- [x] Phase 7: 指示システム（刷新済み）
+  - Tab キーで指示ウィンドウ開閉（プレイヤーがリーダーのときのみ有効）
+  - 指示データ構造（Character.current_order: Dictionary）
+    - move:             explore=探索 / same_room=同室追従 / cluster=密集 / guard_room=部屋を守る / standby=待機
+    - battle_formation: surround=包囲 / front=前衛 / rear=後衛 / same_as_leader=リーダーと同じ
+    - combat:           aggressive=積極攻撃 / support=援護 / standby=待機
+    - target:           nearest=最近傍 / weakest=最弱 / same_as_leader=リーダーと同じ
+    - on_low_hp:        keep_fighting=戦い続ける / retreat=後退 / flee=逃走
+  - 全体方針プリセット（6種）→ 5項目を一括設定
+    - 攻撃: aggressive / surround / same_room / nearest / keep_fighting
+    - 防衛: support / surround / cluster / same_as_leader / retreat
+    - 待機: standby / surround / cluster / nearest / retreat
+    - 追従: support / surround / cluster / same_as_leader / retreat
+    - 撤退: standby / surround / cluster / nearest / flee
+    - 探索: aggressive / surround / explore(リーダー)・same_room(他) / nearest / retreat
+  - 指示ウィンドウ（OrderWindow）
+    - 全体方針行: ←→ でプリセット選択、Z で全メンバーに一括適用
+    - メンバーテーブル: ↑↓ で行移動、←→ で列移動、Z で値を切替
+    - 左パネルに5項目略称を2行で常時表示（行1: 移動+戦闘+標的 / 行2: 隊形+低HP）
+  - UnitAI への反映
+    - combat=aggressive → Strategy.ATTACK（積極的に追従・攻撃）
+    - combat=support/standby → Strategy.WAIT（待機、隊形維持）
+    - on_low_hp=flee かつ HP50%未満 → Strategy.FLEE（逃走優先）
+    - on_low_hp=retreat かつ HP50%未満 → Strategy.WAIT + move=cluster（リーダー周辺に退避）
+    - パーティーレベルの FLEE（GoblinLeaderAI 等）は常に最優先
+    - move: 隊形制約を満たしていなければ move_to_formation / move_to_explore でリーダーへ移動
+      - explore: VisionSystem で未訪問エリアを検出して移動（全訪問済みならランダム巡回）
+      - same_room: MapData.get_area() でリーダーと同じ部屋IDを維持
+      - cluster: マンハッタン距離5以内を維持
+      - guard_room: 初回設定時の部屋を記憶して守る
+      - standby: その場待機（隣接の敵のみ攻撃）
+    - battle_formation=rear: A*で背後に回り込む（ASTAR_FLANK）
+    - target=same_as_leader: リーダーと同じターゲットを攻撃
+  - 統率力・従順度パラメータを CharacterData に追加（当面は値のみ保持）
+  - 操作キャラ切替（Phase 6-3）との連携済み：切替後の新操作キャラには current_order が適用される
+  - hero 自律行動対応：`_hero_manager`（NpcManager）を game_map で生成し、操作外れ時に UnitAI が current_order を反映して動作する
 - [ ] Phase 8: 敵のバリエーション
   - ゴブリン以外の敵を追加（飛行敵を含む）
   - LLMへの自然言語説明（behavior_description）で行動パターンを表現
@@ -442,6 +499,8 @@ assets/images/enemies/
 | 物理攻撃耐性 / 魔法攻撃耐性 / その他耐性 | 割合軽減(%)。将来変更可。防具による補正も予定 |
 | 回避力 | 剣・盾による受け流しも含む |
 | 移動速度 | 単位：秒/タイル（標準0.4） |
+| 統率力（leadership） | リーダー側。高いほど無理な指示でも従わせやすい。クラス・ランクから算出して確定後不変。当面は値のみ保持 |
+| 従順度（obedience） | 個体側（0.0〜1.0）。高いほど指示に素直に従う。クラス・種族・ランクから算出して確定後不変。当面は値のみ保持 |
 
 ### 命中判定（二段階）
 1. **着弾判定**（命中精度）：攻撃が狙った対象に向かうか。命中精度が低いと別の敵・味方に誤射する可能性
@@ -556,6 +615,14 @@ assets/images/enemies/
 ## 作業ルール
 - セッション終了時（「今日はここまで」など）にコミットを依頼された場合は、`git commit` に加えて `git push` まで行う
   - 理由：毎日新しいセッションで作業しており、別PCで作業再開することもあるため
+
+## GDScript 警告の運用方針
+- `warnings/inference_on_variant=1`（project.godot に設定済み）により、Variant 推論警告はエラー扱いせず警告として表示する
+- 警告はビルドを通すが、放置はしない。コミットの節目に以下のコマンドで一覧を確認し、まとめて修正する：
+  ```
+  godot --headless --check-only 2>&1
+  ```
+- 典型的な修正パターン：`:=` による型推論 → `var x: 型 =` または戻り値に `as 型` を付けて明示
 
 ## 参照ファイル
 - docs/spec.md：詳細仕様書（実装前に参照すること）

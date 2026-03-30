@@ -1372,6 +1372,47 @@ assets/images/characters/{class}_{sex}_{age}_{build}_{id}/
 | `scripts/party_manager.gd` | `_spawn_member()` のノード名にマネージャー名プレフィックスを追加（名前衝突防止） |
 | `scripts/unit_ai.gd` | `receive_order()` 内で freed オブジェクトへのキャストを `is_instance_valid()` でガード |
 
+#### 初期3人パーティー構成（Phase 6-1 後期追加）
+
+dungeon_handcrafted.json の入口部屋に `player_party` フィールドを追加し、3人編成でゲームを開始できるようにした。
+
+**dungeon_handcrafted.json 入口部屋の player_party フィールド**
+```json
+"player_party": {
+  "members": [
+    { "class_id": "fighter-sword", "x": 9, "y": 8 },
+    { "class_id": "archer",        "x": 8, "y": 8 },
+    { "class_id": "healer",        "x": 10, "y": 8 }
+  ]
+}
+```
+
+**DungeonBuilder の変更**
+- `_build_spawn_data()` で入口部屋の `player_party` を読み込む
+- `player_party` がなければ従来通りマップ中央に hero 1人を配置（フォールバック）
+
+**game_map.gd の変更**
+- `_setup_initial_allies()`: `player_parties[0].members[1+]` を NpcManager 経由でスポーン
+  - CharacterGenerator で `class_id` を元にランダム生成（名前・ランク・ステータス等）
+  - `npc_managers` に追加し、`_pre_joined_npc_managers` にも記録
+- `_merge_pre_joined_allies()`: `_finish_setup()` の最後に呼び出し
+  - `nm.activate()` で VisionSystem を経由せず直接 AI 起動
+  - `_merge_npc_into_player_party(nm)` で通常の合流処理
+
+**PartyManager.activate() の追加**
+```gdscript
+func activate() -> void:
+    if not _activated:
+        _activated = true
+        _start_ai()
+```
+- AI をプログラム側から直接起動（VisionSystem のエリア入室を待たずに使用可能）
+
+#### パーティーカラー・リングシステム
+- `PartyManager.set_party_color(color)`: 全メンバーの `character.party_color` を一括更新
+- `Character.party_color: Color`（TRANSPARENT=リング非表示）
+- ゲーム開始時に各パーティーに色を設定し、フィールド上で味方/敵/NPCを視覚的に区別
+
 #### バグ修正メモ
 - **ノード名衝突（`@Node2D@N` キャラ出現）**: 複数の NpcManager が同名ノードをシーンツリーに追加すると Godot が自動リネームする。`party_manager.gd._spawn_member()` でノード名に `self.name`（マネージャー名）をプレフィックスとして付与することで解消。
 - **freed オブジェクトクラッシュ**: `unit_ai.gd._process()` がキュー空時に `receive_order(_order)` を再呼び出しする際、`_order` 内に保存済みのターゲット参照が既に `queue_free()` されている場合にキャストでクラッシュ。`is_instance_valid()` チェックを追加して `null` 扱いに変更。
@@ -1397,9 +1438,39 @@ assets/images/characters/{class}_{sex}_{age}_{build}_{id}/
 #### 実装詳細
 
 **DialogueTrigger**
-- `_process()` で毎フレーム監視。条件: 現エリアに生存敵なし + プレイヤーと NPC 隣接（距離1）+ 通路でない
+- `_process()` は **NPC 自発（wants_to_initiate=true）のみ** 自動トリガー
+  - プレイヤー起点（矢印キーバンプ）は `try_trigger_for_member()` 経由で呼ばれる
+  - これにより「立ち去る」選択後に毎フレーム再トリガーされるバグを防止
+- 会話トリガー条件: 現エリアに生存敵なし + プレイヤーと NPC 隣接（距離1）+ 通路でない（エリアID空は除外）
 - `is_area_enemy_free(area)` はゲームマップの敵入室中断チェックでも共用
-- `_npc_wants_to_initiate()` で NpcLeaderAI の `wants_to_initiate()` を呼び、結果を `dialogue_requested` シグナルで通知
+- `try_trigger_for_member(member: Character)`: 矢印キーバンプ時に PlayerController 経由で呼ばれる。同じ条件を確認して `dialogue_requested` を発火
+
+**PlayerController の変更（矢印キーバンプ）**
+```gdscript
+signal npc_bumped(npc_member: Character)
+
+func _try_move(dir: Vector2i) -> void:
+    var new_pos := character.grid_pos + dir
+    if _can_move_to(new_pos):
+        character.move_to(new_pos)
+    else:
+        for blocker: Character in blocking_characters:
+            if not is_instance_valid(blocker): continue
+            if blocker.is_flying != character.is_flying: continue
+            if new_pos in blocker.get_occupied_tiles() and blocker.is_friendly:
+                npc_bumped.emit(blocker)
+                break
+```
+
+**game_map.gd の接続**
+```gdscript
+player_controller.npc_bumped.connect(_on_npc_bumped)
+
+func _on_npc_bumped(npc_member: Character) -> void:
+    if dialogue_trigger == null or player_controller.is_blocked:
+        return
+    dialogue_trigger.try_trigger_for_member(npc_member)
+```
 
 **DialogueWindow（CanvasLayer layer=15）**
 - 画面下部ポップアップ（`vp_h - panel_h - 16px` に配置）
@@ -1487,9 +1558,125 @@ CharacterGenerator.apply_enemy_graphics(member.character_data)
 - `AIController` の本実装
 - `Party.set_active()` を使ったプレイヤー操作キャラクターの切替
 
-## Phase 7: 指示システム（未実装）
-- 攻撃 / 防衛 / 待機 / 追従 / 撤退
-- 指示UI（コマンドメニュー）
+---
+
+## Phase 7: 指示システム ✅ 実装済み（刷新版）
+
+### 変更ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `scripts/character.gd` | `current_order` を5項目構造に刷新 |
+| `scripts/order_window.gd` | 5項目・6プリセット対応に刷新 |
+| `scripts/party_leader_ai.gd` | `_assign_orders()` を新キー対応に更新・`set_vision_system()` 追加 |
+| `scripts/party_manager.gd` | `set_vision_system()` 追加 |
+| `scripts/unit_ai.gd` | `_move_policy`・`_battle_formation` 追加・explore 行動実装 |
+| `scripts/map_data.gd` | `get_all_area_ids()` 追加 |
+| `scripts/vision_system.gd` | `set_party()` 追加（パーティー全員の探索トリガー） |
+| `scripts/left_panel.gd` | 指示略称を2行5項目表示に更新 |
+| `scripts/game_map.gd` | VisionSystem を各マネージャーの LeaderAI に配布 |
+
+### 指示項目（Character.current_order）
+
+| キー | 選択肢 | デフォルト | 説明 |
+|-----|--------|-----------|------|
+| `move` | explore / same_room / cluster / guard_room / standby | same_room | 移動方針 |
+| `battle_formation` | surround / front / rear / same_as_leader | surround | 戦闘隊形 |
+| `combat` | aggressive / support / standby | aggressive | 戦闘姿勢 |
+| `target` | nearest / weakest / same_as_leader | nearest | ターゲット選択 |
+| `on_low_hp` | keep_fighting / retreat / flee | retreat | 低HP時の行動 |
+
+### 全体方針プリセット（6種）
+
+| プリセット | combat | battle_formation | move | target | on_low_hp | 備考 |
+|-----------|--------|-----------------|------|--------|-----------|------|
+| 攻撃 | aggressive | surround | same_room | nearest | keep_fighting | |
+| 防衛 | support | surround | cluster | same_as_leader | retreat | |
+| 待機 | standby | surround | cluster | nearest | retreat | |
+| 追従 | support | surround | cluster | same_as_leader | retreat | |
+| 撤退 | standby | surround | cluster | nearest | flee | |
+| 探索 | aggressive | surround | explore(リーダー) / same_room(他) | nearest | retreat | リーダーが未訪問エリアを探索 |
+
+### 移動方針（move_policy）の動作
+
+| 値 | 動作 |
+|----|------|
+| explore | 未訪問エリアに向かう。全訪問済みならランダムエリアを巡回 |
+| same_room | リーダーと同じ部屋に留まる |
+| cluster | リーダーから5マス以内を維持 |
+| guard_room | 初回設定時の部屋に留まり守る |
+| standby | その場で待機。隣接の敵のみ攻撃 |
+
+### 戦闘隊形（battle_formation）の動作
+
+| 値 | PathMethod | 動作 |
+|----|-----------|------|
+| surround | ASTAR | ターゲットの隣接空きタイルへ |
+| front | ASTAR | ターゲットの隣接空きタイルへ（surround と同じ） |
+| rear | ASTAR_FLANK | ターゲットの背後へ回り込む |
+| same_as_leader | ASTAR | surround と同じ |
+
+### 低HP時（on_low_hp）の処理
+
+- `keep_fighting`: 変更なし
+- `retreat`: 戦略を WAIT に切替 + move_policy を "cluster" に上書き（リーダーそばに退避）
+- `flee`: 戦略を FLEE に切替
+
+### 指示のAI反映フロー
+
+```
+Character.current_order
+  → PartyLeaderAI._assign_orders() (1.5秒ごと / 状況変化時)
+    → 有効戦略決定（combat / on_low_hp / party_strategy の優先判定）
+    → UnitAI.receive_order({
+        "strategy": int, "target": Character,
+        "combat": String, "move": String,
+        "battle_formation": String, "leader": Character
+      })
+      → UnitAI._generate_queue() でアクションキュー生成
+```
+
+### 探索行動（explore）の実装
+
+- `VisionSystem.set_party(party)` でパーティー全員の移動を探索トリガーとして登録
+- `UnitAI.set_vision_system(vs)` で VisionSystem への参照を保持
+- `_find_explore_target()`: `MapData.get_all_area_ids()` で全エリア取得 → `VisionSystem.is_area_visited()` で未訪問エリアを検出 → 最近傍エリアの代表タイルへ
+- `move_to_explore` アクション: ゴールは `_start_action()` で固定（`move_to_attack` と異なりリアルタイム更新しない）
+
+### 左パネル略称（2行表示）
+
+- 行1: 移動 + 戦闘 + 標的（例: `室 積 近`）
+- 行2: 隊形 + 低HP（例: `囲 退`）
+
+| キー | 略称マッピング |
+|-----|--------------|
+| move | 探=explore / 室=same_room / 密=cluster / 守=guard_room / 待=standby |
+| battle_formation | 囲=surround / 前=front / 後=rear / 同=same_as_leader |
+| combat | 積=aggressive / 援=support / 待=standby |
+| target | 近=nearest / 弱=weakest / 同=same_as_leader |
+| on_low_hp | 継=keep_fighting / 退=retreat / 逃=flee |
+
+### バグ修正メモ（Phase 7）
+
+**初期パーティーメンバーが動かない問題**
+- **原因**: `_finish_setup()` は1フレームで同期実行される。VisionSystem.setup() は初期エリアを設定するが `update_visibility()` は呼ばない。pre-joined NpcManager は `_vision_controlled=true` のため、VisionSystem の `_process()` が動く前に `remove_npc_manager()` で除外されてしまい、AI が起動しないまま party に合流する。
+- **修正**: `PartyManager.activate()` を public で追加。`_merge_pre_joined_allies()` で `nm.activate()` を呼んでから merge することで、VisionSystem を経由せず直接 AI を起動する。
+
+**事前合流メンバーと敵が重なる問題**
+- **原因**: 最初の修正案では plain `Character` ノードを直接生成したため、`blocking_characters` に登録されず敵の占有チェックから除外されていた。
+- **修正**: NpcManager 経由でスポーン（`_setup_initial_allies()`）し、`_link_all_character_lists()` の前に `npc_managers` に追加する。これにより通常 NPC と同じ経路で全マネージャーの衝突リストに自動登録される。
+
+**hero の move=explore が操作切替後に動作しない問題**
+- **原因**: `hero` は `PlayerController` のみが管理しており `UnitAI` が存在しなかった。`is_player_controlled = false` になっても `current_order` を読んで行動する AI がなかった。
+- **修正**:
+  - `PartyManager.setup_adopted(member, player, map_data)` を追加（スポーンなしで既存キャラを AI 管理下に置く）。
+  - `UnitAI._is_passable()` に `_player != _member` ガードを追加（hero の自己AI がタイルを自分でブロックしないように）。
+  - `game_map._setup_hero()` で `NpcManager`（`_hero_manager`）を生成し、`setup_adopted(hero, hero, map_data)` → `activate()` で AI を起動。
+  - `game_map._link_all_character_lists()` で `_hero_manager.set_all_members()` と `set_enemy_list()` を配布。
+  - `game_map._setup_vision_system()` で `_hero_manager.set_vision_system()` を配布。
+  - `hero.is_friendly = true` を設定（`_assign_orders()` で `current_order.move` を反映させるために必要）。
+
+### 未実装（今後）
+- 統率力・従順度パラメータの実際の影響（値は保持済み）
 
 ## Phase 8: 敵のバリエーション（未実装）
 - ゴブリン以外の敵を追加

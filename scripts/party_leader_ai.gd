@@ -7,6 +7,7 @@ extends Node
 ##   _create_unit_ai()         : メンバーに対応する UnitAI の種別を返す
 ##   _evaluate_party_strategy(): パーティー全体の戦略判断
 ##   _select_target_for()      : メンバーごとの攻撃ターゲット選択
+##   _select_weakest_target()  : 最弱ターゲット選択（複数候補がある場合）
 
 ## パーティー戦略（UnitAI.Strategy と int 値を合わせる：ATTACK=0, FLEE=1, WAIT=2）
 enum Strategy { ATTACK, FLEE, WAIT, DEFEND }
@@ -50,6 +51,14 @@ func set_all_members(all_members: Array[Character]) -> void:
 			unit_ai.set_all_members(all_members)
 
 
+## VisionSystem を各 UnitAI に配布する（explore 移動方針に必要）
+func set_vision_system(vs: VisionSystem) -> void:
+	for unit_ai_var: Variant in _unit_ais.values():
+		var unit_ai := unit_ai_var as UnitAI
+		if unit_ai != null:
+			unit_ai.set_vision_system(vs)
+
+
 func _process(delta: float) -> void:
 	_reeval_timer -= delta
 	if _reeval_timer <= 0.0:
@@ -58,21 +67,100 @@ func _process(delta: float) -> void:
 
 
 ## 戦略を評価して各メンバーにオーダーを発行する
+## current_order の各項目をパーティー戦略とマージして UnitAI に渡す
 func _assign_orders() -> void:
 	_party_strategy = _evaluate_party_strategy()
-	# PartyLeaderAI.Strategy の int 値は UnitAI.Strategy と先頭3つ（ATTACK/FLEE/WAIT）が一致するため
-	# int のまま order に格納して UnitAI.receive_order() に渡す（キャスト先で同一 int 値として解釈）
-	var strat_int := int(_party_strategy)
+
+	# リーダーのターゲットを先に決定（same_as_leader ポリシー用）
+	var leader_target: Character = null
+	for lm: Character in _party_members:
+		if is_instance_valid(lm):
+			leader_target = _select_target_for(lm)
+			break
+
+	# リーダーキャラクター（UnitAI の formation 計算に使用）
+	var leader_char: Character = null
+	for lm: Character in _party_members:
+		if is_instance_valid(lm) and lm.is_leader:
+			leader_char = lm
+			break
+	if leader_char == null and not _party_members.is_empty():
+		for lm: Character in _party_members:
+			if is_instance_valid(lm):
+				leader_char = lm
+				break
+
 	for member: Character in _party_members:
 		if not is_instance_valid(member):
 			continue
 		var unit_ai := _unit_ais.get(member.name) as UnitAI
 		if unit_ai == null:
 			continue
-		var target := _select_target_for(member)
+
+		var order          := member.current_order
+		var combat         : String = order.get("combat",          "aggressive")
+		var on_low_hp      : String = order.get("on_low_hp",       "retreat")
+		var tgt_policy     : String = order.get("target",          "nearest")
+		var battle_form    : String = order.get("battle_formation", "surround")
+
+		# ── 移動方針設定 ──────────────────────────────────────────────────
+		# 敵は move 制約なし（spread）。味方は current_order.move を使用
+		var move_policy  : String    = "spread"
+		var formation_ref: Character = null
+		if member.is_friendly:
+			move_policy = order.get("move", "same_room") as String
+			# 1人パーティーまたは自分がリーダーの場合は _player（英雄）を基準にする
+			if leader_char == null or leader_char == member:
+				if _player != null and is_instance_valid(_player):
+					formation_ref = _player
+			else:
+				formation_ref = leader_char
+
+		# ── 有効戦略を決定 ───────────────────────────────────────────────
+		# 1. パーティー逃走は最優先（GoblinLeaderAI などの集団判断）
+		var effective_strat: int
+		if _party_strategy == Strategy.FLEE:
+			effective_strat = int(Strategy.FLEE)
+		else:
+			# 個別の戦闘指示から変換
+			match combat:
+				"aggressive": effective_strat = int(Strategy.ATTACK)
+				"support":    effective_strat = int(Strategy.WAIT)
+				"standby":    effective_strat = int(Strategy.WAIT)
+				_:            effective_strat = int(_party_strategy)
+
+		# 2. 個別低HP条件（on_low_hp）：HP50%未満で処理
+		if member.max_hp > 0 and float(member.hp) / float(member.max_hp) < 0.5:
+			match on_low_hp:
+				"flee":
+					effective_strat = int(Strategy.FLEE)
+				"retreat":
+					# 戦略を WAIT に切替、隊形を cluster に上書き（リーダーそばに退避）
+					if effective_strat != int(Strategy.FLEE):
+						effective_strat = int(Strategy.WAIT)
+					move_policy = "cluster"
+				# "keep_fighting" は何も変えない
+
+		# ── ターゲット選択 ────────────────────────────────────────────────
+		var target: Character
+		match tgt_policy:
+			"nearest":
+				target = _select_target_for(member)
+			"weakest":
+				target = _select_weakest_target(member)
+			"same_as_leader":
+				target = leader_target if leader_target != null \
+					else _select_target_for(member)
+			_:
+				target = _select_target_for(member)
+
 		unit_ai.receive_order({
-			"strategy": strat_int,
-			"target":   target,
+			"strategy":         effective_strat,
+			"target":           target,
+			"combat":           combat,
+			"move":             move_policy,
+			"battle_formation": battle_form,
+			"leader":           formation_ref,
 		})
 
 
@@ -126,3 +214,10 @@ func _evaluate_party_strategy() -> Strategy:
 ## 指定メンバーの攻撃ターゲットを選択する（サブクラスがオーバーライドする）
 func _select_target_for(_member: Character) -> Character:
 	return _player
+
+
+## 最もHPが少ない攻撃ターゲットを選択する
+## サブクラスがオーバーライドして複数候補から選択できる。
+## デフォルトは _select_target_for() と同一（ターゲットが1体のみの場合など）
+func _select_weakest_target(member: Character) -> Character:
+	return _select_target_for(member)
