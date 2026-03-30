@@ -364,7 +364,7 @@ assets/images/enemies/
     - [x] names.json作成（男性・女性それぞれ20名）
     - [x] 敵ランクをS/A/B/Cの4段階に統一
   - [x] Phase 6-1: 仲間NPCの配置と基本AI行動
-    - [x] 手作りダンジョン（dungeon_handcrafted.json）：15部屋・8敵パーティー・5NPCパーティー
+    - [x] 手作りダンジョン（dungeon_handcrafted.json）の仕組みを導入
       - 起動優先順位：LLM生成済み → 手作り → LLM新規生成
     - [x] MapData に npc_parties フィールド追加
     - [x] DungeonBuilder が npc_party を rooms から収集
@@ -484,7 +484,16 @@ assets/images/enemies/
   - enemies_list.json に11種全て追加
   - party_manager._create_leader_ai() ファクトリを11種に対応（match文で正確にルーティング）
   - DungeonGenerator プロンプトを11種対応に更新（種族特性・フロア別配置ガイドライン付き）
-  - dungeon_handcrafted.json 削除・game_map.gd からhandcrafted読み込み処理を削除（LLM生成に一本化）
+  - 旧 dungeon_handcrafted.json 削除（後続バグ修正で再作成・内容を刷新）
+- [x] Phase 8 バグ修正
+  - party_manager._spawn_member()：enemy_id のハイフンをアンダーバーに変換してJSONファイルを正しく読み込む（例: "goblin-mage" → goblin_mage.json）
+  - dark_priest.json：id を "dark_priest" → "dark-priest" に修正（画像フォルダ名 `dark-priest_...` と一致させる）
+  - dungeon_handcrafted.json を再作成（6部屋・11種の敵・3人スタートパーティー）
+    - 起動デフォルト：Claude Code 手作りダンジョンを使用。F5 で LLM 生成に切替可能
+    - 入口部屋に hero + archer + healer の3人パーティー
+    - 敵パーティー：goblin・goblin-archer・wolf・zombie・hobgoblin・goblin-mage・dark-knight・dark-mage・dark-priest・salamander
+    - NPCパーティー：ゾンビの霊廟に fighter-sword + healer の2人
+  - game_map.gd：handcrafted ダンジョン読み込みロジックを復元
 - [ ] Phase 9: ステージ・バランス調整
 - [ ] Phase 10: Steam配布準備
 

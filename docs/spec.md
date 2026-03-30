@@ -1821,7 +1821,43 @@ match char_id:
 ### DungeonGenerator プロンプト更新
 - 11種の敵を使用可能として列挙（種族ごとの特性・パーティー構成例）
 - フロア別配置ガイドライン（浅い層：goblin/zombie/wolf中心、深い層：dark系中心）
-- dungeon_handcrafted.json 削除・game_map.gd からhandcrafted読み込み処理を削除
+- 旧 dungeon_handcrafted.json を削除（後続バグ修正で再作成・内容を刷新）
+
+## Phase 8 バグ修正 ✅ 実装済み
+
+### 敵グラフィック非表示バグ
+`_spawn_member()` がハイフン区切りの enemy_id（例: "goblin-mage"）でJSONファイルをそのまま検索していたため、アンダーバー区切りのファイル（goblin_mage.json）が見つからずプレースホルダー色で表示されていた。
+
+**修正（party_manager.gd）**
+```gdscript
+var file_name := char_id.replace("-", "_") + ".json"
+member.character_data = CharacterData.load_from_json(
+    "res://assets/master/enemies/" + file_name
+)
+```
+
+### dark_priest.json id 不一致
+dark_priest.json の `"id": "dark_priest"` がアンダーバーだったため、`apply_enemy_graphics("dark_priest")` が画像フォルダ `dark-priest_...`（ハイフン）を見つけられずプレースホルダー表示になっていた。
+
+**修正**: `"id": "dark-priest"` に変更（フォルダ名と一致）
+
+### dungeon_handcrafted.json 再作成
+Phase 8 Step 3 で削除した手作りダンジョンを再作成。Claude Code が管理するデフォルトダンジョンとして使用。
+
+**起動優先順位（game_map.gd）**
+1. `dungeon_generated.json` が存在する → 読み込む（F5で生成したもの）
+2. `dungeon_handcrafted.json` が存在する → 読み込む（Claude Code 手作り）
+3. いずれもない → LLM でダンジョン生成を開始
+
+**dungeon_handcrafted.json 構成（6部屋1フロア）**
+| 部屋ID | 名前 | 内容 |
+|--------|------|------|
+| r1_1 | 廃墟の入口 | プレイヤー3人（hero, archer, healer）スタート |
+| r1_2 | ゴブリンの集会所 | goblin×3 + goblin-archer×1 |
+| r1_3 | 狼の縄張り | wolf×4 |
+| r1_4 | ゾンビの霊廟 | zombie×2 + NPC（fighter-sword + healer） |
+| r1_5 | 魔術師の書斎 | hobgoblin×1 + goblin×2 + goblin-mage×1 |
+| r1_6 | 闇の司令室 | dark-knight + dark-mage + dark-priest + salamander |
 
 ## Phase 9: ステージ・バランス調整（未実装）
 
