@@ -1,0 +1,136 @@
+{
+  "dungeon": {
+    "floors": [
+      {
+        "floor": 1,
+        "entrance_room": "r1_1",
+        "rooms": [
+          {
+            "id": "r1_1",
+            "name": "廃墟の入口",
+            "x": 2,
+            "y": 2,
+            "width": 12,
+            "height": 10,
+            "type": "normal",
+            "is_entrance": true,
+            "enemy_party": { "members": [] },
+            "player_party": {
+              "members": [
+                { "character_id": "hero",    "x": 5, "y": 6 },
+                { "character_id": "archer",  "x": 7, "y": 6 },
+                { "character_id": "healer",  "x": 6, "y": 7 }
+              ]
+            }
+          },
+          {
+            "id": "r1_2",
+            "name": "ゴブリンの集会所",
+            "x": 20,
+            "y": 2,
+            "width": 14,
+            "height": 12,
+            "type": "normal",
+            "is_entrance": false,
+            "enemy_party": {
+              "members": [
+                { "enemy_id": "goblin",         "x": 23, "y": 5 },
+                { "enemy_id": "goblin",         "x": 26, "y": 7 },
+                { "enemy_id": "goblin",         "x": 22, "y": 9 },
+                { "enemy_id": "goblin-archer",  "x": 31, "y": 5 }
+              ]
+            }
+          },
+          {
+            "id": "r1_3",
+            "name": "狼の縄張り",
+            "x": 40,
+            "y": 2,
+            "width": 12,
+            "height": 12,
+            "type": "normal",
+            "is_entrance": false,
+            "enemy_party": {
+              "members": [
+                { "enemy_id": "wolf", "x": 43, "y": 5 },
+                { "enemy_id": "wolf", "x": 47, "y": 8 },
+                { "enemy_id": "wolf", "x": 44, "y": 10 },
+                { "enemy_id": "wolf", "x": 49, "y": 6 }
+              ]
+            }
+          },
+          {
+            "id": "r1_4",
+            "name": "ゾンビの霊廟",
+            "x": 2,
+            "y": 18,
+            "width": 12,
+            "height": 10,
+            "type": "normal",
+            "is_entrance": false,
+            "enemy_party": {
+              "members": [
+                { "enemy_id": "zombie", "x": 5, "y": 21 },
+                { "enemy_id": "zombie", "x": 9, "y": 23 }
+              ]
+            },
+            "npc_party": {
+              "members": [
+                { "character_id": "fighter-sword", "x": 7, "y": 20 },
+                { "character_id": "healer",        "x": 8, "y": 20 }
+              ]
+            }
+          },
+          {
+            "id": "r1_5",
+            "name": "魔術師の書斎",
+            "x": 20,
+            "y": 18,
+            "width": 14,
+            "height": 12,
+            "type": "normal",
+            "is_entrance": false,
+            "enemy_party": {
+              "members": [
+                { "enemy_id": "hobgoblin",    "x": 26, "y": 23 },
+                { "enemy_id": "goblin",       "x": 23, "y": 22 },
+                { "enemy_id": "goblin",       "x": 29, "y": 25 },
+                { "enemy_id": "goblin-mage",  "x": 31, "y": 20 }
+              ]
+            }
+          },
+          {
+            "id": "r1_6",
+            "name": "闇の司令室",
+            "x": 40,
+            "y": 18,
+            "width": 16,
+            "height": 14,
+            "type": "normal",
+            "is_entrance": false,
+            "enemy_party": {
+              "members": [
+                { "enemy_id": "dark-knight",  "x": 46, "y": 23 },
+                { "enemy_id": "dark-mage",    "x": 51, "y": 21 },
+                { "enemy_id": "dark-priest",  "x": 53, "y": 26 },
+                { "enemy_id": "salamander",   "x": 44, "y": 27 }
+              ]
+            }
+          }
+        ],
+        "corridors": [
+          { "from": "r1_1", "to": "r1_2", "name": "崩れた回廊" },
+          { "from": "r1_2", "to": "r1_3", "name": "狩りの通路" },
+          { "from": "r1_1", "to": "r1_4", "name": "古い階段" },
+          { "from": "r1_2", "to": "r1_5", "name": "南への通路" },
+          { "from": "r1_3", "to": "r1_6", "name": "深淵への道" },
+          { "from": "r1_4", "to": "r1_5", "name": "霊廟の廊下" },
+          { "from": "r1_5", "to": "r1_6", "name": "血塗られた回廊" }
+        ],
+        "stairs": [
+          { "room": "r1_6", "direction": "down" }
+        ]
+      }
+    ]
+  }
+}

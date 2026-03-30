@@ -91,8 +91,10 @@ func _spawn_member(char_id: String, grid_pos: Vector2i) -> Character:
 	var member := Character.new()
 	member.grid_pos = grid_pos
 	member.placeholder_color = Color(1.0, 0.4, 0.2)
+	# enemy_id はハイフン区切り（例: "goblin-archer"）だがファイル名はアンダーバー（goblin_archer.json）
+	var file_name := char_id.replace("-", "_") + ".json"
 	member.character_data = CharacterData.load_from_json(
-		"res://assets/master/enemies/" + char_id + ".json"
+		"res://assets/master/enemies/" + file_name
 	)
 	# 敵画像フォルダが存在すればランダムに選択して適用する（なければ JSON パスを維持）
 	CharacterGenerator.apply_enemy_graphics(member.character_data)
