@@ -428,9 +428,9 @@ func _execute_melee(target: Character, slot_data: Dictionary) -> void:
 	var dmg_mult: float = float(slot_data.get("damage_mult", 1.0))
 	character.face_toward(target.grid_pos)
 	var dir_mult   := Character.get_direction_multiplier(character, target)
-	var raw_damage := int(float(character.attack) * dmg_mult)
+	var raw_damage := int(float(character.attack_power) * dmg_mult)
 	SoundManager.play_attack(character)
-	target.take_damage(raw_damage, dir_mult)
+	target.take_damage(raw_damage, dir_mult, character)
 	SoundManager.play_hit(character)
 	var skill_name: String = str(slot_data.get("name", "近接"))
 	print("[Player] %s → %s  スキル%.1fx 方向%.1fx  HP:%d/%d" % \
@@ -440,7 +440,7 @@ func _execute_melee(target: Character, slot_data: Dictionary) -> void:
 func _execute_ranged(target: Character, slot_data: Dictionary) -> void:
 	var dmg_mult: float = float(slot_data.get("damage_mult", 1.0))
 	character.face_toward(target.grid_pos)
-	var raw_damage := int(float(character.attack) * dmg_mult)
+	var raw_damage := int(float(character.attack_power) * dmg_mult)
 	SoundManager.play_attack(character)
 	_spawn_projectile(target, raw_damage)
 

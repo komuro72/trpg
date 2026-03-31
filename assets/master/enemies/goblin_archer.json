@@ -2,7 +2,7 @@
   "id": "goblin-archer",
   "name": "ゴブリンアーチャー",
   "hp": 18,
-  "attack": 6,
+  "attack_power": 6,
   "defense": 1,
   "is_flying": false,
   "attack_type": "ranged",

@@ -1,0 +1,14 @@
+{
+	"item_type": "shield",
+	"category": "shield",
+	"allowed_classes": ["fighter-sword", "fighter-axe"],
+	"base_stats": {
+		"physical_resistance_min": 3,
+		"physical_resistance_max": 10,
+		"magic_resistance_min": 0,
+		"magic_resistance_max": 5,
+		"defense_strength_min": 3,
+		"defense_strength_max": 8
+	},
+	"depth_scale": 0.5
+}

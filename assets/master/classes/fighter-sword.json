@@ -3,7 +3,7 @@
   "name": "剣士",
   "weapon_type": "sword",
   "base_hp": 100,
-  "base_attack": 12,
+  "base_attack_power": 12,
   "base_defense": 5,
   "pre_delay": 0.3,
   "post_delay": 0.5,

@@ -1,0 +1,9 @@
+{
+	"item_type": "potion_hp",
+	"category": "consumable",
+	"allowed_classes": [],
+	"effect": {
+		"heal_hp": 30
+	},
+	"depth_scale": 0.3
+}

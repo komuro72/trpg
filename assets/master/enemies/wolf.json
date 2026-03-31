@@ -2,7 +2,7 @@
   "id": "wolf",
   "name": "ウルフ",
   "hp": 22,
-  "attack": 9,
+  "attack_power": 9,
   "defense": 2,
   "is_flying": false,
   "attack_type": "melee",

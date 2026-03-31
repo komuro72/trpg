@@ -2,7 +2,6 @@ extends Node2D
 
 ## グリッドマップ
 ## タイル描画 + キャラクター生成 + プレイヤー入力制御
-## Phase 3: LLM生成ダンジョンの非同期読み込み、F5再生成に対応
 ## Phase 5: GRID_SIZE動的計算・視界システム・3カラムUIパネル
 
 ## タイル画像パス
@@ -18,7 +17,6 @@ const COLOR_RUBBLE      := Color(0.55, 0.45, 0.35)
 const COLOR_CORRIDOR    := Color(0.30, 0.30, 0.35)
 const COLOR_GRID_LINE   := Color(0.0, 0.0, 0.0, 0.15)
 
-const DUNGEON_JSON_PATH      := "res://assets/master/maps/dungeon_generated.json"
 const HANDCRAFTED_JSON_PATH  := "res://assets/master/maps/dungeon_handcrafted.json"
 const FALLBACK_JSON_PATH     := "res://assets/master/maps/dungeon_01.json"
 
@@ -58,7 +56,6 @@ var dialogue_trigger: DialogueTrigger
 var dialogue_window: DialogueWindow
 var order_window: OrderWindow
 
-var _generating_label: Label
 var _tile_textures: Dictionary = {}  # TileType(int) -> Texture2D
 var _dialogue_npc_manager: NpcManager  ## 現在会話中の NpcManager
 var _dialogue_npc_initiates: bool = false
@@ -67,13 +64,7 @@ var _dialogue_npc_initiates: bool = false
 func _ready() -> void:
 	# 画面サイズから GRID_SIZE を動的計算（最小32px）
 	GlobalConstants.initialize(get_viewport().get_visible_rect().size)
-
-	if FileAccess.file_exists(DUNGEON_JSON_PATH):
-		_load_generated_dungeon()
-	elif FileAccess.file_exists(HANDCRAFTED_JSON_PATH):
-		_load_handcrafted_dungeon()
-	else:
-		_start_generation()
+	_load_handcrafted_dungeon()
 
 
 func _input(event: InputEvent) -> void:
@@ -92,22 +83,7 @@ func _input(event: InputEvent) -> void:
 				if right_panel != null:
 					right_panel.toggle_debug()
 			KEY_F5:
-				_regenerate()
-
-
-## 既存のdungeon_generated.jsonを読み込んで即座にセットアップ
-func _load_generated_dungeon() -> void:
-	var raw: Variant = JSON.parse_string(_read_file(DUNGEON_JSON_PATH))
-	if raw != null and raw is Dictionary:
-		var floors: Array = ((raw as Dictionary).get("dungeon", {}) as Dictionary).get("floors", [])
-		if CURRENT_FLOOR < floors.size():
-			map_data = DungeonBuilder.build_floor(floors[CURRENT_FLOOR] as Dictionary)
-			_finish_setup()
-			return
-
-	push_error("game_map: dungeon_generated.json のパースに失敗しました。フォールバック使用")
-	map_data = MapData.load_from_json(FALLBACK_JSON_PATH)
-	_finish_setup()
+				get_tree().reload_current_scene()
 
 
 ## 手作りダンジョンJSON（dungeon_handcrafted.json）を読み込む
@@ -123,37 +99,6 @@ func _load_handcrafted_dungeon() -> void:
 	push_error("game_map: dungeon_handcrafted.json のパースに失敗しました。フォールバック使用")
 	map_data = MapData.load_from_json(FALLBACK_JSON_PATH)
 	_finish_setup()
-
-
-## LLMでダンジョン生成を開始し、生成中ラベルを表示する
-func _start_generation() -> void:
-	_show_generating_label()
-
-	var gen := DungeonGenerator.new()
-	gen.name = "DungeonGenerator"
-	add_child(gen)
-	gen.generation_completed.connect(_on_generation_completed)
-	gen.generation_failed.connect(_on_generation_failed)
-	gen.generate()
-
-
-func _on_generation_completed(_dungeon_data: Dictionary) -> void:
-	# 保存済みのJSONを読み込んでシーンをリロード
-	get_tree().reload_current_scene()
-
-
-func _on_generation_failed(error: String) -> void:
-	push_error("game_map: ダンジョン生成失敗: [" + error + "] → フォールバック使用")
-	_hide_generating_label()
-	map_data = MapData.load_from_json(FALLBACK_JSON_PATH)
-	_finish_setup()
-
-
-## F5キー：既存データを削除して再生成
-func _regenerate() -> void:
-	if FileAccess.file_exists(DUNGEON_JSON_PATH):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(DUNGEON_JSON_PATH))
-	get_tree().reload_current_scene()
 
 
 ## セットアップ完了（map_dataが確定してから呼ぶ）
@@ -247,10 +192,12 @@ func _setup_enemies() -> void:
 		var members: Array = (ep as Dictionary).get("members", [])
 		if members.is_empty():
 			continue
+		var items: Array = (ep as Dictionary).get("items", [])
 		var em := EnemyManager.new()
 		em.name = "EnemyManager%d" % idx
 		add_child(em)
-		em.setup(members, hero, map_data)
+		em.setup(members, hero, map_data, items)
+		em.party_wiped.connect(_on_enemy_party_wiped)
 		# VisionSystem が視界管理を担うため、距離ベースのアクティブ化を無効化
 		em.set_vision_controlled(true)
 		enemy_managers.append(em)
@@ -657,29 +604,6 @@ func _calc_party_strength(p: Party) -> float:
 
 
 # --------------------------------------------------------------------------
-# 生成中ラベル
-# --------------------------------------------------------------------------
-
-func _show_generating_label() -> void:
-	var canvas := CanvasLayer.new()
-	canvas.name = "GeneratingLayer"
-	add_child(canvas)
-
-	_generating_label = Label.new()
-	_generating_label.text = "ダンジョン生成中..."
-	_generating_label.add_theme_font_size_override("font_size", 28)
-	_generating_label.add_theme_color_override("font_color", Color.WHITE)
-	_generating_label.set_anchors_preset(Control.PRESET_CENTER)
-	canvas.add_child(_generating_label)
-
-
-func _hide_generating_label() -> void:
-	var canvas := get_node_or_null("GeneratingLayer")
-	if canvas != null:
-		canvas.queue_free()
-
-
-# --------------------------------------------------------------------------
 # ユーティリティ
 # --------------------------------------------------------------------------
 
@@ -695,6 +619,21 @@ func _read_file(path: String) -> String:
 ## キャラクターの死亡シグナルを受け取り、パーティーから除去する
 func _on_character_died(character: Character) -> void:
 	party.remove_member(character)
+
+
+## 敵パーティー全滅シグナルを受け取り、ドロップアイテムをプレイヤーパーティーへ転送する
+## killer が null（ranged 遠距離kill 等）の場合は hero に帰属させる
+func _on_enemy_party_wiped(items: Array, killer: Character) -> void:
+	if items.is_empty():
+		return
+	# アイテムの帰属先キャラを決定（killer がいればそのキャラ、なければ hero）
+	var recipient: Character = killer if (killer != null and is_instance_valid(killer)) else hero
+	if recipient == null or recipient.character_data == null:
+		return
+	for item: Variant in items:
+		recipient.character_data.inventory.append(item)
+	SoundManager.play(SoundManager.ITEM_GET)
+	print("[GameMap] ドロップアイテム %d 個 → %s" % [items.size(), recipient.character_data.character_name])
 
 
 ## タイル画像をプリロードする（画像がない場合はフォールバック色を使用）

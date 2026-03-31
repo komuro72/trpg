@@ -10,6 +10,9 @@ extends Node
 ## VisionSystem 未接続時の距離ベースアクティブ化しきい値
 const ACTIVATION_RANGE: int = 5
 
+## 全メンバーが死亡したときに発火する。items: ドロップアイテム配列、killer: 最後にトドメを刺したキャラ
+signal party_wiped(items: Array, killer: Character)
+
 ## パーティー種別
 var party_type: String = "enemy"
 
@@ -29,6 +32,7 @@ var _map_data:   MapData
 var _activated:  bool = false
 var _vision_controlled: bool = false
 var _all_members: Array[Character] = []  ## 全パーティー合算（AI 起動時に渡す）
+var _drop_items:  Array = []             ## ドロップアイテム（全滅時に party_wiped で転送）
 
 
 ## VisionSystem から呼ばれる。true なら距離ベースのアクティブ化を無効にする
@@ -74,9 +78,11 @@ func setup_adopted(member: Character, player: Character, map_data: MapData) -> v
 
 ## メンバーをスポーンしてパーティーを構成する
 ## spawn_list: [{ "enemy_id" or "character_id": String, "x": int, "y": int }]
-func setup(spawn_list: Array, player: Character, map_data: MapData) -> void:
-	_player   = player
-	_map_data = map_data
+## drop_items: ドロップアイテムの辞書リスト（dungeon_builder から渡される）
+func setup(spawn_list: Array, player: Character, map_data: MapData, drop_items: Array = []) -> void:
+	_player     = player
+	_map_data   = map_data
+	_drop_items = drop_items.duplicate()
 	for spawn_info: Variant in spawn_list:
 		var info    := spawn_info as Dictionary
 		var char_id: String = info.get("enemy_id", info.get("character_id", ""))
@@ -220,3 +226,6 @@ func _on_member_died(character: Character) -> void:
 	# AI に状況変化を通知（逃走判定の再評価を即座に行わせる）
 	if _leader_ai != null:
 		_leader_ai.notify_situation_changed()
+	# 全メンバー死亡 → party_wiped シグナル発火（ドロップ処理）
+	if _members.is_empty() and party_type == "enemy":
+		party_wiped.emit(_drop_items, character.last_attacker)

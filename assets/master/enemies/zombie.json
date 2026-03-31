@@ -2,7 +2,7 @@
   "id": "zombie",
   "name": "ゾンビ",
   "hp": 35,
-  "attack": 6,
+  "attack_power": 6,
   "defense": 2,
   "is_flying": false,
   "attack_type": "melee",

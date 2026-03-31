@@ -78,10 +78,11 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	var char_name := _random_name(sex)
 
 	# 5. ステータス計算
-	var base_hp      := int(class_json.get("base_hp",      100))
-	var base_attack  := int(class_json.get("base_attack",  10))
-	var base_defense := int(class_json.get("base_defense", 3))
-	var stats := _calc_stats(base_hp, base_attack, base_defense, rank, sex, age, build)
+	var base_hp           := int(class_json.get("base_hp",           100))
+	var base_attack_power := int(class_json.get("base_attack_power", class_json.get("base_attack", 10)))
+	var base_magic_power  := int(class_json.get("base_magic_power",  0))
+	var base_defense      := int(class_json.get("base_defense",      3))
+	var stats := _calc_stats(base_hp, base_attack_power, base_magic_power, base_defense, rank, sex, age, build)
 
 	# 6. CharacterData 組み立て
 	var data := CharacterData.new()
@@ -93,7 +94,8 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	data.age                = age
 	data.build              = build
 	data.max_hp             = stats.hp
-	data.attack             = stats.attack
+	data.attack_power       = stats.attack_power
+	data.magic_power        = stats.magic_power
 	data.defense            = stats.defense
 	data.pre_delay          = float(class_json.get("pre_delay",  0.3))
 	data.post_delay         = float(class_json.get("post_delay", 0.5))
@@ -255,8 +257,8 @@ static func _random_name(sex: String) -> String:
 
 ## ステータス計算
 ## 最終値 = base × rank × build × sex × age（hp/defense 最低1、attack 最低0）
-static func _calc_stats(base_hp: int, base_attack: int, base_defense: int,
-		rank: String, sex: String, age: String, build: String) -> Dictionary:
+static func _calc_stats(base_hp: int, base_attack_power: int, base_magic_power: int,
+		base_defense: int, rank: String, sex: String, age: String, build: String) -> Dictionary:
 	var rm: float      = RANK_MULT.get(rank,  1.0) as float
 	var bm: Dictionary = BUILD_MULT.get(build, BUILD_MULT["medium"]) as Dictionary
 	var sm: Dictionary = SEX_MULT.get(sex,    SEX_MULT["male"])   as Dictionary
@@ -267,7 +269,8 @@ static func _calc_stats(base_hp: int, base_attack: int, base_defense: int,
 	var defense_mult := rm * (bm.get("defense", 1.0) as float) * (sm.get("defense", 1.0) as float) * (am.get("defense", 1.0) as float)
 
 	return {
-		"hp":      maxi(1, int(float(base_hp)      * hp_mult)),
-		"attack":  maxi(0, int(float(base_attack)  * attack_mult)),
-		"defense": maxi(0, int(float(base_defense) * defense_mult)),
+		"hp":           maxi(1, int(float(base_hp)           * hp_mult)),
+		"attack_power": maxi(0, int(float(base_attack_power) * attack_mult)),
+		"magic_power":  maxi(0, int(float(base_magic_power)  * attack_mult)),
+		"defense":      maxi(0, int(float(base_defense)      * defense_mult)),
 	}

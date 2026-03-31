@@ -2,7 +2,7 @@
   "id": "hobgoblin",
   "name": "ホブゴブリン",
   "hp": 45,
-  "attack": 12,
+  "attack_power": 12,
   "defense": 4,
   "is_flying": false,
   "attack_type": "melee",

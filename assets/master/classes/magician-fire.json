@@ -3,7 +3,7 @@
   "name": "魔法使い(火)",
   "weapon_type": "staff",
   "base_hp": 70,
-  "base_attack": 15,
+  "base_magic_power": 15,
   "base_defense": 2,
   "pre_delay": 0.5,
   "post_delay": 0.6,

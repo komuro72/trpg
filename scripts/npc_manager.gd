@@ -18,7 +18,8 @@ func set_enemy_list(enemies: Array[Character]) -> void:
 
 
 ## NPC 用スポーン：class_id でキャラクターをランダム生成する
-func setup(spawn_list: Array, player: Character, map_data: MapData) -> void:
+## drop_items は NPC には不使用（PartyManager との署名互換のために宣言）
+func setup(spawn_list: Array, player: Character, map_data: MapData, drop_items: Array = []) -> void:
 	_player   = player
 	_map_data = map_data
 	for spawn_info: Variant in spawn_list:

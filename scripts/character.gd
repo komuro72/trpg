@@ -28,13 +28,17 @@ var join_index: int = 0
 var is_player_controlled: bool = false
 
 ## 基本ステータス（character_data から _ready() で初期化）
-var hp: int = 1
-var max_hp: int = 1
-var mp: int = 0
-var max_mp: int = 0
-var attack: int = 1
-var defense: int = 0
-var is_flying: bool = false
+var hp:           int  = 1
+var max_hp:       int  = 1
+var mp:           int  = 0
+var max_mp:       int  = 0
+var attack_power: int  = 1
+var magic_power:  int  = 0
+var defense:      int  = 0
+var is_flying:    bool = false
+
+## 最後にダメージを与えたキャラクター（ドロップ帰属の追跡用）
+var last_attacker: Character = null
 
 ## バフ状態（一時的な防御力アップ。0=なし、>0=残り秒数）
 var defense_buff_timer: float = 0.0
@@ -151,13 +155,14 @@ func _update_modulate() -> void:
 func _init_stats() -> void:
 	if character_data == null:
 		return
-	max_hp    = character_data.max_hp
-	hp        = max_hp
-	max_mp    = character_data.max_mp
-	mp        = max_mp
-	attack    = character_data.attack
-	defense   = character_data.defense
-	is_flying = character_data.is_flying
+	max_hp       = character_data.max_hp
+	hp           = max_hp
+	max_mp       = character_data.max_mp
+	mp           = max_mp
+	attack_power = character_data.attack_power
+	magic_power  = character_data.magic_power
+	defense      = character_data.defense
+	is_flying    = character_data.is_flying
 
 
 func _setup_sprite() -> void:
@@ -400,7 +405,10 @@ func get_effective_defense() -> int:
 
 
 ## ダメージを受ける（方向倍率 × 攻撃力 − 有効防御力、最低1ダメージ保証）
-func take_damage(raw_amount: int, multiplier: float = 1.0) -> void:
+## attacker: ダメージ源のキャラクター（ドロップ帰属追跡用。null 可）
+func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character = null) -> void:
+	if attacker != null:
+		last_attacker = attacker
 	var actual: int = max(1, int(float(raw_amount) * multiplier) - get_effective_defense())
 	hp = max(0, hp - actual)
 	_spawn_hit_effect(actual)

@@ -3,7 +3,7 @@
   "name": "ヒーラー",
   "weapon_type": "staff",
   "base_hp": 90,
-  "base_attack": 0,
+  "base_magic_power": 30,
   "base_defense": 4,
   "pre_delay": 0.4,
   "post_delay": 0.5,

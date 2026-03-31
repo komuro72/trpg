@@ -1,0 +1,12 @@
+{
+	"item_type": "armor_cloth",
+	"category": "armor",
+	"allowed_classes": ["archer", "scout"],
+	"base_stats": {
+		"physical_resistance_min": 2,
+		"physical_resistance_max": 8,
+		"magic_resistance_min": 2,
+		"magic_resistance_max": 8
+	},
+	"depth_scale": 0.4
+}

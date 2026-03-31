@@ -14,7 +14,7 @@
             "height": 10,
             "type": "normal",
             "is_entrance": true,
-            "enemy_party": { "members": [] },
+            "enemy_party": { "members": [], "items": [] },
             "player_party": {
               "members": [
                 { "character_id": "hero",    "x": 5, "y": 6 },
@@ -38,6 +38,10 @@
                 { "enemy_id": "goblin",         "x": 26, "y": 7 },
                 { "enemy_id": "goblin",         "x": 22, "y": 9 },
                 { "enemy_id": "goblin-archer",  "x": 31, "y": 5 }
+              ],
+              "items": [
+                { "item_type": "bow",         "category": "weapon", "item_name": "粗末な短弓",       "stats": { "attack_power": 3, "accuracy": 0.05 },  "quantity": 1 },
+                { "item_type": "armor_cloth", "category": "armor",  "item_name": "ぼろけたレザーコート", "stats": { "physical_resistance": 3 }, "quantity": 1 }
               ]
             }
           },
@@ -56,6 +60,9 @@
                 { "enemy_id": "wolf", "x": 47, "y": 8 },
                 { "enemy_id": "wolf", "x": 44, "y": 10 },
                 { "enemy_id": "wolf", "x": 49, "y": 6 }
+              ],
+              "items": [
+                { "item_type": "potion_hp", "category": "consumable", "item_name": "赤い薬草", "stats": {}, "effect": { "heal_hp": 30 }, "quantity": 2 }
               ]
             }
           },
@@ -72,6 +79,10 @@
               "members": [
                 { "enemy_id": "zombie", "x": 5, "y": 21 },
                 { "enemy_id": "zombie", "x": 9, "y": 23 }
+              ],
+              "items": [
+                { "item_type": "sword",       "category": "weapon", "item_name": "錆びた短剣",     "stats": { "attack_power": 4, "defense_strength": 1 }, "quantity": 1 },
+                { "item_type": "armor_plate", "category": "armor",  "item_name": "傷んだ鎧の残骸",  "stats": { "physical_resistance": 5 }, "quantity": 1 }
               ]
             },
             "npc_party": {
@@ -96,6 +107,11 @@
                 { "enemy_id": "goblin",       "x": 23, "y": 22 },
                 { "enemy_id": "goblin",       "x": 29, "y": 25 },
                 { "enemy_id": "goblin-mage",  "x": 31, "y": 20 }
+              ],
+              "items": [
+                { "item_type": "axe",         "category": "weapon", "item_name": "ホブゴブリンの戦斧",   "stats": { "attack_power": 9, "accuracy": 0.0, "defense_strength": 3 }, "quantity": 1 },
+                { "item_type": "armor_plate", "category": "armor",  "item_name": "分厚い革鎧",          "stats": { "physical_resistance": 8, "magic_resistance": 2 }, "quantity": 1 },
+                { "item_type": "staff",       "category": "weapon", "item_name": "古い魔法の杖",         "stats": { "magic_power": 6, "accuracy": 0.08 }, "quantity": 1 }
               ]
             }
           },
@@ -114,6 +130,13 @@
                 { "enemy_id": "dark-mage",    "x": 51, "y": 21 },
                 { "enemy_id": "dark-priest",  "x": 53, "y": 26 },
                 { "enemy_id": "salamander",   "x": 44, "y": 27 }
+              ],
+              "items": [
+                { "item_type": "sword",       "category": "weapon", "item_name": "漆黒の騎士剣",      "stats": { "attack_power": 14, "accuracy": 0.12, "defense_strength": 5 }, "quantity": 1 },
+                { "item_type": "shield",      "category": "shield", "item_name": "鋼の盾",            "stats": { "physical_resistance": 8, "defense_strength": 7 }, "quantity": 1 },
+                { "item_type": "armor_plate", "category": "armor",  "item_name": "ダークナイトの鎧",  "stats": { "physical_resistance": 12, "magic_resistance": 4 }, "quantity": 1 },
+                { "item_type": "staff",       "category": "weapon", "item_name": "闇の詠唱杖",        "stats": { "magic_power": 11, "accuracy": 0.15 }, "quantity": 1 },
+                { "item_type": "potion_hp",   "category": "consumable", "item_name": "上位回復薬",   "stats": {}, "effect": { "heal_hp": 60 }, "quantity": 1 }
               ]
             }
           }

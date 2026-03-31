@@ -1,0 +1,9 @@
+{
+	"item_type": "potion_mp",
+	"category": "consumable",
+	"allowed_classes": [],
+	"effect": {
+		"restore_mp": 20
+	},
+	"depth_scale": 0.3
+}

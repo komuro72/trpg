@@ -50,7 +50,7 @@ const TOTAL_COLS := 6
 
 ## 攻撃タイプの表示名
 const ATTACK_TYPE_LABELS: Dictionary = {
-	"melee": "近接", "ranged": "遠距離", "dive": "降下"
+	"melee": "近接", "ranged": "遠距離", "dive": "降下", "magic": "魔法", "heal": "回復"
 }
 
 # ── 内部状態 ──────────────────────────────────────────────────────────────────
@@ -264,13 +264,13 @@ func _get_stat_rows(ch: Character) -> Array:
 
 	rows.append({"label": "HP",           "type": "hp_mp",  "current": ch.hp,   "max": ch.max_hp})
 	rows.append({"label": "MP",           "type": "hp_mp",  "current": ch.mp,   "max": ch.max_mp})
-	rows.append({"label": "攻撃力",        "type": "num",    "base": ch.attack,  "bonus": 0})
+	rows.append({"label": "攻撃力",        "type": "num",    "base": ch.attack_power,  "bonus": 0})
+	if ch.magic_power > 0:
+		rows.append({"label": "魔法力/回復力", "type": "num", "base": ch.magic_power, "bonus": 0})
 	rows.append({"label": "防御力",        "type": "num",    "base": ch.defense, "bonus": 0})
 	rows.append({"label": "攻撃タイプ",    "type": "str",
 		"value": ATTACK_TYPE_LABELS.get(cd.attack_type, cd.attack_type) as String})
 	rows.append({"label": "射程(タイル)",  "type": "num",    "base": cd.attack_range, "bonus": 0})
-	if cd.heal_power > 0:
-		rows.append({"label": "回復力",    "type": "num",    "base": cd.heal_power,   "bonus": 0})
 	rows.append({"label": "攻撃溜め(秒)",  "type": "float",  "base": cd.pre_delay,    "bonus": 0.0})
 	rows.append({"label": "攻撃硬直(秒)",  "type": "float",  "base": cd.post_delay,   "bonus": 0.0})
 	rows.append({"label": "ランク",        "type": "str",    "value": cd.rank})
@@ -668,8 +668,33 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 	_control.draw_string(_font, Vector2(lbl_x, y + float(fs_stat)),
 		"所持アイテム", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_head)
 	y += float(fs_stat) + 6.0
-	_control.draw_string(_font, Vector2(lbl_x, y + stat_h * 0.75),
-		"（なし）", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_dim)
+	var inv: Array = ch.character_data.inventory if ch.character_data else []
+	if inv.is_empty():
+		_control.draw_string(_font, Vector2(lbl_x, y + stat_h * 0.75),
+			"（なし）", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_dim)
+	else:
+		for item: Variant in inv:
+			var item_d := item as Dictionary
+			var iname: String = item_d.get("item_name", "???") as String
+			var icat:  String = item_d.get("category",  "") as String
+			var stats_d: Dictionary = item_d.get("stats", {}) as Dictionary
+			# 主要補正値の要約（attack_power/magic_power/physical_resistance 等）
+			var stat_strs: Array = []
+			for k: String in ["attack_power", "magic_power", "defense_strength",
+					"physical_resistance", "magic_resistance"]:
+				if stats_d.has(k) and int(stats_d[k]) != 0:
+					stat_strs.append("%s+%d" % [k.split("_")[0], int(stats_d[k])])
+			# 消耗品は effect を表示
+			var effect_d: Dictionary = item_d.get("effect", {}) as Dictionary
+			for ek: String in effect_d:
+				stat_strs.append("%s:%d" % [ek, int(effect_d[ek])])
+			var qty: int = int(item_d.get("quantity", 1))
+			var qty_str := " x%d" % qty if qty > 1 else ""
+			var stat_str := " [%s]" % ", ".join(stat_strs) if not stat_strs.is_empty() else ""
+			_control.draw_string(_font, Vector2(lbl_x, y + stat_h * 0.75),
+				iname + qty_str + stat_str, HORIZONTAL_ALIGNMENT_LEFT,
+				avail, fs_stat, c_val)
+			y += stat_h
 
 
 # ── ユーティリティ ────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
   "id": "hero",
   "name": "主人公",
   "hp": 100,
-  "attack": 10,
+  "attack_power": 10,
   "defense": 5,
   "is_flying": false,
   "behavior_description": "",

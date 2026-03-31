@@ -299,7 +299,7 @@ func _start_action(action: Dictionary) -> void:
 			# 回復実行
 			var cost := _member.character_data.heal_mp_cost if _member.character_data else 0
 			if _member.use_mp(cost):
-				var power := _member.character_data.heal_power if _member.character_data else 0
+				var power := _member.character_data.magic_power if _member.character_data else 0
 				tgt.heal(power)
 				SoundManager.play(SoundManager.HEAL)
 			_state = _State.WAITING
@@ -534,9 +534,11 @@ func _execute_attack() -> void:
 	if _attack_target == null or not is_instance_valid(_attack_target):
 		return
 	var atype := _get_attack_type()
+	# magic attack_type は magic_power を使用。それ以外は attack_power
+	var dmg_power := _member.magic_power if atype == "magic" else _member.attack_power
 	match atype:
-		"ranged":
-			# 遠距離攻撃：飛翔体を生成して命中確定ダメージ
+		"ranged", "magic":
+			# 遠距離攻撃（物理弓/魔法）：飛翔体を生成して命中確定ダメージ
 			_member.face_toward(_attack_target.grid_pos)
 			SoundManager.play_attack(_member)
 			var map_node := _member.get_parent()
@@ -545,18 +547,18 @@ func _execute_attack() -> void:
 				proj.z_index = 2
 				map_node.add_child(proj)
 				proj.setup(_member.position, _attack_target.position,
-						true, _attack_target, _member.attack, 1.0)
+						true, _attack_target, dmg_power, 1.0)
 		"dive":
 			# 降下攻撃：方向倍率なし（飛行中の奇襲）、降下エフェクト表示
 			SoundManager.play_attack(_member)
-			_attack_target.take_damage(_member.attack, 1.0)
+			_attack_target.take_damage(dmg_power, 1.0, _member)
 			SoundManager.play_hit(_member)
 			_spawn_dive_effect()
 		_:
 			# melee（近接攻撃）
 			SoundManager.play_attack(_member)
 			var multiplier := Character.get_direction_multiplier(_member, _attack_target)
-			_attack_target.take_damage(_member.attack, multiplier)
+			_attack_target.take_damage(dmg_power, multiplier, _member)
 			SoundManager.play_hit(_member)
 
 
@@ -576,8 +578,8 @@ func _spawn_dive_effect() -> void:
 
 func _calc_attack_goal(target: Character, method: PathMethod) -> Vector2i:
 	var atype := _get_attack_type()
-	if atype == "ranged":
-		# 遠距離：射程内ならその場で攻撃。射程外なら射程内の最近傍タイルへ
+	if atype == "ranged" or atype == "magic":
+		# 遠距離（物理/魔法）：射程内ならその場で攻撃。射程外なら射程内の最近傍タイルへ
 		var range_val := _member.character_data.attack_range if _member.character_data else 5
 		var dist := _manhattan(_member.grid_pos, target.grid_pos)
 		if dist <= range_val:
@@ -843,7 +845,7 @@ func _can_attack_target(target: Character, atype: String) -> bool:
 	if target == null or not is_instance_valid(target):
 		return false
 	match atype:
-		"ranged":
+		"ranged", "magic":
 			var range_val := _member.character_data.attack_range if _member.character_data else 5
 			return _manhattan(_member.grid_pos, target.grid_pos) <= range_val
 		"dive":
@@ -868,7 +870,7 @@ func _can_attack_target(target: Character, atype: String) -> bool:
 func _generate_heal_queue() -> Array:
 	if _member == null or _member.character_data == null:
 		return []
-	if _member.character_data.heal_power <= 0:
+	if _member.character_data.magic_power <= 0:
 		return []
 	var cost := _member.character_data.heal_mp_cost
 	if _member.mp < cost:

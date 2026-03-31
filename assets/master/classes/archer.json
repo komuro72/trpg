@@ -3,7 +3,7 @@
   "name": "弓使い",
   "weapon_type": "bow",
   "base_hp": 80,
-  "base_attack": 10,
+  "base_attack_power": 10,
   "base_defense": 3,
   "pre_delay": 0.4,
   "post_delay": 0.5,

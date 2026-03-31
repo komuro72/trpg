@@ -143,7 +143,7 @@ assets/images/enemies/
 | ゲーム終了 | Esc（当面） | ポーズメニュー内で選択（将来実装） |
 | ポーズメニュー | 未定（将来実装） | Start |
 | AIデバッグパネル ON/OFF | F1 | — |
-| ダンジョン再生成 | F5 | — |
+| シーン再スタート | F5 | — |
 
 ### 指示／ステータスウィンドウ（OrderWindow）
 - 専用ボタンでいつでも開閉可能（ポーズなし・時間進行継続）
@@ -181,7 +181,7 @@ assets/images/enemies/
 ## ゲームデザイン方針
 - レベルアップなし。装備と仲間の強化が成長の主軸
 - 武器はキャラ職業（クラス）に紐づく（剣士は剣のみなど）
-- アイテムはフロア深度に応じた補正値でランダム生成。名前はLLMが自動生成（詳細は「アイテムシステム」節を参照）
+- アイテムはフロア深度に応じた補正値でランダム生成。名前はClaude Codeがダンジョン生成時に作成（詳細は「アイテムシステム」節を参照）
 - 敵リポップなし
 - アイテム入手：過去の冒険者の装備をモンスターがため込んでいる設定
 - ダンジョン攻略は国からの要請、複数パーティーが競争・協力して攻略
@@ -286,7 +286,7 @@ assets/images/enemies/
     - GoblinAI（ゴブリン専用）：HP30%未満または仲間50%以下で逃走、それ以外は攻撃
     - 戦略・ターゲットが変わらずキューが十分残っていれば再評価をスキップ
     - 仲間が倒されたときに即座に再評価（notify_situation_changed）
-    - LLMClient は DungeonGenerator のみが使用（敵AIからは完全に分離）
+    - LLMClient / DungeonGenerator はコード上残存しているが現在は未使用（将来削除対象）
     - 全パーティー合算の `_all_enemies` を BaseAI が参照し、パーティーをまたいだ敵同士の重複を防止
     - `_find_adjacent_goal` に `_is_passable` による占有チェックを追加、A* のゴールタイル特例廃止により同一パーティー内の敵重複も解消
   - [x] Phase 2-4: 移動・攻撃の実装
@@ -303,30 +303,26 @@ assets/images/enemies/
     - 部屋は通路でつながり、フロア内で分岐あり
     - 各部屋に敵パーティーを配置（入口部屋を除く）
     - 現在は1フロア目（CURRENT_FLOOR=0）のみ表示。フロア遷移は Phase 7 以降
-  - LLMによるマップ生成
-    - DungeonGenerator が LLM（claude-haiku、max_tokens=4096）に構造JSONを生成依頼
-    - LLMが生成するのは部屋・通路・階段・敵配置の構造情報＋各部屋・通路のエリア名（ダークファンタジー日本語）
+  - ダンジョンデータの管理方針（現在の運用）
+    - Claude Code が dungeon_handcrafted.json を手作りで作成・管理する（ゲーム内LLM生成は廃止済み）
+    - データ形式：`dungeon.floors[]` の配列でフロアを記述
+      - 各フロア：`floor`番号・`entrance_room`・`rooms[]`・`corridors[]`・`stairs[]`
+      - 各部屋：`id`・`x`・`y`・`width`・`height`・`type`・`enemy_party`・`is_entrance`
+      - 通路：`from`・`to`（部屋IDで指定）
+      - 階段：`room`（部屋ID）・`direction`（down／up）
     - タイルの実データはDungeonBuilderがGodot側で展開
-    - 生成データはassets/master/maps/dungeon_generated.json に保存（.gitignore追加）
-    - プロンプトに randi() のシード値を含めることで毎回異なるマップを生成
-  - 起動・生成の仕組み
-    - ゲーム起動時は保存済みデータを自動読み込み
-    - データがなければ自動でLLM生成（「ダンジョン生成中...」ラベルを表示）
-    - F5キーで新規ダンジョン生成・上書き保存（テスト時の利便性のため）
-    - 生成失敗時は dungeon_01.json にフォールバック
-  - LLMが返すJSONの構造（実装済み）
-    - `dungeon.floors[]` の配列でフロアを返す
-    - 各フロア：`floor`番号・`entrance_room`・`rooms[]`・`corridors[]`・`stairs[]`
-    - 各部屋：`id`・`x`・`y`・`width`・`height`・`type`・`enemy_party`・`is_entrance`
-    - 通路：`from`・`to`（部屋IDで指定）
-    - 階段：`room`（部屋ID）・`direction`（down／up）
+  - 起動・読み込みの仕組み
+    - 起動時は dungeon_handcrafted.json を直接読み込む
+    - F5キー：シーンを再スタート（`get_tree().reload_current_scene()`）
+    - 読み込み失敗時は dungeon_01.json にフォールバック
+  - ※ LLMClient / DungeonGenerator のコードはゲーム内に残存しているが現在は未使用（将来削除対象）
   - 将来の拡張予定
     - フロア数を増やす（フロアを分割して複数回生成する方法を検討。一括生成はトークン上限が課題）
     - 階段の実装（フロア遷移）→ フロア移動が必要になったタイミングで優先実装
     - ステータス表示の改善（現フロアのキャラのみ表示。フロア遷移実装後に対応）
     - 部屋typeにboss・treasureを追加
     - 混成パーティー対応（goblin×3＋hobgoblin×1など）
-    - エリア名生成の強化（DungeonGeneratorのプロンプト修正で対応予定）
+    - エリア名生成の強化（dungeon_handcrafted.json の JSON 編集で対応）
       - 敵の種類・構成を考慮した部屋名（例：ゴブリンが多い部屋→「ゴブリンの巣窟」）
       - フロアごとにテーマを統一した命名（例：1階：廃墟、2階：地下牢、3階：祭壇）
       - ボス部屋・宝部屋には特別な名前を付ける
@@ -394,7 +390,7 @@ assets/images/enemies/
     - [x] 敵ランクをS/A/B/Cの4段階に統一
   - [x] Phase 6-1: 仲間NPCの配置と基本AI行動
     - [x] 手作りダンジョン（dungeon_handcrafted.json）の仕組みを導入
-      - 起動優先順位：LLM生成済み → 手作り → LLM新規生成
+      - 起動時は dungeon_handcrafted.json を直接読み込む
     - [x] MapData に npc_parties フィールド追加
     - [x] DungeonBuilder が npc_party を rooms から収集
     - [x] NpcManager.gd：CharacterGenerator でランダム生成・is_friendly=true・緑プレースホルダー
@@ -512,13 +508,13 @@ assets/images/enemies/
   - 欠けていたJSONマスターデータ8種作成（hobgoblin / goblin_archer / goblin_mage / zombie / wolf / salamander / dark_knight / dark_mage）
   - enemies_list.json に11種全て追加
   - party_manager._create_leader_ai() ファクトリを11種に対応（match文で正確にルーティング）
-  - DungeonGenerator プロンプトを11種対応に更新（種族特性・フロア別配置ガイドライン付き）
+  - dungeon_handcrafted.json を11種対応に更新（種族特性・フロア別配置ガイドラインを手作り反映）
   - 旧 dungeon_handcrafted.json 削除（後続バグ修正で再作成・内容を刷新）
 - [x] Phase 8 バグ修正
   - party_manager._spawn_member()：enemy_id のハイフンをアンダーバーに変換してJSONファイルを正しく読み込む（例: "goblin-mage" → goblin_mage.json）
   - dark_priest.json：id を "dark_priest" → "dark-priest" に修正（画像フォルダ名 `dark-priest_...` と一致させる）
   - dungeon_handcrafted.json を再作成（6部屋・11種の敵・3人スタートパーティー）
-    - 起動デフォルト：Claude Code 手作りダンジョンを使用。F5 で LLM 生成に切替可能
+    - 起動デフォルト：Claude Code 手作りダンジョン（dungeon_handcrafted.json）を直接読み込む。F5 でシーン再スタート
     - 入口部屋に hero + archer + healer の3人パーティー
     - 敵パーティー：goblin・goblin-archer・wolf・zombie・hobgoblin・goblin-mage・dark-knight・dark-mage・dark-priest・salamander
     - NPCパーティー：ゾンビの霊廟に fighter-sword + healer の2人
@@ -576,20 +572,26 @@ assets/images/enemies/
       - item_get / stairs：将来実装時に SoundManager.play(SoundManager.ITEM_GET/STAIRS) で呼ぶ
     - BGMは当面なし
 - [ ] Phase 10: アイテム・装備システム
-  - [ ] Phase 10-1: アイテムデータ基盤
-    - assets/master/items/ にアイテム種類ごとのマスターデータを定義
-    - ダンジョン生成時に LLM が敵パーティーの種族構成・フロア深度を考慮して所持アイテムを割り当て
-    - 補正値はフロア深度に応じた範囲内でランダム生成
-    - アイテム名は LLM が補正値の強さ・フロア深度を考慮して自動生成
+  - [x] Phase 10-1: アイテムデータ基盤
+    - **ステータス統合（フィールドリネーム）**
+      - `attack` → `attack_power`（物理近接/遠距離の攻撃力）
+      - `heal_power` → `magic_power`（魔法攻撃力＋回復力を統合）
+      - `accuracy: float = 0.0` 追加（現時点は未使用・装備実装時に有効化）
+      - `inventory: Array = []` を CharacterData に追加（アイテムインスタンスの辞書リスト）
+      - `last_attacker: Character` を Character に追加（ドロップ帰属の追跡用）
+      - `attack_type` に "magic" を追加（goblin-mage / dark-mage / salamander / dark-priest）
+    - assets/master/items/ にアイテム種類ごとのマスターデータを定義（sword.json, axe.json, bow.json, dagger.json, staff.json, armor_plate.json, armor_cloth.json, armor_robe.json, shield.json, potion_hp.json, potion_mp.json）
+    - dungeon_handcrafted.json の各 enemy_party に `items` 配列を追加（Claude Code が内容を決定）
+    - ドロップシステム：PartyManager に `party_wiped(items, killer)` シグナル追加、全滅時に発火
+    - ゲーム側（game_map）でシグナルを受け、killer の所属パーティーリーダーの inventory に未装備品として追加。item_get 効果音＋メッセージウィンドウ通知
     - グレードフィールドは持たない（補正値の強さがグレードを表す）
-    - 敵パーティー全滅時に最後にトドメを刺したパーティーが所持アイテムを総取り
     - 複数パーティーによる協力撃破の分配は将来実装
   - [ ] Phase 10-2: 装備システム
     - 装備の着脱・ステータスへの補正値反映
     - クラスと装備の対応制限を実装（アイテムシステム節を参照）
     - 被ダメージ計算に防御判定・防御強度・耐性を反映（戦闘仕様節を参照）
   - [ ] Phase 10-3: 消耗品の使用
-    - HPポーション・MPポーション
+    - HP回復ポーション・MP回復ポーション
     - ゲームパッド：LT ホールド＋ABXY で選択・使用（最大4スロット）
     - キーボード操作は実装時に決定
   - [x] Phase 10-4: 指示／ステータスウィンドウ統合
@@ -618,8 +620,8 @@ assets/images/enemies/
   - [ ] Phase 11-2: 10フロア対応・ダンジョン事前生成方式への移行
     - ダンジョンは10フロア構成を標準とする
     - 深いフロアほど強い敵を配置・アイテムの補正値も高くなる
-    - 配布時は LLM で事前に100〜1000個のダンジョンを生成してストック、プレイ時にランダム選択
-    - F5 によるリアルタイム LLM 生成は廃止
+    - 配布時は Claude Code で事前に100〜1000個のダンジョンJSONを生成してストック、プレイ時にランダム選択
+    - F5 は単純なシーン再スタート（`get_tree().reload_current_scene()`）
     - 開発中は手作りダンジョン（dungeon_handcrafted.json）を使用
 - [ ] Phase 12: ステージ・バランス調整
 - [ ] Phase 13: Steam配布準備
@@ -643,26 +645,56 @@ assets/images/enemies/
 | ヒーラー | 杖 | ローブ | ✕ |
 
 - 戦士クラス（剣士・斧戦士）は盾を左手に持つ（グラフィック統一）
-- 杖は魔法使い・ヒーラーで共用。補正値は「魔力」として魔法攻撃力・回復力の両方に効く
+- 杖は魔法使い・ヒーラーで共用。magic_power として魔法攻撃力・回復力の両方に効く
+
+### アイテム所持の仕組み
+- アイテムはキャラクター個人が所持する（パーティー単位のインベントリではない）
+- 各アイテムは「装備中」と「未装備」の2状態を持つ
+- 装備スロット：武器1 / 防具1 / 盾1（戦士クラスのみ）の3スロット
+- **装備は外せない**（別アイテムで上書きのみ）。上書き時、旧装備は未装備品としてそのキャラの手元に残る
+- OrderWindow 下部：装備スロット欄に装備中アイテムを表示、所持アイテム一覧に未装備品と消耗品のみ表示（重複表示しない）
+- 未装備品はリーダー権限でパーティー内の他キャラに受け渡し可能
+
+### 初期装備
+- `dungeon_handcrafted.json` の `player_party` / `npc_parties` メンバーに `items` フィールドで初期装備を記述する
+- 各クラスに応じた装備を持たせる（fighter-sword: 剣+鎧+盾、fighter-axe: 斧+鎧+盾、archer: 弓+服、scout: ダガー+服、magician-fire: 杖+ローブ、healer: 杖+ローブ）
+- 初期装備は弱め（各補正値1〜3程度）
+- 敵ドロップ品は部屋の奥に行くほど強くなる
 
 ### 装備の補正値
-- **武器**：そのクラスが使う攻撃種類の攻撃力・命中精度のみ補正。加えて防御強度も持つ
-- **防具（鎧・服・ローブ・盾）**：物理耐性・魔法耐性を補正。盾は加えて防御強度も持つ
-- 補正がかからないもの：防御精度・移動速度・統率力・従順度・HP・MP
+- **武器**：attack_power・accuracy を補正（魔法系武器は magic_power・accuracy）。加えて block_power も持つ
+- **防具（鎧・服・ローブ）**：physical_resistance・magic_resistance を補正
+- **盾**：physical_resistance・magic_resistance を補正。加えて block_power も持つ
+- 補正がかからないもの：defense_accuracy（防御精度）・move_speed・leadership・obedience・max_hp・max_mp
+
+### ダメージ計算への装備補正反映
+- 攻撃力    = キャラ素値 + 武器 attack_power
+- 命中精度  = キャラ素値 + 武器 accuracy
+- 魔法威力  = キャラ素値 + 杖 magic_power
+- 物理耐性  = キャラ素値 + 防具 physical_resistance + 盾 physical_resistance
+- 魔法耐性  = キャラ素値 + 防具 magic_resistance + 盾 magic_resistance
+- 防御強度  = キャラ素値 + 武器 block_power + 盾 block_power
+- OrderWindow のステータス表示は素値・補正値・最終値の3列（例：攻撃力 15 +3 → 18）
 
 ### アイテム生成
 - 補正値はランダム生成（フロア深度に応じた範囲内）
-- 名前はダンジョン生成時にLLMが補正値の強さ・フロア深度を考慮して自動生成
+- 名前はClaude Codeがダンジョン生成時に補正値の強さ・フロア深度を考慮して作成
 - グレードフィールドは持たない（補正値の強さがグレードを表す）
 - アイテムマスターは `assets/master/items/` に種類ごとに定義
 
+### 敵キャラクターとアイテムの関係
+- 敵は装備の概念を持たない（現状のステータスがそのまま戦闘能力）
+- 敵パーティーの所持アイテムはドロップ用にパーティー単位で保持するのみ
+
 ### アイテムのドロップ
-- 敵パーティー全滅時に、最後にトドメを刺したパーティーが所持アイテムを総取り
-- 敵パーティーの所持アイテムはダンジョン生成時にLLMが種族構成を考慮して割り当て
+- 敵パーティー全滅時、最後にトドメを刺したキャラの所属パーティーのリーダーが全アイテムを自動取得（未装備品としてリーダーの inventory に追加）
+- item_get 効果音を再生
+- メッセージウィンドウに取得通知（例：「〇〇が3点のアイテムを入手した」）
+- 敵パーティーの所持アイテムはClaude Codeがダンジョン生成時に種族構成を考慮して割り当て
 - 複数パーティーによる協力撃破の分配は将来実装
 
 ### 消耗品
-- HPポーション・MPポーション
+- HP回復ポーション・MP回復ポーション
 - ウィンドウを開かずにフィールドから使用可能
 - ゲームパッド：LTホールド＋ABXYで選択・使用（最大4スロット）
 - キーボード：未定（後で検討）
@@ -679,26 +711,28 @@ assets/images/enemies/
 
 ### 情報管理
 - 敵はパーティー単位で情報を共有（個別管理ではない）
-- LLMへの問い合わせもパーティーで1回
 
 ### HP・状態
 - 当面：敵味方ともに正確な数値を共有
 - 将来：視界内の敵は大まかな状態のみ（healthy／wounded／critical）
 
 ### キャラクターステータス
-| ステータス | 説明 |
-|-----------|------|
-| HP | ヒットポイント |
-| MP | マジックポイント（魔法使用時に消費） |
-| 近接攻撃力 / 近接命中精度 | 近接攻撃のダメージ・命中 |
-| 遠隔攻撃力 / 遠隔命中精度 | 弓・投擲などのダメージ・命中 |
-| 魔法攻撃力 / 魔法命中精度 | 魔法のダメージ・命中 |
-| 物理攻撃耐性 / 魔法攻撃耐性 / その他耐性 | 割合軽減(%)。防具による補正あり |
-| 防御精度 | 防御判定の成功しやすさ。キャラ固有の素値（装備による変化なし） |
-| 防御強度 | 防御成功時に無効化できるダメージ量。武器・盾に付くパラメータ |
-| 移動速度 | 単位：秒/タイル（標準0.4） |
-| 統率力（leadership） | リーダー側。高いほど無理な指示でも従わせやすい。クラス・ランクから算出して確定後不変。当面は値のみ保持 |
-| 従順度（obedience） | 個体側（0.0〜1.0）。高いほど指示に素直に従う。クラス・種族・ランクから算出して確定後不変。当面は値のみ保持 |
+| ステータス | フィールド名（実装） | 説明 |
+|-----------|-------------------|------|
+| HP | `max_hp` / `hp` | ヒットポイント |
+| MP | `max_mp` / `mp` | マジックポイント（魔法使用時に消費） |
+| 攻撃力 | `attack_power` | 物理攻撃のダメージ（近接・遠距離共通） |
+| 命中精度 | `accuracy` | 物理攻撃の命中（近接・遠距離共通）。装備実装時に有効化 |
+| 魔法威力 | `magic_power` | 魔法ダメージ・回復量の共通値（攻撃魔法・回復魔法の両方に効く） |
+| 物理攻撃耐性 / 魔法攻撃耐性 / その他耐性 | （将来実装） | 割合軽減(%)。防具による補正あり |
+| 防御精度 | `defense_accuracy` | 防御判定の成功しやすさ。キャラ固有の素値（装備による変化なし） |
+| 防御強度 | （装備側） | 防御成功時に無効化できるダメージ量。武器・盾に付くパラメータ |
+| 移動速度 | `move_speed` | 単位：秒/タイル（標準0.4） |
+| 統率力（leadership） | `leadership` | リーダー側。クラス・ランクから算出して確定後不変。当面は値のみ保持 |
+| 従順度（obedience） | `obedience` | 個体側（0.0〜1.0）。クラス・種族・ランクから算出して確定後不変。当面は値のみ保持 |
+
+- 魔法命中精度は `accuracy` と共通（magic_power 系は攻撃・回復とも同じ命中扱い）
+- 回復魔法は必ず命中するため、ヒーラー（attack_type="heal"）には OrderWindow の命中精度行を表示しない
 
 ### 命中・被ダメージ計算
 
@@ -773,7 +807,9 @@ assets/images/enemies/
 ### 方向と防御
 - 攻撃方向によるダメージ倍率は廃止。方向は防御判定の可否にのみ影響する（詳細は「命中・被ダメージ計算」節を参照）
 
-### LLMへ渡すデータ構造
+### LLMへ渡すデータ構造（参考仕様・未使用）
+> **注意**: Phase 2-3 でルールベースAIに移行済み。以下は当初設計の参考仕様として残す。
+
 ```json
 {
   "party": {
@@ -802,7 +838,9 @@ assets/images/enemies/
 }
 ```
 
-### LLMの返答形式
+### LLMの返答形式（参考仕様・未使用）
+> **注意**: Phase 2-3 でルールベースAIに移行済み。以下は当初設計の参考仕様として残す。
+
 - パーティー単位で行動シーケンスを返す
 - 移動は絶対座標ではなく目標キャラクターへの相対位置で指定
 ```json
@@ -821,7 +859,9 @@ assets/images/enemies/
 ```
 - relative_positionの種類：down_side／up_side／left_side／right_side／adjacent
 
-### LLM呼び出し方針
+### LLM呼び出し方針（参考仕様・未使用）
+> **注意**: Phase 2-3 でルールベースAIに移行済み。以下は当初設計の参考仕様として残す。
+
 - LLMは非同期で常に動かし続ける
 - キューが残り少なくなったタイミングでリクエスト送信
 - 返ってきたシーケンスは既存キューと実行中アクションを即座に置き換えて開始する（追加方式ではなく置き換え方式）

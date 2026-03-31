@@ -3,7 +3,7 @@
   "name": "斥候",
   "weapon_type": "dagger",
   "base_hp": 85,
-  "base_attack": 11,
+  "base_attack_power": 11,
   "base_defense": 3,
   "pre_delay": 0.25,
   "post_delay": 0.4,

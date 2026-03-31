@@ -157,7 +157,8 @@ static func _build_spawn_data(data: MapData, floor_data: Dictionary, rooms: Arra
 			if not members.is_empty():
 				data.enemy_parties.append({
 					"party_id": party_id,
-					"members":  members
+					"members":  members,
+					"items":    (ep as Dictionary).get("items", [])
 				})
 				party_id += 1
 		var np: Variant = r.get("npc_party")
