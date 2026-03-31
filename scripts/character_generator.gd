@@ -103,6 +103,8 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	var folder: String = GRAPHIC_SET_DIR + str(chosen_set.get("folder", ""))
 	data.image_set        = folder
 	data.sprite_top       = folder + "/top.png"
+	data.sprite_walk1     = folder + "/walk1.png"
+	data.sprite_walk2     = folder + "/walk2.png"
 	data.sprite_top_ready = folder + "/ready.png"
 	data.sprite_front     = folder + "/front.png"
 	data.sprite_face      = folder + "/face.png"
@@ -141,6 +143,8 @@ static func apply_enemy_graphics(data: CharacterData) -> void:
 	var folder: String = ENEMY_GRAPHIC_SET_DIR + str(chosen_set.get("folder", ""))
 	data.image_set        = folder
 	data.sprite_top       = folder + "/top.png"
+	data.sprite_walk1     = folder + "/walk1.png"
+	data.sprite_walk2     = folder + "/walk2.png"
 	data.sprite_top_ready = folder + "/ready.png"
 	data.sprite_front     = folder + "/front.png"
 	data.sprite_face      = folder + "/face.png"

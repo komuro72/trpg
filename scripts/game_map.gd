@@ -77,18 +77,22 @@ func _ready() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	# キーボード専用：physical_keycode 直接マッチ（Tab/Esc は action 方式が効かないため）
 	if event is InputEventKey and (event as InputEventKey).pressed \
 			and not (event as InputEventKey).echo:
-		match (event as InputEventKey).keycode:
+		match (event as InputEventKey).physical_keycode:
 			KEY_ESCAPE:
-				get_tree().quit()
+				if order_window != null and order_window.visible:
+					order_window.close_window()
+				else:
+					get_tree().quit()
+			KEY_TAB:
+				_toggle_order_window()
 			KEY_F1:
 				if right_panel != null:
 					right_panel.toggle_debug()
 			KEY_F5:
 				_regenerate()
-			KEY_TAB:
-				_toggle_order_window()
 
 
 ## 既存のdungeon_generated.jsonを読み込んで即座にセットアップ
@@ -171,6 +175,10 @@ func _finish_setup() -> void:
 
 
 func _process(_delta: float) -> void:
+	# ゲームパッドアクション（ポーリング方式）
+	if Input.is_action_just_pressed("open_order_window"):
+		_toggle_order_window()
+
 	# 会話中に敵が部屋に入ってきたら会話を中断する
 	if dialogue_window == null or not dialogue_window.visible:
 		return
@@ -187,19 +195,26 @@ func _process(_delta: float) -> void:
 
 func _setup_hero() -> void:
 	var spawn_pos := Vector2i(2, 2)
-	var class_id  := ""
+	var class_id     := ""
+	var character_id := ""
 	if map_data.player_parties.size() > 0:
 		var members: Array = (map_data.player_parties[0] as Dictionary).get("members", [])
 		if members.size() > 0:
 			var m := members[0] as Dictionary
-			spawn_pos = Vector2i(int(m.get("x", 2)), int(m.get("y", 2)))
-			class_id  = m.get("class_id", "") as String
+			spawn_pos    = Vector2i(int(m.get("x", 2)), int(m.get("y", 2)))
+			class_id     = m.get("class_id",     "") as String
+			character_id = m.get("character_id", "") as String
 
 	hero = Character.new()
 	hero.grid_pos = spawn_pos
 	hero.placeholder_color = Color(0.3, 0.7, 1.0)
-	var gen_data := CharacterGenerator.generate_character(class_id)
-	hero.character_data = gen_data if gen_data != null else CharacterData.create_hero()
+	# character_id == "hero" の場合は hero.json を使用。class_id が指定されていればランダム生成
+	var hero_data: CharacterData
+	if character_id == "hero":
+		hero_data = CharacterData.create_hero()
+	else:
+		hero_data = CharacterGenerator.generate_character(class_id)
+	hero.character_data = hero_data if hero_data != null else CharacterData.create_hero()
 	hero.name = "Hero"
 	hero.party_color = Color.WHITE
 	hero.is_leader = true
@@ -467,18 +482,17 @@ func _setup_order_window() -> void:
 	order_window.switch_requested.connect(_on_switch_character_requested)
 
 
-## Tab キーで指示ウィンドウを開閉する（プレイヤーがリーダーのときのみ開ける）
+## Tab キーで指示ウィンドウを開閉する（誰を操作中でも開ける・閲覧専用モードあり）
 func _toggle_order_window() -> void:
 	if order_window == null:
 		return
 	if order_window.visible:
 		order_window.close_window()
 		return
-	# 指示モードはプレイヤーがリーダーのときのみ有効
-	if hero == null or not hero.is_leader:
-		return
 	# 会話中・その他のブロック中は開かない
-	if player_controller != null and player_controller.is_blocked:
+	if player_controller == null:
+		return
+	if player_controller.is_blocked:
 		return
 	player_controller.is_blocked = true
 	order_window.open_window()

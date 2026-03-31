@@ -28,8 +28,11 @@ var is_blocked: bool = false
 ## 移動先に友好的キャラクターがいたときに発火するシグナル（会話トリガー用）
 signal npc_bumped(npc_member: Character)
 
-const MOVE_INTERVAL_INITIAL: float = 0.20
-const MOVE_INTERVAL_REPEAT:  float = 0.10
+## 移動アニメーションの1タイルあたりの時間・基準値（秒）
+## この定数が移動速度を決める。game_speed で割った値が実効値になる
+## 【旧方式との違い】タイマーによる移動間隔制御を廃止し、アニメーション完了を
+## 次移動の gate として使う先行入力バッファ方式に変更（Phase 9-1）
+const MOVE_INTERVAL: float = 0.30
 const CLASS_JSON_DIR := "res://assets/master/classes/"
 
 ## 前方コーン判定しきい値（cos 45° ≈ 0.707）
@@ -53,12 +56,20 @@ var _attack_slot:   AttackSlot = AttackSlot.Z
 var _valid_targets: Array[Character] = []
 var _target_index:  int = 0  # valid_targets.size() = キャンセル選択
 
-var _move_timer:   float = 0.0
-var _move_holding: bool  = false
+## 先行入力バッファ（アニメーション中に受け付けた移動方向。ZERO=なし）
+## 【問題1・2 の修正】アニメーション中は新たな移動をブロックし、この変数に上書き保存する。
+## アニメーション完了後にバッファを処理することで以下の問題を解決する：
+##   問題1（斜め移動）: 補間途中から別方向への補間開始を防ぐ
+##   問題2（長押し停止）: OS キーリピートの位相ズレや瞬間的なZERO入力の影響を受けない
+var _move_buffer: Vector2i = Vector2i.ZERO
 var _cursor: TargetCursor = null
 
 ## ホールド開始時からのpre_delayカウントダウン（0以下で発動可能）
 var _pre_delay_remaining: float = 0.0
+
+## _input() で検出したターゲット循環方向（+1=次・-1=前・0=なし）
+## is_action_just_pressed をポーリングするより確実にボタン1回を捕捉できる
+var _cycle_direction: int = 0
 
 ## FIRING ステート用：発動待ちの情報
 var _pending_target:    Character  = null
@@ -71,6 +82,18 @@ var _slot_x: Dictionary = {}
 
 func _ready() -> void:
 	_load_class_slots()
+
+
+## ターゲット循環ボタン（LB/RB）をイベント駆動で確実に捕捉する
+## _process でのポーリング（is_action_just_pressed）は他ボタンホールド中に
+## 取りこぼす場合があるため、_input() で毎イベントを直接受け取る方式に変更
+func _input(event: InputEvent) -> void:
+	if _mode != Mode.TARGETING:
+		return
+	if event.is_action_pressed("cycle_target_next", false):
+		_cycle_direction = 1
+	elif event.is_action_pressed("cycle_target_prev", false):
+		_cycle_direction = -1
 
 
 # --------------------------------------------------------------------------
@@ -123,29 +146,32 @@ func _process(delta: float) -> void:
 			_process_firing(delta)
 
 
-func _process_normal(delta: float) -> void:
+func _process_normal(_delta: float) -> void:
 	# 攻撃キーホールドでターゲット選択モードへ
 	if Input.is_action_pressed("attack_melee"):
+		_move_buffer = Vector2i.ZERO
 		_enter_targeting(AttackSlot.Z)
 		return
 	elif Input.is_action_pressed("attack_ranged"):
+		_move_buffer = Vector2i.ZERO
 		_enter_targeting(AttackSlot.X)
 		return
 
-	# 移動処理
-	_move_timer -= delta
 	var dir := _get_input_direction()
-	if dir == Vector2i.ZERO:
-		_move_holding = false
-		_move_timer   = 0.0
+
+	# アニメーション中は新たな移動をブロック
+	# キーが押されていればバッファに上書き記録、離されたらバッファをクリア
+	if character.is_moving():
+		_move_buffer = dir  # ZERO でも上書き（離したらキャンセル）
 		return
-	if not _move_holding:
-		_try_move(dir)
-		_move_holding = true
-		_move_timer   = MOVE_INTERVAL_INITIAL
-	elif _move_timer <= 0.0:
-		_try_move(dir)
-		_move_timer = MOVE_INTERVAL_REPEAT
+
+	# アニメーション完了後：バッファ入力を優先し、次いで現在の入力を使用
+	var effective_dir := _move_buffer if _move_buffer != Vector2i.ZERO else dir
+	_move_buffer = Vector2i.ZERO
+	if effective_dir == Vector2i.ZERO:
+		return
+
+	_try_move(effective_dir)
 
 
 func _process_targeting(delta: float) -> void:
@@ -163,8 +189,13 @@ func _process_targeting(delta: float) -> void:
 	# ターゲットリストをリアルタイム更新（敵の移動・死亡に対応）
 	_refresh_targets()
 
-	# 循環選択（右/下 = 次、左/上 = 前）
-	if Input.is_action_just_pressed("ui_right") or Input.is_action_just_pressed("ui_down"):
+	# 循環選択
+	# ゲームパッド LB/RB: _input() で捕捉した _cycle_direction を使用（取りこぼし防止）
+	# キーボード: 右/下=次・左/上=前（is_action_just_pressed で同フレーム検出）
+	if _cycle_direction != 0:
+		_cycle_target(_cycle_direction)
+		_cycle_direction = 0
+	elif Input.is_action_just_pressed("ui_right") or Input.is_action_just_pressed("ui_down"):
 		_cycle_target(1)
 	elif Input.is_action_just_pressed("ui_left") or Input.is_action_just_pressed("ui_up"):
 		_cycle_target(-1)
@@ -184,8 +215,7 @@ func _process_firing(delta: float) -> void:
 func _enter_targeting(slot: AttackSlot) -> void:
 	_attack_slot  = slot
 	_mode         = Mode.TARGETING
-	_move_holding = false
-	_move_timer   = 0.0
+	_move_buffer  = Vector2i.ZERO
 
 	# ホールド開始時点から pre_delay カウント開始
 	var sd := _get_slot(slot)
@@ -211,6 +241,7 @@ func _exit_targeting() -> void:
 	_valid_targets.clear()
 	_target_index        = 0
 	_pre_delay_remaining = 0.0
+	_cycle_direction     = 0
 	character.is_targeting_mode = false
 	if _cursor != null:
 		_cursor.queue_free()
@@ -262,15 +293,23 @@ func _execute_pending() -> void:
 
 ## ターゲットリストをリフレッシュ（ホールド中の毎フレーム更新）
 func _refresh_targets() -> void:
-	# 現在選択中の敵を記憶しておく
+	# キャンセル状態かどうかを先に記録する
+	# （_target_index == size のとき prev_target が null になり、リセットされていたバグの修正）
+	var was_cancel := _target_index >= _valid_targets.size()
 	var prev_target: Character = null
-	if _target_index < _valid_targets.size():
+	if not was_cancel:
 		prev_target = _valid_targets[_target_index]
 
 	_valid_targets = _get_sorted_targets(_attack_slot)
 
 	if _valid_targets.is_empty():
-		_target_index = 0  # キャンセル選択状態
+		_target_index = 0  # キャンセル選択状態（size=0 なので 0 >= size は true）
+		_update_cursor()
+		return
+
+	# キャンセル状態だった場合はキャンセルを維持（0 にリセットしない）
+	if was_cancel:
+		_target_index = _valid_targets.size()
 		_update_cursor()
 		return
 
@@ -282,13 +321,13 @@ func _refresh_targets() -> void:
 			_update_cursor()
 			return
 
-	# 消えた場合は先頭に戻す（キャンセルインデックスは超えないよう保護）
+	# 消えた場合は先頭へ
 	_target_index = 0
 	_update_cursor()
 
 
 func _cycle_target(dir: int) -> void:
-	var total := _valid_targets.size() + 1  # + キャンセル
+	var total := _valid_targets.size() + 1  # 末尾がキャンセルスロット
 	_target_index = (_target_index + dir + total) % total
 	_update_cursor()
 
@@ -390,7 +429,9 @@ func _execute_melee(target: Character, slot_data: Dictionary) -> void:
 	character.face_toward(target.grid_pos)
 	var dir_mult   := Character.get_direction_multiplier(character, target)
 	var raw_damage := int(float(character.attack) * dmg_mult)
+	SoundManager.play_attack(character)
 	target.take_damage(raw_damage, dir_mult)
+	SoundManager.play_hit(character)
 	var skill_name: String = str(slot_data.get("name", "近接"))
 	print("[Player] %s → %s  スキル%.1fx 方向%.1fx  HP:%d/%d" % \
 			[skill_name, target.name, dmg_mult, dir_mult, target.hp, target.max_hp])
@@ -400,6 +441,7 @@ func _execute_ranged(target: Character, slot_data: Dictionary) -> void:
 	var dmg_mult: float = float(slot_data.get("damage_mult", 1.0))
 	character.face_toward(target.grid_pos)
 	var raw_damage := int(float(character.attack) * dmg_mult)
+	SoundManager.play_attack(character)
 	_spawn_projectile(target, raw_damage)
 
 
@@ -427,7 +469,7 @@ func _get_input_direction() -> Vector2i:
 func _try_move(dir: Vector2i) -> void:
 	var new_pos := character.grid_pos + dir
 	if _can_move_to(new_pos):
-		character.move_to(new_pos)
+		character.move_to(new_pos, MOVE_INTERVAL / GlobalConstants.game_speed)
 	else:
 		# 移動先に友好的キャラクターがいれば npc_bumped を発火する
 		for blocker: Character in blocking_characters:

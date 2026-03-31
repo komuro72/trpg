@@ -430,13 +430,13 @@ scripts/hud.gd               ステータスHUD（新規）
 #### BaseAI ステートマシン（完成版）
 | 定数 | 値 | 説明 |
 |------|-----|------|
-| `MOVE_INTERVAL` | 0.4秒 | タイル移動の間隔 |
+| `MOVE_INTERVAL` | 1.2秒（基準値） | タイル移動の間隔（game_speed で除算） |
 | `WAIT_DURATION` | 1.0秒 | wait アクションの待機時間 |
 | `REEVAL_INTERVAL` | 1.5秒 | 定期再評価の間隔 |
 
 ```
 IDLE → キューからアクションを取り出す
-  "move_to_attack" → MOVING（MOVE_INTERVAL 秒ごとに1タイル移動、毎タイルゴール再計算、到達で IDLE）
+  "move_to_attack" → MOVING（MOVE_INTERVAL/game_speed 秒ごとに1タイル移動、毎タイルゴール再計算、到達で IDLE）
   "flee"           → MOVING（脅威から離れる方向へ移動）
   "wait"           → WAITING（WAIT_DURATION 秒後に IDLE）
   "attack"         → ATTACKING_PRE（pre_delay 秒）
@@ -447,20 +447,25 @@ IDLE → キューからアクションを取り出す
 - 攻撃の隣接判定: `abs(dx) + abs(dy) == 1`（マンハッタン距離=1 のみ）
 - 隣接していない場合はアクションをスキップして次へ
 
-#### 方向ダメージ倍率（Character.get_direction_multiplier）
+#### 攻撃方向の判定（Character.get_attack_direction）
 ```
 attack_from = attacker.grid_pos - target.grid_pos  # targetから見た攻撃方向
 target_fwd  = Character.dir_to_vec(target.facing)
+target_right = target_fwd.rotated(PI/2)  # キャラ正面から見て右方向
 
-attack_from == target_fwd   → 正面 → 1.0倍
-attack_from == -target_fwd  → 背面 → 2.0倍
-それ以外                    → 側面 → 1.5倍
+attack_from == target_fwd   → 正面
+attack_from == -target_fwd  → 背面（防御判定スキップ）
+dot(attack_from, target_right) > 0 → 右側面（武器のみ防御可）
+それ以外                    → 左側面（盾のみ防御可）
 ```
+
+> ※ Phase 2 実装時点では `get_direction_multiplier` として1.0/1.5/2.0倍で管理していた。
+> アイテムシステム実装フェーズで `get_attack_direction` に移行し倍率を廃止する。
 
 #### プレイヤーの攻撃（PlayerController）
 - スペース / Enter キー（ui_accept）で発動
 - 向いている方向の隣接マスを `blocking_characters` から検索
-- ヒットした敵に `get_direction_multiplier` の倍率付きで `take_damage` を呼ぶ
+- ヒットした敵に攻撃方向を渡して `take_damage` を呼ぶ
 - 移動と独立して処理（移動中でも攻撃可能）
 
 #### 占有チェック設計（Character.get_occupied_tiles）
@@ -777,17 +782,24 @@ F5キー:
 | `ranged_accuracy` | float | 遠隔命中精度 |
 | `magic_attack` | int | 魔法攻撃力 |
 | `magic_accuracy` | float | 魔法命中精度 |
-| `physical_resistance` | float | 物理攻撃耐性（割合軽減%。将来変更可。防具による補正も予定） |
+| `physical_resistance` | float | 物理攻撃耐性（割合軽減%。防具による補正あり） |
 | `magic_resistance` | float | 魔法攻撃耐性（同上） |
 | `other_resistance` | Dictionary | その他耐性（炎・毒など随時追加） |
-| `evasion` | float | 回避力（剣・盾による受け流しも含む） |
+| `defense_accuracy` | float | 防御精度（旧: evasion）。防御判定の成功しやすさ。キャラ固有素値・装備による変化なし |
 | `move_speed` | float | 移動速度（秒/タイル。標準0.4） |
 
-### 命中判定（二段階）
-1. **着弾判定**（命中精度）：攻撃が狙った対象に向かうか。命中精度が低いと別の敵・味方に誤射する可能性
-2. **回避判定**（回避力）：着弾した対象が剣・盾で受け流すか、身をかわせるか
+**装備パラメータ（ItemData に持つ・CharacterData には含まない）**
+| フィールド名 | 型 | 説明 |
+|-----------|-----|------|
+| `defense_strength` | int | 防御強度。防御成功時に無効化できるダメージ量。武器・盾が持つ |
 
-> 現在の実装（`attack` / `defense`）はこの仕様への移行前の暫定値。Phase 4以降で段階的に置き換える。
+### 命中・被ダメージ計算（詳細は「ステータス仕様更新」節を参照）
+1. **着弾判定**（命中精度）：攻撃が狙った対象に向かうか。命中精度が低いと別の敵・味方に誤射する可能性
+2. **防御判定**（defense_accuracy）：背面攻撃はスキップ。成功時に武器・盾の防御強度でダメージカット
+3. **耐性適用**（physical/magic resistance）：割合軽減
+4. **最終ダメージ確定**（最低1）
+
+> 現在の実装（`attack` / `defense`）はこの仕様への移行前の暫定値。アイテムシステム実装フェーズで段階的に置き換える。
 
 ---
 
@@ -1772,7 +1784,7 @@ Character.current_order
 ## Phase 8 Step 2+3: 種族別AIルーチン・ダンジョン生成組み込み ✅ 実装済み
 
 ### UnitAI への追加（unit_ai.gd）
-- `_get_move_interval() -> float`: 移動間隔の仮想メソッド（デフォルト=MOVE_INTERVAL=0.4秒）
+- `_get_move_interval() -> float`: 移動間隔の仮想メソッド（デフォルト=MOVE_INTERVAL/game_speed=1.2秒÷倍率）
 - `_on_after_attack() -> void`: 攻撃後フック（MP消費などに使用）
 - `_execute_attack()` から `_on_after_attack()` を呼び出すよう修正
 
@@ -1859,9 +1871,502 @@ Phase 8 Step 3 で削除した手作りダンジョンを再作成。Claude Code
 | r1_5 | 魔術師の書斎 | hobgoblin×1 + goblin×2 + goblin-mage×1 |
 | r1_6 | 闇の司令室 | dark-knight + dark-mage + dark-priest + salamander |
 
-## Phase 9: ステージ・バランス調整（未実装）
+## Phase 9: 操作感・表現強化
 
-## Phase 10: Steam配布準備（未実装）
+### Phase 9-1: 歩行アニメーション・滑らか移動 ✅ 完了
+詳細仕様: 本ファイルの「歩行アニメーション仕様」節を参照。
+
+### Phase 9-2: ゲームパッド対応 ✅ 完了
+詳細仕様: 本ファイルの「ゲームパッド対応仕様」節を参照。
+
+### Phase 9-3: 飛翔体グラフィック
+
+#### 画像ファイル
+```
+assets/images/projectiles/
+  arrow.png        矢（弓使い・ゴブリンアーチャー）
+  magic_bullet.png 魔法弾（魔法使い・ゴブリンメイジ・ダークメイジ）
+  flame.png        炎（サラマンダー）
+```
+- 当面は magic_bullet.png と flame.png は同じ画像でも可
+
+#### Projectile（projectile.gd）の変更点
+- `image_path: String` フィールド追加（`CharacterData.attack_type` と `character_id` から決定）
+- `_ready()` で画像ロード。ファイルなしの場合は既存の黄色円フォールバックを維持
+- `rotation` を速度ベクトルの角度に合わせて設定（飛行方向に向ける）
+
+#### 飛翔体画像の決定ロジック
+```
+character_id が "goblin-archer" or class_id が "archer" → arrow.png
+attack_type が "magic" → magic_bullet.png
+character_id が "salamander" → flame.png
+それ以外の ranged → magic_bullet.png（フォールバック）
+```
+
+#### 飛翔体なし（回復・バフ）
+- ヒーラー・ダークプリーストの回復/バフは飛翔体を生成しない
+- 将来的に別途エフェクト（光の輪など）を追加予定
+
+### Phase 9-4: 効果音
+
+#### 使用アセット
+- Kenney 等の CC0 アセットを使用
+- 採用したアセットは CLAUDE.md のライセンステーブルに追加する
+
+#### AudioManager（audio_manager.gd）
+- Autoload として登録
+- `play_sfx(sfx_name: String)` でワンショット再生
+- 音源ファイルは `assets/audio/sfx/` 以下に配置
+
+#### 効果音一覧
+| sfx_name | タイミング |
+|---------|---------|
+| `attack_slash` | 近接攻撃発動（剣士・斥候） |
+| `attack_axe` | 近接攻撃発動（斧戦士） |
+| `attack_shoot` | 弓発射 |
+| `attack_magic` | 魔法弾発射 |
+| `attack_flame` | 炎発射 |
+| `hit_physical` | 物理攻撃命中 |
+| `hit_magic` | 魔法攻撃命中 |
+| `damaged` | ダメージを受けた |
+| `die` | 死亡 |
+| `heal` | 回復 |
+| `room_enter` | 部屋に入った |
+| `item_get` | アイテム取得 |
+| `stairs` | 階段を使った |
+
+- BGMは将来実装（当面なし）
+
+---
+
+## Phase 10: アイテム・装備システム（未実装）
+
+詳細仕様: 本ファイルの「アイテムシステム詳細仕様」節・「ステータス仕様更新」節を参照。
+
+### Phase 10-1: アイテムデータ基盤
+
+#### 新規ファイル
+```
+scripts/item_data.gd              ItemData リソースクラス
+scripts/item_generator.gd         フロア深度・種類からランダム生成
+assets/master/items/              アイテム種類ごとの JSON マスターデータ
+```
+
+#### 変更ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `scripts/dungeon_generator.gd` | LLM プロンプトに敵パーティーへのアイテム割り当て指示を追加 |
+| `scripts/dungeon_builder.gd` | `_build_spawn_data()` で drop_items を各 enemy_party に設定 |
+| `scripts/party_manager.gd` | `_on_party_wiped()` でドロップアイテムをプレイヤーパーティーへ転送 |
+
+### Phase 10-2: 装備システム
+
+#### 変更ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `scripts/character_data.gd` | `equipped_weapon / equipped_armor / equipped_shield: ItemData` 追加 |
+| `scripts/character_data.gd` | `get_stat_total(key)` メソッド追加（素値 + 装備補正値の合計） |
+| `scripts/character_data.gd` | `defense_accuracy` フィールド追加（旧 `evasion` からリネーム） |
+| `scripts/character.gd` | `take_damage()` を新しい被ダメージ計算フローに更新 |
+| `scripts/character.gd` | `get_attack_direction()` メソッド追加（正面/左側面/右側面/背面を返す） |
+
+### Phase 10-3: 消耗品の使用
+
+#### 変更ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `scripts/player_controller.gd` | LT ホールド中の A/B/X/Y をアイテムスロット1〜4として処理 |
+| `scripts/character.gd` | `use_consumable(slot_index)` メソッド追加 |
+
+### Phase 10-4: 指示／ステータスウィンドウ統合 ✅ 完了
+
+詳細仕様: 本ファイルの「指示／ステータスウィンドウ統合仕様」節を参照。
+
+#### 実装済みファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `scripts/order_window.gd` | 下部ステータス詳細・装備スロット（空）・所持アイテム（空）パネルを追加 |
+| `scripts/game_map.gd` | Tab 開閉条件を「誰でも開ける」に変更（旧：リーダーのみ）。player_controller null チェック追加 |
+
+#### 実装メモ
+- `_get_stat_rows(ch)` でキャラのステータス行データ（type: num/float/str/hp_mp）を生成
+- `_draw_status_section()` で下部パネルを描画。左側に顔/全身画像・右側に素値・補正値・最終値の3列表示（補正値は現在すべて 0）
+- `_get_selected_char()` でフォーカス行のキャラを選択（フォーカスなければ操作キャラ）
+- `_is_editable()` でリーダー判定。false の場合は指示変更キーを無効化しタイトルに「（閲覧のみ）」表示
+- 装備・アイテム欄は「（なし）」プレースホルダー（Phase 10-2/3 実装後に実データ表示）
+- `_get_char_front_texture(ch)`: sprite_front → sprite_face の順でループして試す。ファイルが存在しない場合（ResourceLoader.exists() = false）も次を試す。不在パスは null キャッシュして再チェックを省略
+  - **注意**: CharacterGenerator 生成キャラは常に sprite_front にパスが入るが front.png がない場合があるため、ファイル存在チェックが必須
+- カーソル位置記憶：`open_window()` でリセットせず前回位置を維持
+- 全体方針→個別方針の下移動時に `_col_cursor = 0`（操作列から開始）
+
+---
+
+## Phase 11: フロア・ダンジョン拡張（未実装）
+
+### Phase 11-1: 階段実装・フロア遷移
+
+#### 仕様
+- 階段を踏んだキャラのみ移動（パーティー分断あり）
+- 操作キャラが別フロアに移動したらカメラはそのキャラを追う
+- 残ったメンバーは AI 行動継続
+- 上のフロアへの移動も可能（往来自由）
+- 倒した敵はフロアをまたいでも復活しない
+- 敵も階段を使って別フロアに移動できる（原則は部屋を守るため自発的には移動しない）
+- フロアは縦方向につながったひとつの大きなダンジョンとして扱う（フロア単位の独立概念なし）
+
+#### 設計メモ
+- MapData を複数フロア分保持する仕組みが必要（`floors: Array[MapData]`）
+- VisionSystem・CameraController・EnemyManager 等のフロア切替対応が必要
+- 現行の `CURRENT_FLOOR = 0` 定数を廃止して動的に管理
+
+### Phase 11-2: 10フロア対応・ダンジョン事前生成方式への移行
+
+#### 仕様
+- ダンジョンは10フロア構成を標準とする
+- 深いフロアほど強い敵を配置・アイテムの補正値も高くなる
+- 配布時は LLM で事前に100〜1000個のダンジョンを生成してストック、プレイ時にランダム選択
+- F5 によるリアルタイム LLM 生成は廃止（開発中は手作りダンジョンを使用）
+
+#### 事前生成方式の設計メモ
+- 生成スクリプトはゲーム本体とは独立したツールとして実装
+- 生成済みダンジョンデータを `assets/master/maps/generated/dungeon_XXXX.json` に保存
+- ゲーム起動時にリストからランダム選択して読み込む
+
+---
+
+## Phase 12: ステージ・バランス調整（未実装）
+
+## Phase 13: Steam配布準備（未実装）
+
+---
+
+## 歩行アニメーション仕様（Phase 9-1 実装済み）
+
+### 画像フォーマット
+```
+{class or enemy_type}_{sex}_{age}_{build}_{id}/
+  top.png      通常立ち（静止中・フォールバック）
+  walk1.png    歩行パターン1・左足を出した状態
+  walk2.png    歩行パターン2・右足を出した状態
+  ready.png    構えポーズ
+  front.png    全身正面（UI用）
+  face.png     顔アイコン（LeftPanel用）
+```
+- walk1/walk2 がない場合は top 固定のままフォールバック（既存キャラへの影響なし）
+
+### アニメーション仕様
+- 移動アニメーション（位置補間）と同期して駆動する（タイマーではなく進捗 t=0→1 ベース）
+- アニメーションシーケンス: `walk1 → top → walk2 → top`（4フレーム）
+  - t=0.0〜0.25: walk1
+  - t=0.25〜0.50: top
+  - t=0.50〜0.75: walk2
+  - t=0.75〜1.00: top
+- 構えモード（is_targeting_mode / is_attacking）中はスプライト切替を停止（位置補間は継続）
+- 静止中: top.png 固定（または ready.png・is_attacking 中）
+
+### CharacterData の追加フィールド
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `sprite_walk1` | String | 歩行パターン1のパス（空文字=フォールバック） |
+| `sprite_walk2` | String | 歩行パターン2のパス（空文字=フォールバック） |
+
+- CharacterGenerator が image_set フォルダから walk1.png / walk2.png を自動スキャン
+- hero.json 等の直接 JSON 指定キャラは `sprites.walk1` / `sprites.walk2` を明示する
+
+### character.gd の実装
+#### 追加フィールド
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| `_tex_top` | Texture2D | top.png のキャッシュ |
+| `_tex_walk1` | Texture2D | walk1.png のキャッシュ（なければ null） |
+| `_tex_walk2` | Texture2D | walk2.png のキャッシュ（なければ null） |
+| `_visual_from` | Vector2 | 補間開始ワールド座標 |
+| `_visual_to` | Vector2 | 補間終了ワールド座標 |
+| `_visual_elapsed` | float | 補間経過時間（秒） |
+| `_visual_duration` | float | 補間総時間（秒）。0=補間なし |
+
+#### 主要メソッド
+- `move_to(new_grid_pos, duration=0.4)`: grid_pos を即時更新（衝突判定維持）し、position を duration 秒かけて補間開始
+- `sync_position()`: 即座スナップ＋補間キャンセル（初期配置・テレポート用）
+- `is_moving() -> bool`: `_visual_duration > 0.0` を返す（PlayerController の gate 判定に使用）
+- `_update_visual_move(delta)`: _process() から毎フレーム呼ぶ。位置補間とスプライトフレーム切替を行う
+
+### game_speed による速度制御
+GlobalConstants に `var game_speed: float = 1.0` を追加。将来の設定画面からここを変更することで全体速度を調整できる。
+
+| 対象 | 基準値 | 実効値の計算 |
+|------|--------|-------------|
+| UnitAI MOVE_INTERVAL | 1.2s | `MOVE_INTERVAL / game_speed` |
+| UnitAI WAIT_DURATION | 3.0s | `WAIT_DURATION / game_speed` |
+| PlayerController MOVE_INTERVAL | 0.30s | `MOVE_INTERVAL / game_speed` |
+
+- `game_speed = 1.0`: 標準速度（1タイル1.2秒）
+- `game_speed = 2.0`: 2倍速（1タイル0.6秒）
+
+### PlayerController の先行入力バッファ方式
+#### 背景（旧タイマー方式の問題）
+- **斜め移動問題**: アニメーション補間途中に別方向入力が来ると、中間視覚座標から新グリッド位置への斜め補間が発生していた
+- **長押し停止問題**: OS のキーリピートと _move_timer の位相ズレ、または1フレームの ZERO 入力で `_move_holding=false` になり MOVE_INTERVAL_INITIAL(0.6s) 待機が再発していた
+
+#### 解決策: 先行入力バッファ方式
+```
+_move_buffer: Vector2i  # 直近の方向入力を1つだけ保持（上書き方式）
+```
+
+1. `character.is_moving()` が true の間は移動をブロック
+2. キーが押されていれば方向をバッファに上書き保存、**離されたらバッファを ZERO にクリア**
+3. アニメーション完了後にバッファ → 現在入力の優先順で次の移動を実行
+4. これにより斜め移動・長押し停止の両問題を解消
+
+#### 定数
+| 定数 | 値 | 説明 |
+|------|-----|------|
+| `MOVE_INTERVAL` | 0.30s | 1タイルの移動アニメーション時間・基準値 |
+
+旧 `MOVE_INTERVAL_INITIAL`・`MOVE_INTERVAL_REPEAT`・`_move_timer`・`_move_holding` は廃止。
+
+---
+
+## ゲームパッド対応仕様
+
+### Input Map 設定（project.godot）
+
+| アクション名 | キーボード | ゲームパッド |
+|------------|-----------|-------------|
+| `ui_up` / `ui_down` / `ui_left` / `ui_right` | 矢印キー | 左スティック軸 or 十字キー |
+| `attack_melee` | Z | Joypad Button 0（A / Cross） |
+| `attack_ranged` | X | Joypad Button 2（X / Square） |
+| `cycle_target_prev` | 矢印キー（左/上） + ターゲット中 | Joypad Button 9（LB / L1） |
+| `cycle_target_next` | 矢印キー（右/下） + ターゲット中 | Joypad Button 10（RB / R1） |
+| `open_order_window` | ※キーボードは別途処理 | Joypad Button 4（Select / Back） |
+| `use_item_modifier` | — | Joypad Axis 2（LT / L2）ホールド |
+| `game_quit` | ※キーボードは別途処理 | — |
+
+※ アイテム使用（LTホールド中）は use_item_modifier が押されている間、A/B/X/Y をアイテムスロット1〜4に割り当て
+
+### キーボード入力処理の実装メモ
+Godot 4 では Tab・Esc キーが UI フォーカスナビゲーション / ui_cancel として特別処理されるため、
+`event.is_action_pressed()` や `Input.is_action_just_pressed()` のアクション名方式では
+キーボードの Tab / Esc を確実に検出できない。以下の方針で実装済み：
+
+- **キーボード Tab / Esc**：`game_map._input()` の `physical_keycode` 直接マッチで処理
+  ```gdscript
+  KEY_ESCAPE → OrderWindow が開いていれば close_window()、そうでなければ get_tree().quit()
+  KEY_TAB    → _toggle_order_window()
+  KEY_F1     → AIデバッグパネル toggle
+  KEY_F5     → ダンジョン再生成
+  ```
+- **ゲームパッド Select ボタン**：`game_map._process()` の `Input.is_action_just_pressed("open_order_window")` でポーリング
+- **全描画用 Control ノード**に `focus_mode = Control.FOCUS_NONE` を設定（UI フォーカス干渉防止）
+  - 対象: order_window, left_panel, right_panel, dialogue_window, message_window, area_name_display
+
+### ターゲット循環バグ修正
+- キャンセル状態（`_target_index == _valid_targets.size()`）で `_refresh_targets()` が毎フレーム呼ばれると
+  `prev_target = null` → インデックスが 0 にリセットされ、LB での後退が機能しなかった
+- `was_cancel` フラグで「キャンセル選択中だったか」を保持し、refresh 後もキャンセル状態を維持するよう修正
+
+### PlayerController の変更点
+- 移動入力: `Input.get_vector()` で左スティック対応（デッドゾーン 0.3）
+- ターゲット循環: ターゲットモード中に cycle_target_prev / next を検出
+- アイテム使用モード: use_item_modifier ホールド中のみ A/B/X/Y をアイテムスロットとして扱う（将来実装）
+
+---
+
+## 指示／ステータスウィンドウ統合仕様
+
+### 変更概要
+既存の OrderWindow を拡張し、指示だけでなくステータス・装備・アイテムも確認できるウィンドウとする。
+
+### 開閉ルール ✅ 実装済み
+- Tab（キーボード）/ Select（ゲームパッド）/ Esc でいつでも開閉（ポーズなし・時間進行継続）
+- 旧仕様（リーダー操作中のみ有効）を廃止：誰を操作中でも開ける
+- **リーダー操作中**：指示の変更可（従来通り）
+- **非リーダー操作中**：閲覧のみ（指示変更キーは無効。タイトルに「（閲覧のみ）」表示）
+- 会話中・その他ブロック中（`player_controller.is_blocked == true`）は開かない
+
+### ウィンドウ構成
+```
+┌──────────────────────────────────┐
+│  [上部] キャラ一覧テーブル        │
+│    全体方針プリセット行           │
+│    メンバー行: 名前・5指示項目    │
+│    ↑↓行移動 / ←→列移動 / Z切替  │
+├──────────────────────────────────┤
+│  [下部] 選択中キャラ詳細          │
+│    ステータス（素値・補正・最終値）│
+│    装備スロット（武器・防具・盾）  │
+│    所持アイテム（消耗品スロット）  │
+└──────────────────────────────────┘
+```
+
+### ステータス3列表示（下部）
+```
+攻撃力         15   +5   →  20
+防御精度       12    0   →  12
+物理耐性       10%  +5%  →  15%
+```
+- 「素値」: CharacterData の基礎パラメータ
+- 「補正値」: 装備による合計補正
+- 「最終値」: 素値 + 補正値（乗算の場合は別途計算）
+- 開発中は全ステータス項目を表示（防御精度・防御強度・耐性 etc. 含む）
+- 配布前にプレイヤーに見せる項目・隠す項目を再検討する
+
+### 装備スロット表示（下部）
+- 武器スロット・防具スロット・盾スロット（盾非対応クラスはグレーアウト）
+- 各スロット: アイテム名 + 主要補正値の要約表示
+- 未装備の場合: 「(なし)」表示
+
+### 消耗品スロット表示（下部）
+- 最大4スロット（ゲームパッドの LT+ABXY に対応）
+- 各スロット: アイテム名 + 残数
+- 空スロット: 「(空)」表示
+
+---
+
+## アイテムシステム詳細仕様
+
+### ファイル構成
+```
+assets/master/items/
+  sword.json          剣
+  axe.json            斧
+  bow.json            弓
+  dagger.json         ダガー
+  staff.json          杖
+  armor_plate.json    鎧
+  armor_cloth.json    服
+  armor_robe.json     ローブ
+  shield.json         盾
+  potion_hp.json      HPポーション
+  potion_mp.json      MPポーション
+```
+
+### アイテムJSONフォーマット
+```json
+{
+  "item_type": "sword",
+  "category": "weapon",
+  "allowed_classes": ["fighter-sword"],
+  "base_stats": {
+    "melee_attack_min": 3,
+    "melee_attack_max": 8,
+    "melee_accuracy_min": 0.05,
+    "melee_accuracy_max": 0.15,
+    "defense_strength_min": 1,
+    "defense_strength_max": 4
+  },
+  "depth_scale": 0.5
+}
+```
+- `depth_scale`: フロア深度ごとの補正値上乗せ係数（深いほど強くなる割合）
+- 消耗品は `base_stats` の代わりに `effect: { "heal_hp": 30 }` 等を持つ
+
+### アイテムデータ（インスタンス）
+各アイテムインスタンスは生成時にランダム補正値と名前を確定する。
+
+```gdscript
+class_name ItemData extends Resource
+
+var item_type: String       # "sword", "shield" 等
+var category: String        # "weapon", "armor", "consumable"
+var item_name: String       # LLM生成の名前（例: "古びた騎士の剣"）
+var allowed_classes: Array  # 装備可能クラスID一覧
+var stats: Dictionary       # 確定済み補正値 { "melee_attack": 5, ... }
+var quantity: int           # 消耗品のみ使用（装備品は常に1）
+```
+
+### アイテム生成フロー
+1. フロア深度 `d`（0〜）と種類（sword.json 等）を元にランダム補正値を計算
+   - `stat = rand_range(base_min, base_max) + d * depth_scale`
+2. LLMに補正値サマリ＋フロア深度を渡して名前生成（ダンジョン生成と同タイミング）
+3. ItemData インスタンスを生成
+
+### 装備補正の反映（CharacterData）
+- `equipped_weapon: ItemData`・`equipped_armor: ItemData`・`equipped_shield: ItemData`
+- `get_stat_total(stat_key)` メソッド: 素値 + 全装備の補正値合計を返す
+- ステータスウィンドウの3列表示はこのメソッドから取得
+
+### 防御強度の計算
+```
+使用可能な防御強度 = 攻撃方向に応じた装備の防御強度の合計
+
+正面:   equipped_shield.defense_strength + equipped_weapon.defense_strength
+左側面: equipped_shield.defense_strength
+右側面: equipped_weapon.defense_strength
+背面:   0（防御判定スキップ）
+```
+- 盾未装備の場合、盾の防御強度は 0 として計算
+
+### ドロップシステム
+- `EnemyParty.drop_items: Array[ItemData]` にダンジョン生成時にアイテムを格納
+- 全滅時に `_on_party_wiped()` が呼ばれ、トドメを刺したパーティーに `drop_items` を転送
+- アイテムはそのパーティーの「パーティー共有インベントリ」に格納（個人所持ではない）
+- プレイヤーはウィンドウ内でメンバーへ装備を割り当て可能
+
+### 消耗品の使用
+- ゲームパッド: LT ホールド中のみ A/B/X/Y = スロット1〜4に割り当て
+- キーボード: 未定
+- 使用はフィールドから即時発動（ウィンドウを開く必要なし）
+- 使用対象: 自分自身のみ（現フェーズ。将来は仲間へも）
+
+---
+
+## ステータス仕様更新（防御精度・防御強度）
+
+### 用語変更
+| 変更前 | 変更後 | 備考 |
+|--------|--------|------|
+| 回避力（evasion） | 防御精度（defense_accuracy） | キャラ素値。装備による変化なし |
+| （新規） | 防御強度（defense_strength） | 武器・盾のパラメータ |
+
+### 防御精度（defense_accuracy）
+- キャラクター固有の素値（クラス基準値 × ランク/体格/性別/年齢 補正）
+- 防御判定の成功確率を決定（実装時に確率計算の詳細を定義）
+- 装備による補正なし
+
+### 防御強度（defense_strength）
+- 武器・盾それぞれが持つ数値
+- 防御判定成功時に「使用可能な防御強度の合計」をダメージから引く
+- 例: 剣（防御強度3）+ 盾（防御強度5）装備、正面から攻撃
+  → 防御判定成功時に最大8ダメージをカット
+
+### 被ダメージ計算の全フロー
+```
+1. 着弾判定
+   命中精度が基準値未満 → 外れ or 誤射（将来実装）
+
+2. 防御判定（背面攻撃はスキップ）
+   判定成功（防御精度に基づく確率）:
+     カット量 = 攻撃方向に応じた使用可能な防御強度の合計
+     残ダメージ = max(0, 攻撃ダメージ - カット量)
+   判定失敗:
+     残ダメージ = 攻撃ダメージ
+
+3. 耐性適用
+   残ダメージ × (1.0 - 物理or魔法耐性%)
+
+4. 最終ダメージ
+   max(1, 残ダメージ)    ← 最低1は保証
+```
+
+### CharacterData のフィールド変更
+- `evasion` → `defense_accuracy: float` にリネーム
+- `equipped_weapon / equipped_armor / equipped_shield: ItemData` を追加（装備スロット）
+- アイテムシステム実装前は装備スロットは null のまま（防御強度0として計算）
+
+### ステータス決定構造への追加
+キャラクター生成時の 防御精度 補正（旧・回避力と同じ方向性で引き継ぐ）:
+| 体格 | 方向性 |
+|------|--------|
+| slim | 高め |
+| medium | 標準 |
+| muscular | 低め |
+
+| 年齢 | 方向性 |
+|------|--------|
+| young | 高め（素早い） |
+| adult | 標準 |
+| elder | 低め |
 
 ---
 

@@ -7,8 +7,11 @@
   "is_flying": false,
   "behavior_description": "",
   "sprites": {
-    "top":       "res://assets/images/characters/hero_top.png",
-    "top_ready": "res://assets/images/characters/hero_top_ready.png",
-    "front":     "res://assets/images/characters/hero_front.png"
+    "top":       "res://assets/images/characters/test/top.png",
+    "walk1":     "res://assets/images/characters/test/walk1.png",
+    "walk2":     "res://assets/images/characters/test/walk2.png",
+    "top_ready": "res://assets/images/characters/test/ready.png",
+    "front":     "res://assets/images/characters/test/face.png",
+    "face":      "res://assets/images/characters/test/face.png"
   }
 }

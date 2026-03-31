@@ -91,6 +91,9 @@ func _process(_delta: float) -> void:
 	if area != _current_area:
 		_current_area = area
 		area_changed.emit(area)
+		# 部屋に入ったとき（通路=空文字を除く）に入室音を再生
+		if not area.is_empty():
+			SoundManager.play(SoundManager.ROOM_ENTER)
 		# 未訪問エリアに入ったら訪問済みにしてタイルを開示
 		if _has_area_data and not area.is_empty() and not is_area_visited(area):
 			_visit_area(PLAYER_PARTY_ID, area)

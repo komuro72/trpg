@@ -21,6 +21,8 @@ var build:    String = ""   # 体格（slim / medium / muscular）
 ## フォルダパス（例: "res://assets/images/characters/fighter-sword_male_young_slim_01"）
 var image_set:        String = ""
 var sprite_top:       String = ""  # フィールド表示用（真上から見た画像）
+var sprite_walk1:     String = ""  # 歩行パターン1・左足（未設定時は sprite_top を使用）
+var sprite_walk2:     String = ""  # 歩行パターン2・右足（未設定時は sprite_top を使用）
 var sprite_top_ready: String = ""  # ターゲット選択中の構え画像（未設定時は sprite_top を使用）
 var sprite_front:     String = ""  # UI・ステータス画面用（全身正面画像）
 var sprite_face:      String = ""  # 顔アイコン（LeftPanel 表示用）
@@ -109,6 +111,8 @@ static func load_from_json(path: String) -> CharacterData:
 	var sprites: Dictionary = d.get("sprites", {})
 	data.image_set        = sprites.get("image_set",  "")
 	data.sprite_top       = sprites.get("top",        "")
+	data.sprite_walk1     = sprites.get("walk1",      "")
+	data.sprite_walk2     = sprites.get("walk2",      "")
 	data.sprite_front     = sprites.get("front",      "")
 	data.sprite_face      = sprites.get("face",       "")
 	# 構え画像: sprites.top_ready を優先し、なければトップレベルの ready_image を使用

@@ -1,0 +1,48 @@
+Sound Effects License
+=====================
+
+All audio files in this directory are sourced from Kenney (https://kenney.nl)
+and are released under the Creative Commons Zero (CC0) license.
+
+CC0 means: No Rights Reserved. You may use, modify, and distribute these files
+for any purpose, including commercial use, without attribution.
+
+More information: https://creativecommons.org/publicdomain/zero/1.0/
+
+
+Source Packs
+------------
+
+1. RPG Audio
+   URL: https://kenney.nl/assets/rpg-audio
+   License: CC0 (Public Domain)
+   Files used:
+     slash.ogg         <- knifeSlice.ogg
+     axe.ogg           <- chop.ogg
+     dagger.ogg        <- drawKnife1.ogg
+     arrow_shoot.ogg   <- metalClick.ogg
+     room_enter.ogg    <- doorOpen_1.ogg
+     item_get.ogg      <- handleCoins.ogg
+
+2. Impact Sounds
+   URL: https://kenney.nl/assets/impact-sounds
+   License: CC0 (Public Domain)
+   Files used:
+     hit_physical.ogg  <- impactMetal_heavy_000.ogg
+     hit_magic.ogg     <- impactGlass_heavy_000.ogg
+     take_damage.ogg   <- impactSoft_heavy_000.ogg
+     stairs.ogg        <- footstep_concrete_000.ogg
+
+3. Sci-fi Sounds
+   URL: https://kenney.nl/assets/sci-fi-sounds
+   License: CC0 (Public Domain)
+   Files used:
+     magic_shoot.ogg   <- laserSmall_000.ogg
+     flame_shoot.ogg   <- thrusterFire_000.ogg
+     death.ogg         <- explosionCrunch_000.ogg
+
+4. Interface Sounds
+   URL: https://kenney.nl/assets/interface-sounds
+   License: CC0 (Public Domain)
+   Files used:
+     heal.ogg          <- confirmation_001.ogg

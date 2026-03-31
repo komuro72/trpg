@@ -2,82 +2,97 @@ class_name CameraController
 extends Node
 
 ## カメラコントローラー
-## デッドゾーン方式でキャラクターを追従。移動はグリッド単位スナップ。
-## なめらかスクロールは将来のアニメーション実装時に追加予定。
+## デッドゾーン方式でキャラクターを追従。
+## Phase 9-1: 滑らかスクロールを実装。
+##   - デッドゾーン判定をキャラクターの視覚位置（character.position）に対して行う
+##   - _cam_target（デッドゾーン境界で更新するピクセル目標座標）と
+##     _cam_pos（_cam_target に向かって指数減衰 lerp する実座標）の2段構成
+##   - Camera2D.limit_* によるマップ端制限はそのまま維持
 
 ## デッドゾーン比率（画面サイズに対する割合）
 const DEAD_ZONE_RATIO: float = 0.70
 
+## 追従速度の指数減衰係数（大きいほど速く追いつく）
+## 10.0 → キャラ移動 0.3s 中に約 95% 追従
+const FOLLOW_SPEED: float = 10.0
+
 var character: Character = null
 var camera: Camera2D = null
 
-## カメラ中心のグリッド座標
-var _cam_grid: Vector2i
-var _last_char_grid: Vector2i = Vector2i(-9999, -9999)
+## カメラが向かうべきピクセル座標（デッドゾーン判定で更新）
+var _cam_target: Vector2
+## 現在のカメラ位置（_cam_target に向かって補間中）
+var _cam_pos: Vector2
 
 
 func _ready() -> void:
 	if character == null or camera == null:
 		return
-	_cam_grid = character.grid_pos
+	var init_pos := _char_world_pos()
+	_cam_target  = init_pos
+	_cam_pos     = init_pos
 	_apply()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if character == null or camera == null:
 		return
-	# キャラクターが移動したときだけ更新
-	if character.grid_pos != _last_char_grid:
-		_last_char_grid = character.grid_pos
-		_update(character.grid_pos)
 
+	# キャラクターの視覚位置（補間済み）でデッドゾーン判定し、_cam_target を更新
+	_update_target(_char_world_pos())
 
-## キャラクターの新しいグリッド座標を受けてカメラ位置を更新する
-func _update(char_grid: Vector2i) -> void:
-	var dz := _dead_zone_half_cells()
-	var diff := char_grid - _cam_grid
-
-	# デッドゾーンを超えた分だけグリッド単位でカメラをスナップ
-	if diff.x > dz.x:
-		_cam_grid.x = char_grid.x - dz.x
-	elif diff.x < -dz.x:
-		_cam_grid.x = char_grid.x + dz.x
-
-	if diff.y > dz.y:
-		_cam_grid.y = char_grid.y - dz.y
-	elif diff.y < -dz.y:
-		_cam_grid.y = char_grid.y + dz.y
-
+	# 指数減衰 lerp でカメラを滑らかに追従
+	_cam_pos = _cam_pos.lerp(_cam_target, 1.0 - exp(-FOLLOW_SPEED * delta))
 	_apply()
 
 
-## デッドゾーンの半径をグリッドセル数で返す
+## キャラクターの視覚位置を受けてデッドゾーン判定を行い _cam_target を更新する
+func _update_target(char_pos: Vector2) -> void:
+	var dz   := _dead_zone_half_px()
+	var diff := char_pos - _cam_target
+
+	if diff.x > dz.x:
+		_cam_target.x = char_pos.x - dz.x
+	elif diff.x < -dz.x:
+		_cam_target.x = char_pos.x + dz.x
+
+	if diff.y > dz.y:
+		_cam_target.y = char_pos.y - dz.y
+	elif diff.y < -dz.y:
+		_cam_target.y = char_pos.y + dz.y
+
+
+## デッドゾーンの半径をピクセル単位で返す
 ## X方向はサイドパネル分を除いたフィールド幅を基準にする
-func _dead_zone_half_cells() -> Vector2i:
+func _dead_zone_half_px() -> Vector2:
 	var vp_size  := get_viewport().get_visible_rect().size
 	var gs       := float(GlobalConstants.GRID_SIZE)
 	var panel_px := float(GlobalConstants.PANEL_TILES * GlobalConstants.GRID_SIZE)
 	var field_w  := vp_size.x - 2.0 * panel_px
-	return Vector2i(
-		maxi(1, int(field_w * DEAD_ZONE_RATIO / 2.0 / gs)),
-		maxi(1, int(vp_size.y * DEAD_ZONE_RATIO / 2.0 / gs))
+	return Vector2(
+		maxf(gs, field_w  * DEAD_ZONE_RATIO * 0.5),
+		maxf(gs, vp_size.y * DEAD_ZONE_RATIO * 0.5)
 	)
 
 
-## 追従対象を切り替え、カメラ位置を即座に新しいキャラクターに合わせる
+## 追従対象を切り替え、カメラを即座に新しいキャラクターの位置にスナップする
 func set_follow_target(new_character: Character) -> void:
 	character = new_character
 	if new_character != null and is_instance_valid(new_character):
-		_cam_grid = new_character.grid_pos
+		var pos    := _char_world_pos()
+		_cam_target = pos
+		_cam_pos    = pos
 		_apply()
-	_last_char_grid = Vector2i(-9999, -9999)  # 次フレームで強制更新
+
+
+## 追従対象キャラクターのワールド座標を返す（position = 視覚補間済みの座標）
+func _char_world_pos() -> Vector2:
+	if character == null or not is_instance_valid(character):
+		return _cam_pos
+	return character.position
 
 
 ## カメラ座標を Camera2D に反映する
 ## Camera2D.limit_* がマップ端制限を担うため、ここでは直接セットするだけ
 func _apply() -> void:
-	var gs := float(GlobalConstants.GRID_SIZE)
-	camera.global_position = Vector2(
-		_cam_grid.x * gs + gs * 0.5,
-		_cam_grid.y * gs + gs * 0.5
-	)
+	camera.global_position = _cam_pos

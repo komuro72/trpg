@@ -28,6 +28,7 @@ func _ready() -> void:
 	_font = ThemeDB.fallback_font
 	_control = Control.new()
 	_control.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_control.focus_mode = Control.FOCUS_NONE
 	add_child(_control)
 	_control.draw.connect(_on_draw)
 

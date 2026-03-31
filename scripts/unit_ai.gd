@@ -10,8 +10,8 @@ extends Node
 enum Strategy   { ATTACK, FLEE, WAIT }
 enum PathMethod { DIRECT, ASTAR, ASTAR_FLANK }
 
-const MOVE_INTERVAL  := 0.4  ## タイル移動の間隔（秒）
-const WAIT_DURATION  := 1.0  ## wait アクションの待機時間（秒）
+const MOVE_INTERVAL  := 1.2  ## タイル移動の間隔・基準値（秒）。game_speed=1.0 時の標準速度
+const WAIT_DURATION  := 3.0  ## wait アクションの待機時間・基準値（秒）
 const QUEUE_MIN_LEN  := 3    ## キューがこれ以下になったら補充するしきい値
 
 ## 従順度（0.0=完全自律 / 1.0=完全にリーダー指示に従う）
@@ -301,6 +301,7 @@ func _start_action(action: Dictionary) -> void:
 			if _member.use_mp(cost):
 				var power := _member.character_data.heal_power if _member.character_data else 0
 				tgt.heal(power)
+				SoundManager.play(SoundManager.HEAL)
 			_state = _State.WAITING
 			_timer = _member.character_data.post_delay if _member.character_data else 0.5
 
@@ -323,7 +324,7 @@ func _start_action(action: Dictionary) -> void:
 
 		"wait":
 			_state = _State.WAITING
-			_timer = WAIT_DURATION
+			_timer = WAIT_DURATION / GlobalConstants.game_speed
 
 		_:
 			_complete_action()
@@ -347,7 +348,7 @@ func _step_toward_goal() -> bool:
 
 	var next := _get_next_step(_goal)
 	if next != _member.grid_pos:
-		_member.move_to(next)
+		_member.move_to(next, _get_move_interval())
 		return _member.grid_pos != _goal
 
 	return false
@@ -537,6 +538,7 @@ func _execute_attack() -> void:
 		"ranged":
 			# 遠距離攻撃：飛翔体を生成して命中確定ダメージ
 			_member.face_toward(_attack_target.grid_pos)
+			SoundManager.play_attack(_member)
 			var map_node := _member.get_parent()
 			if map_node != null:
 				var proj := Projectile.new()
@@ -546,12 +548,16 @@ func _execute_attack() -> void:
 						true, _attack_target, _member.attack, 1.0)
 		"dive":
 			# 降下攻撃：方向倍率なし（飛行中の奇襲）、降下エフェクト表示
+			SoundManager.play_attack(_member)
 			_attack_target.take_damage(_member.attack, 1.0)
+			SoundManager.play_hit(_member)
 			_spawn_dive_effect()
 		_:
 			# melee（近接攻撃）
+			SoundManager.play_attack(_member)
 			var multiplier := Character.get_direction_multiplier(_member, _attack_target)
 			_attack_target.take_damage(_member.attack, multiplier)
+			SoundManager.play_hit(_member)
 
 
 ## 降下攻撃エフェクトを生成する（簡易：黄色→白のフラッシュ円）
@@ -944,8 +950,9 @@ func _get_path_method() -> PathMethod:
 
 ## 移動間隔（秒/タイル）。サブクラスで上書きして速度変更可能
 ## zombie=遅い(MOVE_INTERVAL*2.0) / wolf=速い(MOVE_INTERVAL*0.67) など
+## GlobalConstants.game_speed で割ることで設定画面の速度変更に対応する
 func _get_move_interval() -> float:
-	return MOVE_INTERVAL
+	return MOVE_INTERVAL / GlobalConstants.game_speed
 
 
 ## 攻撃実行後に呼ばれるフック。MP消費などはここで行う（サブクラスでオーバーライド）
