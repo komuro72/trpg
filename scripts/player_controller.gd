@@ -95,10 +95,9 @@ func _input(event: InputEvent) -> void:
 # --------------------------------------------------------------------------
 
 ## character のクラスIDに基づいてスロットデータをロードする
-## クラスデータが存在しない場合はデフォルト（近接Z・遠距離X）を使用
+## クラスデータが存在しない場合はデフォルト（近接攻撃）を使用
 func _load_class_slots() -> void:
 	_slot_z = DEFAULT_SLOT_Z.duplicate()
-	_slot_x = DEFAULT_SLOT_X.duplicate()
 	if character == null or character.character_data == null:
 		return
 	var class_id := character.character_data.class_id
