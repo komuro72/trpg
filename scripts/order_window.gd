@@ -60,7 +60,17 @@ const ATTACK_TYPE_LABELS: Dictionary = {
 enum _FocusArea { GLOBAL_POLICY, MEMBER_TABLE, CLOSE, LOG }
 
 ## 名前列Z押下時のサブメニュー項目
-const SUBMENU_ITEMS: Array[String] = ["操作切替", "装備（未実装）", "アイテム受渡（未実装）"]
+const SUBMENU_ITEMS: Array[String] = ["操作切替", "アイテム"]
+
+## クラスID → 装備可能アイテムタイプ一覧
+const CLASS_EQUIP_TYPES: Dictionary = {
+	"fighter-sword": ["sword",  "armor_plate", "shield"],
+	"fighter-axe":   ["axe",    "armor_plate", "shield"],
+	"archer":        ["bow",    "armor_cloth"],
+	"scout":         ["dagger", "armor_cloth"],
+	"magician-fire": ["staff",  "armor_robe"],
+	"healer":        ["staff",  "armor_robe"],
+}
 
 var _party:          Party
 var _focus_area:     _FocusArea = _FocusArea.GLOBAL_POLICY
@@ -89,6 +99,17 @@ var _message_window: MessageWindow = null
 var _log_mode:   bool = false
 var _log_scroll: int  = 0
 
+## アイテム画面の状態
+enum _ItemMode { OFF, ITEM_LIST, ACTION_MENU, TRANSFER_SELECT }
+var _item_mode:          _ItemMode = _ItemMode.OFF
+var _item_char:          Character = null   ## アイテムを見ているキャラ
+var _item_cursor:        int       = 0
+var _cached_unequipped:  Array     = []     ## _item_char の未装備アイテムリスト（キャッシュ）
+var _selected_item:      Dictionary = {}    ## ITEM_LIST で選んだアイテム
+var _action_items:       Array[String] = [] ## ACTION_MENU の選択肢
+var _action_cursor:      int       = 0
+var _transfer_cursor:    int       = 0
+
 
 # ── セットアップ ──────────────────────────────────────────────────────────────
 
@@ -115,6 +136,7 @@ func close_window() -> void:
 	visible = false
 	_submenu_open = false
 	_log_mode     = false
+	_item_mode    = _ItemMode.OFF
 	closed.emit()
 
 
@@ -167,7 +189,9 @@ func _handle_input() -> void:
 				close_window()
 
 		_FocusArea.MEMBER_TABLE:
-			if _submenu_open:
+			if _item_mode != _ItemMode.OFF:
+				_handle_item_input()
+			elif _submenu_open:
 				# サブメニュー操作（名前列Z押下後）
 				if Input.is_action_just_pressed("ui_up"):
 					_submenu_cursor = (_submenu_cursor - 1 + SUBMENU_ITEMS.size()) % SUBMENU_ITEMS.size()
@@ -252,10 +276,157 @@ func _execute_submenu(member_index: int, submenu_index: int) -> void:
 			if not already:
 				switch_requested.emit(ch)
 				_controlled_char = ch
-		1:  # 装備：未実装
-			pass
-		2:  # アイテム受渡：未実装
-			pass
+		1:  # アイテム：未装備品一覧を開く
+			_item_char          = ch
+			_cached_unequipped  = _get_unequipped_items(ch)
+			_item_cursor        = 0
+			_item_mode          = _ItemMode.ITEM_LIST
+
+
+## アイテム画面の入力処理
+func _handle_item_input() -> void:
+	match _item_mode:
+		_ItemMode.ITEM_LIST:
+			if Input.is_action_just_pressed("ui_up"):
+				_item_cursor = maxi(0, _item_cursor - 1)
+			elif Input.is_action_just_pressed("ui_down"):
+				_item_cursor = mini(_cached_unequipped.size() - 1, _item_cursor + 1)
+			elif Input.is_action_just_pressed("attack_melee") \
+					or Input.is_action_just_pressed("ui_accept"):
+				if not _cached_unequipped.is_empty() and _item_cursor < _cached_unequipped.size():
+					_selected_item = _cached_unequipped[_item_cursor] as Dictionary
+					_action_items  = _build_action_items(_item_char, _selected_item)
+					if not _action_items.is_empty():
+						_action_cursor = 0
+						_item_mode     = _ItemMode.ACTION_MENU
+			elif Input.is_action_just_pressed("ui_cancel"):
+				_item_mode = _ItemMode.OFF
+
+		_ItemMode.ACTION_MENU:
+			if Input.is_action_just_pressed("ui_up"):
+				_action_cursor = (_action_cursor - 1 + _action_items.size()) % _action_items.size()
+			elif Input.is_action_just_pressed("ui_down"):
+				_action_cursor = (_action_cursor + 1) % _action_items.size()
+			elif Input.is_action_just_pressed("attack_melee") \
+					or Input.is_action_just_pressed("ui_accept"):
+				var action: String = _action_items[_action_cursor] as String
+				if action == "装備する":
+					_do_equip(_item_char, _selected_item)
+					var iname: String = _selected_item.get("item_name", "？") as String
+					if _message_window != null:
+						_message_window.show_message(
+							"%s は %s を装備した" % [_get_char_name(_item_char), iname])
+					_cached_unequipped = _get_unequipped_items(_item_char)
+					_item_cursor = mini(_item_cursor, maxi(0, _cached_unequipped.size() - 1))
+					_item_mode   = _ItemMode.ITEM_LIST
+				elif action == "渡す":
+					_transfer_cursor = 0
+					_item_mode       = _ItemMode.TRANSFER_SELECT
+			elif Input.is_action_just_pressed("ui_cancel"):
+				_item_mode = _ItemMode.ITEM_LIST
+
+		_ItemMode.TRANSFER_SELECT:
+			var targets := _get_transfer_targets()
+			if Input.is_action_just_pressed("ui_up"):
+				_transfer_cursor = maxi(0, _transfer_cursor - 1)
+			elif Input.is_action_just_pressed("ui_down"):
+				_transfer_cursor = mini(targets.size() - 1, _transfer_cursor + 1)
+			elif Input.is_action_just_pressed("attack_melee") \
+					or Input.is_action_just_pressed("ui_accept"):
+				if _transfer_cursor < targets.size():
+					var to_ch := targets[_transfer_cursor] as Character
+					var iname: String = _selected_item.get("item_name", "？") as String
+					_do_transfer(_item_char, to_ch, _selected_item)
+					if _message_window != null:
+						_message_window.show_message(
+							"%s は %s に %s を渡した" % [
+								_get_char_name(_item_char), _get_char_name(to_ch), iname])
+					_cached_unequipped = _get_unequipped_items(_item_char)
+					_item_cursor = mini(_item_cursor, maxi(0, _cached_unequipped.size() - 1))
+					_item_mode   = _ItemMode.ITEM_LIST
+			elif Input.is_action_just_pressed("ui_cancel"):
+				_item_mode = _ItemMode.ACTION_MENU
+
+
+## 対象キャラの未装備アイテムを返す（装備スロットに入っていないもの）
+func _get_unequipped_items(ch: Character) -> Array:
+	if ch == null or not is_instance_valid(ch) or ch.character_data == null:
+		return []
+	var cd := ch.character_data
+	var result: Array = []
+	for item_v: Variant in cd.inventory:
+		var item := item_v as Dictionary
+		var equipped: bool = is_same(item, cd.equipped_weapon) \
+			or is_same(item, cd.equipped_armor) \
+			or is_same(item, cd.equipped_shield)
+		if not equipped:
+			result.append(item)
+	return result
+
+
+## そのキャラのクラスでアイテムを装備できるか
+func _can_equip(ch: Character, item: Dictionary) -> bool:
+	if ch == null or not is_instance_valid(ch) or ch.character_data == null:
+		return false
+	var itype: String = item.get("item_type", "") as String
+	var cid: String   = ch.character_data.class_id
+	var allowed: Array = CLASS_EQUIP_TYPES.get(cid, []) as Array
+	return allowed.has(itype)
+
+
+## アクションメニューの選択肢を構築する
+func _build_action_items(ch: Character, item: Dictionary) -> Array[String]:
+	var actions: Array[String] = []
+	if _can_equip(ch, item):
+		actions.append("装備する")
+	# 渡す：リーダー操作中 かつ 対象が自分自身でないメンバーがいる場合
+	if _is_editable() and _get_transfer_targets().size() > 0:
+		actions.append("渡す")
+	return actions
+
+
+## アイテムを装備スロットにセットする（在庫は変更しない）
+func _do_equip(ch: Character, item: Dictionary) -> void:
+	if ch == null or not is_instance_valid(ch) or ch.character_data == null:
+		return
+	var cd := ch.character_data
+	var cat: String = item.get("category", "") as String
+	match cat:
+		"weapon": cd.equipped_weapon = item
+		"armor":  cd.equipped_armor  = item
+		"shield": cd.equipped_shield = item
+
+
+## アイテムを別キャラに受け渡す
+func _do_transfer(from_ch: Character, to_ch: Character, item: Dictionary) -> void:
+	if from_ch == null or to_ch == null:
+		return
+	if not is_instance_valid(from_ch) or not is_instance_valid(to_ch):
+		return
+	if from_ch.character_data == null or to_ch.character_data == null:
+		return
+	from_ch.character_data.inventory.erase(item)
+	to_ch.character_data.inventory.append(item)
+
+
+## 受け渡し先の候補リスト（_item_char 以外の有効パーティーメンバー）
+func _get_transfer_targets() -> Array:
+	var targets: Array = []
+	for m_v: Variant in _sorted_members:
+		var ch := m_v as Character
+		if is_instance_valid(ch) and ch != _item_char:
+			targets.append(ch)
+	return targets
+
+
+## キャラクターの表示名を返す
+func _get_char_name(ch: Character) -> String:
+	if ch == null or not is_instance_valid(ch):
+		return "？"
+	var cd := ch.character_data
+	return cd.character_name \
+		if (cd != null and not cd.character_name.is_empty()) \
+		else String(ch.name)
 
 
 ## 操作中のキャラクターがパーティーリーダーなら true（指示変更可）
@@ -613,9 +784,19 @@ func _on_draw() -> void:
 			_control.draw_string(_font, Vector2(sub_x + 10.0, sy + sub_ih * 0.72),
 				SUBMENU_ITEMS[si], HORIZONTAL_ALIGNMENT_LEFT, sub_w - 14.0, fs_body, s_col)
 
+	# ── アイテム画面オーバーレイ ──────────────────────────────────────────────────
+	if _item_mode != _ItemMode.OFF:
+		_draw_item_overlay(px, py, panel_w, pad, fs_body, fs_stat, stat_h)
+
 	# ── 操作ヒント ────────────────────────────────────────────────────────────────
 	var hint_str: String
-	if _log_mode:
+	if _item_mode == _ItemMode.ITEM_LIST:
+		hint_str = "↑↓:選択  Z/Enter:決定  Esc:戻る"
+	elif _item_mode == _ItemMode.ACTION_MENU:
+		hint_str = "↑↓:選択  Z/Enter:実行  Esc:戻る"
+	elif _item_mode == _ItemMode.TRANSFER_SELECT:
+		hint_str = "↑↓:選択  Z/Enter:渡す  Esc:戻る"
+	elif _log_mode:
 		hint_str = "↑↓:スクロール  Z/Enter/Esc:ログを閉じる  Tab:ウィンドウを閉じる"
 	elif _submenu_open:
 		hint_str = "↑↓:選択  Z/Enter:決定  Esc:キャンセル"
@@ -850,3 +1031,149 @@ func _draw_sep(px: float, y: float, panel_w: float, pad: float) -> void:
 		Vector2(px + pad, y),
 		Vector2(px + panel_w - pad, y),
 		Color(0.35, 0.35, 0.55, 0.65), 1)
+
+
+## アイテム画面のオーバーレイ（_item_mode に応じて切替描画）
+func _draw_item_overlay(main_px: float, main_py: float, main_pw: float,
+		pad: float, fs_body: int, fs_stat: int, row_h: float) -> void:
+	# オーバーレイ幅はメインパネルより少し狭め
+	var ow := minf(main_pw * 0.82, 700.0)
+	var ox := main_px + (main_pw - ow) * 0.5
+
+	match _item_mode:
+		_ItemMode.ITEM_LIST:
+			_draw_item_list_overlay(ox, main_py, ow, pad, fs_body, fs_stat, row_h)
+		_ItemMode.ACTION_MENU:
+			_draw_action_menu_overlay(ox, main_py, ow, pad, fs_body, row_h)
+		_ItemMode.TRANSFER_SELECT:
+			_draw_transfer_select_overlay(ox, main_py, ow, pad, fs_body, fs_stat, row_h)
+
+
+## アイテム一覧オーバーレイ（未装備品リスト）
+func _draw_item_list_overlay(ox: float, main_py: float, ow: float,
+		pad: float, fs_body: int, fs_stat: int, row_h: float) -> void:
+	var title_h: float = float(fs_body) + 10.0
+	var items := _cached_unequipped
+	var list_rows: int = maxi(1, items.size())
+	var oh: float = pad + title_h + 8.0 + float(list_rows) * row_h + pad
+	var oy := main_py + 80.0
+
+	_control.draw_rect(Rect2(ox, oy, ow, oh), Color(0.07, 0.07, 0.15, 0.97))
+	_control.draw_rect(Rect2(ox, oy, ow, oh), Color(0.55, 0.55, 0.80, 0.90), false, 2)
+
+	var cname := _get_char_name(_item_char)
+	_control.draw_string(_font, Vector2(ox + pad, oy + pad + float(fs_body)),
+		"%s の所持アイテム（未装備品）" % cname,
+		HORIZONTAL_ALIGNMENT_LEFT, ow - pad * 2.0, fs_body, Color(0.88, 0.88, 1.00))
+
+	var y := oy + pad + title_h + 8.0
+	if items.is_empty():
+		_control.draw_string(_font, Vector2(ox + pad, y + row_h * 0.70),
+			"アイテムなし", HORIZONTAL_ALIGNMENT_LEFT, ow - pad * 2.0,
+			fs_stat, Color(0.50, 0.50, 0.60))
+	else:
+		for ii: int in range(items.size()):
+			var item := items[ii] as Dictionary
+			var is_cur := (ii == _item_cursor)
+			if is_cur:
+				_control.draw_rect(Rect2(ox + 2.0, y, ow - 4.0, row_h),
+					Color(0.20, 0.28, 0.55, 0.80))
+			var iname: String = item.get("item_name", "？") as String
+			var itype: String = item.get("item_type", "") as String
+			var icat:  String = item.get("category",  "") as String
+			# 主要補正値サマリ
+			var stats_d: Dictionary = item.get("stats", {}) as Dictionary
+			var parts: Array = []
+			for k: String in ["attack_power", "magic_power", "physical_resistance",
+					"magic_resistance", "defense_strength"]:
+				if stats_d.has(k):
+					var v: float = float(stats_d[k])
+					if v != 0.0:
+						parts.append("%s+%s" % [k.split("_")[0], str(int(v))])
+			var effect_d: Dictionary = item.get("effect", {}) as Dictionary
+			for ek: String in effect_d:
+				parts.append("%s:%d" % [ek, int(effect_d[ek])])
+			var stat_str := "" if parts.is_empty() else " [%s]" % ", ".join(parts)
+			var equip_mark := "◆" if _can_equip(_item_char, item) else "  "
+			var txt := "%s %s  %s / %s%s" % [equip_mark, iname, icat, itype, stat_str]
+			var c: Color = Color(1.0, 1.0, 0.3) if is_cur else Color(0.85, 0.85, 0.90)
+			_control.draw_string(_font, Vector2(ox + pad, y + row_h * 0.70),
+				txt, HORIZONTAL_ALIGNMENT_LEFT, ow - pad * 2.0, fs_stat, c)
+			y += row_h
+
+
+## アクションメニューオーバーレイ
+func _draw_action_menu_overlay(ox: float, main_py: float, ow: float,
+		pad: float, fs_body: int, row_h: float) -> void:
+	var iname: String = _selected_item.get("item_name", "？") as String
+	var title_h: float = float(fs_body) + 10.0
+	var list_rows: int = maxi(1, _action_items.size())
+	var oh: float = pad + title_h + 8.0 + float(list_rows) * row_h + pad
+	var oy := main_py + 80.0
+
+	_control.draw_rect(Rect2(ox, oy, ow, oh), Color(0.07, 0.07, 0.15, 0.97))
+	_control.draw_rect(Rect2(ox, oy, ow, oh), Color(0.55, 0.55, 0.80, 0.90), false, 2)
+
+	_control.draw_string(_font, Vector2(ox + pad, oy + pad + float(fs_body)),
+		iname + " をどうする？",
+		HORIZONTAL_ALIGNMENT_LEFT, ow - pad * 2.0, fs_body, Color(0.88, 0.88, 1.00))
+
+	var y := oy + pad + title_h + 8.0
+	if _action_items.is_empty():
+		_control.draw_string(_font, Vector2(ox + pad, y + row_h * 0.70),
+			"操作できません", HORIZONTAL_ALIGNMENT_LEFT, ow - pad * 2.0,
+			fs_body, Color(0.60, 0.60, 0.70))
+	else:
+		for ai: int in range(_action_items.size()):
+			var is_cur := (ai == _action_cursor)
+			if is_cur:
+				_control.draw_rect(Rect2(ox + 2.0, y, ow - 4.0, row_h),
+					Color(0.20, 0.28, 0.55, 0.80))
+			var c: Color = Color(1.0, 1.0, 0.3) if is_cur else Color(0.85, 0.85, 0.90)
+			var prefix := "▶ " if is_cur else "   "
+			_control.draw_string(_font, Vector2(ox + pad, y + row_h * 0.70),
+				prefix + (_action_items[ai] as String),
+				HORIZONTAL_ALIGNMENT_LEFT, ow - pad * 2.0, fs_body, c)
+			y += row_h
+
+
+## 受け渡し相手選択オーバーレイ
+func _draw_transfer_select_overlay(ox: float, main_py: float, ow: float,
+		pad: float, fs_body: int, fs_stat: int, row_h: float) -> void:
+	var iname: String = _selected_item.get("item_name", "？") as String
+	var targets := _get_transfer_targets()
+	var title_h: float = float(fs_body) + 10.0
+	var list_rows: int = maxi(1, targets.size())
+	var oh: float = pad + title_h + 8.0 + float(list_rows) * row_h + pad
+	var oy := main_py + 80.0
+
+	_control.draw_rect(Rect2(ox, oy, ow, oh), Color(0.07, 0.07, 0.15, 0.97))
+	_control.draw_rect(Rect2(ox, oy, ow, oh), Color(0.55, 0.55, 0.80, 0.90), false, 2)
+
+	_control.draw_string(_font, Vector2(ox + pad, oy + pad + float(fs_body)),
+		"%s を誰に渡す？" % iname,
+		HORIZONTAL_ALIGNMENT_LEFT, ow - pad * 2.0, fs_body, Color(0.88, 0.88, 1.00))
+
+	var y := oy + pad + title_h + 8.0
+	if targets.is_empty():
+		_control.draw_string(_font, Vector2(ox + pad, y + row_h * 0.70),
+			"渡せる相手がいません", HORIZONTAL_ALIGNMENT_LEFT, ow - pad * 2.0,
+			fs_stat, Color(0.50, 0.50, 0.60))
+	else:
+		for ti: int in range(targets.size()):
+			var to_ch := targets[ti] as Character
+			if not is_instance_valid(to_ch):
+				continue
+			var is_cur := (ti == _transfer_cursor)
+			if is_cur:
+				_control.draw_rect(Rect2(ox + 2.0, y, ow - 4.0, row_h),
+					Color(0.20, 0.28, 0.55, 0.80))
+			var c: Color = Color(1.0, 1.0, 0.3) if is_cur else Color(0.85, 0.85, 0.90)
+			var prefix := "▶ " if is_cur else "   "
+			var tname := _get_char_name(to_ch)
+			var inv_count: int = to_ch.character_data.inventory.size() \
+				if to_ch.character_data != null else 0
+			_control.draw_string(_font, Vector2(ox + pad, y + row_h * 0.70),
+				"%s%s  （所持 %d 件）" % [prefix, tname, inv_count],
+				HORIZONTAL_ALIGNMENT_LEFT, ow - pad * 2.0, fs_stat, c)
+			y += row_h

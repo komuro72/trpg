@@ -2046,12 +2046,36 @@ assets/master/items/
 
 #### OrderWindow 改修（Phase 10-2 追加分）
 
-- **6a: 名前列サブメニュー**
+- **6a: 名前列サブメニュー + アイテム画面**
   - 「操作」列を削除。名前列（col 0）をインタラクティブ化
-  - Z 押下でサブメニュー表示（操作切替 / 装備（未実装） / アイテム受渡（未実装））
+  - Z 押下でサブメニュー表示（操作切替 / アイテム）
   - `_submenu_open / _submenu_cursor` で状態管理
-  - `_execute_submenu()` で操作切替を実行（装備/アイテム受渡はスタブ）
+  - `_execute_submenu()` で操作切替を実行; アイテムは `_item_mode = ITEM_LIST` に遷移
   - `_get_col_xs()` から control_r（0.10）を削除、name_r を 0.22 に拡大
+  - **アイテム画面の状態遷移（`_ItemMode` enum）**
+    - `OFF` → `ITEM_LIST`（未装備品一覧）→ `ACTION_MENU`（装備する/渡す）→ `TRANSFER_SELECT`（渡す相手）
+    - 各状態で Esc を押すと1つ前の状態に戻る。`close_window()` で OFF にリセット
+  - **主要メソッド**
+    - `_handle_item_input()`: 各 _ItemMode の入力処理（`_handle_input()` 内で最初に分岐）
+    - `_get_unequipped_items(ch)`: `is_same()` で装備スロット参照と比較し未装備品を抽出
+    - `_can_equip(ch, item)`: `CLASS_EQUIP_TYPES` 定数でクラス vs item_type を照合
+    - `_build_action_items(ch, item)`: 「装備する」（can_equip 時）/ 「渡す」（リーダー操作中 かつ 他メンバーあり）
+    - `_do_equip(ch, item)`: category に応じた装備スロットに item 参照をセット（inventory は変更しない。旧スロット参照を外すことで旧装備は自動的に未装備扱いになる）
+    - `_do_transfer(from_ch, to_ch, item)`: `from_ch.inventory.erase(item)` → `to_ch.inventory.append(item)`
+    - `_get_transfer_targets()`: `_item_char` 以外の有効パーティーメンバー
+    - `_get_char_name(ch)`: character_name 優先の表示名ヘルパー
+  - **描画（オーバーレイ方式）**
+    - `_draw_item_overlay()`: _item_mode に応じて3つのサブ関数に委譲
+    - `_draw_item_list_overlay()`: 未装備品一覧。装備可能アイテムは ◆ マーク、名前+カテゴリ+補正値サマリを表示
+    - `_draw_action_menu_overlay()`: 「装備する / 渡す」のリスト
+    - `_draw_transfer_select_overlay()`: 渡す相手一覧（所持件数を表示）
+  - **`CLASS_EQUIP_TYPES` 定数**（クラスID → 許可 item_type 配列）
+    - fighter-sword: [sword, armor_plate, shield]
+    - fighter-axe: [axe, armor_plate, shield]
+    - archer: [bow, armor_cloth]
+    - scout: [dagger, armor_cloth]
+    - magician-fire: [staff, armor_robe]
+    - healer: [staff, armor_robe]
 - **6b: ステータス行の追加**
   - `_get_stat_rows()` に物理耐性・魔法耐性行を追加（`"pct"` type: 0-100% 表示）
   - 攻撃力・魔法力の bonus に `get_weapon_attack_bonus()` / `get_weapon_magic_bonus()` を反映
@@ -2071,7 +2095,7 @@ assets/master/items/
 | `scripts/projectile.gd` | `setup()` に attacker・is_magic 引数追加; `_on_arrive()` で `take_damage(d, m, attacker, is_magic)` 呼び出し |
 | `scripts/player_controller.gd` | `_execute_melee/ranged()` から方向倍率を削除; is_magic フラグを take_damage/projectile に渡す |
 | `scripts/unit_ai.gd` | ranged/magic projectile に `_member`・`is_magic` を渡す |
-| `scripts/order_window.gd` | 名前列サブメニュー・物理/魔法耐性行・pct type・ログ行追加; 操作列削除 |
+| `scripts/order_window.gd` | 名前列サブメニュー・アイテム画面（ITEM_LIST/ACTION_MENU/TRANSFER_SELECT）・物理/魔法耐性行・ログ行追加; 操作列削除 |
 | `scripts/left_panel.gd` | 行2 を「隊形+低HP+取得」の3略称に変更 |
 | `scripts/message_window.gd` | `log_entries: Array[String]` 追加; `show_message()` で自動追記 |
 | `scripts/game_map.gd` | `_on_enemy_party_wiped()` で MessageWindow 通知; `order_window.setup(party, message_window)` |
