@@ -1007,7 +1007,8 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 	_control.draw_string(_font, Vector2(lbl_x, y + float(fs_stat)),
 		"所持アイテム", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_head)
 	y += float(fs_stat) + 6.0
-	var inv: Array = ch.character_data.inventory if ch.character_data else []
+	# 未装備品のみ表示（装備スロットに入っているアイテムは除外）
+	var inv: Array = _get_unequipped_items(ch)
 	if inv.is_empty():
 		_control.draw_string(_font, Vector2(lbl_x, y + stat_h * 0.75),
 			"（なし）", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_dim)
