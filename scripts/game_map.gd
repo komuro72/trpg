@@ -57,6 +57,8 @@ var dialogue_window: DialogueWindow
 var order_window: OrderWindow
 
 var _tile_textures: Dictionary = {}  # TileType(int) -> Texture2D
+## 床に散らばったアイテム（Vector2i → Dictionary）。1マスに1個
+var _floor_items: Dictionary = {}
 var _dialogue_npc_manager: NpcManager  ## 現在会話中の NpcManager
 var _dialogue_npc_initiates: bool = false
 
@@ -123,6 +125,9 @@ func _process(_delta: float) -> void:
 	# ゲームパッドアクション（ポーリング方式）
 	if Input.is_action_just_pressed("open_order_window"):
 		_toggle_order_window()
+
+	# 床アイテムの拾得チェック
+	_check_item_pickup()
 
 	# 会話中に敵が部屋に入ってきたら会話を中断する
 	if dialogue_window == null or not dialogue_window.visible:
@@ -626,22 +631,61 @@ func _on_character_died(character: Character) -> void:
 	party.remove_member(character)
 
 
-## 敵パーティー全滅シグナルを受け取り、ドロップアイテムをプレイヤーパーティーへ転送する
-## killer が null（ranged 遠距離kill 等）の場合は hero に帰属させる
-func _on_enemy_party_wiped(items: Array, killer: Character) -> void:
+## 敵パーティー全滅シグナルを受け取り、アイテムを部屋の床に散らばらせる（部屋制圧方式）
+func _on_enemy_party_wiped(items: Array, room_id: String) -> void:
 	if items.is_empty():
 		return
-	# アイテムの帰属先キャラを決定（killer がいればそのキャラ、なければ hero）
-	var recipient: Character = killer if (killer != null and is_instance_valid(killer)) else hero
-	if recipient == null or recipient.character_data == null:
+	# 部屋タイルを取得して FLOORのみに絞り、既存アイテムがないタイルを候補にする
+	var candidates: Array[Vector2i] = []
+	if room_id.is_empty():
+		# エリアIDが取れない場合はドロップをスキップ
 		return
-	for item: Variant in items:
-		recipient.character_data.inventory.append(item)
-	SoundManager.play(SoundManager.ITEM_GET)
-	var recipient_name := recipient.character_data.character_name
-	if message_window != null:
-		message_window.show_message("%s が %d 点のアイテムを入手した" % [recipient_name, items.size()])
-	print("[GameMap] ドロップアイテム %d 個 → %s" % [items.size(), recipient_name])
+	for tile: Vector2i in map_data.get_tiles_in_area(room_id):
+		if map_data.get_tile(tile) == MapData.TileType.FLOOR and not _floor_items.has(tile):
+			candidates.append(tile)
+	if candidates.is_empty():
+		return
+	# シャッフルして items の数だけタイルを割り当て（最大 candidates.size() 個）
+	candidates.shuffle()
+	var placed := 0
+	for item_v: Variant in items:
+		if placed >= candidates.size():
+			break
+		_floor_items[candidates[placed]] = item_v as Dictionary
+		placed += 1
+	if placed > 0:
+		SoundManager.play(SoundManager.ITEM_GET)
+		if message_window != null:
+			message_window.show_message("アイテムが部屋に散らばった！（%d個）" % placed)
+		queue_redraw()
+		print("[GameMap] アイテム %d 個を部屋 %s に散布" % [placed, room_id])
+
+
+## 床アイテムの拾得チェック（_process から毎フレーム呼ぶ）
+func _check_item_pickup() -> void:
+	if _floor_items.is_empty() or party == null:
+		return
+	for member_v: Variant in party.sorted_members():
+		var ch := member_v as Character
+		if not is_instance_valid(ch) or ch.character_data == null:
+			continue
+		var pos := ch.grid_pos
+		if not _floor_items.has(pos):
+			continue
+		# item_pickup 指示確認（プレイヤー操作キャラは常に拾う）
+		var pickup_order: String = ch.current_order.get("item_pickup", "passive") as String
+		if pickup_order == "avoid" and not ch.is_player_controlled:
+			continue
+		var item := _floor_items[pos] as Dictionary
+		ch.character_data.inventory.append(item)
+		_floor_items.erase(pos)
+		SoundManager.play(SoundManager.ITEM_GET)
+		var cname := ch.character_data.character_name \
+			if not ch.character_data.character_name.is_empty() else String(ch.name)
+		var iname: String = item.get("item_name", "アイテム") as String
+		if message_window != null:
+			message_window.show_message("%s は %s を拾った" % [cname, iname])
+		queue_redraw()
 
 
 ## タイル画像をプリロードする（画像がない場合はフォールバック色を使用）
@@ -690,3 +734,13 @@ func _draw() -> void:
 				draw_rect(rect, fill_color)
 
 			draw_rect(rect, COLOR_GRID_LINE, false)
+
+	# 床アイテムを描画（訪問済みタイルのみ）
+	for tile_v: Variant in _floor_items.keys():
+		var ipos  := tile_v as Vector2i
+		if use_vision and not visible_tiles.has(ipos):
+			continue
+		var irect := Rect2(ipos.x * gs + gs * 0.25, ipos.y * gs + gs * 0.25,
+			gs * 0.50, gs * 0.50)
+		draw_rect(irect, Color(1.0, 0.85, 0.15, 0.90))
+		draw_rect(irect, Color(1.0, 1.0, 0.5, 0.70), false, 1)
