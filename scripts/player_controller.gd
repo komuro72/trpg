@@ -2,7 +2,7 @@ class_name PlayerController
 extends Node
 
 ## プレイヤー入力コントローラー
-## Phase 4: NORMAL/TARGETING/FIRINGステートマシン・Z/Xキー攻撃スロット・飛翔体対応
+## Phase 4: NORMAL/TARGETING/FIRINGステートマシン・攻撃スロット・飛翔体対応
 ## Phase 6-0: クラスJSONのスロット定義を読み込み、クラスごとの攻撃動作に対応
 ##   - action: "melee" → マンハッタン距離・近接判定
 ##   - action: "ranged" / "ranged_area" → ユークリッド距離・飛翔体
@@ -12,6 +12,7 @@ extends Node
 ##   - キーリリース時にターゲットあり→攻撃発動、なし→ノーコストキャンセル
 ##   - ターゲットソート: 前方±45°を距離順、次いでそれ以外を距離順
 ##   - ホールド中に射程内の敵リストをリアルタイム更新
+## Phase 10-2: 攻撃を Z/A の1ボタンに統合。攻撃タイプはクラスのスロット定義から自動判定
 
 var character: Character = null
 var map_data: MapData = null
@@ -43,16 +44,10 @@ const DEFAULT_SLOT_Z: Dictionary = {
 	"name": "近接攻撃", "action": "melee",  "type": "physical",
 	"range": 1, "damage_mult": 1.0, "pre_delay": 0.0
 }
-const DEFAULT_SLOT_X: Dictionary = {
-	"name": "遠距離攻撃", "action": "ranged", "type": "physical",
-	"range": 5, "damage_mult": 1.0, "pre_delay": 0.0
-}
 
-enum Mode       { NORMAL, TARGETING, FIRING }
-enum AttackSlot { Z, X }
+enum Mode { NORMAL, TARGETING, FIRING }
 
-var _mode:          Mode       = Mode.NORMAL
-var _attack_slot:   AttackSlot = AttackSlot.Z
+var _mode: Mode = Mode.NORMAL
 var _valid_targets: Array[Character] = []
 var _target_index:  int = 0  # valid_targets.size() = キャンセル選択
 
@@ -77,7 +72,6 @@ var _pending_slot_data: Dictionary = {}
 
 ## クラスJSONから読み込んだスロットデータ
 var _slot_z: Dictionary = {}
-var _slot_x: Dictionary = {}
 
 
 func _ready() -> void:
@@ -117,16 +111,10 @@ func _load_class_slots() -> void:
 	var z_data: Variant = slots.get("Z")
 	if z_data != null and z_data is Dictionary:
 		_slot_z = (z_data as Dictionary).duplicate()
-	var x_data: Variant = slots.get("X")
-	if x_data != null and x_data is Dictionary:
-		_slot_x = (x_data as Dictionary).duplicate()
 
 
-func _get_slot(slot: AttackSlot) -> Dictionary:
-	match slot:
-		AttackSlot.Z: return _slot_z
-		AttackSlot.X: return _slot_x
-	return DEFAULT_SLOT_Z.duplicate()
+func _get_slot() -> Dictionary:
+	return _slot_z if not _slot_z.is_empty() else DEFAULT_SLOT_Z.duplicate()
 
 
 # --------------------------------------------------------------------------
@@ -148,13 +136,9 @@ func _process(delta: float) -> void:
 
 func _process_normal(_delta: float) -> void:
 	# 攻撃キーホールドでターゲット選択モードへ
-	if Input.is_action_pressed("attack_melee"):
+	if Input.is_action_pressed("attack"):
 		_move_buffer = Vector2i.ZERO
-		_enter_targeting(AttackSlot.Z)
-		return
-	elif Input.is_action_pressed("attack_ranged"):
-		_move_buffer = Vector2i.ZERO
-		_enter_targeting(AttackSlot.X)
+		_enter_targeting()
 		return
 
 	var dir := _get_input_direction()
@@ -179,7 +163,7 @@ func _process_targeting(delta: float) -> void:
 	_pre_delay_remaining -= delta
 
 	# キーリリース検出 → 発動 or キャンセル
-	if not _is_slot_held(_attack_slot):
+	if not _is_slot_held():
 		if _target_index < _valid_targets.size():
 			_commit_attack()
 		else:
@@ -212,16 +196,15 @@ func _process_firing(delta: float) -> void:
 # ターゲット選択
 # --------------------------------------------------------------------------
 
-func _enter_targeting(slot: AttackSlot) -> void:
-	_attack_slot  = slot
+func _enter_targeting() -> void:
 	_mode         = Mode.TARGETING
 	_move_buffer  = Vector2i.ZERO
 
 	# ホールド開始時点から pre_delay カウント開始
-	var sd := _get_slot(slot)
+	var sd := _get_slot()
 	_pre_delay_remaining = float(sd.get("pre_delay", 0.0))
 
-	_valid_targets = _get_sorted_targets(slot)
+	_valid_targets = _get_sorted_targets()
 	_target_index  = 0  # 先頭の敵を自動選択（敵なしならキャンセル選択）
 	character.is_targeting_mode = true
 
@@ -251,7 +234,7 @@ func _exit_targeting() -> void:
 ## キーリリース時にターゲットが確定していたら発動（残 pre_delay があれば FIRING へ）
 func _commit_attack() -> void:
 	_pending_target    = _valid_targets[_target_index]
-	_pending_slot_data = _get_slot(_attack_slot)
+	_pending_slot_data = _get_slot()
 
 	# カーソル片付け（is_targeting_mode は FIRING 中も維持）
 	for t: Character in _valid_targets:
@@ -300,7 +283,7 @@ func _refresh_targets() -> void:
 	if not was_cancel:
 		prev_target = _valid_targets[_target_index]
 
-	_valid_targets = _get_sorted_targets(_attack_slot)
+	_valid_targets = _get_sorted_targets()
 
 	if _valid_targets.is_empty():
 		_target_index = 0  # キャンセル選択状態（size=0 なので 0 >= size は true）
@@ -348,8 +331,8 @@ func _update_cursor() -> void:
 
 
 ## 有効なターゲットを前方±45°優先・距離順でソートして返す
-func _get_sorted_targets(slot: AttackSlot) -> Array[Character]:
-	return _sort_targets(_get_valid_targets(slot))
+func _get_sorted_targets() -> Array[Character]:
+	return _sort_targets(_get_valid_targets())
 
 
 ## 前方±45°の敵を距離順 → その他の敵を距離順の順でソート
@@ -385,17 +368,14 @@ func _dist_to(target: Character) -> float:
 
 
 ## 攻撃キーが現在ホールド中かを返す
-func _is_slot_held(slot: AttackSlot) -> bool:
-	match slot:
-		AttackSlot.Z: return Input.is_action_pressed("attack_melee")
-		AttackSlot.X: return Input.is_action_pressed("attack_ranged")
-	return false
+func _is_slot_held() -> bool:
+	return Input.is_action_pressed("attack")
 
 
-## 指定スロットの有効なターゲット一覧を返す（ソートなし）
+## 有効なターゲット一覧を返す（ソートなし）
 ## "melee" → マンハッタン距離、"ranged"/"ranged_area" → ユークリッド距離
-func _get_valid_targets(slot: AttackSlot) -> Array[Character]:
-	var sd:        Dictionary = _get_slot(slot)
+func _get_valid_targets() -> Array[Character]:
+	var sd:        Dictionary = _get_slot()
 	var action:    String     = str(sd.get("action", "melee"))
 	var range_val: int        = int(sd.get("range",  1))
 	var result: Array[Character] = []

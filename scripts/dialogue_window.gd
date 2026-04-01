@@ -82,10 +82,13 @@ func _process(delta: float) -> void:
 	elif Input.is_action_just_pressed("ui_down"):
 		_choice_index = (_choice_index + 1) % _choices.size()
 		_control.queue_redraw()
-	elif Input.is_action_just_pressed("attack_melee") \
-			or Input.is_action_just_pressed("ui_accept"):
+	elif Input.is_action_just_pressed("attack") \
+			or Input.is_action_just_pressed("ui_accept") \
+			or Input.is_action_just_pressed("ui_right"):
 		choice_confirmed.emit(_choices[_choice_index])
-	elif Input.is_action_just_pressed("ui_cancel"):
+	elif Input.is_action_just_pressed("ui_cancel") \
+			or Input.is_action_just_pressed("menu_back") \
+			or Input.is_action_just_pressed("ui_left"):
 		hide_dialogue()
 		dismissed.emit()
 
@@ -268,7 +271,7 @@ func _draw_panel(field_x: float, field_w: float, vp_h: float, gs_f: float) -> vo
 	# ── 操作ヒント ────────────────────────────────────────
 	_control.draw_string(_font,
 		Vector2(px + pad, py + panel_h - pad * 0.6),
-		"↑↓ : 選択    Z / Enter : 決定    Esc : 閉じる",
+		"↑↓ : 選択    Z / 右 : 決定    X / 左 / Esc : 閉じる",
 		HORIZONTAL_ALIGNMENT_LEFT, -1, fs_hint, Color(0.48, 0.48, 0.58))
 
 

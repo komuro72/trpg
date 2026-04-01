@@ -174,7 +174,7 @@ func _handle_input() -> void:
 				_policy_cursor = (_policy_cursor - 1 + PRESETS.size()) % PRESETS.size()
 			elif Input.is_action_just_pressed("ui_right"):
 				_policy_cursor = (_policy_cursor + 1) % PRESETS.size()
-			elif Input.is_action_just_pressed("attack_melee") \
+			elif Input.is_action_just_pressed("attack") \
 					or Input.is_action_just_pressed("ui_accept"):
 				if _is_editable():
 					_apply_preset(_policy_cursor)
@@ -185,7 +185,8 @@ func _handle_input() -> void:
 					_col_cursor    = 0  # 操作列から開始
 				else:
 					_focus_area = _FocusArea.CLOSE
-			elif Input.is_action_just_pressed("ui_cancel"):
+			elif Input.is_action_just_pressed("ui_cancel") \
+					or Input.is_action_just_pressed("menu_back"):
 				close_window()
 
 		_FocusArea.MEMBER_TABLE:
@@ -197,11 +198,14 @@ func _handle_input() -> void:
 					_submenu_cursor = (_submenu_cursor - 1 + SUBMENU_ITEMS.size()) % SUBMENU_ITEMS.size()
 				elif Input.is_action_just_pressed("ui_down"):
 					_submenu_cursor = (_submenu_cursor + 1) % SUBMENU_ITEMS.size()
-				elif Input.is_action_just_pressed("attack_melee") \
-						or Input.is_action_just_pressed("ui_accept"):
+				elif Input.is_action_just_pressed("attack") \
+						or Input.is_action_just_pressed("ui_accept") \
+						or Input.is_action_just_pressed("ui_right"):
 					_execute_submenu(_member_cursor, _submenu_cursor)
 					_submenu_open = false
-				elif Input.is_action_just_pressed("ui_cancel"):
+				elif Input.is_action_just_pressed("ui_cancel") \
+						or Input.is_action_just_pressed("menu_back") \
+						or Input.is_action_just_pressed("ui_left"):
 					_submenu_open = false
 			else:
 				if Input.is_action_just_pressed("ui_up"):
@@ -215,10 +219,19 @@ func _handle_input() -> void:
 					else:
 						_member_cursor += 1
 				elif Input.is_action_just_pressed("ui_left"):
-					_col_cursor = (_col_cursor - 1 + TOTAL_COLS) % TOTAL_COLS
+					if _col_cursor == 0:
+						# 名前列左キー：ウィンドウを閉じる
+						close_window()
+					else:
+						_col_cursor = (_col_cursor - 1 + TOTAL_COLS) % TOTAL_COLS
 				elif Input.is_action_just_pressed("ui_right"):
-					_col_cursor = (_col_cursor + 1) % TOTAL_COLS
-				elif Input.is_action_just_pressed("attack_melee") \
+					if _col_cursor == 0:
+						# 名前列右キー：サブメニューを開く
+						_submenu_cursor = 0
+						_submenu_open   = true
+					else:
+						_col_cursor = (_col_cursor + 1) % TOTAL_COLS
+				elif Input.is_action_just_pressed("attack") \
 						or Input.is_action_just_pressed("ui_accept"):
 					if _col_cursor == 0:
 						# 名前列：サブメニューを開く
@@ -228,7 +241,8 @@ func _handle_input() -> void:
 						# 1..6 列：リーダー操作中のみ値変更可
 						if _is_editable():
 							_cycle_member_col(_member_cursor, _col_cursor - 1, +1)
-				elif Input.is_action_just_pressed("ui_cancel"):
+				elif Input.is_action_just_pressed("ui_cancel") \
+						or Input.is_action_just_pressed("menu_back"):
 					close_window()
 
 		_FocusArea.CLOSE:
@@ -239,9 +253,10 @@ func _handle_input() -> void:
 				elif Input.is_action_just_pressed("ui_down"):
 					var entries := _message_window.log_entries if _message_window != null else []
 					_log_scroll = mini(_log_scroll + 1, maxi(0, entries.size() - 1))
-				elif Input.is_action_just_pressed("attack_melee") \
+				elif Input.is_action_just_pressed("attack") \
 						or Input.is_action_just_pressed("ui_accept") \
-						or Input.is_action_just_pressed("ui_cancel"):
+						or Input.is_action_just_pressed("ui_cancel") \
+						or Input.is_action_just_pressed("menu_back"):
 					_log_mode = false
 			else:
 				if Input.is_action_just_pressed("ui_up"):
@@ -250,14 +265,17 @@ func _handle_input() -> void:
 						_member_cursor = members_count - 1
 					else:
 						_focus_area = _FocusArea.GLOBAL_POLICY
-				elif Input.is_action_just_pressed("attack_melee") \
-						or Input.is_action_just_pressed("ui_accept"):
-					# ログ行でZを押すとログモードを開閉
+				elif Input.is_action_just_pressed("attack") \
+						or Input.is_action_just_pressed("ui_accept") \
+						or Input.is_action_just_pressed("ui_right"):
+					# ログ行でZ/右キーを押すとログモードを開始
 					_log_mode   = true
 					_log_scroll = 0
 					if _message_window != null:
 						_log_scroll = maxi(0, _message_window.log_entries.size() - 1)
-				elif Input.is_action_just_pressed("ui_cancel"):
+				elif Input.is_action_just_pressed("ui_cancel") \
+						or Input.is_action_just_pressed("menu_back") \
+						or Input.is_action_just_pressed("ui_left"):
 					close_window()
 
 
@@ -291,15 +309,18 @@ func _handle_item_input() -> void:
 				_item_cursor = maxi(0, _item_cursor - 1)
 			elif Input.is_action_just_pressed("ui_down"):
 				_item_cursor = mini(_cached_unequipped.size() - 1, _item_cursor + 1)
-			elif Input.is_action_just_pressed("attack_melee") \
-					or Input.is_action_just_pressed("ui_accept"):
+			elif Input.is_action_just_pressed("attack") \
+					or Input.is_action_just_pressed("ui_accept") \
+					or Input.is_action_just_pressed("ui_right"):
 				if not _cached_unequipped.is_empty() and _item_cursor < _cached_unequipped.size():
 					_selected_item = _cached_unequipped[_item_cursor] as Dictionary
 					_action_items  = _build_action_items(_item_char, _selected_item)
 					if not _action_items.is_empty():
 						_action_cursor = 0
 						_item_mode     = _ItemMode.ACTION_MENU
-			elif Input.is_action_just_pressed("ui_cancel"):
+			elif Input.is_action_just_pressed("ui_cancel") \
+					or Input.is_action_just_pressed("menu_back") \
+					or Input.is_action_just_pressed("ui_left"):
 				_item_mode = _ItemMode.OFF
 
 		_ItemMode.ACTION_MENU:
@@ -307,8 +328,9 @@ func _handle_item_input() -> void:
 				_action_cursor = (_action_cursor - 1 + _action_items.size()) % _action_items.size()
 			elif Input.is_action_just_pressed("ui_down"):
 				_action_cursor = (_action_cursor + 1) % _action_items.size()
-			elif Input.is_action_just_pressed("attack_melee") \
-					or Input.is_action_just_pressed("ui_accept"):
+			elif Input.is_action_just_pressed("attack") \
+					or Input.is_action_just_pressed("ui_accept") \
+					or Input.is_action_just_pressed("ui_right"):
 				var action: String = _action_items[_action_cursor] as String
 				if action == "装備する":
 					_do_equip(_item_char, _selected_item)
@@ -322,7 +344,9 @@ func _handle_item_input() -> void:
 				elif action == "渡す":
 					_transfer_cursor = 0
 					_item_mode       = _ItemMode.TRANSFER_SELECT
-			elif Input.is_action_just_pressed("ui_cancel"):
+			elif Input.is_action_just_pressed("ui_cancel") \
+					or Input.is_action_just_pressed("menu_back") \
+					or Input.is_action_just_pressed("ui_left"):
 				_item_mode = _ItemMode.ITEM_LIST
 
 		_ItemMode.TRANSFER_SELECT:
@@ -331,8 +355,9 @@ func _handle_item_input() -> void:
 				_transfer_cursor = maxi(0, _transfer_cursor - 1)
 			elif Input.is_action_just_pressed("ui_down"):
 				_transfer_cursor = mini(targets.size() - 1, _transfer_cursor + 1)
-			elif Input.is_action_just_pressed("attack_melee") \
-					or Input.is_action_just_pressed("ui_accept"):
+			elif Input.is_action_just_pressed("attack") \
+					or Input.is_action_just_pressed("ui_accept") \
+					or Input.is_action_just_pressed("ui_right"):
 				if _transfer_cursor < targets.size():
 					var to_ch := targets[_transfer_cursor] as Character
 					var iname: String = _selected_item.get("item_name", "？") as String
@@ -344,7 +369,9 @@ func _handle_item_input() -> void:
 					_cached_unequipped = _get_unequipped_items(_item_char)
 					_item_cursor = mini(_item_cursor, maxi(0, _cached_unequipped.size() - 1))
 					_item_mode   = _ItemMode.ITEM_LIST
-			elif Input.is_action_just_pressed("ui_cancel"):
+			elif Input.is_action_just_pressed("ui_cancel") \
+					or Input.is_action_just_pressed("menu_back") \
+					or Input.is_action_just_pressed("ui_left"):
 				_item_mode = _ItemMode.ACTION_MENU
 
 
