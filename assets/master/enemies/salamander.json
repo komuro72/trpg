@@ -3,6 +3,8 @@
   "name": "サラマンダー",
   "hp": 28,
   "magic_power": 10,
+  "physical_resistance": 0.05,
+  "magic_resistance": 0.06,
   "defense": 2,
   "is_flying": false,
   "attack_type": "magic",

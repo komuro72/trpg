@@ -4,6 +4,8 @@
   "hp": 22,
   "mp": 30,
   "magic_power": 12,
+  "physical_resistance": 0.02,
+  "magic_resistance": 0.10,
   "defense": 1,
   "is_flying": false,
   "attack_type": "magic",

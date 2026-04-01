@@ -5,6 +5,8 @@
   "base_hp": 70,
   "base_magic_power": 15,
   "base_defense": 2,
+  "base_physical_resistance": 0.02,
+  "base_magic_resistance": 0.10,
   "pre_delay": 0.5,
   "post_delay": 0.6,
   "is_flying": false,

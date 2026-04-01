@@ -427,31 +427,33 @@ func _get_valid_targets(slot: AttackSlot) -> Array[Character]:
 func _execute_melee(target: Character, slot_data: Dictionary) -> void:
 	var dmg_mult: float = float(slot_data.get("damage_mult", 1.0))
 	character.face_toward(target.grid_pos)
-	var dir_mult   := Character.get_direction_multiplier(character, target)
 	var raw_damage := int(float(character.attack_power) * dmg_mult)
+	var is_magic   := (slot_data.get("type", "physical") as String) == "magic"
 	SoundManager.play_attack(character)
-	target.take_damage(raw_damage, dir_mult, character)
+	target.take_damage(raw_damage, 1.0, character, is_magic)
 	SoundManager.play_hit(character)
 	var skill_name: String = str(slot_data.get("name", "近接"))
-	print("[Player] %s → %s  スキル%.1fx 方向%.1fx  HP:%d/%d" % \
-			[skill_name, target.name, dmg_mult, dir_mult, target.hp, target.max_hp])
+	print("[Player] %s → %s  スキル%.1fx  HP:%d/%d" % \
+			[skill_name, target.name, dmg_mult, target.hp, target.max_hp])
 
 
 func _execute_ranged(target: Character, slot_data: Dictionary) -> void:
 	var dmg_mult: float = float(slot_data.get("damage_mult", 1.0))
 	character.face_toward(target.grid_pos)
 	var raw_damage := int(float(character.attack_power) * dmg_mult)
+	var is_magic   := (slot_data.get("type", "physical") as String) == "magic"
 	SoundManager.play_attack(character)
-	_spawn_projectile(target, raw_damage)
+	_spawn_projectile(target, raw_damage, is_magic)
 
 
-func _spawn_projectile(target: Character, raw_damage: int) -> void:
+func _spawn_projectile(target: Character, raw_damage: int, is_magic: bool = false) -> void:
 	if map_node == null:
 		return
 	var proj := Projectile.new()
 	proj.z_index = 2
 	map_node.add_child(proj)
-	proj.setup(character.position, target.position, true, target, raw_damage, 1.0)
+	proj.setup(character.position, target.position, true, target, raw_damage, 1.0,
+			character, is_magic)
 
 
 # --------------------------------------------------------------------------

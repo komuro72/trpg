@@ -546,19 +546,19 @@ func _execute_attack() -> void:
 				var proj := Projectile.new()
 				proj.z_index = 2
 				map_node.add_child(proj)
+				var is_magic := (atype == "magic")
 				proj.setup(_member.position, _attack_target.position,
-						true, _attack_target, dmg_power, 1.0)
+						true, _attack_target, dmg_power, 1.0, _member, is_magic)
 		"dive":
 			# 降下攻撃：方向倍率なし（飛行中の奇襲）、降下エフェクト表示
 			SoundManager.play_attack(_member)
-			_attack_target.take_damage(dmg_power, 1.0, _member)
+			_attack_target.take_damage(dmg_power, 1.0, _member, false)
 			SoundManager.play_hit(_member)
 			_spawn_dive_effect()
 		_:
 			# melee（近接攻撃）
 			SoundManager.play_attack(_member)
-			var multiplier := Character.get_direction_multiplier(_member, _attack_target)
-			_attack_target.take_damage(dmg_power, multiplier, _member)
+			_attack_target.take_damage(dmg_power, 1.0, _member, false)
 			SoundManager.play_hit(_member)
 
 

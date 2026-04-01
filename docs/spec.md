@@ -1996,16 +1996,89 @@ assets/master/items/
 | `scripts/party_manager.gd` | `signal party_wiped(items, killer)` 追加; 全滅時にシグナル発火 |
 | `scripts/game_map.gd` | `party_wiped` シグナルを受けてプレイヤーパーティーへ転送 |
 
-### Phase 10-2: 装備システム
+### Phase 10-2: 装備システム ✅ 完了
+
+#### 耐性ステータスの追加
+
+- `CharacterData` に `physical_resistance: float`・`magic_resistance: float`・`defense_accuracy: float` を追加
+- クラス JSON（assets/master/classes/*.json）に `base_physical_resistance`・`base_magic_resistance` を追加
+- 敵 JSON（assets/master/enemies/*.json）にも同フィールドを追加
+- `CharacterGenerator._calc_stats()` で defense_mult を使って耐性計算（上限 0.75 でクランプ）
+- `CharacterData.get_total_physical_resistance()` / `get_total_magic_resistance()`: 素値＋装備補正を合算し 0.95 でクランプ
+
+#### 初期装備の付与
+
+- `CharacterData.apply_initial_items(items: Array)`: items から `equipped: true` のものを装備スロットにセット
+- `CharacterData._equip_item(item)`: category に応じて equipped_weapon / equipped_armor / equipped_shield にセット
+- `dungeon_handcrafted.json` の player_party・npc_party メンバーに `items` フィールドで初期装備を定義
+- `game_map._setup_hero()` と `npc_manager.setup()` が `apply_initial_items()` を呼び出す
+
+#### ダメージ計算への装備補正反映
+
+`character.gd` の `take_damage(raw, mult, attacker=null, attack_is_magic=false)` を全面改訂:
+
+1. **攻撃方向判定**（`_calc_attack_direction(attacker)`）
+   - atan2 で攻撃者→防御者方向角と防御者向き角の差を計算
+   - 正面 ±45°→ "front"、背面 ±45°→ "back"、右 ±45°→ "right"、左→ "left"
+   - 背面攻撃は防御判定をスキップ
+2. **防御判定**（`defense_accuracy` で成功/失敗）
+   - 成功時 `_calc_block_power(direction)` でカット量を決定
+     - front: weapon_block + shield_block / left: shield_block / right: weapon_block / back: 0
+3. **耐性適用**（物理 or 魔法耐性で割合軽減）
+   - 残ダメージ × (1 - resistance)。最低 1 ダメージ保証
+
+- `player_controller._execute_ranged()`: is_magic フラグを `_spawn_projectile()` に渡す
+- `unit_ai._execute_attack()` ranged/magic: `is_magic = (atype == "magic")` を projectile に渡す
+- `projectile.gd.setup()`: attacker・is_magic 引数追加。着弾時に `take_damage(d, m, attacker, is_magic)` を呼ぶ
+
+#### ドロップ処理（MessageWindow 通知追加）
+
+- `game_map._on_enemy_party_wiped()`: メッセージウィンドウに「〇〇が N 点のアイテムを入手した」を表示
+
+#### item_pickup 指示の追加
+
+- `Character.current_order` に `"item_pickup": "aggressive"` をデフォルト追加
+- `OrderWindow.COL_OPTIONS/COL_LABELS/COL_HEADERS/COL_KEYS` に 6 列目として取得指示を追加
+  - aggressive=積極的に拾う / passive=近くのみ / avoid=拾わない
+- `PRESET_TABLE` に item_pickup 列を追加（全 6 preset 更新）
+- `_apply_preset()` で item_pickup を current_order に反映
+- `LeftPanel` 行2: 隊形+低HP+取得 の 3 略称表示に変更
+
+#### OrderWindow 改修（Phase 10-2 追加分）
+
+- **6a: 名前列サブメニュー**
+  - 「操作」列を削除。名前列（col 0）をインタラクティブ化
+  - Z 押下でサブメニュー表示（操作切替 / 装備（未実装） / アイテム受渡（未実装））
+  - `_submenu_open / _submenu_cursor` で状態管理
+  - `_execute_submenu()` で操作切替を実行（装備/アイテム受渡はスタブ）
+  - `_get_col_xs()` から control_r（0.10）を削除、name_r を 0.22 に拡大
+- **6b: ステータス行の追加**
+  - `_get_stat_rows()` に物理耐性・魔法耐性行を追加（`"pct"` type: 0-100% 表示）
+  - 攻撃力・魔法力の bonus に `get_weapon_attack_bonus()` / `get_weapon_magic_bonus()` を反映
+  - stat 描画に `"pct"` ケースを追加（素値%・補正値%・最終値% 表示）
+- **6c: ログ行**
+  - 「閉じる」行を「ログ」行に変更（`_FocusArea.CLOSE` = ログ行）
+  - Z 押下でログモード（`_log_mode = true`）に入り最新エントリ位置にスクロール
+  - ログモード中 ↑↓ でスクロール、Z/Enter/Esc でログモード終了
+  - `MessageWindow.log_entries: Array[String]`（最大 50 件）を追加。`show_message()` 呼び出し時に自動追記
 
 #### 変更ファイル
 | ファイル | 変更内容 |
 |---------|---------|
-| `scripts/character_data.gd` | `equipped_weapon / equipped_armor / equipped_shield: ItemData` 追加 |
-| `scripts/character_data.gd` | `get_stat_total(key)` メソッド追加（素値 + 装備補正値の合計） |
-| `scripts/character_data.gd` | `defense_accuracy` フィールド追加（旧 `evasion` からリネーム） |
-| `scripts/character.gd` | `take_damage()` を新しい被ダメージ計算フローに更新 |
-| `scripts/character.gd` | `get_attack_direction()` メソッド追加（正面/左側面/右側面/背面を返す） |
+| `scripts/character_data.gd` | `physical_resistance`, `magic_resistance`, `defense_accuracy`, `equipped_weapon/armor/shield`, `inventory` 追加; `apply_initial_items()`, `_equip_item()`, `get_weapon_*_bonus()`, `get_total_*_resistance()` 追加 |
+| `scripts/character_generator.gd` | `_calc_stats()` で耐性計算追加。`generate_character()` でクラス JSON から耐性読み込み |
+| `scripts/character.gd` | `take_damage()` 全面改訂（atan2方向判定・防御強度カット・耐性軽減）; `_calc_attack_direction()`, `_calc_block_power()` 追加 |
+| `scripts/projectile.gd` | `setup()` に attacker・is_magic 引数追加; `_on_arrive()` で `take_damage(d, m, attacker, is_magic)` 呼び出し |
+| `scripts/player_controller.gd` | `_execute_melee/ranged()` から方向倍率を削除; is_magic フラグを take_damage/projectile に渡す |
+| `scripts/unit_ai.gd` | ranged/magic projectile に `_member`・`is_magic` を渡す |
+| `scripts/order_window.gd` | 名前列サブメニュー・物理/魔法耐性行・pct type・ログ行追加; 操作列削除 |
+| `scripts/left_panel.gd` | 行2 を「隊形+低HP+取得」の3略称に変更 |
+| `scripts/message_window.gd` | `log_entries: Array[String]` 追加; `show_message()` で自動追記 |
+| `scripts/game_map.gd` | `_on_enemy_party_wiped()` で MessageWindow 通知; `order_window.setup(party, message_window)` |
+| `scripts/npc_manager.gd` | `setup()` で `apply_initial_items()` 呼び出し |
+| `assets/master/classes/*.json` | `base_physical_resistance`, `base_magic_resistance` 追加 |
+| `assets/master/enemies/*.json` | `physical_resistance`, `magic_resistance` 追加 |
+| `assets/master/maps/dungeon_handcrafted.json` | player_party メンバーに初期装備 items フィールド追加 |
 
 ### Phase 10-3: 消耗品の使用
 

@@ -3,6 +3,8 @@
   "name": "ゴブリン",
   "hp": 30,
   "attack_power": 5,
+  "physical_resistance": 0.03,
+  "magic_resistance": 0.02,
   "defense": 2,
   "is_flying": false,
   "rank": "C",

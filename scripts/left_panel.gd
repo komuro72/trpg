@@ -196,13 +196,14 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 		Vector2(tx, mp_bar_y + bar_h + 10.0),
 		cond, HORIZONTAL_ALIGNMENT_LEFT, tw, 10, cond_col)
 
-	# 指示状態（5項目を1文字略称で2行表示）
-	# 行1: 移動+戦闘+標的  行2: 隊形+低HP
+	# 指示状態（6項目を1文字略称で2行表示）
+	# 行1: 移動+戦闘+標的  行2: 隊形+低HP+取得
 	# 移動: 探=explore 室=same_room 密=cluster 守=guard_room 待=standby
 	# 戦闘: 積=aggressive 援=support 待=standby
 	# 標的: 近=nearest 弱=weakest 同=same_as_leader
 	# 隊形: 囲=surround 前=front 後=rear 同=same_as_leader
 	# 低HP: 継=keep_fighting 退=retreat 逃=flee
+	# 取得: 拾=aggressive 近=passive 無=avoid
 	var ord: Dictionary = c.current_order
 	var move_a: String  = {"explore": "探", "same_room": "室", "cluster": "密",
 		"guard_room": "守", "standby": "待"}.get(
@@ -216,6 +217,8 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 		ord.get("target",           "nearest")   as String, "近") as String
 	var lowh_a: String   = {"keep_fighting": "継", "retreat": "退", "flee": "逃"}.get(
 		ord.get("on_low_hp",        "retreat")   as String, "退") as String
+	var pickup_a: String = {"aggressive": "拾", "passive": "近", "avoid": "無"}.get(
+		ord.get("item_pickup",      "aggressive") as String, "拾") as String
 	var ord_color := Color(0.55, 0.90, 0.65)
 	_control.draw_string(_font,
 		Vector2(tx, mp_bar_y + bar_h + 22.0),
@@ -223,7 +226,7 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 		HORIZONTAL_ALIGNMENT_LEFT, tw, 10, ord_color)
 	_control.draw_string(_font,
 		Vector2(tx, mp_bar_y + bar_h + 34.0),
-		"%s %s" % [bform_a, lowh_a],
+		"%s %s %s" % [bform_a, lowh_a, pickup_a],
 		HORIZONTAL_ALIGNMENT_LEFT, tw, 10, ord_color)
 
 	# カード下区切り線

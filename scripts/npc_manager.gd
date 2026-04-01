@@ -24,9 +24,13 @@ func setup(spawn_list: Array, player: Character, map_data: MapData, drop_items: 
 	_map_data = map_data
 	for spawn_info: Variant in spawn_list:
 		var info     := spawn_info as Dictionary
-		var class_id := info.get("class_id", "fighter-sword") as String
+		var class_id: String = info.get("character_id", info.get("class_id", "fighter-sword")) as String
 		var pos      := Vector2i(int(info.get("x", 0)), int(info.get("y", 0)))
+		var items    := info.get("items", []) as Array
 		var member   := _spawn_member(class_id, pos)
+		# 初期装備を付与する
+		if member.character_data != null and not items.is_empty():
+			member.character_data.apply_initial_items(items)
 		_members.append(member)
 
 

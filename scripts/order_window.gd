@@ -18,14 +18,14 @@ signal switch_requested(new_character: Character)
 
 const PRESETS: Array[String] = ["攻撃", "防衛", "待機", "追従", "撤退", "探索"]
 
-## プリセット → [combat, battle_formation, move, target, on_low_hp]
+## プリセット → [combat, battle_formation, move, target, on_low_hp, item_pickup]
 const PRESET_TABLE: Array = [
-	["aggressive", "surround", "same_room", "nearest",        "keep_fighting"],
-	["support",    "surround", "cluster",   "same_as_leader", "retreat"],
-	["standby",    "surround", "cluster",   "nearest",        "retreat"],
-	["support",    "surround", "cluster",   "same_as_leader", "retreat"],
-	["standby",    "surround", "cluster",   "nearest",        "flee"],
-	["aggressive", "surround", "explore",   "nearest",        "retreat"],
+	["aggressive", "surround", "same_room", "nearest",        "keep_fighting", "aggressive"],
+	["support",    "surround", "cluster",   "same_as_leader", "retreat",       "passive"],
+	["standby",    "surround", "cluster",   "nearest",        "retreat",       "avoid"],
+	["support",    "surround", "cluster",   "same_as_leader", "retreat",       "passive"],
+	["standby",    "surround", "cluster",   "nearest",        "flee",          "avoid"],
+	["aggressive", "surround", "explore",   "nearest",        "retreat",       "aggressive"],
 ]
 
 const COL_OPTIONS: Array = [
@@ -34,6 +34,7 @@ const COL_OPTIONS: Array = [
 	["aggressive", "support", "standby"],
 	["nearest", "weakest", "same_as_leader"],
 	["keep_fighting", "retreat", "flee"],
+	["aggressive", "passive", "avoid"],
 ]
 
 const COL_LABELS: Array = [
@@ -42,11 +43,12 @@ const COL_LABELS: Array = [
 	["積極攻撃", "援護", "待機"],
 	["最近傍", "最弱", "リーダーと同じ"],
 	["戦い続ける", "後退", "逃走"],
+	["積極的に拾う", "近くのみ", "拾わない"],
 ]
 
-const COL_HEADERS: Array[String] = ["移動", "隊形", "戦闘", "ターゲット", "低HP"]
-const COL_KEYS: Array[String] = ["move", "battle_formation", "combat", "target", "on_low_hp"]
-const TOTAL_COLS := 6
+const COL_HEADERS: Array[String] = ["移動", "隊形", "戦闘", "ターゲット", "低HP", "取得"]
+const COL_KEYS: Array[String] = ["move", "battle_formation", "combat", "target", "on_low_hp", "item_pickup"]
+const TOTAL_COLS := 7
 
 ## 攻撃タイプの表示名
 const ATTACK_TYPE_LABELS: Dictionary = {
@@ -55,14 +57,21 @@ const ATTACK_TYPE_LABELS: Dictionary = {
 
 # ── 内部状態 ──────────────────────────────────────────────────────────────────
 
-enum _FocusArea { GLOBAL_POLICY, MEMBER_TABLE, CLOSE }
+enum _FocusArea { GLOBAL_POLICY, MEMBER_TABLE, CLOSE, LOG }
+
+## 名前列Z押下時のサブメニュー項目
+const SUBMENU_ITEMS: Array[String] = ["操作切替", "装備（未実装）", "アイテム受渡（未実装）"]
 
 var _party:          Party
 var _focus_area:     _FocusArea = _FocusArea.GLOBAL_POLICY
 var _policy_cursor:  int = 0
 var _applied_policy: int = -1
 var _member_cursor:  int = 0
-var _col_cursor:     int = 1
+var _col_cursor:     int = 0
+
+## 名前列サブメニュー状態
+var _submenu_open:   bool = false
+var _submenu_cursor: int  = 0
 
 var _controlled_char: Character = null
 var _sorted_members: Array = []
@@ -73,11 +82,19 @@ var _font:    Font
 ## front/face 画像テクスチャキャッシュ（パス → Texture2D）
 var _texture_cache: Dictionary = {}
 
+## MessageWindow 参照（ログ表示に使用）
+var _message_window: MessageWindow = null
+
+## ログ表示モード・スクロール
+var _log_mode:   bool = false
+var _log_scroll: int  = 0
+
 
 # ── セットアップ ──────────────────────────────────────────────────────────────
 
-func setup(party: Party) -> void:
-	_party = party
+func setup(party: Party, message_window: MessageWindow = null) -> void:
+	_party          = party
+	_message_window = message_window
 
 
 func set_controlled(ch: Character) -> void:
@@ -96,6 +113,8 @@ func open_window() -> void:
 
 func close_window() -> void:
 	visible = false
+	_submenu_open = false
+	_log_mode     = false
 	closed.emit()
 
 
@@ -148,52 +167,95 @@ func _handle_input() -> void:
 				close_window()
 
 		_FocusArea.MEMBER_TABLE:
-			if Input.is_action_just_pressed("ui_up"):
-				if _member_cursor <= 0:
-					_focus_area = _FocusArea.GLOBAL_POLICY
-				else:
-					_member_cursor -= 1
-			elif Input.is_action_just_pressed("ui_down"):
-				if _member_cursor >= members_count - 1:
-					_focus_area = _FocusArea.CLOSE
-				else:
-					_member_cursor += 1
-			elif Input.is_action_just_pressed("ui_left"):
-				_col_cursor = (_col_cursor - 1 + TOTAL_COLS) % TOTAL_COLS
-			elif Input.is_action_just_pressed("ui_right"):
-				_col_cursor = (_col_cursor + 1) % TOTAL_COLS
-			elif Input.is_action_just_pressed("attack_melee") \
-					or Input.is_action_just_pressed("ui_accept"):
-				if _col_cursor == 0:
-					# 操作列：常に切替可（リーダーでなくても）
-					if _member_cursor < _sorted_members.size():
-						var ch := _sorted_members[_member_cursor] as Character
-						if is_instance_valid(ch):
-							var already := _controlled_char != null \
-								and is_instance_valid(_controlled_char) \
-								and ch == _controlled_char
-							if not already:
-								switch_requested.emit(ch)
-								_controlled_char = ch
-				else:
-					# 1..5 列：リーダー操作中のみ値変更可
-					if _is_editable():
-						_cycle_member_col(_member_cursor, _col_cursor - 1, +1)
-			elif Input.is_action_just_pressed("ui_cancel"):
-				close_window()
+			if _submenu_open:
+				# サブメニュー操作（名前列Z押下後）
+				if Input.is_action_just_pressed("ui_up"):
+					_submenu_cursor = (_submenu_cursor - 1 + SUBMENU_ITEMS.size()) % SUBMENU_ITEMS.size()
+				elif Input.is_action_just_pressed("ui_down"):
+					_submenu_cursor = (_submenu_cursor + 1) % SUBMENU_ITEMS.size()
+				elif Input.is_action_just_pressed("attack_melee") \
+						or Input.is_action_just_pressed("ui_accept"):
+					_execute_submenu(_member_cursor, _submenu_cursor)
+					_submenu_open = false
+				elif Input.is_action_just_pressed("ui_cancel"):
+					_submenu_open = false
+			else:
+				if Input.is_action_just_pressed("ui_up"):
+					if _member_cursor <= 0:
+						_focus_area = _FocusArea.GLOBAL_POLICY
+					else:
+						_member_cursor -= 1
+				elif Input.is_action_just_pressed("ui_down"):
+					if _member_cursor >= members_count - 1:
+						_focus_area = _FocusArea.CLOSE
+					else:
+						_member_cursor += 1
+				elif Input.is_action_just_pressed("ui_left"):
+					_col_cursor = (_col_cursor - 1 + TOTAL_COLS) % TOTAL_COLS
+				elif Input.is_action_just_pressed("ui_right"):
+					_col_cursor = (_col_cursor + 1) % TOTAL_COLS
+				elif Input.is_action_just_pressed("attack_melee") \
+						or Input.is_action_just_pressed("ui_accept"):
+					if _col_cursor == 0:
+						# 名前列：サブメニューを開く
+						_submenu_cursor = 0
+						_submenu_open   = true
+					else:
+						# 1..6 列：リーダー操作中のみ値変更可
+						if _is_editable():
+							_cycle_member_col(_member_cursor, _col_cursor - 1, +1)
+				elif Input.is_action_just_pressed("ui_cancel"):
+					close_window()
 
 		_FocusArea.CLOSE:
-			if Input.is_action_just_pressed("ui_up"):
-				if members_count > 0:
-					_focus_area    = _FocusArea.MEMBER_TABLE
-					_member_cursor = members_count - 1
-				else:
-					_focus_area = _FocusArea.GLOBAL_POLICY
-			elif Input.is_action_just_pressed("attack_melee") \
-					or Input.is_action_just_pressed("ui_accept"):
-				close_window()
-			elif Input.is_action_just_pressed("ui_cancel"):
-				close_window()
+			if _log_mode:
+				# ログ表示モード：スクロール操作
+				if Input.is_action_just_pressed("ui_up"):
+					_log_scroll = maxi(0, _log_scroll - 1)
+				elif Input.is_action_just_pressed("ui_down"):
+					var entries := _message_window.log_entries if _message_window != null else []
+					_log_scroll = mini(_log_scroll + 1, maxi(0, entries.size() - 1))
+				elif Input.is_action_just_pressed("attack_melee") \
+						or Input.is_action_just_pressed("ui_accept") \
+						or Input.is_action_just_pressed("ui_cancel"):
+					_log_mode = false
+			else:
+				if Input.is_action_just_pressed("ui_up"):
+					if members_count > 0:
+						_focus_area    = _FocusArea.MEMBER_TABLE
+						_member_cursor = members_count - 1
+					else:
+						_focus_area = _FocusArea.GLOBAL_POLICY
+				elif Input.is_action_just_pressed("attack_melee") \
+						or Input.is_action_just_pressed("ui_accept"):
+					# ログ行でZを押すとログモードを開閉
+					_log_mode   = true
+					_log_scroll = 0
+					if _message_window != null:
+						_log_scroll = maxi(0, _message_window.log_entries.size() - 1)
+				elif Input.is_action_just_pressed("ui_cancel"):
+					close_window()
+
+
+## 名前列サブメニューの選択を実行する
+func _execute_submenu(member_index: int, submenu_index: int) -> void:
+	if member_index >= _sorted_members.size():
+		return
+	var ch := _sorted_members[member_index] as Character
+	if not is_instance_valid(ch):
+		return
+	match submenu_index:
+		0:  # 操作切替：常に有効
+			var already := _controlled_char != null \
+				and is_instance_valid(_controlled_char) \
+				and ch == _controlled_char
+			if not already:
+				switch_requested.emit(ch)
+				_controlled_char = ch
+		1:  # 装備：未実装
+			pass
+		2:  # アイテム受渡：未実装
+			pass
 
 
 ## 操作中のキャラクターがパーティーリーダーなら true（指示変更可）
@@ -223,6 +285,7 @@ func _apply_preset(preset_index: int) -> void:
 			"move":             move_val,
 			"target":           p[3] as String,
 			"on_low_hp":        p[4] as String,
+			"item_pickup":      p[5] as String,
 		}
 
 
@@ -255,7 +318,7 @@ func _get_col_label(ch: Character, col_param_index: int) -> String:
 # ── ステータスデータ ──────────────────────────────────────────────────────────
 
 ## ステータス表示用の行データを生成する
-## 各要素: { "label", "type": "num"|"float"|"str"|"hp_mp", ... }
+## 各要素: { "label", "type": "num"|"float"|"str"|"hp_mp"|"pct", ... }
 func _get_stat_rows(ch: Character) -> Array:
 	var rows: Array = []
 	if ch == null or ch.character_data == null:
@@ -264,10 +327,20 @@ func _get_stat_rows(ch: Character) -> Array:
 
 	rows.append({"label": "HP",           "type": "hp_mp",  "current": ch.hp,   "max": ch.max_hp})
 	rows.append({"label": "MP",           "type": "hp_mp",  "current": ch.mp,   "max": ch.max_mp})
-	rows.append({"label": "攻撃力",        "type": "num",    "base": ch.attack_power,  "bonus": 0})
-	if ch.magic_power > 0:
-		rows.append({"label": "魔法力/回復力", "type": "num", "base": ch.magic_power, "bonus": 0})
+	rows.append({"label": "攻撃力",        "type": "num",    "base": ch.attack_power,
+		"bonus": cd.get_weapon_attack_bonus()})
+	if ch.magic_power > 0 or cd.magic_power > 0:
+		rows.append({"label": "魔法力/回復力", "type": "num", "base": ch.magic_power,
+			"bonus": cd.get_weapon_magic_bonus()})
 	rows.append({"label": "防御力",        "type": "num",    "base": ch.defense, "bonus": 0})
+	var phys_total := cd.get_total_physical_resistance()
+	var phys_bonus := phys_total - cd.physical_resistance
+	rows.append({"label": "物理耐性",      "type": "pct",
+		"base": cd.physical_resistance, "bonus": phys_bonus})
+	var mag_total := cd.get_total_magic_resistance()
+	var mag_bonus := mag_total - cd.magic_resistance
+	rows.append({"label": "魔法耐性",      "type": "pct",
+		"base": cd.magic_resistance, "bonus": mag_bonus})
 	rows.append({"label": "攻撃タイプ",    "type": "str",
 		"value": ATTACK_TYPE_LABELS.get(cd.attack_type, cd.attack_type) as String})
 	rows.append({"label": "射程(タイル)",  "type": "num",    "base": cd.attack_range, "bonus": 0})
@@ -431,18 +504,16 @@ func _on_draw() -> void:
 	var col_xs := _get_col_xs(px, panel_w, pad)
 
 	# ── ヘッダー行 ────────────────────────────────────────────────────────────
-	_control.draw_string(_font, Vector2(col_xs[0], y + row_h * 0.66),
-		"名前", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label, Color(0.55, 0.55, 0.70))
-	var op_h_col: Color = Color(1.0, 1.0, 0.3) \
+	var nm_h_col: Color = Color(1.0, 1.0, 0.3) \
 		if (_focus_area == _FocusArea.MEMBER_TABLE and _col_cursor == 0) \
 		else Color(0.55, 0.55, 0.70)
-	_control.draw_string(_font, Vector2(col_xs[1], y + row_h * 0.66),
-		"操作", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label, op_h_col)
+	_control.draw_string(_font, Vector2(col_xs[0], y + row_h * 0.66),
+		"名前", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label, nm_h_col)
 	for ci: int in range(COL_HEADERS.size()):
 		var h_col: Color = Color(1.0, 1.0, 0.3) \
 			if (_focus_area == _FocusArea.MEMBER_TABLE and ci + 1 == _col_cursor) \
 			else Color(0.55, 0.55, 0.70)
-		_control.draw_string(_font, Vector2(col_xs[ci + 2], y + row_h * 0.66),
+		_control.draw_string(_font, Vector2(col_xs[ci + 1], y + row_h * 0.66),
 			COL_HEADERS[ci], HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label, h_col)
 	y += row_h
 
@@ -461,31 +532,19 @@ func _on_draw() -> void:
 		var nm_str := cd.character_name \
 			if (cd != null and not cd.character_name.is_empty()) \
 			else String(ch.name)
-		var name_w := col_xs[1] - col_xs[0] - 4.0
-		_control.draw_string(_font, Vector2(col_xs[0], y + row_h * 0.67),
-			nm_str, HORIZONTAL_ALIGNMENT_LEFT, name_w, fs_body, Color.WHITE)
-
 		var is_controlled: bool = _controlled_char != null \
 			and is_instance_valid(_controlled_char) \
 			and ch == _controlled_char
-		var op_focused := is_mem and (_col_cursor == 0)
-		var op_txt: String
-		if is_controlled:
-			op_txt = "[操作中]"
-		elif op_focused:
-			op_txt = "▶[切替]"
-		else:
-			op_txt = "[切替]"
-		var op_color: Color
-		if is_controlled:
-			op_color = Color(0.45, 1.0, 0.55)
-		elif op_focused:
-			op_color = Color(1.0, 1.0, 0.3)
-		else:
-			op_color = Color(0.80, 0.80, 0.80)
-		var op_w := col_xs[2] - col_xs[1] - 4.0
-		_control.draw_string(_font, Vector2(col_xs[1], y + row_h * 0.67),
-			op_txt, HORIZONTAL_ALIGNMENT_LEFT, op_w, fs_body, op_color)
+		var nm_focused := is_mem and (_col_cursor == 0)
+		# 名前に操作状態を付記（操作中=★、名前列フォーカス時=▶）
+		var nm_prefix := "★" if is_controlled else ("▶" if nm_focused else "  ")
+		var nm_color: Color
+		if is_controlled:  nm_color = Color(0.45, 1.0, 0.55)
+		elif nm_focused:   nm_color = Color(1.0, 1.0, 0.3)
+		else:              nm_color = Color(0.90, 0.90, 0.90)
+		var name_w := col_xs[1] - col_xs[0] - 4.0
+		_control.draw_string(_font, Vector2(col_xs[0], y + row_h * 0.67),
+			nm_prefix + nm_str, HORIZONTAL_ALIGNMENT_LEFT, name_w, fs_body, nm_color)
 
 		for ci: int in range(COL_HEADERS.size()):
 			var lbl     := _get_col_label(ch, ci)
@@ -493,11 +552,11 @@ func _on_draw() -> void:
 			var c_col: Color = Color(1.0, 1.0, 0.3) if focused else Color(0.80, 0.80, 0.80)
 			var txt2    := "◀%s▶" % lbl if focused else lbl
 			var col_w: float
-			if ci + 3 < col_xs.size():
-				col_w = col_xs[ci + 3] - col_xs[ci + 2] - 4.0
+			if ci + 2 < col_xs.size():
+				col_w = col_xs[ci + 2] - col_xs[ci + 1] - 4.0
 			else:
-				col_w = px + panel_w - pad - col_xs[ci + 2]
-			_control.draw_string(_font, Vector2(col_xs[ci + 2], y + row_h * 0.67),
+				col_w = px + panel_w - pad - col_xs[ci + 1]
+			_control.draw_string(_font, Vector2(col_xs[ci + 1], y + row_h * 0.67),
 				txt2, HORIZONTAL_ALIGNMENT_LEFT, col_w, fs_body, c_col)
 
 		y += row_h
@@ -506,32 +565,96 @@ func _on_draw() -> void:
 	_draw_sep(px, y, panel_w, pad)
 	y += 13.0
 
-	# ── 閉じるボタン ──────────────────────────────────────────────────────────
-	var is_close := (_focus_area == _FocusArea.CLOSE)
-	if is_close:
+	# ── ログ行 ────────────────────────────────────────────────────────────────
+	var is_log_row := (_focus_area == _FocusArea.CLOSE)
+	if is_log_row:
 		_control.draw_rect(Rect2(px + 4.0, y, panel_w - 8.0, row_h),
 			Color(0.18, 0.24, 0.48, 0.70))
-	var c_col2 := Color(1.0, 1.0, 0.3) if is_close else Color(0.68, 0.68, 0.82)
-	var c_txt  := "▶  閉じる" if is_close else "    閉じる"
-	var c_tw   := _font.get_string_size(c_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_body).x
+	var log_col: Color
+	if _log_mode:     log_col = Color(0.40, 1.00, 0.80)
+	elif is_log_row:  log_col = Color(1.0, 1.0, 0.3)
+	else:             log_col = Color(0.68, 0.68, 0.82)
+	var log_prefix := "▶  " if is_log_row else "    "
+	var log_label  := log_prefix + ("ログ [表示中]" if _log_mode else "ログ")
+	var log_tw     := _font.get_string_size(log_label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_body).x
 	_control.draw_string(_font,
-		Vector2(px + panel_w * 0.5 - c_tw * 0.5, y + row_h * 0.67),
-		c_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_body, c_col2)
+		Vector2(px + panel_w * 0.5 - log_tw * 0.5, y + row_h * 0.67),
+		log_label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_body, log_col)
 	y += row_h
 
 	# ── ステータスパネル（下部） ───────────────────────────────────────────────
-	if sel_ch != null:
+	if _log_mode and _message_window != null:
+		_draw_log_section(px, y, panel_w, pad, fs_stat, stat_h)
+	elif sel_ch != null:
 		_draw_status_section(px, y, panel_w, pad, sel_ch, stat_rows, stat_h, fs_stat)
 
 	# ── 操作ヒント ────────────────────────────────────────────────────────────
-	var hint_str := "↑↓:行移動  ←→:列/方針切替  Z/Enter:切替/値切替  Tab/Esc:閉じる"
-	if not _is_editable():
-		hint_str = "↑↓:行移動  ←→:列移動  Z/Enter:操作切替  Tab/Esc:閉じる（閲覧のみ）"
+	# ── 名前列サブメニュー（オーバーレイ） ───────────────────────────────────────
+	if _submenu_open and _focus_area == _FocusArea.MEMBER_TABLE:
+		var sub_w  := 200.0
+		var sub_ih := maxf(22.0, gs_f * 0.24)
+		var sub_h  := SUBMENU_ITEMS.size() * sub_ih + 8.0
+		var row_offset := py + pad + float(fs_title) + 10.0 + 13.0 + row_h + 8.0 + 13.0 \
+			+ row_h + float(_member_cursor) * row_h
+		var sub_x := col_xs[0]
+		var sub_y := row_offset + row_h
+		_control.draw_rect(Rect2(sub_x, sub_y, sub_w, sub_h), Color(0.10, 0.10, 0.20, 0.96))
+		_control.draw_rect(Rect2(sub_x, sub_y, sub_w, sub_h),
+			Color(0.60, 0.60, 0.85, 0.90), false, 1)
+		for si: int in range(SUBMENU_ITEMS.size()):
+			var sy := sub_y + 4.0 + float(si) * sub_ih
+			var s_col: Color
+			if si == _submenu_cursor:
+				_control.draw_rect(Rect2(sub_x + 2.0, sy, sub_w - 4.0, sub_ih),
+					Color(0.25, 0.35, 0.70, 0.80))
+				s_col = Color(1.0, 1.0, 0.3)
+			else:
+				s_col = Color(0.80, 0.80, 0.90)
+			_control.draw_string(_font, Vector2(sub_x + 10.0, sy + sub_ih * 0.72),
+				SUBMENU_ITEMS[si], HORIZONTAL_ALIGNMENT_LEFT, sub_w - 14.0, fs_body, s_col)
+
+	# ── 操作ヒント ────────────────────────────────────────────────────────────────
+	var hint_str: String
+	if _log_mode:
+		hint_str = "↑↓:スクロール  Z/Enter/Esc:ログを閉じる  Tab:ウィンドウを閉じる"
+	elif _submenu_open:
+		hint_str = "↑↓:選択  Z/Enter:決定  Esc:キャンセル"
+	elif _is_editable():
+		hint_str = "↑↓:行移動  ←→:列/方針切替  Z/Enter:選択/値切替  Tab/Esc:閉じる"
+	else:
+		hint_str = "↑↓:行移動  ←→:列移動  Z/Enter:名前列で操作切替  Tab/Esc:閉じる（閲覧のみ）"
 	_control.draw_string(_font,
 		Vector2(px + pad, py + panel_h - float(fs_hint) - pad * 0.45),
 		hint_str,
 		HORIZONTAL_ALIGNMENT_LEFT, panel_w - pad * 2.0, fs_hint,
 		Color(0.46, 0.46, 0.56))
+
+
+## ログ表示セクション（MessageWindow のログエントリを一覧表示）
+func _draw_log_section(px: float, y_start: float, panel_w: float, pad: float,
+		fs_stat: int, stat_h: float) -> void:
+	var y     := y_start + 13.0
+	var avail := panel_w - pad * 2.0
+	var lbl_x := px + pad
+
+	_draw_sep(px, y_start, panel_w, pad)
+	var entries: Array[String] = _message_window.log_entries if _message_window != null else []
+	var visible_rows := 12
+	var start_idx    := maxi(0, _log_scroll - visible_rows + 1)
+	var end_idx      := mini(entries.size(), start_idx + visible_rows)
+
+	_control.draw_string(_font, Vector2(lbl_x, y + float(fs_stat)),
+		"ログ（%d件）  ↑↓:スクロール  Z/Esc:閉じる" % entries.size(),
+		HORIZONTAL_ALIGNMENT_LEFT, avail, fs_stat, Color(0.80, 0.80, 1.00))
+	y += float(fs_stat) + stat_h
+
+	for i: int in range(start_idx, end_idx):
+		var entry := entries[i] as String
+		var is_cur := (i == _log_scroll)
+		var e_col: Color = Color(1.0, 1.0, 0.3) if is_cur else Color(0.70, 0.70, 0.80)
+		_control.draw_string(_font, Vector2(lbl_x, y + stat_h * 0.75),
+			"%d: %s" % [i + 1, entry], HORIZONTAL_ALIGNMENT_LEFT, avail, fs_stat, e_col)
+		y += stat_h
 
 
 ## ステータス詳細・装備・アイテムセクションを描画する（左：front画像 / 右：ステータス数値）
@@ -637,6 +760,18 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 					"%+.2f" % bonus,     HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_bonus)
 				_control.draw_string(_font, Vector2(final_x, y + stat_h * 0.75),
 					"→ %.2f" % final_v, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, fc)
+			"pct":
+				# 耐性(0.0〜1.0)をパーセント表示（base + bonus → total%）
+				var base  : float = row.get("base",  0.0) as float
+				var bonus : float = row.get("bonus", 0.0) as float
+				var final_v := base + bonus
+				var fc := Color(1.0, 1.0, 0.55) if bonus != 0.0 else c_val
+				_control.draw_string(_font, Vector2(base_x,  y + stat_h * 0.75),
+					"%d%%" % int(base * 100.0),        HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_val)
+				_control.draw_string(_font, Vector2(bonus_x, y + stat_h * 0.75),
+					"%+d%%" % int(bonus * 100.0),      HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_bonus)
+				_control.draw_string(_font, Vector2(final_x, y + stat_h * 0.75),
+					"→ %d%%" % int(final_v * 100.0),  HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, fc)
 			"str":
 				var val: String = row.get("value", "") as String
 				_control.draw_string(_font, Vector2(base_x, y + stat_h * 0.75),
@@ -700,15 +835,13 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 # ── ユーティリティ ────────────────────────────────────────────────────────────
 
 func _get_col_xs(px: float, panel_w: float, pad: float) -> Array[float]:
-	var avail     := panel_w - pad * 2.0
-	var name_r    := 0.18
-	var control_r := 0.10
-	var item_r    := (1.0 - name_r - control_r) / float(COL_HEADERS.size())
+	var avail  := panel_w - pad * 2.0
+	var name_r := 0.22
+	var item_r := (1.0 - name_r) / float(COL_HEADERS.size())
 	var xs: Array[float] = []
-	xs.append(px + pad)
-	xs.append(px + pad + avail * name_r)
+	xs.append(px + pad)  # [0] 名前列
 	for ci: int in range(COL_HEADERS.size()):
-		xs.append(px + pad + avail * (name_r + control_r + item_r * float(ci)))
+		xs.append(px + pad + avail * (name_r + item_r * float(ci)))  # [1..n] 指示列
 	return xs
 
 

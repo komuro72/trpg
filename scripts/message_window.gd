@@ -6,12 +6,16 @@ extends CanvasLayer
 
 const DISPLAY_DURATION: float = 3.0
 const FADE_DURATION:    float = 0.5
+const LOG_MAX:          int   = 50
 
 var _control: Control
 var _font: Font
 var _message: String = ""
 var _timer:   float  = 0.0
 var _alpha:   float  = 0.0
+
+## 直近50件のメッセージログ（OrderWindow ログ表示に使用）
+var log_entries: Array[String] = []
 
 
 func _ready() -> void:
@@ -28,6 +32,9 @@ func show_message(msg: String) -> void:
 	_message = msg
 	_timer   = DISPLAY_DURATION
 	_alpha   = 1.0
+	log_entries.append(msg)
+	if log_entries.size() > LOG_MAX:
+		log_entries = log_entries.slice(log_entries.size() - LOG_MAX)
 	if _control != null:
 		_control.queue_redraw()
 

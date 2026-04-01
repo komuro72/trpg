@@ -61,6 +61,7 @@ var current_order: Dictionary = {
 	"combat":           "aggressive",
 	"target":           "nearest",
 	"on_low_hp":        "retreat",
+	"item_pickup":      "aggressive",
 }
 
 ## プレースホルダー色（素材がない場合に使用）
@@ -404,17 +405,100 @@ func get_effective_defense() -> int:
 	return defense
 
 
-## ダメージを受ける（方向倍率 × 攻撃力 − 有効防御力、最低1ダメージ保証）
-## attacker: ダメージ源のキャラクター（ドロップ帰属追跡用。null 可）
-func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character = null) -> void:
+## ダメージを受ける（Phase 10-2 装備補正対応版）
+## attack_is_magic: true なら魔法耐性を、false なら物理耐性を適用
+## attacker:        ダメージ源（方向判定・ドロップ帰属追跡用。null 可）
+func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character = null,
+		attack_is_magic: bool = false) -> void:
 	if attacker != null:
 		last_attacker = attacker
-	var actual: int = max(1, int(float(raw_amount) * multiplier) - get_effective_defense())
+
+	# 1. 防御判定（背面攻撃はスキップ）
+	var blocked := 0
+	if attacker != null and character_data != null:
+		var dir_result := _calc_attack_direction(attacker)
+		if dir_result != "back":
+			var acc := character_data.defense_accuracy if "defense_accuracy" in character_data else 0.0
+			var roll := randf()
+			if roll < acc:
+				# 成功：方向に応じた防具の防御強度でカット
+				blocked = _calc_block_power(dir_result)
+
+	# 2. 防御強度を差し引き
+	var after_block := max(0, int(float(raw_amount) * multiplier) - get_effective_defense() - blocked)
+
+	# 3. 耐性適用（線形軽減）
+	var resistance := 0.0
+	if character_data != null:
+		if attack_is_magic:
+			resistance = character_data.get_total_magic_resistance()
+		else:
+			resistance = character_data.get_total_physical_resistance()
+	var actual: int = max(1, int(float(after_block) * (1.0 - resistance)))
+
 	hp = max(0, hp - actual)
 	_spawn_hit_effect(actual)
 	SoundManager.play(SoundManager.TAKE_DAMAGE)
 	if hp <= 0:
 		die()
+
+
+## 攻撃者から見た防御側の方向を返す（"front" / "left" / "right" / "back"）
+## atan2 で4象限判定：防御側の facing を基準に攻撃者の相対角度を計算する
+func _calc_attack_direction(attacker: Character) -> String:
+	# 防御側から見た攻撃者の相対位置ベクトル（ワールド座標差）
+	var dx := attacker.grid_pos.x - grid_pos.x
+	var dy := attacker.grid_pos.y - grid_pos.y
+	if dx == 0 and dy == 0:
+		return "front"
+
+	# 攻撃が来る角度（atan2: y上向き=0、時計回り正）
+	var angle_attack := atan2(float(dy), float(dx))
+
+	# 防御側の facing 方向角度（DOWN=π/2、UP=-π/2、RIGHT=0、LEFT=π）
+	var facing_angle: float
+	match facing:
+		Direction.DOWN:  facing_angle = PI / 2.0
+		Direction.UP:    facing_angle = -PI / 2.0
+		Direction.RIGHT: facing_angle = 0.0
+		Direction.LEFT:  facing_angle = PI
+		_:               facing_angle = PI / 2.0
+
+	# 防御側の正面方向からの相対角度（-π〜π に正規化）
+	var rel := angle_attack - facing_angle
+	while rel >  PI: rel -= TAU
+	while rel < -PI: rel += TAU
+
+	# 4象限（±45° = ±π/4）で判定
+	var quarter := PI / 4.0
+	if rel >= -quarter and rel < quarter:
+		return "front"
+	elif rel >= PI - quarter or rel < -(PI - quarter):
+		return "back"
+	elif rel >= quarter:
+		return "right"
+	else:
+		return "left"
+
+
+## 方向に応じた防御強度（ブロック量）を返す
+## 戦士クラス（盾あり）：正面=盾+武器、左=盾、右=武器、背面=0
+## 盾なしクラス：正面・左右=武器のみ
+func _calc_block_power(direction: String) -> int:
+	if character_data == null:
+		return 0
+	var weapon_block := character_data.get_weapon_block_power()
+	var shield_block := character_data.get_shield_block_power()
+	var has_shield   := not character_data.equipped_shield.is_empty()
+	match direction:
+		"front":
+			return weapon_block + (shield_block if has_shield else 0)
+		"left":
+			return shield_block if has_shield else weapon_block
+		"right":
+			return weapon_block
+		_:
+			return 0
 
 
 ## ヒット位置に HitEffect を生成する（親ノードに追加してワールド座標固定）

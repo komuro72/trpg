@@ -142,6 +142,7 @@ func _setup_hero() -> void:
 	var spawn_pos := Vector2i(2, 2)
 	var class_id     := ""
 	var character_id := ""
+	var hero_items: Array = []
 	if map_data.player_parties.size() > 0:
 		var members: Array = (map_data.player_parties[0] as Dictionary).get("members", [])
 		if members.size() > 0:
@@ -149,6 +150,7 @@ func _setup_hero() -> void:
 			spawn_pos    = Vector2i(int(m.get("x", 2)), int(m.get("y", 2)))
 			class_id     = m.get("class_id",     "") as String
 			character_id = m.get("character_id", "") as String
+			hero_items   = m.get("items",        []) as Array
 
 	hero = Character.new()
 	hero.grid_pos = spawn_pos
@@ -160,6 +162,9 @@ func _setup_hero() -> void:
 	else:
 		hero_data = CharacterGenerator.generate_character(class_id)
 	hero.character_data = hero_data if hero_data != null else CharacterData.create_hero()
+	# 初期装備を付与する
+	if hero.character_data != null and not hero_items.is_empty():
+		hero.character_data.apply_initial_items(hero_items)
 	hero.name = "Hero"
 	hero.party_color = Color.WHITE
 	hero.is_leader = true
@@ -423,7 +428,7 @@ func _setup_order_window() -> void:
 	order_window = OrderWindow.new()
 	order_window.name = "OrderWindow"
 	add_child(order_window)
-	order_window.setup(party)
+	order_window.setup(party, message_window)
 	order_window.set_controlled(hero)
 	order_window.closed.connect(_on_order_window_closed)
 	order_window.switch_requested.connect(_on_switch_character_requested)
@@ -633,7 +638,10 @@ func _on_enemy_party_wiped(items: Array, killer: Character) -> void:
 	for item: Variant in items:
 		recipient.character_data.inventory.append(item)
 	SoundManager.play(SoundManager.ITEM_GET)
-	print("[GameMap] ドロップアイテム %d 個 → %s" % [items.size(), recipient.character_data.character_name])
+	var recipient_name := recipient.character_data.character_name
+	if message_window != null:
+		message_window.show_message("%s が %d 点のアイテムを入手した" % [recipient_name, items.size()])
+	print("[GameMap] ドロップアイテム %d 個 → %s" % [items.size(), recipient_name])
 
 
 ## タイル画像をプリロードする（画像がない場合はフォールバック色を使用）

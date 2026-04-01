@@ -3,6 +3,8 @@
   "name": "ゾンビ",
   "hp": 35,
   "attack_power": 6,
+  "physical_resistance": 0.10,
+  "magic_resistance": 0.02,
   "defense": 2,
   "is_flying": false,
   "attack_type": "melee",

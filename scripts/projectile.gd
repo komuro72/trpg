@@ -12,18 +12,23 @@ var _will_hit:   bool
 var _target:     Character
 var _damage:     int
 var _multiplier: float
+var _attacker:   Character
+var _is_magic:   bool
 var _done:       bool = false
 
 
 ## 発射設定。add_child 後すぐに呼ぶこと。
 func setup(from: Vector2, to: Vector2, will_hit: bool,
-		target: Character, damage: int, multiplier: float) -> void:
+		target: Character, damage: int, multiplier: float,
+		attacker: Character = null, is_magic: bool = false) -> void:
 	position    = from
 	_dest       = to
 	_will_hit   = will_hit
 	_target     = target
 	_damage     = damage
 	_multiplier = multiplier
+	_attacker   = attacker
+	_is_magic   = is_magic
 
 
 func _process(delta: float) -> void:
@@ -41,7 +46,7 @@ func _process(delta: float) -> void:
 func _on_arrive() -> void:
 	_done = true
 	if _will_hit and is_instance_valid(_target):
-		_target.take_damage(_damage, _multiplier)
+		_target.take_damage(_damage, _multiplier, _attacker, _is_magic)
 		print("[Player] 遠距離攻撃 → %s  HP:%d/%d" % \
 				[_target.name, _target.hp, _target.max_hp])
 	queue_free()

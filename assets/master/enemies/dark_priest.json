@@ -3,6 +3,8 @@
   "name": "ダークプリースト",
   "hp": 20,
   "mp": 30,
+  "physical_resistance": 0.03,
+  "magic_resistance": 0.10,
   "defense": 1,
   "is_flying": false,
   "attack_type": "magic",
