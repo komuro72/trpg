@@ -971,11 +971,34 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 	_control.draw_string(_font, Vector2(lbl_x, y + float(fs_stat)),
 		"装備", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_head)
 	y += float(fs_stat) + 6.0
-	for slot: String in ["武器", "防具", "盾"]:
-		_control.draw_string(_font, Vector2(lbl_x,  y + stat_h * 0.75),
-			slot, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_lbl)
-		_control.draw_string(_font, Vector2(base_x, y + stat_h * 0.75),
-			"（なし）", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_dim)
+	var slot_defs: Array = [
+		["武器", cd.equipped_weapon],
+		["防具", cd.equipped_armor],
+		["盾",   cd.equipped_shield],
+	]
+	for sd: Variant in slot_defs:
+		var sd_arr   := sd as Array
+		var slot_lbl : String     = sd_arr[0] as String
+		var equip    : Dictionary = sd_arr[1] as Dictionary
+		_control.draw_string(_font, Vector2(lbl_x, y + stat_h * 0.75),
+			slot_lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_lbl)
+		if equip.is_empty():
+			_control.draw_string(_font, Vector2(base_x, y + stat_h * 0.75),
+				"（なし）", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_dim)
+		else:
+			var ename: String = equip.get("item_name", "？") as String
+			var estats: Dictionary = equip.get("stats", {}) as Dictionary
+			var eparts: Array = []
+			for k: String in ["attack_power", "magic_power", "defense_strength",
+					"physical_resistance", "magic_resistance"]:
+				if estats.has(k):
+					var v: float = float(estats[k])
+					if v != 0.0:
+						eparts.append("%s+%d" % [k.split("_")[0], int(v)])
+			var estat_str := "" if eparts.is_empty() else " [%s]" % ", ".join(eparts)
+			_control.draw_string(_font, Vector2(base_x, y + stat_h * 0.75),
+				ename + estat_str,
+				HORIZONTAL_ALIGNMENT_LEFT, stats_avail * 0.52, fs_stat, c_val)
 		y += stat_h
 
 	# ── 所持アイテム ──────────────────────────────────────────────────────────
