@@ -410,9 +410,9 @@ func _on_draw() -> void:
 	var fs_hint  := maxi(10, int(gs_f * 0.13))
 	var fs_stat  := maxi(11, int(gs_f * 0.135))
 
-	var pad      := maxf(18.0, gs_f * 0.20)
-	var row_h    := maxf(26.0, gs_f * 0.28)
-	var stat_h   := maxf(18.0, gs_f * 0.21)  # ステータス行の高さ（本文より小さめ）
+	var pad:    float = maxf(18.0, gs_f * 0.20)
+	var row_h:  float = maxf(26.0, gs_f * 0.28)
+	var stat_h: float = maxf(18.0, gs_f * 0.21)  # ステータス行の高さ（本文より小さめ）
 
 	var member_count := _sorted_members.size()
 
@@ -591,9 +591,9 @@ func _on_draw() -> void:
 	# ── 操作ヒント ────────────────────────────────────────────────────────────
 	# ── 名前列サブメニュー（オーバーレイ） ───────────────────────────────────────
 	if _submenu_open and _focus_area == _FocusArea.MEMBER_TABLE:
-		var sub_w  := 200.0
-		var sub_ih := maxf(22.0, gs_f * 0.24)
-		var sub_h  := SUBMENU_ITEMS.size() * sub_ih + 8.0
+		var sub_w:  float = 200.0
+		var sub_ih: float = maxf(22.0, gs_f * 0.24)
+		var sub_h:  float = SUBMENU_ITEMS.size() * sub_ih + 8.0
 		var row_offset := py + pad + float(fs_title) + 10.0 + 13.0 + row_h + 8.0 + 13.0 \
 			+ row_h + float(_member_cursor) * row_h
 		var sub_x := col_xs[0]
@@ -639,9 +639,9 @@ func _draw_log_section(px: float, y_start: float, panel_w: float, pad: float,
 
 	_draw_sep(px, y_start, panel_w, pad)
 	var entries: Array[String] = _message_window.log_entries if _message_window != null else []
-	var visible_rows := 12
-	var start_idx    := maxi(0, _log_scroll - visible_rows + 1)
-	var end_idx      := mini(entries.size(), start_idx + visible_rows)
+	var visible_rows: int = 12
+	var start_idx:    int = maxi(0, _log_scroll - visible_rows + 1)
+	var end_idx:      int = mini(entries.size(), start_idx + visible_rows)
 
 	_control.draw_string(_font, Vector2(lbl_x, y + float(fs_stat)),
 		"ログ（%d件）  ↑↓:スクロール  Z/Esc:閉じる" % entries.size(),
@@ -666,7 +666,7 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 	# ── 左右分割レイアウト ────────────────────────────────────────────────────
 	# 左列: front画像（最大 180px 正方形）
 	# 右列: ステータス数値テーブル
-	var img_col_w := minf(avail * 0.22, 180.0)
+	var img_col_w: float = minf(avail * 0.22, 180.0)
 	var col_gap   := pad
 	var stats_x0  := px + pad + img_col_w + col_gap
 	var stats_avail := px + panel_w - pad - stats_x0
