@@ -1997,8 +1997,8 @@ assets/master/items/
 | `assets/master/enemies/*.json` | `attack` → `attack_power`/`magic_power`; magic 系に `"attack_type":"magic"` |
 | `assets/master/maps/dungeon_handcrafted.json` | 各 enemy_party に `items` 配列追加 |
 | `scripts/dungeon_builder.gd` | `_build_spawn_data()` で items を enemy_party に通す |
-| `scripts/party_manager.gd` | `signal party_wiped(items, killer)` 追加; 全滅時にシグナル発火 |
-| `scripts/game_map.gd` | `party_wiped` シグナルを受けてプレイヤーパーティーへ転送 |
+| `scripts/party_manager.gd` | `signal party_wiped(items, killer)` 追加（後に `room_id` 方式に変更。下記参照） |
+| `scripts/game_map.gd` | `_floor_items` で床散布管理; `_check_item_pickup()` で自動取得; `_draw()` でアイテムマーカー描画 |
 
 ### Phase 10-2: 装備システム ✅ 完了
 
@@ -2035,9 +2035,23 @@ assets/master/items/
 - `unit_ai._execute_attack()` ranged/magic: `is_magic = (atype == "magic")` を projectile に渡す
 - `projectile.gd.setup()`: attacker・is_magic 引数追加。着弾時に `take_damage(d, m, attacker, is_magic)` を呼ぶ
 
-#### ドロップ処理（MessageWindow 通知追加）
+#### ドロップ処理（部屋制圧方式・床散布）
 
-- `game_map._on_enemy_party_wiped()`: メッセージウィンドウに「〇〇が N 点のアイテムを入手した」を表示
+- `party_manager.gd`:
+  - `signal party_wiped(items: Array, room_id: String)` に変更（旧: `killer: Character`）
+  - `_room_id: String` を追加。`setup()` 時に最初のスポーン位置から `map_data.get_area()` で部屋IDを取得
+  - 全滅時に `party_wiped.emit(_drop_items, _room_id)` を発火
+- `game_map.gd`:
+  - `_floor_items: Dictionary = {}` 追加（Vector2i → item Dictionary、1マス1個）
+  - `_on_enemy_party_wiped(items, room_id)`:
+    - `map_data.get_tiles_in_area(room_id)` で部屋のFLOORタイル一覧を取得
+    - `candidates.shuffle()` 後、アイテム数分だけ `_floor_items` に1個ずつ配置
+    - メッセージ「アイテムが部屋に散らばった！（N個）」を表示
+  - `_check_item_pickup()`: `_process()` から毎フレーム呼び出し
+    - パーティー全メンバーの `grid_pos` を `_floor_items` のキーと照合
+    - `item_pickup == "avoid"` かつ AI 制御中はスキップ
+    - 該当マスのアイテムを `inventory.append()`、`_floor_items.erase()`、メッセージ表示
+  - `_draw()` でフロアアイテムを黄色マーカー（50%サイズの矩形）で描画。ビジョン外は非表示
 
 #### item_pickup 指示の追加
 
@@ -2107,6 +2121,59 @@ assets/master/items/
 | `assets/master/classes/*.json` | `base_physical_resistance`, `base_magic_resistance` 追加 |
 | `assets/master/enemies/*.json` | `physical_resistance`, `magic_resistance` 追加 |
 | `assets/master/maps/dungeon_handcrafted.json` | player_party メンバーに初期装備 items フィールド追加 |
+
+### 操作体系の刷新 ✅ 完了（Phase 10-2 と同時実施）
+
+#### 概要
+攻撃を Z/X の2ボタンから Z/A の1ボタンに統合し、X/B をメニュー戻るとして再割り当て。
+合わせてメニュー内のナビゲーションを左/右キーで統一。
+
+#### InputMap 変更（project.godot）
+| 変更内容 | 旧 | 新 |
+|---------|-----|-----|
+| `attack_melee` → `attack` | Z + Joypad 0（A） | Z + Joypad 0（A）（名称変更） |
+| `attack_ranged` → 削除 | X + Joypad 2（X） | — |
+| `menu_back` → 新規追加 | — | X + Joypad 1（B） |
+
+#### player_controller.gd
+- `AttackSlot` enum を `{ Z, X }` → `{ Z }` のみに縮小（X関連フィールドをすべて削除）
+- 削除: `DEFAULT_SLOT_X`、`_slot_x`、`_attack_slot` フィールド
+- `_process_normal()`: `attack_ranged` チェック削除。`attack` 1アクションのみ
+- `_enter_targeting()`: 引数 `slot: AttackSlot` を削除。常に `_get_slot()` から slot Z を使用
+- `_is_slot_held()`: `Input.is_action_pressed("attack")` のみを返す（シンプル化）
+- `_get_slot()`: `_slot_x` 廃止。`_slot_z` を返すだけ（空なら `DEFAULT_SLOT_Z` を返す）
+- `_load_class_slots()`: `_slot_x` 初期化・X スロット読み込みを削除
+
+#### order_window.gd
+- `attack_melee` → `attack` に全置換
+- 名前列（col 0）の左右キー:
+  - 右キー: サブメニューを開く（Z/accept と同等）
+  - 左キー: ウィンドウを閉じる
+- 指示列（col 1-6）の左キー: 従来通り列移動（変更なし）
+- サブメニュー: `ui_right` = 決定、`ui_left` / `menu_back` = 閉じる
+- アイテム画面（ITEM_LIST / ACTION_MENU / TRANSFER_SELECT）:
+  - `ui_right` = 決定（`attack` / `ui_accept` と同等）
+  - `ui_left` / `menu_back` = 1つ前の状態に戻る
+- ログ行（CLOSE エリア）:
+  - `ui_right` / `attack` = ログスクロールモード開始
+  - `ui_left` / `menu_back` = ウィンドウを閉じる
+- ログスクロールモード: `menu_back` でモード終了（`ui_cancel` と同等）
+
+#### dialogue_window.gd
+- `attack_melee` → `attack` に変更
+- `ui_right` = 選択確定（`attack` / `ui_accept` と同等）
+- `ui_left` / `menu_back` = 会話ウィンドウを閉じる
+- ヒントテキスト: `↑↓ : 選択    Z / 右 : 決定    X / 左 / Esc : 閉じる`
+
+#### 変更ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `project.godot` | attack_melee → attack、attack_ranged 削除、menu_back 追加 |
+| `scripts/player_controller.gd` | AttackSlot.X / _slot_x / DEFAULT_SLOT_X 削除; 1ボタン統合 |
+| `scripts/order_window.gd` | attack → attack に全置換; 左/右キーナビゲーション追加 |
+| `scripts/dialogue_window.gd` | attack → attack に変更; 左/右キーナビゲーション追加 |
+
+---
 
 ### Phase 10-3: 消耗品の使用
 
