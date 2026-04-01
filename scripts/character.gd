@@ -425,7 +425,7 @@ func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character =
 				blocked = _calc_block_power(dir_result)
 
 	# 2. 防御強度を差し引き
-	var after_block := max(0, int(float(raw_amount) * multiplier) - get_effective_defense() - blocked)
+	var after_block: int = maxi(0, int(float(raw_amount) * multiplier) - get_effective_defense() - blocked)
 
 	# 3. 耐性適用（線形軽減）
 	var resistance := 0.0
@@ -434,7 +434,7 @@ func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character =
 			resistance = character_data.get_total_magic_resistance()
 		else:
 			resistance = character_data.get_total_physical_resistance()
-	var actual: int = max(1, int(float(after_block) * (1.0 - resistance)))
+	var actual: int = maxi(1, int(float(after_block) * (1.0 - resistance)))
 
 	hp = max(0, hp - actual)
 	_spawn_hit_effect(actual)
