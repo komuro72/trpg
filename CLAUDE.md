@@ -57,6 +57,21 @@ assets/images/enemies/
 - 攻撃アニメーション（attack1.png / attack2.png）は将来実装。当面は攻撃モーション中も ready → top の切り替えのまま
 - 画像がない敵はJSONのフラットパス指定またはプレースホルダー色にフォールバック
 
+### タイル画像フォーマット
+```
+assets/images/tiles/
+  {category}_{id}/
+    floor.png      (部屋の床タイル)
+    wall.png       (壁タイル)
+    obstacle.png   (障害物タイル。カテゴリに応じて瓦礫・溶岩溜まり等)
+    corridor.png   (通路タイル。省略時はfloor.pngにフォールバック)
+```
+- category: stone, dirt, lava 等（当面は stone のみ）
+- id: 5桁ゼロ埋め（00001〜99999）
+- ダンジョンデータのフロアごとに tile_set を指定（未指定時は "stone_00001"）
+- 旧 RUBBLE → OBSTACLE にリネーム（タイル種別定数・コメント等）
+- 高解像度画像（1024x1024）は左上1/4を切り出して1セルに表示（_crop_single_tile）
+
 ## 使用アセットとライセンス
 | アセット | 用途 | ライセンス | 帰属表示 |
 |---------|------|-----------|---------|
@@ -365,8 +380,8 @@ assets/images/enemies/
 - [x] Phase 5: グラフィック＆UI強化
   - グラフィック
     - [x] トップビューへの変更（キャラ画像1枚・GRID_SIZEサイズ・回転で方向対応）
-    - [x] タイル画像の追加（tile_floor.png / tile_wall.png / tile_rubble.png / tile_corridor.png、なければフォールバック色）
-    - [x] RUBBLEタイル追加（type=2、地上は歩行不可・飛行は通過可能）
+    - [x] タイル画像の追加（タイルセット方式: {category}_{id}/floor.png 等。なければフォールバック色）
+    - [x] OBSTACLEタイル（旧RUBBLE、type=2、地上は歩行不可・飛行は通過可能）
     - [x] CORRIDORタイル追加（type=3、歩行・飛行とも通過可能。DungeonBuilderが通路に使用）
     - [x] モード表示：ターゲット確定=白輝き（Color(1.5,1.5,1.5)）、ヒット=HitEffect（AnimatedSprite2D）
     - [x] ターゲット選択モード：sprite_top_ready に対応（未設定時は sprite_top をそのまま使用）
@@ -513,7 +528,7 @@ assets/images/enemies/
   - 操作キャラ切替（Phase 6-3）との連携済み：切替後の新操作キャラには current_order が適用される
   - hero 自律行動対応：`_hero_manager`（NpcManager）を game_map で生成し、操作外れ時に UnitAI が current_order を反映して動作する
 - [x] Phase 8 Step 1: 未実装行動の追加
-  - 飛行移動：飛行キャラ（is_flying=true）は WALL・RUBBLE・地上キャラ占有タイルを通過可能
+  - 飛行移動：飛行キャラ（is_flying=true）は WALL・OBSTACLE・地上キャラ占有タイルを通過可能
   - 攻撃タイプ（melee / ranged / dive）を CharacterData に追加し UnitAI が参照
     - melee: 地上のみ隣接攻撃（飛行→地上OK、地上→飛行NG、飛行→飛行NG）
     - ranged: 射程内の全対象を飛翔体で攻撃（飛行レイヤー無関係）
@@ -859,7 +874,7 @@ assets/images/enemies/
 
 ### 飛行キャラクター
 - キャラクターデータに `is_flying` フラグを追加
-- WALL・RUBBLE・地上キャラ占有タイルを通過可能（飛行同士はブロックし合う）
+- WALL・OBSTACLE・地上キャラ占有タイルを通過可能（飛行同士はブロックし合う）
 - 攻撃の可否（攻撃タイプ別）
 
 | 攻撃側 \ 対象 | 地上 | 飛行 |
@@ -881,7 +896,7 @@ assets/images/enemies/
 | ゴブリンメイジ | 遠距離（魔法） | 遠距離から魔法で攻撃 |
 | ゾンビ | 近接（つかみ） | 低速。近くの人間に向かってくる |
 | ウルフ | 近接（かみつき＝つかみ効果） | 集団行動。高速移動 |
-| ハーピー | 降下（dive） | 飛行（WALL・RUBBLE・地上キャラを無視して移動）。飛行中は地上からの近接攻撃を受けない。地上の敵に隣接して降下攻撃を行う（攻撃中も飛行扱いを維持） |
+| ハーピー | 降下（dive） | 飛行（WALL・OBSTACLE・地上キャラを無視して移動）。飛行中は地上からの近接攻撃を受けない。地上の敵に隣接して降下攻撃を行う（攻撃中も飛行扱いを維持） |
 | サラマンダー | 遠距離（炎＝魔法効果） | 遠距離から火を吐く |
 | ダークナイト | 近接 | 人間型の強敵 |
 | ダークメイジ | 遠距離（魔法） | 人間型。後方から魔法攻撃 |

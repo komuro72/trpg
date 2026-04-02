@@ -3,6 +3,7 @@
     "floors": [
       {
         "floor": 1,
+        "tile_set": "stone_00001",
         "entrance_room": "r1_1",
         "rooms": [
           {

@@ -4,9 +4,9 @@ extends RefCounted
 ## タイルマップデータ管理
 ## タイルの種別・配置・移動可否クエリを担う。描画は game_map.gd が行う。
 ## Phase 2-2: load_from_json() でマップ・スポーン情報をJSONから読み込めるように拡張。
-## Phase 5:   RUBBLE タイルを追加。is_walkable_for() で飛行キャラ対応。
+## Phase 5:   OBSTACLE（旧RUBBLE）タイルを追加。is_walkable_for() で飛行キャラ対応。
 
-enum TileType { FLOOR = 0, WALL = 1, RUBBLE = 2, CORRIDOR = 3 }
+enum TileType { FLOOR = 0, WALL = 1, OBSTACLE = 2, CORRIDOR = 3 }
 
 ## デフォルトマップサイズ定数（player_controller.gd のフォールバック用に残す）
 const MAP_WIDTH: int = 20
@@ -185,10 +185,10 @@ func build_adjacency() -> void:
 
 
 ## 飛行フラグを考慮した移動可否
-## 地上：FLOOR・CORRIDOR可。飛行：FLOOR・CORRIDOR・RUBBLE可（WALLは不可）
+## 地上：FLOOR・CORRIDOR可。飛行：FLOOR・CORRIDOR・OBSTACLE可（WALLは不可）
 func is_walkable_for(pos: Vector2i, flying: bool) -> bool:
 	var tile := get_tile(pos)
 	match tile:
 		TileType.FLOOR, TileType.CORRIDOR: return true
-		TileType.RUBBLE: return flying
+		TileType.OBSTACLE: return flying
 		_: return false

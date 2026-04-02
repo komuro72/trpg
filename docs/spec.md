@@ -112,21 +112,21 @@ scripts/
 
 #### MapData（map_data.gd）
 - `class_name MapData extends RefCounted`
-- タイル種別: `enum TileType { FLOOR = 0, WALL = 1, RUBBLE = 2, CORRIDOR = 3 }`
+- タイル種別: `enum TileType { FLOOR = 0, WALL = 1, OBSTACLE = 2, CORRIDOR = 3 }`
 - マップサイズ定数: `MAP_WIDTH = 20`, `MAP_HEIGHT = 15`
 - マップデータ: `_tiles: Array`（Array[Array[int]]、行優先 `_tiles[y][x]`）
 - 初期マップ: `_init()` で外周WALL・内側FLOORの四角い部屋を生成
 - `get_tile(pos: Vector2i) -> TileType`: 範囲外は WALL を返す
 - `is_walkable(pos: Vector2i) -> bool`: FLOOR・CORRIDOR が true
-- `is_walkable_for(pos, flying)`: FLOOR・CORRIDOR は常に可。RUBBLE は flying=true のみ可。WALL は不可
+- `is_walkable_for(pos, flying)`: FLOOR・CORRIDOR は常に可。OBSTACLE は flying=true のみ可。WALL は不可
 
 #### タイル仕様
 | タイル | 値 | 地上通過 | 飛行通過 | 画像 | フォールバック色 |
 |-------|-----|---------|---------|------|--------------|
-| FLOOR | 0 | ✅ | ✅ | tile_floor.png | Color(0.40, 0.40, 0.40) |
-| WALL | 1 | ✗ | ✗ | tile_wall.png | Color(0.20, 0.20, 0.20) |
-| RUBBLE | 2 | ✗ | ✅ | tile_rubble.png | Color(0.55, 0.45, 0.35) |
-| CORRIDOR | 3 | ✅ | ✅ | tile_corridor.png | Color(0.30, 0.30, 0.35) |
+| FLOOR | 0 | ✅ | ✅ | floor.png | Color(0.40, 0.40, 0.40) |
+| WALL | 1 | ✗ | ✗ | wall.png | Color(0.20, 0.20, 0.20) |
+| OBSTACLE | 2 | ✗ | ✅ | obstacle.png | Color(0.55, 0.45, 0.35) |
+| CORRIDOR | 3 | ✅ | ✅ | corridor.png | Color(0.30, 0.30, 0.35) |
 
 #### タイル描画（game_map.gd）
 - `_load_tile_textures()`: 起動時に4種の画像をプリロード。画像なしならフォールバック色
@@ -922,7 +922,7 @@ scripts/game_map.gd           player_controller.map_node = self を追加
 
 #### 変更ファイル
 ```
-scripts/map_data.gd            RUBBLEタイル・is_walkable_for() 追加
+scripts/map_data.gd            OBSTACLEタイル・is_walkable_for() 追加
 scripts/character_data.gd      sprite_top・sprite_front・is_flying 対応
 scripts/character.gd           rotation方式・is_flying・_load_top_sprite() 追加
 scripts/game_map.gd            タイル画像描画・COLOR_GRID_LINE・_load_tile_textures() 追加
@@ -935,19 +935,23 @@ assets/master/enemies/goblin.json     同上
 #### タイル種別（map_data.gd）
 | タイプ | 値 | 地上通過 | 飛行通過 | 画像ファイル |
 |-------|-----|---------|---------|------------|
-| FLOOR | 0 | ✅ | ✅ | tile_floor.png |
-| WALL | 1 | ✗ | ✗ | tile_wall.png |
-| RUBBLE | 2 | ✗ | ✅ | tile_rubble.png |
-| CORRIDOR | 3 | ✅ | ✅ | tile_corridor.png |
+| FLOOR | 0 | ✅ | ✅ | floor.png |
+| WALL | 1 | ✗ | ✗ | wall.png |
+| OBSTACLE | 2 | ✗ | ✅ | obstacle.png |
+| CORRIDOR | 3 | ✅ | ✅ | corridor.png |
 
-- `is_walkable_for(pos, flying: bool)`: FLOOR・CORRIDOR は常に可、RUBBLE は flying=true のみ可、WALL は不可
+- `is_walkable_for(pos, flying: bool)`: FLOOR・CORRIDOR は常に可、OBSTACLE は flying=true のみ可、WALL は不可
 - `is_walkable(pos)`: 後方互換用（FLOOR・CORRIDOR が true）
 - DungeonBuilder の `_carve_corridor()` が通路セルに CORRIDOR を設定（部屋の FLOOR は上書きしない）
 
-#### タイル描画（game_map.gd）
-- `_load_tile_textures()`: 起動時に4種の画像をプリロード。`_finish_setup()` から呼び出し
+#### タイルセット方式（game_map.gd）
+- タイル画像は `assets/images/tiles/{category}_{id}/` フォルダに配置
+  - floor.png / wall.png / obstacle.png / corridor.png
+  - corridor.png 省略時は floor.png にフォールバック
+- `_tile_set_id`: フロアデータの `tile_set` フィールドから取得（デフォルト: "stone_00001"）
+- `_load_tile_textures()`: `TILE_SET_DIR + _tile_set_id + "/floor.png"` 等のパスを構築して読み込み。`_crop_single_tile()` で高解像度画像の左上1/4を切り出し
 - `_draw()`: 画像があれば `draw_texture_rect`、なければフォールバック色で描画
-  - フォールバック色: FLOOR=Color(0.40,0.40,0.40) / WALL=Color(0.20,0.20,0.20) / RUBBLE=Color(0.55,0.45,0.35) / CORRIDOR=Color(0.30,0.30,0.35)
+  - フォールバック色: FLOOR=Color(0.40,0.40,0.40) / WALL=Color(0.20,0.20,0.20) / OBSTACLE=Color(0.55,0.45,0.35) / CORRIDOR=Color(0.30,0.30,0.35)
 - グリッド線: `COLOR_GRID_LINE = Color(0,0,0,0.15)` で全タイルにアウトライン
 
 #### トップビュー対応（character.gd / character_data.gd）
@@ -1719,7 +1723,7 @@ Character.current_order
 
 ### 飛行移動仕様
 
-飛行キャラ（`is_flying = true`）は WALL・RUBBLE・地上キャラ占有タイルを通過できる。
+飛行キャラ（`is_flying = true`）は WALL・OBSTACLE・地上キャラ占有タイルを通過できる。
 飛行同士はブロックし合う（`_is_passable()` 内でレイヤー一致のみ占有チェック）。
 
 ### 攻撃タイプ（CharacterData.attack_type）

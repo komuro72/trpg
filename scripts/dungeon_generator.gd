@@ -45,7 +45,7 @@ func _build_prompt(seed_val: int) -> String:
 	p += "- 部屋はX/Y座標で配置し、重なりがないようにすること\n"
 	p += "- 各部屋の座標はフロア全体に余裕をもって分散させること（各部屋間に最低4タイルの間隔）\n"
 	p += "- 部屋は通路（corridors）でつながり、フロア内で分岐があること\n"
-	p += "- タイル種別：FLOOR(0)=部屋の床、WALL(1)=壁、RUBBLE(2)=瓦礫、CORRIDOR(3)=通路\n"
+	p += "- タイル種別：FLOOR(0)=部屋の床、WALL(1)=壁、OBSTACLE(2)=障害物、CORRIDOR(3)=通路\n"
 	p += "- 通路はCorridorsで部屋間の接続情報のみ記述する（タイルデータはエンジン側で生成）\n"
 	p += "- 階段（stairs）は各フロアに2〜3か所（1層目にはdown階段のみ、最下層にはup階段のみ）\n"
 	p += "- 入口部屋にはenemyを配置しない、is_entrance: trueを設定する\n"

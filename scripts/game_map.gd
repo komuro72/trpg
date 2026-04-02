@@ -4,16 +4,14 @@ extends Node2D
 ## タイル描画 + キャラクター生成 + プレイヤー入力制御
 ## Phase 5: GRID_SIZE動的計算・視界システム・3カラムUIパネル
 
-## タイル画像パス
-const TILE_IMAGE_FLOOR    := "res://assets/images/tiles/tile_floor.png"
-const TILE_IMAGE_WALL     := "res://assets/images/tiles/tile_wall.png"
-const TILE_IMAGE_RUBBLE   := "res://assets/images/tiles/tile_rubble.png"
-const TILE_IMAGE_CORRIDOR := "res://assets/images/tiles/tile_corridor.png"
+## タイルセットのベースディレクトリ
+const TILE_SET_DIR := "res://assets/images/tiles/"
+const DEFAULT_TILE_SET := "stone_00001"
 
 ## タイル画像が存在しない場合のフォールバック色
 const COLOR_FLOOR       := Color(0.40, 0.40, 0.40)
 const COLOR_WALL        := Color(0.20, 0.20, 0.20)
-const COLOR_RUBBLE      := Color(0.55, 0.45, 0.35)
+const COLOR_OBSTACLE    := Color(0.55, 0.45, 0.35)
 const COLOR_CORRIDOR    := Color(0.30, 0.30, 0.35)
 const COLOR_GRID_LINE   := Color(0.0, 0.0, 0.0, 0.15)
 
@@ -55,6 +53,7 @@ var area_name_display: AreaNameDisplay
 var dialogue_trigger: DialogueTrigger
 var order_window: OrderWindow
 
+var _tile_set_id: String = DEFAULT_TILE_SET  ## 現在のフロアのタイルセットID
 var _tile_textures: Dictionary = {}  # TileType(int) -> Texture2D
 ## 床に散らばったアイテム（Vector2i → Dictionary）。1マスに1個
 var _floor_items: Dictionary = {}
@@ -95,7 +94,9 @@ func _load_handcrafted_dungeon() -> void:
 	if raw != null and raw is Dictionary:
 		var floors: Array = ((raw as Dictionary).get("dungeon", {}) as Dictionary).get("floors", [])
 		if CURRENT_FLOOR < floors.size():
-			map_data = DungeonBuilder.build_floor(floors[CURRENT_FLOOR] as Dictionary)
+			var floor_data := floors[CURRENT_FLOOR] as Dictionary
+			_tile_set_id = floor_data.get("tile_set", DEFAULT_TILE_SET) as String
+			map_data = DungeonBuilder.build_floor(floor_data)
 			_finish_setup()
 			return
 
@@ -750,16 +751,39 @@ func _check_item_pickup() -> void:
 ## タイル画像をプリロードする（画像がない場合はフォールバック色を使用）
 func _load_tile_textures() -> void:
 	_tile_textures.clear()
-	var paths := {
-		MapData.TileType.FLOOR:    TILE_IMAGE_FLOOR,
-		MapData.TileType.WALL:     TILE_IMAGE_WALL,
-		MapData.TileType.RUBBLE:   TILE_IMAGE_RUBBLE,
-		MapData.TileType.CORRIDOR: TILE_IMAGE_CORRIDOR,
+	var base := TILE_SET_DIR + _tile_set_id + "/"
+	var names := {
+		MapData.TileType.FLOOR:    "floor.png",
+		MapData.TileType.WALL:     "wall.png",
+		MapData.TileType.OBSTACLE: "obstacle.png",
+		MapData.TileType.CORRIDOR: "corridor.png",
 	}
-	for tile_type: int in paths:
-		var path: String = paths[tile_type]
+	for tile_type: int in names:
+		var path: String = base + (names[tile_type] as String)
 		if ResourceLoader.exists(path):
-			_tile_textures[tile_type] = load(path) as Texture2D
+			var tex := load(path) as Texture2D
+			if tex != null:
+				_tile_textures[tile_type] = _crop_single_tile(tex)
+	# corridor.png がない場合は floor.png にフォールバック
+	if not _tile_textures.has(MapData.TileType.CORRIDOR) \
+			and _tile_textures.has(MapData.TileType.FLOOR):
+		_tile_textures[MapData.TileType.CORRIDOR] = _tile_textures[MapData.TileType.FLOOR]
+
+
+## タイル画像の左上1/4を切り出して使用する
+## 高解像度画像（1024x1024）をそのままセルに縮小するとパターンが細かくなりすぎるため、
+## 1/4領域を切り出すことで1セルに対して適切な密度で表示する
+## 512px以下の画像はそのまま返す
+func _crop_single_tile(tex: Texture2D) -> Texture2D:
+	var size := tex.get_size()
+	var tile_size := mini(int(size.x), int(size.y)) / 2
+	# 512px以下の画像は1タイル分とみなしてそのまま返す
+	if tile_size <= 256:
+		return tex
+	var atlas := AtlasTexture.new()
+	atlas.atlas = tex
+	atlas.region = Rect2(0, 0, tile_size, tile_size)
+	return atlas
 
 
 func _draw() -> void:
@@ -787,7 +811,7 @@ func _draw() -> void:
 				var fill_color: Color
 				match tile:
 					MapData.TileType.FLOOR:    fill_color = COLOR_FLOOR
-					MapData.TileType.RUBBLE:   fill_color = COLOR_RUBBLE
+					MapData.TileType.OBSTACLE:   fill_color = COLOR_OBSTACLE
 					MapData.TileType.CORRIDOR: fill_color = COLOR_CORRIDOR
 					_:                         fill_color = COLOR_WALL
 				draw_rect(rect, fill_color)

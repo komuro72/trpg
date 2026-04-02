@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ibduhida6s75"
-path="res://.godot/imported/tile_corridor.png-f3fc5d1a3548550f2f23baff2015a54d.ctex"
+uid="uid://byg2si2q11g2a"
+path="res://.godot/imported/floor.png-6014a236af1ca5a06f0042233add0308.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/images/tiles/tile_corridor.png"
-dest_files=["res://.godot/imported/tile_corridor.png-f3fc5d1a3548550f2f23baff2015a54d.ctex"]
+source_file="res://assets/images/tiles/stone_00001/floor.png"
+dest_files=["res://.godot/imported/floor.png-6014a236af1ca5a06f0042233add0308.ctex"]
 
 [params]
 
