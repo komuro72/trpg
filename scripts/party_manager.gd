@@ -31,6 +31,7 @@ var _player:     Character
 var _map_data:   MapData
 var _activated:  bool = false
 var _vision_controlled: bool = false
+var suppress_ai_log: bool = false        ## true ならリーダーAIのログ出力を抑制する
 var _all_members: Array[Character] = []  ## 全パーティー合算（AI 起動時に渡す）
 var _drop_items:  Array = []             ## ドロップアイテム（全滅時に party_wiped で転送）
 var _room_id:     String = ""            ## このパーティーが属する部屋のエリアID
@@ -130,8 +131,10 @@ func get_enemies() -> Array[Character]:
 
 ## VisionSystem から呼ばれる：訪問済みエリアに基づいてメンバーの表示を更新する
 ## visited_areas: { area_id: String -> true } プレイヤーパーティーの訪問済みエリア集合
+## friendly_areas: フレンドリーキャラ（プレイヤー+NPC）が占有するエリアIDの辞書
+## 敵マネージャーの場合、friendly_areas のいずれかにメンバーがいればアクティブ化する
 func update_visibility(player_area: String, map_data: MapData,
-		visited_areas: Dictionary) -> void:
+		visited_areas: Dictionary, friendly_areas: Dictionary = {}) -> void:
 	for member: Character in _members:
 		if not is_instance_valid(member):
 			continue
@@ -142,9 +145,10 @@ func update_visibility(player_area: String, map_data: MapData,
 		else:
 			# 訪問済みエリアのメンバーは表示（一度見たら消えない）
 			member.visible = visited_areas.has(member_area)
-		# AI アクティブ化：プレイヤーと同じエリアに初めて入ったとき
-		var in_same_area := not player_area.is_empty() and player_area == member_area
-		if in_same_area and not _activated:
+		# AI アクティブ化：フレンドリーキャラと同じエリアに初めて入ったとき
+		var in_friendly_area := not member_area.is_empty() and (
+			player_area == member_area or friendly_areas.has(member_area))
+		if in_friendly_area and not _activated:
 			_activated = true
 			_start_ai()
 
@@ -219,6 +223,8 @@ func _start_ai() -> void:
 	if _leader == null:
 		return
 	_leader_ai = _create_leader_ai(_leader)
+	if suppress_ai_log:
+		_leader_ai.log_enabled = false
 	add_child(_leader_ai)
 	_leader_ai.setup(_members, _player, _map_data, _all_members)
 

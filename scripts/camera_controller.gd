@@ -10,7 +10,7 @@ extends Node
 ##   - Camera2D.limit_* によるマップ端制限はそのまま維持
 
 ## デッドゾーン比率（画面サイズに対する割合）
-const DEAD_ZONE_RATIO: float = 0.70
+const DEAD_ZONE_RATIO: float = 0.40
 
 ## 追従速度の指数減衰係数（大きいほど速く追いつく）
 ## 10.0 → キャラ移動 0.3s 中に約 95% 追従

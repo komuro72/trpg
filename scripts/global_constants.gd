@@ -22,6 +22,26 @@ var game_speed: float = 1.0
 const SPRITE_SOURCE_WIDTH: int = 512
 const SPRITE_SOURCE_HEIGHT: int = 1024
 
+## クラスIDから日本語名への変換テーブル
+const CLASS_NAME_JP: Dictionary = {
+	"fighter-sword": "剣士",
+	"fighter-axe":   "斧戦士",
+	"archer":        "弓使い",
+	"magician-fire": "魔法使い",
+	"healer":        "ヒーラー",
+	"scout":         "斥候",
+}
+
+## アイテム補正キーの日本語名
+const STAT_NAME_JP: Dictionary = {
+	"attack_power":        "攻撃力",
+	"magic_power":         "魔力",
+	"accuracy":            "命中",
+	"physical_resistance": "物理耐性",
+	"magic_resistance":    "魔法耐性",
+	"defense_strength":    "防御強度",
+}
+
 
 ## 画面サイズからGRID_SIZEを計算する
 ## 縦方向タイル数を固定してGRID_SIZEを決定（最小32px）

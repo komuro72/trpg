@@ -166,13 +166,23 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 	var tx := fx + float(pad + icon_size + pad)
 	var tw := fw - tx - float(pad)
 
-	# キャラクター名
+	# キャラクター名 + クラス名 + ランク
 	var name_str: String = c.character_data.character_name \
 		if (c.character_data != null and not c.character_data.character_name.is_empty()) \
 		else String(c.name)
+	var class_jp := ""
+	var rank_str := ""
+	if c.character_data != null:
+		class_jp = GlobalConstants.CLASS_NAME_JP.get(c.character_data.class_id, "") as String
+		rank_str = c.character_data.rank
+	var header := name_str
+	if not class_jp.is_empty():
+		header += " " + class_jp
+	if not rank_str.is_empty():
+		header += " " + rank_str
 	_control.draw_string(_font,
 		Vector2(tx, fy + float(pad) + 13.0),
-		name_str, HORIZONTAL_ALIGNMENT_LEFT, tw, 13, Color.WHITE)
+		header, HORIZONTAL_ALIGNMENT_LEFT, tw, 13, Color.WHITE)
 
 	# HPバー
 	var hp_ratio := float(c.hp) / float(c.max_hp) if c.max_hp > 0 else 0.0
@@ -196,38 +206,32 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 		Vector2(tx, mp_bar_y + bar_h + 10.0),
 		cond, HORIZONTAL_ALIGNMENT_LEFT, tw, 10, cond_col)
 
-	# 指示状態（6項目を1文字略称で2行表示）
-	# 行1: 移動+戦闘+標的  行2: 隊形+低HP+取得
-	# 移動: 探=explore 室=same_room 密=cluster 守=guard_room 待=standby
-	# 戦闘: 積=aggressive 援=support 待=standby
-	# 標的: 近=nearest 弱=weakest 同=same_as_leader
-	# 隊形: 囲=surround 前=front 後=rear 同=same_as_leader
-	# 低HP: 継=keep_fighting 退=retreat 逃=flee
-	# 取得: 拾=aggressive 近=passive 無=avoid
+	# 指示状態（OrderWindow の COL_LABELS と完全一致する表記）
 	var ord: Dictionary = c.current_order
-	var move_a: String  = {"explore": "探", "same_room": "室", "cluster": "密",
-		"guard_room": "守", "standby": "待"}.get(
-		ord.get("move",             "same_room") as String, "室") as String
-	var bform_a: String = {"surround": "囲", "front": "前", "rear": "後",
-		"same_as_leader": "同"}.get(
-		ord.get("battle_formation", "surround")  as String, "囲") as String
-	var combat_a: String = {"aggressive": "積", "support": "援", "standby": "待"}.get(
-		ord.get("combat",           "aggressive") as String, "積") as String
-	var target_a: String = {"nearest": "近", "weakest": "弱", "same_as_leader": "同"}.get(
-		ord.get("target",           "nearest")   as String, "近") as String
-	var lowh_a: String   = {"keep_fighting": "継", "retreat": "退", "flee": "逃"}.get(
-		ord.get("on_low_hp",        "retreat")   as String, "退") as String
-	var pickup_a: String = {"aggressive": "拾", "passive": "近", "avoid": "無"}.get(
-		ord.get("item_pickup",      "aggressive") as String, "拾") as String
+	var move_a: String  = {"explore": "探索", "same_room": "同じ部屋", "cluster": "密集",
+		"guard_room": "部屋を守る", "standby": "待機"}.get(
+		ord.get("move",             "same_room") as String, "同じ部屋") as String
+	var bform_a: String = {"surround": "包囲", "front": "前衛", "rear": "後衛",
+		"same_as_leader": "リーダーと同じ"}.get(
+		ord.get("battle_formation", "surround")  as String, "包囲") as String
+	var combat_a: String = {"aggressive": "積極攻撃", "support": "援護", "standby": "待機"}.get(
+		ord.get("combat",           "aggressive") as String, "積極攻撃") as String
+	var target_a: String = {"nearest": "最近傍", "weakest": "最弱", "same_as_leader": "リーダーと同じ"}.get(
+		ord.get("target",           "nearest")   as String, "最近傍") as String
+	var lowh_a: String   = {"keep_fighting": "戦い続ける", "retreat": "後退", "flee": "逃走"}.get(
+		ord.get("on_low_hp",        "retreat")   as String, "後退") as String
+	var pickup_a: String = {"aggressive": "積極的に拾う", "passive": "近くのみ", "avoid": "拾わない"}.get(
+		ord.get("item_pickup",      "aggressive") as String, "積極的に拾う") as String
 	var ord_color := Color(0.55, 0.90, 0.65)
+	var fs_ord := 9
 	_control.draw_string(_font,
 		Vector2(tx, mp_bar_y + bar_h + 22.0),
-		"%s %s %s" % [move_a, combat_a, target_a],
-		HORIZONTAL_ALIGNMENT_LEFT, tw, 10, ord_color)
+		"%s / %s / %s" % [move_a, combat_a, target_a],
+		HORIZONTAL_ALIGNMENT_LEFT, tw, fs_ord, ord_color)
 	_control.draw_string(_font,
 		Vector2(tx, mp_bar_y + bar_h + 34.0),
-		"%s %s %s" % [bform_a, lowh_a, pickup_a],
-		HORIZONTAL_ALIGNMENT_LEFT, tw, 10, ord_color)
+		"%s / %s / %s" % [bform_a, lowh_a, pickup_a],
+		HORIZONTAL_ALIGNMENT_LEFT, tw, fs_ord, ord_color)
 
 	# カード下区切り線
 	_control.draw_line(

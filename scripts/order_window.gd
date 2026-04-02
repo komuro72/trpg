@@ -251,8 +251,8 @@ func _handle_input() -> void:
 				if Input.is_action_just_pressed("ui_up"):
 					_log_scroll = maxi(0, _log_scroll - 1)
 				elif Input.is_action_just_pressed("ui_down"):
-					var entries := _message_window.log_entries if _message_window != null else []
-					_log_scroll = mini(_log_scroll + 1, maxi(0, entries.size() - 1))
+					var log_visible := MessageLog.get_visible_entries() if MessageLog != null else []
+					_log_scroll = mini(_log_scroll + 1, maxi(0, log_visible.size() - 1))
 				elif Input.is_action_just_pressed("attack") \
 						or Input.is_action_just_pressed("ui_accept") \
 						or Input.is_action_just_pressed("ui_cancel") \
@@ -271,8 +271,8 @@ func _handle_input() -> void:
 					# ログ行でZ/右キーを押すとログモードを開始
 					_log_mode   = true
 					_log_scroll = 0
-					if _message_window != null:
-						_log_scroll = maxi(0, _message_window.log_entries.size() - 1)
+					if MessageLog != null:
+						_log_scroll = maxi(0, MessageLog.get_visible_entries().size() - 1)
 				elif Input.is_action_just_pressed("ui_cancel") \
 						or Input.is_action_just_pressed("menu_back") \
 						or Input.is_action_just_pressed("ui_left"):
@@ -335,8 +335,8 @@ func _handle_item_input() -> void:
 				if action == "装備する":
 					_do_equip(_item_char, _selected_item)
 					var iname: String = _selected_item.get("item_name", "？") as String
-					if _message_window != null:
-						_message_window.show_message(
+					if MessageLog != null:
+						MessageLog.add_system(
 							"%s は %s を装備した" % [_get_char_name(_item_char), iname])
 					_cached_unequipped = _get_unequipped_items(_item_char)
 					_item_cursor = mini(_item_cursor, maxi(0, _cached_unequipped.size() - 1))
@@ -362,8 +362,8 @@ func _handle_item_input() -> void:
 					var to_ch := targets[_transfer_cursor] as Character
 					var iname: String = _selected_item.get("item_name", "？") as String
 					_do_transfer(_item_char, to_ch, _selected_item)
-					if _message_window != null:
-						_message_window.show_message(
+					if MessageLog != null:
+						MessageLog.add_system(
 							"%s は %s に %s を渡した" % [
 								_get_char_name(_item_char), _get_char_name(to_ch), iname])
 					_cached_unequipped = _get_unequipped_items(_item_char)
@@ -422,6 +422,7 @@ func _do_equip(ch: Character, item: Dictionary) -> void:
 		"weapon": cd.equipped_weapon = item
 		"armor":  cd.equipped_armor  = item
 		"shield": cd.equipped_shield = item
+	ch.refresh_stats_from_equipment()
 
 
 ## アイテムを別キャラに受け渡す
@@ -530,15 +531,19 @@ func _get_stat_rows(ch: Character) -> Array:
 	if ch.magic_power > 0 or cd.magic_power > 0:
 		rows.append({"label": "魔法力/回復力", "type": "num", "base": ch.magic_power,
 			"bonus": cd.get_weapon_magic_bonus()})
+	# 命中精度（ヒーラー=回復必中のため非表示）
+	if cd.attack_type != "heal":
+		rows.append({"label": "命中精度",      "type": "pct",
+			"base": cd.accuracy, "bonus": cd.get_weapon_accuracy_bonus()})
 	rows.append({"label": "防御力",        "type": "num",    "base": ch.defense, "bonus": 0})
-	var phys_total := cd.get_total_physical_resistance()
-	var phys_bonus := phys_total - cd.physical_resistance
-	rows.append({"label": "物理耐性",      "type": "pct",
-		"base": cd.physical_resistance, "bonus": phys_bonus})
-	var mag_total := cd.get_total_magic_resistance()
-	var mag_bonus := mag_total - cd.magic_resistance
-	rows.append({"label": "魔法耐性",      "type": "pct",
-		"base": cd.magic_resistance, "bonus": mag_bonus})
+	rows.append({"label": "防御精度",      "type": "pct",
+		"base": cd.defense_accuracy, "bonus": 0.0})
+	var phys_equip := cd.get_total_physical_resistance_score() - cd.physical_resistance
+	rows.append({"label": "物理耐性",      "type": "num",
+		"base": cd.physical_resistance, "bonus": phys_equip})
+	var mag_equip := cd.get_total_magic_resistance_score() - cd.magic_resistance
+	rows.append({"label": "魔法耐性",      "type": "num",
+		"base": cd.magic_resistance, "bonus": mag_equip})
 	rows.append({"label": "攻撃タイプ",    "type": "str",
 		"value": ATTACK_TYPE_LABELS.get(cd.attack_type, cd.attack_type) as String})
 	rows.append({"label": "射程(タイル)",  "type": "num",    "base": cd.attack_range, "bonus": 0})
@@ -730,6 +735,13 @@ func _on_draw() -> void:
 		var nm_str := cd.character_name \
 			if (cd != null and not cd.character_name.is_empty()) \
 			else String(ch.name)
+		# クラス名・ランクを付記
+		if cd != null:
+			var cls_jp: String = GlobalConstants.CLASS_NAME_JP.get(cd.class_id, "") as String
+			if not cls_jp.is_empty():
+				nm_str += " " + cls_jp
+			if not cd.rank.is_empty():
+				nm_str += " " + cd.rank
 		var is_controlled: bool = _controlled_char != null \
 			and is_instance_valid(_controlled_char) \
 			and ch == _controlled_char
@@ -781,7 +793,7 @@ func _on_draw() -> void:
 	y += row_h
 
 	# ── ステータスパネル（下部） ───────────────────────────────────────────────
-	if _log_mode and _message_window != null:
+	if _log_mode and MessageLog != null:
 		_draw_log_section(px, y, panel_w, pad, fs_stat, stat_h)
 	elif sel_ch != null:
 		_draw_status_section(px, y, panel_w, pad, sel_ch, stat_rows, stat_h, fs_stat)
@@ -838,7 +850,7 @@ func _on_draw() -> void:
 		Color(0.46, 0.46, 0.56))
 
 
-## ログ表示セクション（MessageWindow のログエントリを一覧表示）
+## ログ表示セクション（MessageLog の共有バッファを一覧表示・色分け対応）
 func _draw_log_section(px: float, y_start: float, panel_w: float, pad: float,
 		fs_stat: int, stat_h: float) -> void:
 	var y     := y_start + 13.0
@@ -846,22 +858,24 @@ func _draw_log_section(px: float, y_start: float, panel_w: float, pad: float,
 	var lbl_x := px + pad
 
 	_draw_sep(px, y_start, panel_w, pad)
-	var entries: Array[String] = _message_window.log_entries if _message_window != null else []
+	var log_visible: Array[Dictionary] = MessageLog.get_visible_entries() if MessageLog != null else []
 	var visible_rows: int = 12
 	var start_idx:    int = maxi(0, _log_scroll - visible_rows + 1)
-	var end_idx:      int = mini(entries.size(), start_idx + visible_rows)
+	var end_idx:      int = mini(log_visible.size(), start_idx + visible_rows)
 
 	_control.draw_string(_font, Vector2(lbl_x, y + float(fs_stat)),
-		"ログ（%d件）  ↑↓:スクロール  Z/Esc:閉じる" % entries.size(),
+		"ログ（%d件）  ↑↓:スクロール  Z/Esc:閉じる" % log_visible.size(),
 		HORIZONTAL_ALIGNMENT_LEFT, avail, fs_stat, Color(0.80, 0.80, 1.00))
 	y += float(fs_stat) + stat_h
 
 	for i: int in range(start_idx, end_idx):
-		var entry := entries[i] as String
+		var entry := log_visible[i]
 		var is_cur := (i == _log_scroll)
-		var e_col: Color = Color(1.0, 1.0, 0.3) if is_cur else Color(0.70, 0.70, 0.80)
+		var base_col: Color = entry.get("color", Color.WHITE) as Color
+		var e_col: Color = base_col if is_cur else base_col * Color(0.65, 0.65, 0.75, 1.0)
+		var text: String = entry.get("text", "") as String
 		_control.draw_string(_font, Vector2(lbl_x, y + stat_h * 0.75),
-			"%d: %s" % [i + 1, entry], HORIZONTAL_ALIGNMENT_LEFT, avail, fs_stat, e_col)
+			"%d: %s" % [i + 1, text], HORIZONTAL_ALIGNMENT_LEFT, avail, fs_stat, e_col)
 		y += stat_h
 
 
@@ -1016,12 +1030,16 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 			var ename: String = equip.get("item_name", "？") as String
 			var estats: Dictionary = equip.get("stats", {}) as Dictionary
 			var eparts: Array = []
-			for k: String in ["attack_power", "magic_power", "defense_strength",
-					"physical_resistance", "magic_resistance"]:
+			for k: String in ["attack_power", "magic_power", "accuracy",
+					"defense_strength", "physical_resistance", "magic_resistance"]:
 				if estats.has(k):
 					var v: float = float(estats[k])
 					if v != 0.0:
-						eparts.append("%s+%d" % [k.split("_")[0], int(v)])
+						var jp: String = GlobalConstants.STAT_NAME_JP.get(k, k) as String
+						if k == "accuracy" or k == "physical_resistance" or k == "magic_resistance":
+							eparts.append("%s+%d%%" % [jp, int(v * 100.0)])
+						else:
+							eparts.append("%s+%d" % [jp, int(v)])
 			var estat_str := "" if eparts.is_empty() else " [%s]" % ", ".join(eparts)
 			_control.draw_string(_font, Vector2(base_x, y + stat_h * 0.75),
 				ename + estat_str,
@@ -1130,24 +1148,34 @@ func _draw_item_list_overlay(ox: float, main_py: float, ow: float,
 				_control.draw_rect(Rect2(ox + 2.0, y, ow - 4.0, row_h),
 					Color(0.20, 0.28, 0.55, 0.80))
 			var iname: String = item.get("item_name", "？") as String
-			var itype: String = item.get("item_type", "") as String
-			var icat:  String = item.get("category",  "") as String
-			# 主要補正値サマリ
+			# 主要補正値サマリ（日本語表記）
 			var stats_d: Dictionary = item.get("stats", {}) as Dictionary
 			var parts: Array = []
-			for k: String in ["attack_power", "magic_power", "physical_resistance",
-					"magic_resistance", "defense_strength"]:
+			for k: String in ["attack_power", "magic_power", "accuracy",
+					"physical_resistance", "magic_resistance", "defense_strength"]:
 				if stats_d.has(k):
 					var v: float = float(stats_d[k])
 					if v != 0.0:
-						parts.append("%s+%s" % [k.split("_")[0], str(int(v))])
+						var jp: String = GlobalConstants.STAT_NAME_JP.get(k, k) as String
+						if k == "accuracy" or k == "physical_resistance" or k == "magic_resistance":
+							parts.append("%s+%d%%" % [jp, int(v * 100.0)])
+						else:
+							parts.append("%s+%d" % [jp, int(v)])
 			var effect_d: Dictionary = item.get("effect", {}) as Dictionary
 			for ek: String in effect_d:
 				parts.append("%s:%d" % [ek, int(effect_d[ek])])
 			var stat_str := "" if parts.is_empty() else " [%s]" % ", ".join(parts)
-			var equip_mark := "◆" if _can_equip(_item_char, item) else "  "
-			var txt := "%s %s  %s / %s%s" % [equip_mark, iname, icat, itype, stat_str]
-			var c: Color = Color(1.0, 1.0, 0.3) if is_cur else Color(0.85, 0.85, 0.90)
+			var can_equip := _can_equip(_item_char, item)
+			var equip_mark := "◆" if can_equip else "  "
+			var txt := "%s %s%s" % [equip_mark, iname, stat_str]
+			# 装備可能：通常色（白/黄）、装備不可：灰色
+			var c: Color
+			if is_cur:
+				c = Color(1.0, 1.0, 0.3)
+			elif can_equip:
+				c = Color(0.90, 0.90, 0.95)
+			else:
+				c = Color(0.50, 0.50, 0.58)
 			_control.draw_string(_font, Vector2(ox + pad, y + row_h * 0.70),
 				txt, HORIZONTAL_ALIGNMENT_LEFT, ow - pad * 2.0, fs_stat, c)
 			y += row_h

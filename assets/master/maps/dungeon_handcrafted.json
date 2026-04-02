@@ -17,20 +17,20 @@
             "enemy_party": { "members": [], "items": [] },
             "player_party": {
               "members": [
-                { "character_id": "hero",    "x": 5, "y": 6,
+                { "class_id": "fighter-sword", "x": 5, "y": 6,
                   "items": [
                     { "item_type": "sword",       "category": "weapon", "item_name": "古びた片手剣",     "stats": { "attack_power": 2, "accuracy": 0.03, "defense_strength": 1 }, "equipped": true },
                     { "item_type": "armor_plate", "category": "armor",  "item_name": "傷んだ革鎧",       "stats": { "physical_resistance": 2 }, "equipped": true },
                     { "item_type": "shield",      "category": "shield", "item_name": "木の盾",           "stats": { "physical_resistance": 1, "defense_strength": 1 }, "equipped": true }
                   ]
                 },
-                { "character_id": "archer",  "x": 7, "y": 6,
+                { "class_id": "archer",  "x": 7, "y": 6,
                   "items": [
                     { "item_type": "bow",         "category": "weapon", "item_name": "粗末な弓",         "stats": { "attack_power": 2, "accuracy": 0.05 }, "equipped": true },
                     { "item_type": "armor_cloth", "category": "armor",  "item_name": "薄いレザーコート",  "stats": { "physical_resistance": 1 }, "equipped": true }
                   ]
                 },
-                { "character_id": "healer",  "x": 6, "y": 7,
+                { "class_id": "healer",  "x": 6, "y": 7,
                   "items": [
                     { "item_type": "staff",      "category": "weapon", "item_name": "木の杖",           "stats": { "magic_power": 2, "accuracy": 0.03 }, "equipped": true },
                     { "item_type": "armor_robe", "category": "armor",  "item_name": "粗末な修道服",      "stats": { "magic_resistance": 2 }, "equipped": true }

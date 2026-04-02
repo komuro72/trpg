@@ -48,6 +48,16 @@ const RANK_THRESHOLDS: Array = [
 	[100,"C"],
 ]
 
+## 使用済み名前・画像セットの追跡（重複防止）。シーン再起動でリセットされる
+static var _used_names: Dictionary = {}       ## { name: String -> true }
+static var _used_image_sets: Dictionary = {}  ## { folder: String -> true }
+
+
+## 使用済みリストをリセットする（シーン再起動時に呼ぶ）
+static func reset_used() -> void:
+	_used_names.clear()
+	_used_image_sets.clear()
+
 
 ## 指定クラスのキャラクターを1体生成する。class_id が空ならランダム選択
 static func generate_character(class_id: String = "") -> CharacterData:
@@ -59,7 +69,13 @@ static func generate_character(class_id: String = "") -> CharacterData:
 		push_error("CharacterGenerator: 利用可能なグラフィックセットがありません")
 		return null
 
-	var chosen_set: Dictionary = sets[randi() % sets.size()]
+	# 未使用の画像セットを優先（枯渇時はフォールバック）
+	var unused_sets: Array = []
+	for s: Dictionary in sets:
+		if not _used_image_sets.has(s.get("folder", "")):
+			unused_sets.append(s)
+	var pool: Array = unused_sets if not unused_sets.is_empty() else sets
+	var chosen_set: Dictionary = pool[randi() % pool.size()]
 	var chosen_class: String   = chosen_set.get("class", "")
 
 	# 2. クラスデータ読み込み
@@ -75,15 +91,15 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	var sex:   String = chosen_set.get("sex",   "male")
 	var age:   String = chosen_set.get("age",   "adult")
 	var build: String = chosen_set.get("build", "medium")
-	var char_name := _random_name(sex)
+	var char_name := _random_unused_name(sex)
 
 	# 5. ステータス計算
 	var base_hp                   := int(class_json.get("base_hp",           100))
 	var base_attack_power         := int(class_json.get("base_attack_power", class_json.get("base_attack", 10)))
 	var base_magic_power          := int(class_json.get("base_magic_power",  0))
 	var base_defense              := int(class_json.get("base_defense",      3))
-	var base_physical_resistance  := float(class_json.get("base_physical_resistance", 0.0))
-	var base_magic_resistance     := float(class_json.get("base_magic_resistance",    0.0))
+	var base_physical_resistance  := int(class_json.get("base_physical_resistance", 0))
+	var base_magic_resistance     := int(class_json.get("base_magic_resistance",    0))
 	var stats := _calc_stats(base_hp, base_attack_power, base_magic_power, base_defense,
 		base_physical_resistance, base_magic_resistance, rank, sex, age, build)
 
@@ -115,6 +131,10 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	data.sprite_top_ready = folder + "/ready.png"
 	data.sprite_front     = folder + "/front.png"
 	data.sprite_face      = folder + "/face.png"
+
+	# 使用済みとして登録
+	_used_names[char_name] = true
+	_used_image_sets[str(chosen_set.get("folder", ""))] = true
 
 	return data
 
@@ -245,8 +265,8 @@ static func _random_rank() -> String:
 	return "C"
 
 
-## names.json から指定性別の名前をランダム選択
-static func _random_name(sex: String) -> String:
+## names.json から未使用の名前を優先してランダム選択（枯渇時はフォールバック）
+static func _random_unused_name(sex: String) -> String:
 	var file := FileAccess.open(NAMES_JSON_PATH, FileAccess.READ)
 	if file == null:
 		return "名無し"
@@ -257,14 +277,20 @@ static func _random_name(sex: String) -> String:
 	var names_list: Array = (parsed as Dictionary).get(sex, [])
 	if names_list.is_empty():
 		return "名無し"
-	return str(names_list[randi() % names_list.size()])
+	# 未使用の名前を優先
+	var unused: Array = []
+	for n: Variant in names_list:
+		if not _used_names.has(str(n)):
+			unused.append(n)
+	var pool: Array = unused if not unused.is_empty() else names_list
+	return str(pool[randi() % pool.size()])
 
 
 ## ステータス計算
 ## 最終値 = base × rank × build × sex × age（hp/defense 最低1、attack 最低0）
-## 耐性は clamp(base × rank × defense_mult, 0, 0.75) で上限75%
+## 耐性は int(base × defense_mult)（能力値。軽減率への変換は CharacterData.resistance_to_ratio()）
 static func _calc_stats(base_hp: int, base_attack_power: int, base_magic_power: int,
-		base_defense: int, base_physical_resistance: float, base_magic_resistance: float,
+		base_defense: int, base_physical_resistance: int, base_magic_resistance: int,
 		rank: String, sex: String, age: String, build: String) -> Dictionary:
 	var rm: float      = RANK_MULT.get(rank,  1.0) as float
 	var bm: Dictionary = BUILD_MULT.get(build, BUILD_MULT["medium"]) as Dictionary
@@ -280,6 +306,6 @@ static func _calc_stats(base_hp: int, base_attack_power: int, base_magic_power: 
 		"attack_power":        maxi(0, int(float(base_attack_power) * attack_mult)),
 		"magic_power":         maxi(0, int(float(base_magic_power)  * attack_mult)),
 		"defense":             maxi(0, int(float(base_defense)      * defense_mult)),
-		"physical_resistance": clampf(base_physical_resistance * defense_mult, 0.0, 0.75),
-		"magic_resistance":    clampf(base_magic_resistance    * defense_mult, 0.0, 0.75),
+		"physical_resistance": maxi(0, int(float(base_physical_resistance) * defense_mult)),
+		"magic_resistance":    maxi(0, int(float(base_magic_resistance) * defense_mult)),
 	}

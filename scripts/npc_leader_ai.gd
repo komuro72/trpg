@@ -3,7 +3,7 @@ extends PartyLeaderAI
 
 ## NPC リーダーAI
 ## 敵（ゴブリン等の enemy_party）を優先的にターゲットにして攻撃する。
-## 生存敵がいれば ATTACK、いなければ WAIT。
+## 生存敵がいれば ATTACK、いなければ EXPLORE（探索行動）。
 
 var _enemy_list: Array[Character] = []
 
@@ -19,12 +19,23 @@ func _create_unit_ai(_member: Character) -> UnitAI:
 
 
 ## パーティー全体の戦略を評価する
-## 生存している敵がいれば ATTACK、なければ WAIT
+## 生存している敵がいれば ATTACK、いなければ EXPLORE（探索行動）
 func _evaluate_party_strategy() -> Strategy:
 	for enemy: Character in _enemy_list:
 		if is_instance_valid(enemy) and enemy.hp > 0:
 			return Strategy.ATTACK
-	return Strategy.WAIT
+	return Strategy.EXPLORE
+
+
+## 戦略変更の理由
+func _get_strategy_change_reason() -> String:
+	if _party_strategy == Strategy.ATTACK:
+		return "敵を検知"
+	if _party_strategy == Strategy.EXPLORE:
+		return "敵なし・周辺探索"
+	if _party_strategy == Strategy.WAIT:
+		return "敵なし"
+	return super._get_strategy_change_reason()
 
 
 ## 各メンバーの攻撃ターゲットを選択する（最も近い生存敵）

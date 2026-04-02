@@ -49,9 +49,10 @@ var heal_mp_cost: int = 0
 ## バフスキルのMP消費（防御力アップなど）
 var buff_mp_cost: int = 0
 
-## 耐性（割合軽減。クラス素値＋装備補正。Phase 10-2〜）
-var physical_resistance: float = 0.0  ## 物理ダメージの割合軽減（0.0〜1.0）
-var magic_resistance:    float = 0.0  ## 魔法ダメージの割合軽減（0.0〜1.0）
+## 耐性（能力値。内部で軽減率に変換。クラス素値＋装備補正。Phase 10-2〜）
+## 変換式: 軽減率 = 能力値 / (能力値 + 100.0)（逓減カーブ・100で50%軽減）
+var physical_resistance: int = 0  ## 物理耐性の能力値
+var magic_resistance:    int = 0  ## 魔法耐性の能力値
 
 ## インベントリ（アイテムインスタンスの辞書リスト。Phase 10-1〜）
 var inventory: Array = []
@@ -115,8 +116,8 @@ static func load_from_json(path: String) -> CharacterData:
 	data.rank                    = d.get("rank", "C")
 	data.leadership              = int(d.get("leadership", 5))
 	data.obedience               = float(d.get("obedience", 0.5))
-	data.physical_resistance     = float(d.get("physical_resistance", 0.0))
-	data.magic_resistance        = float(d.get("magic_resistance",    0.0))
+	data.physical_resistance     = int(d.get("physical_resistance", 0))
+	data.magic_resistance        = int(d.get("magic_resistance",    0))
 	data.defense_accuracy        = float(d.get("defense_accuracy",    0.5))
 
 	# クラス情報（Phase 6-0〜）
@@ -175,6 +176,11 @@ func get_weapon_magic_bonus() -> int:
 	return int((equipped_weapon.get("stats", {}) as Dictionary).get("magic_power", 0))
 
 
+## 装備中の武器から命中精度補正を返す
+func get_weapon_accuracy_bonus() -> float:
+	return float((equipped_weapon.get("stats", {}) as Dictionary).get("accuracy", 0.0))
+
+
 ## 装備中の武器から防御強度を返す
 func get_weapon_block_power() -> int:
 	return int((equipped_weapon.get("stats", {}) as Dictionary).get("defense_strength", 0))
@@ -185,18 +191,35 @@ func get_shield_block_power() -> int:
 	return int((equipped_shield.get("stats", {}) as Dictionary).get("defense_strength", 0))
 
 
-## 装備補正込みの物理耐性を返す（素値 + 防具 + 盾）
+## 装備補正込みの物理耐性の能力値合計を返す（素値 + 防具 + 盾）
+func get_total_physical_resistance_score() -> int:
+	var bonus := int((equipped_armor.get("stats",  {}) as Dictionary).get("physical_resistance", 0))
+	var shield := int((equipped_shield.get("stats", {}) as Dictionary).get("physical_resistance", 0))
+	return physical_resistance + bonus + shield
+
+
+## 装備補正込みの魔法耐性の能力値合計を返す（素値 + 防具 + 盾）
+func get_total_magic_resistance_score() -> int:
+	var bonus := int((equipped_armor.get("stats",  {}) as Dictionary).get("magic_resistance", 0))
+	var shield := int((equipped_shield.get("stats", {}) as Dictionary).get("magic_resistance", 0))
+	return magic_resistance + bonus + shield
+
+
+## 能力値から軽減率に変換する（逓減カーブ: score / (score + 100)）
+static func resistance_to_ratio(score: int) -> float:
+	if score <= 0:
+		return 0.0
+	return float(score) / (float(score) + 100.0)
+
+
+## 装備補正込みの物理耐性の軽減率を返す（0.0〜1.0）
 func get_total_physical_resistance() -> float:
-	var bonus := float((equipped_armor.get("stats",  {}) as Dictionary).get("physical_resistance", 0))
-	var shield := float((equipped_shield.get("stats", {}) as Dictionary).get("physical_resistance", 0))
-	return clampf(physical_resistance + bonus + shield, 0.0, 0.95)
+	return resistance_to_ratio(get_total_physical_resistance_score())
 
 
-## 装備補正込みの魔法耐性を返す（素値 + 防具 + 盾）
+## 装備補正込みの魔法耐性の軽減率を返す（0.0〜1.0）
 func get_total_magic_resistance() -> float:
-	var bonus := float((equipped_armor.get("stats",  {}) as Dictionary).get("magic_resistance", 0))
-	var shield := float((equipped_shield.get("stats", {}) as Dictionary).get("magic_resistance", 0))
-	return clampf(magic_resistance + bonus + shield, 0.0, 0.95)
+	return resistance_to_ratio(get_total_magic_resistance_score())
 
 
 ## ヒーロー用データをJSONから生成する

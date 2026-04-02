@@ -300,7 +300,9 @@ func _start_action(action: Dictionary) -> void:
 			var cost := _member.character_data.heal_mp_cost if _member.character_data else 0
 			if _member.use_mp(cost):
 				var power := _member.character_data.magic_power if _member.character_data else 0
+				var hp_before := tgt.hp
 				tgt.heal(power)
+				tgt.log_heal(_member, power, hp_before)
 				SoundManager.play(SoundManager.HEAL)
 			_state = _State.WAITING
 			_timer = _member.character_data.post_delay if _member.character_data else 0.5

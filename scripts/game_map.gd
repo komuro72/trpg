@@ -53,7 +53,6 @@ var right_panel: RightPanel
 var message_window: MessageWindow
 var area_name_display: AreaNameDisplay
 var dialogue_trigger: DialogueTrigger
-var dialogue_window: DialogueWindow
 var order_window: OrderWindow
 
 var _tile_textures: Dictionary = {}  # TileType(int) -> Texture2D
@@ -66,6 +65,8 @@ var _dialogue_npc_initiates: bool = false
 func _ready() -> void:
 	# 画面サイズから GRID_SIZE を動的計算（最小32px）
 	GlobalConstants.initialize(get_viewport().get_visible_rect().size)
+	# キャラクター生成の使用済みリストをリセット（F5 再起動対応）
+	CharacterGenerator.reset_used()
 	_load_handcrafted_dungeon()
 
 
@@ -82,8 +83,8 @@ func _input(event: InputEvent) -> void:
 			KEY_TAB:
 				_toggle_order_window()
 			KEY_F1:
-				if right_panel != null:
-					right_panel.toggle_debug()
+				if MessageLog != null:
+					MessageLog.toggle_debug()
 			KEY_F5:
 				get_tree().reload_current_scene()
 
@@ -106,6 +107,7 @@ func _load_handcrafted_dungeon() -> void:
 ## セットアップ完了（map_dataが確定してから呼ぶ）
 func _finish_setup() -> void:
 	_load_tile_textures()
+	map_data.build_adjacency()
 	_setup_hero()
 	_setup_enemies()
 	_setup_npcs()
@@ -130,12 +132,13 @@ func _process(_delta: float) -> void:
 	_check_item_pickup()
 
 	# 会話中に敵が部屋に入ってきたら会話を中断する
-	if dialogue_window == null or not dialogue_window.visible:
+	if message_window == null or not message_window.is_dialogue_active():
 		return
 	if dialogue_trigger == null:
 		return
 	var area := vision_system.get_current_area() if vision_system != null else ""
 	if not dialogue_trigger.is_area_enemy_free(area):
+		message_window.show_message("敵の接近により会話が中断された！")
 		_close_dialogue()
 
 
@@ -145,28 +148,22 @@ func _process(_delta: float) -> void:
 
 func _setup_hero() -> void:
 	var spawn_pos := Vector2i(2, 2)
-	var class_id     := ""
-	var character_id := ""
+	var class_id := "fighter-sword"
 	var hero_items: Array = []
 	if map_data.player_parties.size() > 0:
 		var members: Array = (map_data.player_parties[0] as Dictionary).get("members", [])
 		if members.size() > 0:
 			var m := members[0] as Dictionary
-			spawn_pos    = Vector2i(int(m.get("x", 2)), int(m.get("y", 2)))
-			class_id     = m.get("class_id",     "") as String
-			character_id = m.get("character_id", "") as String
-			hero_items   = m.get("items",        []) as Array
+			spawn_pos  = Vector2i(int(m.get("x", 2)), int(m.get("y", 2)))
+			class_id   = m.get("class_id", m.get("character_id", "fighter-sword")) as String
+			hero_items = m.get("items",    []) as Array
 
 	hero = Character.new()
 	hero.grid_pos = spawn_pos
 	hero.placeholder_color = Color(0.3, 0.7, 1.0)
-	# character_id == "hero" の場合は hero.json を使用。class_id が指定されていればランダム生成
-	var hero_data: CharacterData
-	if character_id == "hero":
-		hero_data = CharacterData.create_hero()
-	else:
-		hero_data = CharacterGenerator.generate_character(class_id)
-	hero.character_data = hero_data if hero_data != null else CharacterData.create_hero()
+	# CharacterGenerator でランダム生成（他キャラと同様）
+	var hero_data := CharacterGenerator.generate_character(class_id)
+	hero.character_data = hero_data if hero_data != null else CharacterData.new()
 	# 初期装備を付与する
 	if hero.character_data != null and not hero_items.is_empty():
 		hero.character_data.apply_initial_items(hero_items)
@@ -189,6 +186,7 @@ func _setup_hero() -> void:
 	add_child(_hero_manager)
 	_hero_manager.setup_adopted(hero, hero, map_data)
 	_hero_manager.set_vision_controlled(true)  # VisionSystem には登録しない
+	_hero_manager.suppress_ai_log = true  # プレイヤー操作中はログ不要
 	_hero_manager.activate()
 
 
@@ -284,6 +282,7 @@ func _merge_pre_joined_allies() -> void:
 		if is_instance_valid(nm):
 			# VisionSystem による起動を待たず AI を直接起動してから合流させる
 			# （_finish_setup() は同一フレームで完了するため _process() より先に実行される）
+			nm.suppress_ai_log = true  # 合流前の一時パーティーのログを抑制
 			nm.activate()
 			_merge_npc_into_player_party(nm)
 	_pre_joined_npc_managers.clear()
@@ -363,6 +362,17 @@ func _setup_vision_system() -> void:
 	if _hero_manager != null:
 		_hero_manager.set_vision_system(vision_system)
 
+	# NPC パーティーをゲーム開始時に即座にアクティブ化（探索行動を開始する）
+	# VisionSystem 配布後に呼ぶこと（explore 行動で VisionSystem を参照するため）
+	for nm: NpcManager in npc_managers:
+		if nm not in _pre_joined_npc_managers:
+			nm.activate()
+
+	# MessageLog のエリアフィルタを設定（デバッグログをプレイヤーエリアに限定）
+	if MessageLog != null:
+		MessageLog.setup_area_filter(map_data, func() -> String:
+				return vision_system.get_current_area() if vision_system != null else "")
+
 
 func _setup_panels() -> void:
 	# 左パネル（味方ステータス）
@@ -418,11 +428,10 @@ func _setup_dialogue_system() -> void:
 	if player_controller != null:
 		player_controller.npc_bumped.connect(_on_npc_bumped)
 
-	dialogue_window = DialogueWindow.new()
-	dialogue_window.name = "DialogueWindow"
-	add_child(dialogue_window)
-	dialogue_window.choice_confirmed.connect(_on_dialogue_choice)
-	dialogue_window.dismissed.connect(_on_dialogue_dismissed)
+	# MessageWindow の会話シグナルを接続
+	if message_window != null:
+		message_window.choice_confirmed.connect(_on_dialogue_choice)
+		message_window.dialogue_dismissed.connect(_on_dialogue_dismissed)
 
 
 # --------------------------------------------------------------------------
@@ -509,7 +518,39 @@ func _on_dialogue_requested(nm: NpcManager, npc_initiates: bool) -> void:
 	player_controller.is_blocked = true
 	# 会話中は対象 NPC の AI を一時停止（メンバーが動き回らないようにする）
 	nm.set_process_mode(Node.PROCESS_MODE_DISABLED)
-	dialogue_window.show_dialogue(nm, npc_initiates)
+
+	# NPC パーティー情報をメッセージとして表示
+	var npc_name := _get_npc_party_leader_name(nm)
+	if npc_initiates:
+		message_window.show_message("%s のパーティーが話しかけてきた" % npc_name)
+	else:
+		message_window.show_message("%s のパーティーに話しかけた" % npc_name)
+	# メンバー情報を表示
+	for member: Character in nm.get_members():
+		if not is_instance_valid(member):
+			continue
+		var cd: CharacterData = member.character_data
+		if cd == null:
+			continue
+		var ratio := float(member.hp) / float(member.max_hp) if member.max_hp > 0 else 0.0
+		var cond := "元気" if ratio > 0.6 else ("負傷" if ratio > 0.3 else "重傷")
+		message_window.show_message("  %s [%s] %s (%s)" % [cd.character_name, cd.rank, cd.class_id, cond])
+
+	# 選択肢を構築して MessageWindow で表示
+	var choices: Array[Dictionary] = []
+	if npc_initiates:
+		message_window.show_message("「一緒に連れて行ってもらえないか...」")
+		choices.assign([
+			{"id": DialogueWindow.CHOICE_JOIN_US, "label": "（承諾する）"},
+			{"id": DialogueWindow.CHOICE_CANCEL,  "label": "（断る）"},
+		])
+	else:
+		choices.assign([
+			{"id": DialogueWindow.CHOICE_JOIN_US,   "label": "「仲間になってほしい」"},
+			{"id": DialogueWindow.CHOICE_JOIN_THEM, "label": "「一緒に連れて行ってほしい」"},
+			{"id": DialogueWindow.CHOICE_CANCEL,    "label": "（立ち去る）"},
+		])
+	message_window.start_dialogue(choices)
 
 
 func _on_dialogue_choice(choice_id: String) -> void:
@@ -529,14 +570,18 @@ func _on_dialogue_choice(choice_id: String) -> void:
 			var player_strength := _calc_party_strength(party)
 			accepted = (leader_ai as NpcLeaderAI).will_accept(choice_id, player_strength)
 
+	var npc_name := _get_npc_party_leader_name(_dialogue_npc_manager)
+	message_window.end_dialogue()
 	if not accepted:
-		dialogue_window.show_rejected()
+		message_window.show_rejected("%s は申し出を断った" % npc_name)
 		return
 
 	# 合流処理
 	if choice_id == DialogueWindow.CHOICE_JOIN_US:
+		message_window.show_message("%s のパーティーが仲間に加わった！" % npc_name)
 		_merge_npc_into_player_party(_dialogue_npc_manager)
 	elif choice_id == DialogueWindow.CHOICE_JOIN_THEM:
+		message_window.show_message("%s のパーティーに合流した！" % npc_name)
 		_merge_player_into_npc_party(_dialogue_npc_manager)
 
 	_close_dialogue()
@@ -555,8 +600,8 @@ func _close_dialogue() -> void:
 		player_controller.is_blocked = false
 	if dialogue_trigger != null:
 		dialogue_trigger.set_dialogue_active(false)
-	if dialogue_window != null:
-		dialogue_window.hide_dialogue()
+	if message_window != null:
+		message_window.end_dialogue()
 
 
 ## NPC 全員をプレイヤーパーティーに加入させる（プレイヤーがリーダー維持）
@@ -601,6 +646,20 @@ func _merge_player_into_npc_party(nm: NpcManager) -> void:
 		vision_system.remove_npc_manager(nm)
 	npc_managers.erase(nm)
 	dialogue_trigger.setup(hero, npc_managers, enemy_managers, vision_system, map_data)
+
+
+## NPC パーティーのリーダー名を返す
+func _get_npc_party_leader_name(nm: NpcManager) -> String:
+	for member: Character in nm.get_members():
+		if is_instance_valid(member) and member.is_leader:
+			if member.character_data != null and not member.character_data.character_name.is_empty():
+				return member.character_data.character_name
+	# リーダーがいなければ最初の生存メンバー
+	for member: Character in nm.get_members():
+		if is_instance_valid(member):
+			if member.character_data != null and not member.character_data.character_name.is_empty():
+				return member.character_data.character_name
+	return "NPC"
 
 
 ## パーティーの総合力（最大HP合計）を返す

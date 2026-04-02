@@ -33,6 +33,10 @@ var _area_map: Dictionary = {}   # Vector2i -> String
 ## DungeonBuilderがLLM生成JSONのnameフィールドから設定する
 var _area_names: Dictionary = {}  # String -> String
 
+## エリア隣接テーブル（エリアID → 隣接エリアIDの配列）
+## build_adjacency() で構築。VisionSystem の先行可視化に使用
+var _adjacent_areas: Dictionary = {}  # String -> Array[String]
+
 
 func _init() -> void:
 	_generate_room()
@@ -152,6 +156,32 @@ func get_tiles_in_area(area_id: String) -> Array[Vector2i]:
 		if _area_map[pos] == area_id:
 			result.append(pos as Vector2i)
 	return result
+
+
+## 指定エリアに隣接するエリアIDの配列を返す
+func get_adjacent_areas(area_id: String) -> Array[String]:
+	return _adjacent_areas.get(area_id, []) as Array[String]
+
+
+## エリア隣接テーブルを構築する（セットアップ完了後に1回呼ぶ）
+## タイル同士が上下左右で隣接し、異なるエリアIDを持つ場合に「隣接」と判定する
+func build_adjacency() -> void:
+	_adjacent_areas.clear()
+	for pos: Variant in _area_map.keys():
+		var area: String = _area_map[pos] as String
+		if area.is_empty():
+			continue
+		for offset: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0),
+				Vector2i(0, 1), Vector2i(0, -1)]:
+			var npos := (pos as Vector2i) + offset
+			var neighbor: String = _area_map.get(npos, "") as String
+			if neighbor.is_empty() or neighbor == area:
+				continue
+			if not _adjacent_areas.has(area):
+				_adjacent_areas[area] = [] as Array[String]
+			var adj: Array[String] = _adjacent_areas[area] as Array[String]
+			if not adj.has(neighbor):
+				adj.append(neighbor)
 
 
 ## 飛行フラグを考慮した移動可否

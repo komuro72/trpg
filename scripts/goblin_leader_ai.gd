@@ -35,6 +35,13 @@ func _evaluate_party_strategy() -> Strategy:
 	return Strategy.WAIT
 
 
+## 戦略変更の理由
+func _get_strategy_change_reason() -> String:
+	if _party_strategy == Strategy.FLEE:
+		return "仲間50%以下"
+	return super._get_strategy_change_reason()
+
+
 ## 攻撃ターゲット: プレイヤー
 func _select_target_for(_member: Character) -> Character:
 	return _player

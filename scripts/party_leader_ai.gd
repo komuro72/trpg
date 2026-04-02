@@ -9,8 +9,9 @@ extends Node
 ##   _select_target_for()      : メンバーごとの攻撃ターゲット選択
 ##   _select_weakest_target()  : 最弱ターゲット選択（複数候補がある場合）
 
-## パーティー戦略（UnitAI.Strategy と int 値を合わせる：ATTACK=0, FLEE=1, WAIT=2）
-enum Strategy { ATTACK, FLEE, WAIT, DEFEND }
+## パーティー戦略（ATTACK=0, FLEE=1, WAIT=2 は UnitAI.Strategy と int 値一致）
+## DEFEND=3, EXPLORE=4 はパーティーレベル専用（UnitAI へは WAIT/ATTACK に変換して渡す）
+enum Strategy { ATTACK, FLEE, WAIT, DEFEND, EXPLORE }
 
 const REEVAL_INTERVAL := 1.5  ## 定期再評価の間隔（秒）
 
@@ -19,6 +20,8 @@ var _player:        Character
 var _map_data:      MapData
 var _unit_ais:      Dictionary = {}  ## member.name -> UnitAI
 var _party_strategy: Strategy = Strategy.WAIT
+var _prev_strategy:  Strategy = Strategy.WAIT  ## 前回の戦略（変更検出用）
+var log_enabled:     bool  = true  ## false にするとログ出力を抑制する（一時パーティー用）
 var _reeval_timer:   float = 0.0
 var _initial_count:  int   = 0  ## 初期メンバー数（逃走判定の基準）
 
@@ -71,6 +74,15 @@ func _process(delta: float) -> void:
 func _assign_orders() -> void:
 	_party_strategy = _evaluate_party_strategy()
 
+	# 戦略変更時にログ出力
+	# - プレイヤー操作中のメンバーがいる場合はスキップ（プレイヤーが指示を出す側）
+	# - 初回評価でも、デフォルト（WAIT）から変わっていればログを出す（敵のアクティブ化時など）
+	if _party_strategy != _prev_strategy:
+		var old_strategy := _prev_strategy
+		_prev_strategy = _party_strategy
+		if log_enabled and not _has_player_controlled_member():
+			_log_strategy_change(old_strategy)
+
 	# リーダーのターゲットを先に決定（same_as_leader ポリシー用）
 	var leader_target: Character = null
 	for lm: Character in _party_members:
@@ -121,6 +133,15 @@ func _assign_orders() -> void:
 		var effective_strat: int
 		if _party_strategy == Strategy.FLEE:
 			effective_strat = int(Strategy.FLEE)
+		elif _party_strategy == Strategy.EXPLORE:
+			# 探索戦略：UnitAI には ATTACK を渡し、move を explore に設定
+			var cd := member.character_data
+			if cd != null and (cd.magic_power > 0 or cd.buff_mp_cost > 0):
+				effective_strat = int(Strategy.WAIT)
+			else:
+				effective_strat = int(Strategy.ATTACK)
+			if member.is_friendly:
+				move_policy = "explore"
 		else:
 			# 回復・バフ専用キャラ（magic_power > 0）は常に WAIT を渡す
 			# UnitAI._generate_queue() の先頭で heal/buff キューが自動生成される
@@ -133,7 +154,12 @@ func _assign_orders() -> void:
 					"aggressive": effective_strat = int(Strategy.ATTACK)
 					"support":    effective_strat = int(Strategy.WAIT)
 					"standby":    effective_strat = int(Strategy.WAIT)
-					_:            effective_strat = int(_party_strategy)
+					_:
+						# DEFEND 等のパーティー専用戦略は WAIT に変換
+						if int(_party_strategy) > int(Strategy.WAIT):
+							effective_strat = int(Strategy.WAIT)
+						else:
+							effective_strat = int(_party_strategy)
 
 		# 2. 個別低HP条件（on_low_hp）：HP50%未満で処理
 		if member.max_hp > 0 and float(member.hp) / float(member.max_hp) < 0.5:
@@ -201,6 +227,75 @@ func get_debug_info() -> Array:
 		if unit_ai != null:
 			result.append(unit_ai.get_debug_info())
 	return result
+
+
+# --------------------------------------------------------------------------
+# AI戦略変更ログ
+# --------------------------------------------------------------------------
+
+## プレイヤーが直接操作中のメンバーがいるか判定する
+func _has_player_controlled_member() -> bool:
+	for m: Character in _party_members:
+		if is_instance_valid(m) and m.is_player_controlled:
+			return true
+	return false
+
+
+## 戦略変更時にログ出力する。サブクラスが _get_strategy_change_reason() をオーバーライドして理由を提供可能
+func _log_strategy_change(old_strategy: Strategy) -> void:
+	if MessageLog == null:
+		return
+	var leader_name := _get_leader_name()
+	var old_name := _strategy_to_preset_name(old_strategy)
+	var new_name := _strategy_to_preset_name(_party_strategy)
+	var reason := _get_strategy_change_reason()
+	var text := "[AI] %s: %s→%s（%s）" % [leader_name, old_name, new_name, reason]
+	var leader_pos := Vector2i(-1, -1)
+	for m: Character in _party_members:
+		if is_instance_valid(m) and m.is_leader:
+			leader_pos = m.grid_pos
+			break
+	MessageLog.add_ai(text, leader_pos)
+
+
+## リーダーキャラの名前を取得する
+func _get_leader_name() -> String:
+	for m: Character in _party_members:
+		if is_instance_valid(m) and m.is_leader:
+			var cname: String = m.character_data.character_name if m.character_data != null else ""
+			if not cname.is_empty():
+				return cname
+			return m.character_data.character_id if m.character_data != null else m.name
+	# リーダーがいなければ最初の生存メンバー
+	for m: Character in _party_members:
+		if is_instance_valid(m):
+			var cname: String = m.character_data.character_name if m.character_data != null else ""
+			if not cname.is_empty():
+				return cname
+			return m.character_data.character_id if m.character_data != null else m.name
+	return "不明"
+
+
+## Strategy を日本語プリセット名に変換する
+func _strategy_to_preset_name(strat: Strategy) -> String:
+	match strat:
+		Strategy.ATTACK:  return "攻撃"
+		Strategy.FLEE:    return "撤退"
+		Strategy.WAIT:    return "待機"
+		Strategy.DEFEND:  return "防衛"
+		Strategy.EXPLORE: return "探索"
+	return "不明"
+
+
+## 戦略変更の理由を返す（サブクラスがオーバーライド可能）
+func _get_strategy_change_reason() -> String:
+	match _party_strategy:
+		Strategy.ATTACK:  return "敵発見"
+		Strategy.FLEE:    return "撤退判断"
+		Strategy.WAIT:    return "待機"
+		Strategy.DEFEND:  return "防衛"
+		Strategy.EXPLORE: return "探索開始"
+	return ""
 
 
 # --------------------------------------------------------------------------

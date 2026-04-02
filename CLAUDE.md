@@ -142,7 +142,7 @@ assets/images/enemies/
 | アイテム使用（ホールド） | 未定 | LT ホールド＋ABXY |
 | ゲーム終了 | Esc（当面） | ポーズメニュー内で選択（将来実装） |
 | ポーズメニュー | 未定（将来実装） | Start |
-| AIデバッグパネル ON/OFF | F1 | — |
+| デバッグメッセージ ON/OFF | F1 | — |
 | シーン再スタート | F5 | — |
 | OrderWindow 名前列サブメニュー | Z または 右キー（名前列上） | 同左 |
 | メニュー内決定 | Z / 右キー / Enter | A / 右 |
@@ -277,7 +277,7 @@ assets/images/enemies/
     - キャラクターはWALLタイルに移動不可
     - キャラクターのZオーダー：タイルより手前に表示
   - [x] Phase 1-4: カメラ・スクロール（追従・範囲制限）
-    - カメラはデッドゾーン方式（画面の70%）
+    - カメラはデッドゾーン方式（画面の40%）
     - デッドゾーン内はカメラ固定、超えたらブロック単位でカメラ移動
     - なめらかスクロールはアニメーション実装時に追加予定
     - マップ外（壁の外側）は黒で表示
@@ -385,8 +385,8 @@ assets/images/enemies/
     - [x] 左パネル（LeftPanel.gd）：フェイスアイコン・名前・HPバー・MPバー・状態
       - フェイスアイコンは face.png（なければ front.png）を TextureRect ノードで表示
     - [x] 右パネル（RightPanel.gd）：可視敵の種類・数・ランク（ランク色分け）
-    - [x] AIデバッグパネル（RightPanel下半分）：現在エリアの敵の戦略・ターゲット・キューをリアルタイム表示。F1でON/OFF。デフォルトON（リリース版ではOFF予定）
-    - [x] メッセージウィンドウ（MessageWindow.gd）：将来のシステムメッセージ用に保持（現在呼び出し元なし）
+    - [x] ~~AIデバッグパネル（RightPanel下半分）~~：Phase 10-2準備で廃止。代わりにMessageWindowのデバッグメッセージ（F1でON/OFF）に移行
+    - [x] メッセージウィンドウ（MessageWindow.gd）：フィールド画面下部に5行固定表示。MessageLog（Autoload）で共有バッファ管理。メッセージ種別（system=白/combat=黄/ai=水色）で色分け。F1でデバッグメッセージ（combat/ai）のON/OFF切替
     - [x] エリア名表示（AreaNameDisplay.gd）：エリア入室時にフィールド上部中央にエリア名を常時表示（名前なしエリアは非表示）
 - [ ] Phase 6: 仲間AI・操作切替
   - [x] Phase 6-0: 準備（クラス・ステータス・グラフィック仕様の反映＋AIリファクタリング）
@@ -430,22 +430,23 @@ assets/images/enemies/
     - [x] DialogueTrigger.try_trigger_for_member()：矢印キーバンプ用の直接トリガーメソッド
     - [x] PlayerController.gd：npc_bumped シグナル追加（矢印キーで NPC 方向に入力すると発火）
     - [x] game_map._on_npc_bumped()：npc_bumped を受け取り DialogueTrigger.try_trigger_for_member() を呼ぶ
-    - [x] DialogueWindow.gd：会話UI（メンバー一覧・選択肢・↑↓/Z/Esc操作）
+    - [x] ~~DialogueWindow.gd~~：会話UIはMessageWindowに統合済み（Phase 10-2準備で移行）
     - [x] NpcLeaderAI：wants_to_initiate() / will_accept() / get_party_strength() 追加
     - [x] player_controller.gd：is_blocked フラグ追加（会話中は移動・攻撃入力を無効化）
     - [x] vision_system.gd：remove_npc_manager() 追加
     - [x] game_map.gd：_setup_dialogue_system() / 合流処理 / 敵入室による会話中断
     - [x] game_map.gd：会話中は対象 NpcManager の process_mode を DISABLED に設定（NPC 停止）
     - [x] player_controller.gd：_get_valid_targets() で is_friendly チェック追加（合流後の仲間を攻撃対象から除外）
-    - [x] dialogue_window.gd：画面下部ポップアップ方式・GRID_SIZE 連動フォントサイズに変更
+    - [x] ~~dialogue_window.gd~~：MessageWindowに統合済み（選択肢をインライン表示）
     - 会話トリガー条件
       - 部屋内の敵が全滅していること
       - プレイヤーと NPC メンバーが隣接（マンハッタン距離1）
       - 通路（エリアIDなし）では会話しない
       - プレイヤー起点：矢印キーで NPC 方向に入力（バンプ検出）
       - NPC 自発：wants_to_initiate=true のとき毎フレーム自動チェック
-    - 会話UI
-      - NPCパーティーの情報を表示（名前・クラス・ランク・状態）
+    - 会話UI（MessageWindow統合）
+      - NPCパーティーの情報をメッセージとして表示（名前・ランク・クラス・状態）
+      - 選択肢をMessageWindow下部にインライン表示（↑↓選択、Z/右で決定、X/左で閉じる）
       - プレイヤーから話しかけた場合の選択肢
         - 「仲間になってほしい」：NPC がプレイヤー傘下に加入、プレイヤーがリーダー維持
         - 「一緒に連れて行ってほしい」：プレイヤーが NPC 傘下に加入、NPC リーダーがリーダー
@@ -453,6 +454,7 @@ assets/images/enemies/
       - NPC 側からの申し出（wants_to_initiate=true）：承諾/断る の2択
       - NPCの申し出ロジック：重傷者が過半数（HP<50%）なら申し出
       - NPCリーダーAIの承諾/拒否：プレイヤー総合力 × 1.5 < NPC 総合力なら拒否
+      - 結果（合流・拒否・中断）もメッセージとして表示
     - 合流処理
       - 合流メンバーを party に追加・常時表示
       - VisionSystem・npc_managers から除外（再会話防止）
@@ -543,7 +545,7 @@ assets/images/enemies/
 - [ ] Phase 9: 操作感・表現強化
   - [x] Phase 9-1: 歩行アニメーション・滑らか移動
     - move_to(pos, duration) に持続時間パラメータを追加。視覚位置を _visual_from→_visual_to へ duration 秒かけて線形補間
-    - 衝突判定・grid_pos は即時更新のまま（グリッド単位を維持）
+    - 衝突判定・grid_pos は半マス到達（進捗50%）で更新。移動中は旧位置+移動先の両方を占有タイルとして返す
     - スプライトフレームを補間進捗 t=0→1 で駆動: 0%〜25%=walk1, 25%〜50%=top, 50%〜75%=walk2, 75%〜100%=top
     - walk1/walk2 がない場合は top 固定にフォールバック
     - is_moving() メソッドを追加（_visual_duration > 0 の間 true）
@@ -629,14 +631,53 @@ assets/images/enemies/
       - メニュー内ナビゲーション：右キー/Z=決定、左キー/X/Esc=戻る（order_window・dialogue_window 共通）
       - 名前列：右キー/Z=サブメニュー開く、左キー=ウィンドウ閉じる
       - ログ行：右キー/Z=ログ開始、左キー/X/Esc=ウィンドウ閉じる
-    - [ ] 装備ステータス補正値反映（get_effective_attack_power() 等の計算に装備補正を加算）
-    - [ ] 被ダメージ計算に防御判定・防御強度・耐性を反映（戦闘仕様節を参照）
-    - [ ] 方向判定：atan2 で4象限（正面/背面/左側面/右側面）、近接・遠距離共通
-    - [ ] 耐性（physical_resistance / magic_resistance）をキャラクターデータに追加
+    - [x] MessageWindow拡張・AIデバッグパネル廃止（Phase 10-2 準備）
+      - RightPanel からAIデバッグ表示（下半分）を削除。敵情報表示のみ残す
+      - MessageLog（Autoload）を新設。メッセージ種別（system=白/combat=黄/ai=水色）と色分け、デバッグフィルタ
+      - MessageWindow をフィールド画面下部5行固定表示にリファクタリング。自動スクロール
+      - OrderWindow のログ行が MessageLog の共有バッファを参照するよう統合
+      - F1キーを MessageLog のデバッグメッセージ表示トグルに転用（デフォルトON）
+      - 各リーダーAI（Goblin/Wolf/Hobgoblin/Default/NPC）に戦略変更時のログ出力を追加
+        - ログフォーマット：`[AI] {名前}: {旧}→{新}（{理由}）`（例：`[AI] ゴブリン: 待機→攻撃（敵発見）`）
+        - プレイヤー操作中のメンバーがいるパーティーはログ抑制
+        - 合流前の一時パーティー（初期仲間・hero_manager）はsuppress_ai_logフラグでログ抑制
+      - character.gd に戦闘計算ログ出力（暫定フォーマット）を追加
+      - Strategy enum に EXPLORE を追加（パーティーレベル専用。UnitAI には ATTACK+move=explore に変換）
+      - NPC パーティーのデフォルト戦略を WAIT → EXPLORE に変更（敵なし時は探索行動）
+      - 敵パーティーのデフォルト戦略は WAIT のまま（アクティブ化時に ATTACK に遷移）
+    - [x] 全キャラクター常時行動化（Phase 10-2 準備）
+      - NPC パーティーをゲーム開始時に即座にアクティブ化（VisionSystem 配布後）
+      - 敵パーティーはプレイヤー or NPC が部屋に入ったらアクティブ化（friendly_areas で判定）
+      - 画面外のNPCは非表示のまま自律行動（VisionSystem の既存 visited_areas で表示制御）
+      - デバッグログ（combat/ai）をプレイヤーのいるエリアに限定（MessageLog エリアフィルタ）
+    - [x] 会話UIをMessageWindowに統合（Phase 10-2 準備）
+      - DialogueWindow を廃止。会話の選択肢をMessageWindow下部にインライン表示
+      - NPC パーティー情報（名前・ランク・クラス・状態）をメッセージとして表示
+      - 会話の結果（合流・拒否・中断）もメッセージとして表示
+    - [x] 装備ステータス補正値反映
+      - 装備変更時に Character.refresh_stats_from_equipment() でパラメータに反映（attack_power / magic_power）
+      - 攻撃コードは装備補正込みのパラメータを参照するため変更不要
+      - 戦闘計算ログは武器名・装備補正の内訳を表示しない（補正済みパラメータを表示）
+    - [x] 被ダメージ計算に防御判定・防御強度・耐性を反映（Phase 10-2 準備で実装済み）
+    - [x] 方向判定：atan2 で4象限（正面/背面/左側面/右側面）、近接・遠距離共通（Phase 10-2 準備で実装済み）
+    - [x] 耐性（physical_resistance / magic_resistance）をキャラクターデータに追加（Phase 10-2 準備で実装済み）
       - クラスごとの素値を設定、他パラメータと同じ生成フローで決定
-      - 当面は線形軽減、将来バランス調整で変更可能な設計
-    - [ ] 初期装備の付与（dungeon_handcrafted.json の items → 装備スロットにセット）
+      - 能力値（整数）で管理し、軽減率への変換は内部で行う: 軽減率 = 能力値 / (能力値 + 100)
+    - [x] 初期装備の付与（Phase 10-2 準備で実装済み。dungeon_handcrafted.json の items → 装備スロットにセット）
     - AI自動装備は将来実装（当面は拾って持つだけ）
+    - [x] UI改善・バグ修正
+      - 左パネル・OrderWindow にクラス名（日本語）・ランクを表示
+      - 左パネルの個別指示表示を OrderWindow の COL_LABELS と完全一致する表記に統一（例：同じ部屋 / 積極攻撃 / 最近傍）
+      - 会話選択の決定を Z/A のみ、キャンセルを X/B のみに限定（左右キー無効化・移動との競合防止）
+      - CharacterGenerator で名前・画像セットの重複防止（使用済みリスト追跡・枯渇時フォールバック）
+      - アイテム一覧の装備可否色分け（不可=灰色）・補正値の日本語表記統一（アイテム一覧・装備欄の両方）
+      - GlobalConstants に CLASS_NAME_JP / STAT_NAME_JP テーブルを追加
+      - 主人公を hero.json 固定からランダム生成に変更（他キャラと同様に CharacterGenerator 使用）
+      - dungeon_handcrafted.json の主人公定義を character_id:"hero" → class_id:"fighter-sword" に変更
+      - 耐性を能力値（整数）に変更。軽減率 = 能力値 / (能力値 + 100) の逓減カーブで内部変換
+      - カメラのデッドゾーン比率を 0.70 → 0.40 に変更（先読みマージン拡大・出会いがしら軽減）
+      - 隣接エリアの先行可視化（通路の端に立つと次の部屋が見える。VisionSystem でタイル隣接チェック）
+      - 移動時の grid_pos 更新を半マス到達（進捗50%）に遅延。占有タイルは旧位置+移動先の両方をカバー
   - [ ] Phase 10-3: 消耗品の使用
     - HP回復ポーション・MP回復ポーション
     - ゲームパッド：LT ホールド＋ABXY で選択・使用（最大4スロット）
@@ -775,8 +816,8 @@ assets/images/enemies/
 | 攻撃力 | `attack_power` | 物理攻撃のダメージ（近接・遠距離共通） |
 | 命中精度 | `accuracy` | 物理攻撃の命中（近接・遠距離共通）。装備実装時に有効化 |
 | 魔法威力 | `magic_power` | 魔法ダメージ・回復量の共通値（攻撃魔法・回復魔法の両方に効く） |
-| 物理攻撃耐性 | `physical_resistance` | 物理ダメージの割合軽減。クラスごとに素値を設定＋装備補正 |
-| 魔法攻撃耐性 | `magic_resistance` | 魔法ダメージの割合軽減。クラスごとに素値を設定＋装備補正 |
+| 物理攻撃耐性 | `physical_resistance` | 物理ダメージ軽減の能力値（整数）。軽減率 = 値/(値+100)。クラスごとに素値を設定＋装備補正 |
+| 魔法攻撃耐性 | `magic_resistance` | 魔法ダメージ軽減の能力値（整数）。軽減率 = 値/(値+100)。クラスごとに素値を設定＋装備補正 |
 | 防御精度 | `defense_accuracy` | 防御判定の成功しやすさ。キャラ固有の素値（装備による変化なし） |
 | 防御強度 | （装備側） | 防御成功時に無効化できるダメージ量。武器・盾に付くパラメータ |
 | 移動速度 | `move_speed` | 単位：秒/タイル（標準0.4） |
@@ -787,7 +828,7 @@ assets/images/enemies/
 - 回復魔法は必ず命中するため、ヒーラー（attack_type="heal"）には OrderWindow の命中精度行を表示しない
 - 耐性素値はクラスごとに設定（例：戦士クラスは物理耐性高め、魔法使いは魔法耐性高め）
 - 耐性はクラス基準値 × ランク補正 × 体格補正 × 性別補正 × 年齢補正で決定
-- 軽減方式：当面は線形（内部値がそのまま軽減率として機能）、将来的に逓減カーブに変更可能な設計
+- 軽減方式：逓減カーブ（軽減率 = 能力値 / (能力値 + 100)。100で50%、200で67%）
 - OrderWindow では数値のみ表示（%表記はしない）
 
 ### 命中・被ダメージ計算
@@ -798,7 +839,7 @@ assets/images/enemies/
 1. **防御判定**（防御精度で成功/失敗。背面攻撃は判定スキップ）
    - 成功：攻撃方向に応じた武器・盾の防御強度の合計をダメージからカット
    - 失敗：カットなし
-2. **耐性適用**（物理 or 魔法耐性で割合軽減）
+2. **耐性適用**（物理 or 魔法耐性の能力値から軽減率を算出して軽減。軽減率 = 能力値 / (能力値 + 100)）
    - 残ダメージ × (1 - 耐性%)
 3. **最終ダメージ確定**（最低1）
 

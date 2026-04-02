@@ -1494,14 +1494,13 @@ func _on_npc_bumped(npc_member: Character) -> void:
     dialogue_trigger.try_trigger_for_member(npc_member)
 ```
 
-**DialogueWindow（CanvasLayer layer=15）**
-- 画面下部ポップアップ（`vp_h - panel_h - 16px` に配置）
-- パネル幅: フィールド幅 - 32px（左右パネルの内側いっぱい）
-- フォントサイズ: GRID_SIZE 連動（1080p基準: タイトル≈18px、本文≈16px、ヒント≈13px）
+**会話UI（MessageWindow統合）** ※旧 DialogueWindow は廃止済み
+- MessageWindow下部に選択肢をインライン表示（会話モード）
+- NPC メンバー情報をメッセージとして表示（名前・ランク・クラス・状態）
 - プレイヤー起点: 3択（仲間に / 連れて行って / 立ち去る）
 - NPC 起点: 2択（承諾する / 断る）＋ NPC の申し出セリフ表示
-- `show_rejected()` で拒否メッセージを 1.8 秒表示後に自動クローズ
-- 操作: ↑↓ 選択 / Z・Enter 決定 / Esc キャンセル
+- `show_rejected()` で拒否メッセージを 1.5 秒表示後に `dialogue_dismissed` 発火
+- 操作: ↑↓ 選択 / Z・右 決定 / X・左・Esc 閉じる
 
 **NpcLeaderAI の新メソッド**
 | メソッド | 説明 |
@@ -2007,8 +2006,10 @@ assets/master/items/
 - `CharacterData` に `physical_resistance: float`・`magic_resistance: float`・`defense_accuracy: float` を追加
 - クラス JSON（assets/master/classes/*.json）に `base_physical_resistance`・`base_magic_resistance` を追加
 - 敵 JSON（assets/master/enemies/*.json）にも同フィールドを追加
-- `CharacterGenerator._calc_stats()` で defense_mult を使って耐性計算（上限 0.75 でクランプ）
-- `CharacterData.get_total_physical_resistance()` / `get_total_magic_resistance()`: 素値＋装備補正を合算し 0.95 でクランプ
+- `CharacterGenerator._calc_stats()` で defense_mult を使って耐性計算（能力値 = int(基準値 × 補正)）
+- 耐性は能力値（整数）で管理。軽減率への変換: `resistance_to_ratio(score) = score / (score + 100.0)`
+- `CharacterData.get_total_physical_resistance_score()` / `get_total_magic_resistance_score()`: 素値＋装備補正の能力値合計
+- `CharacterData.get_total_physical_resistance()` / `get_total_magic_resistance()`: 変換後の軽減率を返す
 
 #### 初期装備の付与
 
@@ -2175,6 +2176,301 @@ assets/master/items/
 
 ---
 
+### MessageWindow拡張・AIデバッグパネル廃止（Phase 10-2 準備） ✅ 完了
+
+#### 概要
+- RightPanel からAIデバッグ表示（下半分）を削除。敵情報表示のみ残す
+- MessageWindow をフィールド画面下部5行固定表示にリファクタリング
+- MessageLog（Autoload）を新設し、MessageWindow と OrderWindow でログバッファを共有
+- F1キーを MessageLog のデバッグメッセージ表示トグルに転用
+
+#### 新規ファイル
+| ファイル | 役割 |
+|---------|------|
+| `scripts/message_log.gd` | メッセージログ管理（Autoload）。メッセージ種別・色分け・デバッグフィルタ |
+
+#### メッセージ種別
+| 種別 | enum | 色 | デバッグ専用 | 用途 |
+|------|------|-----|------------|------|
+| システム | SYSTEM | 白 | No | エリア入室、アイテム取得、会話イベント等 |
+| 戦闘計算 | COMBAT | 黄 | Yes | 攻撃・回復の計算過程 |
+| AI戦略変更 | AI | 水色 | Yes | リーダーAIの全体指示変更時 |
+
+- `debug_visible: bool = true`（デフォルトON）で COMBAT / AI の表示を制御
+- `get_visible_entries()` でフィルタ済みエントリを返す
+- `entry_added` シグナルで MessageWindow / OrderWindow に再描画を通知
+
+#### MessageWindow 変更内容
+- フィールド画面下部に固定サイズ・5行表示・半透明背景で常時表示
+- 最新メッセージに自動スクロール
+- `show_message()` は後方互換として `MessageLog.add_system()` に委譲
+- `log_entries` プロパティは後方互換として `MessageLog.get_visible_entries()` のテキスト配列を返す
+
+#### RightPanel 変更内容
+- `toggle_debug()` メソッド削除
+- `_debug_visible` フラグ削除
+- `_draw_debug_section()` メソッド削除
+- 敵情報表示はパネル全高を使用
+
+#### OrderWindow 変更内容
+- ログ行が `MessageLog.get_visible_entries()` を直接参照（色分け対応）
+- アイテム装備・受け渡しメッセージを `MessageLog.add_system()` に直接出力
+
+#### game_map.gd 変更内容
+- F1キーハンドラ: `right_panel.toggle_debug()` → `MessageLog.toggle_debug()`
+
+#### Strategy enum 拡張
+- `PartyLeaderAI.Strategy` に `EXPLORE = 4` を追加
+  - パーティーレベル専用（UnitAI には `ATTACK` + `move=explore` に変換して渡す）
+  - `_assign_orders()` で EXPLORE 戦略時に `effective_strat = ATTACK`、`move_policy = "explore"` を設定
+  - DEFEND/EXPLORE 等の UnitAI 未対応値は WAIT に安全に変換（デフォルトケース）
+
+#### NPC/敵パーティーのデフォルト戦略
+- NPC パーティー（NpcLeaderAI）：敵なし時 `WAIT` → `EXPLORE` に変更（探索行動）
+- 敵パーティー：`WAIT` のまま（VisionSystem でアクティブ化時に `ATTACK` に遷移）
+
+#### AI戦略変更ログ
+- `party_leader_ai.gd` に `_prev_strategy` フィールド追加（変更検出用）
+- `_assign_orders()` で戦略変更時に `_log_strategy_change(old_strategy)` を呼び出し
+- ログフォーマット: `[AI] {リーダー名}: {旧プリセット}→{新プリセット}（{理由}）`
+  - 例: `[AI] ゴブリン: 待機→攻撃（敵発見）`
+- サブクラスが `_get_strategy_change_reason()` をオーバーライドして理由を提供
+  - GoblinLeaderAI / WolfLeaderAI: FLEE → "仲間50%以下"
+  - NpcLeaderAI: ATTACK → "敵を検知"、EXPLORE → "敵なし・周辺探索"
+
+#### ログ抑制
+- `PartyLeaderAI.log_enabled: bool = true`: false でログ出力を抑制
+- `PartyManager.suppress_ai_log: bool = false`: true なら `_start_ai()` で leader_ai.log_enabled = false を設定
+- `_has_player_controlled_member()`: プレイヤー操作中メンバーがいるパーティーのログを抑制
+- 適用箇所:
+  - `_hero_manager`: suppress_ai_log = true（プレイヤー操作中はログ不要）
+  - 初期仲間の一時 NpcManager: suppress_ai_log = true（合流前のログ抑制）
+
+#### 戦闘計算ログ（暫定）
+- `character.gd._log_damage()`: take_damage の計算過程をログ出力
+  - フォーマット: `{攻撃者} → {対象}: 攻撃力{値} / 方向:{方向}→{防御結果} / 耐性{値}%→最終{ダメージ}`
+- `character.gd.log_heal()`: 回復ログを出力（unit_ai から呼び出し）
+  - フォーマット: `{回復者} → {対象}: 回復 魔力{値} → HP{回復前}→{回復後}`
+- 装備補正はパラメータに事前反映する方式のため、ログには武器名・装備補正の内訳を表示しない
+
+#### 変更ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `scripts/message_log.gd` | 新規: Autoload。メッセージ種別・色分け・デバッグフィルタ |
+| `scripts/message_window.gd` | 全面改訂: 固定5行表示・MessageLog 参照 |
+| `scripts/right_panel.gd` | AIデバッグ表示削除。敵情報のみ |
+| `scripts/order_window.gd` | ログ行を MessageLog 参照に変更・色分け対応 |
+| `scripts/game_map.gd` | F1 → MessageLog.toggle_debug(); hero_manager・初期仲間の suppress_ai_log 設定 |
+| `scripts/party_manager.gd` | suppress_ai_log フラグ追加; _start_ai() で leader_ai.log_enabled に反映 |
+| `scripts/party_leader_ai.gd` | Strategy.EXPLORE 追加; log_enabled・_has_player_controlled_member()・_log_strategy_change(old)・_get_strategy_change_reason(); EXPLORE 時の move_policy 変換 |
+| `scripts/goblin_leader_ai.gd` | _get_strategy_change_reason() オーバーライド |
+| `scripts/wolf_leader_ai.gd` | _get_strategy_change_reason() オーバーライド |
+| `scripts/npc_leader_ai.gd` | デフォルト戦略 WAIT→EXPLORE; _get_strategy_change_reason() オーバーライド |
+| `scripts/character.gd` | _log_damage()・log_heal()・_char_display_name()・_dir_to_jp() 追加 |
+| `scripts/unit_ai.gd` | heal 実行時に log_heal() 呼び出し追加 |
+| `project.godot` | MessageLog Autoload 追加 |
+
+### 全キャラクター常時行動化（Phase 10-2 準備） ✅ 完了
+
+#### 概要
+- NPC パーティーをゲーム開始時に即座にアクティブ化（探索行動を開始）
+- 敵パーティーはプレイヤー or NPC が部屋に入ったらアクティブ化
+- デバッグログ（combat/ai）をプレイヤーのいるエリアに限定
+
+#### アクティブ化ルール
+| パーティー種別 | アクティブ化タイミング | デフォルト行動 |
+|--------------|---------------------|-------------|
+| プレイヤー | 常時アクティブ | — |
+| NPC | ゲーム開始時（`_setup_vision_system()` 末尾で `activate()`） | EXPLORE |
+| 敵 | フレンドリーキャラが部屋に入ったとき | WAIT → ATTACK |
+
+#### 実装詳細
+
+**NPC即時アクティブ化**
+- `game_map._setup_vision_system()` 末尾で `_pre_joined_npc_managers` 以外の全 NpcManager に `activate()` 呼び出し
+- VisionSystem 配布後に呼ぶ（explore 行動で `_vision_system.is_area_visited()` を参照するため）
+
+**敵アクティブ化トリガー拡張**
+- `vision_system._process()` でフレンドリーキャラ（プレイヤーパーティー + NPC）の占有エリアを `friendly_areas: Dictionary` に収集
+- `party_manager.update_visibility()` に `friendly_areas` パラメータ追加（省略可能、後方互換）
+- アクティブ化条件: `player_area == member_area or friendly_areas.has(member_area)`
+
+**NPC表示制御**
+- 変更なし。既存の `visited_areas.has(member_area)` でプレイヤー未訪問エリアのNPCは非表示のまま
+
+**デバッグログエリアフィルタ**
+- `message_log.gd` に `setup_area_filter(map_data, get_player_area)` 追加
+- `add_combat()` / `add_ai()` に省略可能な `grid_pos: Vector2i = Vector2i(-1, -1)` パラメータ追加
+- `_is_in_player_area(grid_pos)`: grid_pos のエリアがプレイヤーエリアと不一致ならバッファに入れない
+- `character.gd._log_damage()` / `log_heal()` と `party_leader_ai.gd._log_strategy_change()` から grid_pos を渡す
+
+#### 変更ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `scripts/message_log.gd` | setup_area_filter()・_is_in_player_area() 追加; add_combat/add_ai に grid_pos パラメータ |
+| `scripts/party_manager.gd` | update_visibility() に friendly_areas パラメータ追加 |
+| `scripts/vision_system.gd` | _process() でフレンドリーエリア収集、敵マネージャーに渡す |
+| `scripts/game_map.gd` | _setup_vision_system() 末尾で NPC activate() + MessageLog フィルタ設定 |
+| `scripts/character.gd` | _log_damage()・log_heal() で grid_pos を渡す |
+| `scripts/party_leader_ai.gd` | _log_strategy_change() で leader_pos を渡す |
+
+### 会話UIをMessageWindowに統合（Phase 10-2 準備） ✅ 完了
+
+#### 概要
+- DialogueWindow（専用ポップアップ）を廃止し、会話の選択肢をMessageWindow下部にインライン表示する
+- NPC パーティー情報や会話の結果もメッセージとしてログに残る
+
+#### MessageWindow の会話モード
+- `start_dialogue(choices: Array[Dictionary])`: 選択肢をインライン表示して入力受付開始
+  - choices: `[{ "id": String, "label": String }]`
+- `end_dialogue()`: 会話モード終了
+- `show_rejected(msg)`: 拒否メッセージ表示（1.5秒後に `dialogue_dismissed` 発火）
+- `is_dialogue_active() -> bool`: 会話中かどうか
+- シグナル: `choice_confirmed(choice_id)` / `dialogue_dismissed()`
+- 入力: ↑↓で選択、Z/右で決定、X/左/Escで閉じる
+- 会話中はウィンドウの背景が濃くなり枠線表示。選択肢はセパレーターで区切りカーソル付き
+
+#### game_map.gd の変更
+- DialogueWindow のノード生成・シグナル接続を廃止
+- `_setup_dialogue_system()` で MessageWindow の `choice_confirmed` / `dialogue_dismissed` を接続
+- `_on_dialogue_requested()`: NPC メンバー情報をメッセージ表示 → `message_window.start_dialogue()` で選択肢表示
+- `_on_dialogue_choice()`: `message_window.end_dialogue()` → 結果メッセージ表示
+- `_close_dialogue()`: `dialogue_window.hide_dialogue()` → `message_window.end_dialogue()`
+- `_process()` の会話中断チェック: `dialogue_window.visible` → `message_window.is_dialogue_active()`
+- `dialogue_window` 変数を削除
+
+#### 会話フローのメッセージ
+| タイミング | メッセージ |
+|-----------|----------|
+| NPC から話しかけられた | `{名前} のパーティーが話しかけてきた` |
+| プレイヤーから話しかけた | `{名前} のパーティーに話しかけた` |
+| メンバー情報 | `  {名前} [{ランク}] {クラス} ({状態})` × 人数分 |
+| NPC が仲間に加入 | `{名前} のパーティーが仲間に加わった！` |
+| NPC パーティーに合流 | `{名前} のパーティーに合流した！` |
+| NPC が申し出を拒否 | `{名前} は申し出を断った` |
+| 敵接近で会話中断 | `敵の接近により会話が中断された！` |
+
+#### 変更ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `scripts/message_window.gd` | 会話モード追加（start_dialogue/end_dialogue/show_rejected/is_dialogue_active/入力処理/描画） |
+| `scripts/game_map.gd` | DialogueWindow 廃止。MessageWindow に会話シグナル接続。NPC情報・結果をメッセージ表示 |
+
+### 装備ステータス補正値反映（Phase 10-2 完了） ✅ 完了
+
+#### 方式
+- 装備補正は攻撃時に毎回加算するのではなく、装備変更時に Character のパラメータに事前反映する
+- `Character.attack_power` / `magic_power` は装備補正込みの実効値を保持する
+
+#### 実装詳細
+
+**character.gd**:
+- `refresh_stats_from_equipment()` を追加
+  - `attack_power = cd.attack_power + cd.get_weapon_attack_bonus()`
+  - `magic_power = cd.magic_power + cd.get_weapon_magic_bonus()`
+- `_init_stats()` の末尾で呼び出し（初期装備の反映）
+- defense は装備補正なし。耐性は `take_damage()` 内で `get_total_*_resistance()` 経由で既に装備込み
+
+**character_data.gd**:
+- `get_weapon_accuracy_bonus() -> float` を追加（武器の accuracy 補正）
+
+**order_window.gd**:
+- `_do_equip()` で装備変更後に `ch.refresh_stats_from_equipment()` を呼び出し
+- `_get_stat_rows()` に命中精度（accuracy + 武器補正）・防御精度（defense_accuracy）行を追加
+
+#### 変更ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `scripts/character.gd` | `refresh_stats_from_equipment()` 追加; `_init_stats()` から呼び出し |
+| `scripts/character_data.gd` | `get_weapon_accuracy_bonus()` 追加 |
+| `scripts/order_window.gd` | `_do_equip()` で refresh 呼び出し; 命中精度・防御精度行追加 |
+
+### UI改善・バグ修正（Phase 10-2） ✅ 完了
+
+#### クラス名・ランク表示
+- 左パネル: キャラ名の横にクラス名（日本語）とランクを表示（例：`エリカ 弓使い A`）
+- OrderWindow: メンバーテーブルの名前列に同様に表示
+- `GlobalConstants.CLASS_NAME_JP` テーブルで class_id → 日本語名を変換
+
+#### 左パネルの個別指示表示
+- OrderWindow の COL_LABELS と完全一致する表記に統一（例：`同じ部屋 / 積極攻撃 / 最近傍`）
+
+#### 会話選択の操作修正
+- 決定: Z / A のみ（`ui_right` 削除）
+- キャンセル: X / B のみ（`ui_left` / `ui_cancel` 削除）
+- フィールド上の会話は移動入力と競合するため、OrderWindow 内の左右キー操作とは別体系
+
+#### キャラクター生成の重複防止
+- `CharacterGenerator` に `_used_names` / `_used_image_sets` static 変数を追加
+- 生成時に未使用の名前・画像セットを優先選択（枯渇時はフォールバック）
+- `reset_used()` で使用済みリストをクリア（`game_map._ready()` で呼び出し・F5 再起動対応）
+
+#### アイテム表示改善
+- 装備可能アイテム: 通常色（白）、装備不可: 灰色で色分け
+- 補正値を日本語表記に統一（`GlobalConstants.STAT_NAME_JP` テーブル使用）
+  - attack_power → 攻撃力、magic_power → 魔力、accuracy → 命中、等
+  - アイテム一覧・装備欄の両方に適用
+- カテゴリ・タイプの冗長表記を削除し、アイテム名 + 補正値サマリのみに簡略化
+
+#### 主人公のランダム生成化
+- hero.json 固定から CharacterGenerator によるランダム生成に変更（他キャラと同様）
+- `dungeon_handcrafted.json` の主人公定義を `character_id: "hero"` → `class_id: "fighter-sword"` に変更
+- `game_map._setup_hero()` から hero.json 分岐を削除。常に `CharacterGenerator.generate_character(class_id)` を使用
+- 画像セットの重複防止（`_used_image_sets`）も主人公に適用される
+
+#### 耐性の能力値化
+- 耐性を float（軽減率）から int（能力値）に変更
+- 変換式: `軽減率 = 能力値 / (能力値 + 100.0)`（逓減カーブ。100で50%軽減）
+- クラスJSON / 敵JSON: `0.12` → `12` 等（×100 で整数化）
+- アイテムの耐性値はそのまま（元々整数で正しい値だった）
+- `CharacterData`: `physical_resistance: float` → `int`。`get_total_*_resistance_score()` 追加
+- `CharacterGenerator._calc_stats()`: 耐性計算を int 対応に変更
+- OrderWindow: 耐性を能力値（整数）で表示（%表記ではなく）
+- 戦闘ログ: 変換後の軽減率%で表示（既存のまま）
+
+#### 変更ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `scripts/global_constants.gd` | CLASS_NAME_JP / STAT_NAME_JP テーブル追加 |
+| `scripts/left_panel.gd` | クラス名・ランク表示; 個別指示を COL_LABELS と完全一致に |
+| `scripts/order_window.gd` | 名前列にクラス名・ランク; アイテム色分け・日本語補正値（一覧・装備欄の両方） |
+| `scripts/message_window.gd` | 会話選択の左右キー無効化 |
+| `scripts/character_generator.gd` | _used_names / _used_image_sets 追跡; reset_used() |
+| `scripts/game_map.gd` | _ready() で reset_used() 呼び出し; _setup_hero() から hero.json 分岐を削除 |
+| `scripts/character_data.gd` | physical/magic_resistance を int 化; resistance_to_ratio() / get_total_*_resistance_score() 追加 |
+| `scripts/character_generator.gd` | _calc_stats() の耐性計算を int 対応に変更 |
+| `assets/master/classes/*.json` | base_physical/magic_resistance を float→int に変更 |
+| `assets/master/enemies/*.json` | physical/magic_resistance を float→int に変更 |
+| `assets/master/maps/dungeon_handcrafted.json` | 主人公 character_id:"hero" → class_id:"fighter-sword" |
+
+#### カメラのデッドゾーン縮小
+- `camera_controller.gd`: `DEAD_ZONE_RATIO` を 0.70 → 0.40 に変更
+- 先読みマージンが拡大し、出会いがしらが軽減される
+
+#### 隣接エリアの先行可視化
+- プレイヤーパーティーメンバーの隣接タイル（4方向）が未訪問エリアに属していればそのエリアを可視化
+- 通路の端に立つと次の部屋の中が見える（部屋のタイルに隣接するまで発動しない）
+- `map_data.gd`: `build_adjacency()` / `get_adjacent_areas()` / `_adjacent_areas` 追加（将来用に保持）
+- `vision_system.gd`: `_reveal_adjacent_areas()` 追加（タイル隣接チェック方式）
+- `game_map.gd`: `_finish_setup()` で `map_data.build_adjacency()` を呼び出し
+
+#### 移動時の grid_pos 半マス遅延更新
+- `character.gd`: `move_to()` で `grid_pos` を即時更新せず `_pending_grid_pos` に保存
+- `_update_visual_move()`: 進捗50%（半マス到達）で `grid_pos = _pending_grid_pos` を確定
+- `get_occupied_tiles()`: 移動中は旧位置と移動先の両方を返す（二重占有防止）
+- `sync_position()`: テレポート時は即時確定のまま（変更なし）
+- 効果: 視界・衝突判定が視覚位置と一致し、移動の不自然さが解消
+
+| ファイル | 変更内容 |
+|---------|---------|
+| `scripts/camera_controller.gd` | DEAD_ZONE_RATIO 0.70→0.40 |
+| `scripts/vision_system.gd` | _reveal_adjacent_areas() 追加（タイル隣接チェック方式） |
+| `scripts/map_data.gd` | build_adjacency() / get_adjacent_areas() / _adjacent_areas 追加 |
+| `scripts/game_map.gd` | _finish_setup() で build_adjacency() 呼び出し |
+| `scripts/character.gd` | move_to() 半マス遅延; _pending_grid_pos / _grid_pos_committed; get_occupied_tiles() 拡張 |
+
+---
+
 ### Phase 10-3: 消耗品の使用
 
 #### 変更ファイル
@@ -2291,7 +2587,7 @@ assets/master/items/
 | `_visual_duration` | float | 補間総時間（秒）。0=補間なし |
 
 #### 主要メソッド
-- `move_to(new_grid_pos, duration=0.4)`: grid_pos を即時更新（衝突判定維持）し、position を duration 秒かけて補間開始
+- `move_to(new_grid_pos, duration=0.4)`: grid_pos は半マス到達（進捗50%）で更新。position を duration 秒かけて補間。移動中は旧位置+移動先の両方を占有タイルとして返す
 - `sync_position()`: 即座スナップ＋補間キャンセル（初期配置・テレポート用）
 - `is_moving() -> bool`: `_visual_duration > 0.0` を返す（PlayerController の gate 判定に使用）
 - `_update_visual_move(delta)`: _process() から毎フレーム呼ぶ。位置補間とスプライトフレーム切替を行う

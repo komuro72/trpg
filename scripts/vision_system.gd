@@ -108,16 +108,62 @@ func _process(_delta: float) -> void:
 			if _has_area_data and not member_area.is_empty() and not is_area_visited(member_area):
 				_visit_area(PLAYER_PARTY_ID, member_area)
 
+	# プレイヤーパーティーがいるエリアの隣接エリアを先行可視化
+	if _has_area_data:
+		_reveal_adjacent_areas()
+
+	# フレンドリーキャラ（プレイヤーパーティー + NPC）の占有エリアを収集
+	var friendly_areas: Dictionary = {}
+	if not _current_area.is_empty():
+		friendly_areas[_current_area] = true
+	if _party != null:
+		for m: Variant in _party.members:
+			var ch := m as Character
+			if is_instance_valid(ch):
+				var a := _map_data.get_area(ch.grid_pos)
+				if not a.is_empty():
+					friendly_areas[a] = true
+	for nm_var: Variant in _npc_managers:
+		var nm := nm_var as NpcManager
+		if is_instance_valid(nm):
+			for member: Character in nm.get_members():
+				if is_instance_valid(member):
+					var a := _map_data.get_area(member.grid_pos)
+					if not a.is_empty():
+						friendly_areas[a] = true
+
 	# 敵・NPC マネージャーに可視性を通知
 	var visited := _visited_by_party.get(PLAYER_PARTY_ID, {}) as Dictionary
 	for em_var: Variant in _enemy_managers:
 		var em := em_var as EnemyManager
 		if is_instance_valid(em):
-			em.update_visibility(_current_area, _map_data, visited)
+			em.update_visibility(_current_area, _map_data, visited, friendly_areas)
 	for nm_var: Variant in _npc_managers:
 		var nm := nm_var as NpcManager
 		if is_instance_valid(nm):
 			nm.update_visibility(_current_area, _map_data, visited)
+
+
+## プレイヤーパーティーメンバーの隣接タイルが未訪問エリアに属していれば先行可視化する
+## 通路の端に立ったら次の部屋の中が見える（部屋のタイルに隣接するまで発動しない）
+func _reveal_adjacent_areas() -> void:
+	var positions: Array[Vector2i] = []
+	if _player != null and is_instance_valid(_player):
+		positions.append(_player.grid_pos)
+	if _party != null:
+		for m: Variant in _party.members:
+			var ch := m as Character
+			if is_instance_valid(ch) and ch != _player:
+				positions.append(ch.grid_pos)
+	for pos: Vector2i in positions:
+		var my_area := _map_data.get_area(pos)
+		for offset: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0),
+				Vector2i(0, 1), Vector2i(0, -1)]:
+			var npos := pos + offset
+			var neighbor_area := _map_data.get_area(npos)
+			if not neighbor_area.is_empty() and neighbor_area != my_area \
+					and not is_area_visited(neighbor_area):
+				_visit_area(PLAYER_PARTY_ID, neighbor_area)
 
 
 ## 指定パーティーがエリアを訪問する
