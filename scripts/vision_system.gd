@@ -7,6 +7,8 @@ extends Node
 ##   - 未訪問エリアのタイル・敵は非表示
 ##   - 一度訪問したエリアはずっと表示（暗くしない）
 ##   - 訪問済みフラグはパーティー単位で管理（将来の仲間視界共有に対応）
+## Phase 11-1: フロアインデックスごとに訪問済みエリア・可視タイルを管理。
+##   switch_floor() でアクティブフロアを切り替える。
 
 ## エリアが変わったとき（通路含む）
 signal area_changed(new_area: String)
@@ -22,13 +24,17 @@ var _map_data: MapData
 var _enemy_managers: Array = []
 var _npc_managers: Array = []
 var _current_area: String = ""
+var _current_floor_index: int = 0
 
-## パーティー単位の訪問済みエリア管理
-## { party_id: int -> { area_id: String -> true } }
-var _visited_by_party: Dictionary = {}
+## フロアごとの訪問済みエリア管理
+## [ floor_index -> { party_id: int -> { area_id: String -> true } } ]
+var _floor_visited: Array = []
 
-## 可視タイルのキャッシュ { Vector2i -> true }
-## 訪問済みエリアのタイル + 隣接壁タイルを保持する
+## フロアごとの可視タイルキャッシュ
+## [ floor_index -> { Vector2i -> true } ]
+var _floor_visible_tiles: Array = []
+
+## 現在フロアの可視タイル（_floor_visible_tiles[_current_floor_index] への参照）
 var _visible_tiles: Dictionary = {}
 
 ## エリアデータが存在するか（存在しない場合は視界システムを無効化して全タイル表示）
@@ -38,7 +44,11 @@ var _has_area_data: bool = false
 func setup(player: Character, map_data: MapData) -> void:
 	_player   = player
 	_map_data = map_data
-	_visited_by_party[PLAYER_PARTY_ID] = {}
+	_current_floor_index = player.current_floor
+
+	_ensure_floor_data(_current_floor_index)
+	(_floor_visited[_current_floor_index] as Dictionary)[PLAYER_PARTY_ID] = {}
+	_visible_tiles = _floor_visible_tiles[_current_floor_index] as Dictionary
 
 	# 開始エリアを即座に訪問済みにする
 	var start_area := map_data.get_area(player.grid_pos)
@@ -57,6 +67,10 @@ func add_enemy_manager(em: EnemyManager) -> void:
 	_enemy_managers.append(em)
 
 
+func remove_enemy_manager(em: EnemyManager) -> void:
+	_enemy_managers.erase(em)
+
+
 func add_npc_manager(nm: NpcManager) -> void:
 	_npc_managers.append(nm)
 
@@ -71,8 +85,11 @@ func get_current_area() -> String:
 
 ## 指定エリアがいずれかのパーティーメンバーに訪問済みかどうかを返す
 func is_area_visited(area_id: String) -> bool:
-	for party_id: int in _visited_by_party.keys():
-		if (_visited_by_party[party_id] as Dictionary).has(area_id):
+	if _current_floor_index >= _floor_visited.size():
+		return false
+	var fv := _floor_visited[_current_floor_index] as Dictionary
+	for party_id: int in fv.keys():
+		if (fv[party_id] as Dictionary).has(area_id):
 			return true
 	return false
 
@@ -81,6 +98,33 @@ func is_area_visited(area_id: String) -> bool:
 ## エリアデータが存在しない場合は空辞書を返す（呼び出し側が全タイル描画にフォールバック）
 func get_visible_tiles() -> Dictionary:
 	return _visible_tiles
+
+
+## アクティブフロアを切り替える（階段遷移時に呼ぶ）
+## 新フロアの MapData と、遷移後のプレイヤーを渡す
+func switch_floor(floor_index: int, map_data: MapData, player: Character) -> void:
+	_current_floor_index = floor_index
+	_map_data  = map_data
+	_player    = player
+	_current_area = ""
+
+	_ensure_floor_data(floor_index)
+	# 訪問済みパーティーデータが未初期化なら初期化
+	var fv := _floor_visited[floor_index] as Dictionary
+	if not fv.has(PLAYER_PARTY_ID):
+		fv[PLAYER_PARTY_ID] = {}
+
+	# _visible_tiles を新フロアのキャッシュにリバインド（参照渡し）
+	_visible_tiles = _floor_visible_tiles[floor_index] as Dictionary
+
+	# 開始エリアを即座に訪問済みにする
+	var start_area := map_data.get_area(player.grid_pos)
+	_has_area_data = not start_area.is_empty()
+	if _has_area_data and not start_area.is_empty() and not is_area_visited(start_area):
+		_visit_area(PLAYER_PARTY_ID, start_area)
+		_current_area = start_area
+	else:
+		_current_area = start_area
 
 
 func _process(_delta: float) -> void:
@@ -133,7 +177,9 @@ func _process(_delta: float) -> void:
 						friendly_areas[a] = true
 
 	# 敵・NPC マネージャーに可視性を通知
-	var visited := _visited_by_party.get(PLAYER_PARTY_ID, {}) as Dictionary
+	var visited: Dictionary = {}
+	if _current_floor_index < _floor_visited.size():
+		visited = (_floor_visited[_current_floor_index] as Dictionary).get(PLAYER_PARTY_ID, {}) as Dictionary
 	for em_var: Variant in _enemy_managers:
 		var em := em_var as EnemyManager
 		if is_instance_valid(em):
@@ -168,7 +214,10 @@ func _reveal_adjacent_areas() -> void:
 
 ## 指定パーティーがエリアを訪問する
 func _visit_area(party_id: int, area_id: String) -> void:
-	(_visited_by_party[party_id] as Dictionary)[area_id] = true
+	var fv := _floor_visited[_current_floor_index] as Dictionary
+	if not fv.has(party_id):
+		fv[party_id] = {}
+	(fv[party_id] as Dictionary)[area_id] = true
 	_reveal_tiles(area_id)
 	tiles_revealed.emit()
 
@@ -188,3 +237,11 @@ func _reveal_tiles(area_id: String) -> void:
 			var npos := pos + offset
 			if _map_data.get_tile(npos) == MapData.TileType.WALL:
 				_visible_tiles[npos] = true
+
+
+## フロアデータ配列を必要なサイズに拡張する
+func _ensure_floor_data(floor_index: int) -> void:
+	while _floor_visited.size() <= floor_index:
+		_floor_visited.append({})
+	while _floor_visible_tiles.size() <= floor_index:
+		_floor_visible_tiles.append({})

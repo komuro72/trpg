@@ -5,8 +5,9 @@ extends RefCounted
 ## タイルの種別・配置・移動可否クエリを担う。描画は game_map.gd が行う。
 ## Phase 2-2: load_from_json() でマップ・スポーン情報をJSONから読み込めるように拡張。
 ## Phase 5:   OBSTACLE（旧RUBBLE）タイルを追加。is_walkable_for() で飛行キャラ対応。
+## Phase 11-1: STAIRS_DOWN / STAIRS_UP タイルを追加。
 
-enum TileType { FLOOR = 0, WALL = 1, OBSTACLE = 2, CORRIDOR = 3 }
+enum TileType { FLOOR = 0, WALL = 1, OBSTACLE = 2, CORRIDOR = 3, STAIRS_DOWN = 4, STAIRS_UP = 5 }
 
 ## デフォルトマップサイズ定数（player_controller.gd のフォールバック用に残す）
 const MAP_WIDTH: int = 20
@@ -112,10 +113,11 @@ func get_tile(pos: Vector2i) -> TileType:
 	return _tiles[pos.y][pos.x]
 
 
-## 地上キャラ用の移動可否（FLOOR・CORRIDOR）
+## 地上キャラ用の移動可否（FLOOR・CORRIDOR・階段）
 func is_walkable(pos: Vector2i) -> bool:
 	var tile := get_tile(pos)
-	return tile == TileType.FLOOR or tile == TileType.CORRIDOR
+	return tile == TileType.FLOOR or tile == TileType.CORRIDOR \
+		or tile == TileType.STAIRS_DOWN or tile == TileType.STAIRS_UP
 
 
 ## 指定座標のエリアIDを設定する（DungeonBuilderが使用）
@@ -184,11 +186,22 @@ func build_adjacency() -> void:
 				adj.append(neighbor)
 
 
+## 指定タイル種別の全座標を返す（階段位置の検索に使用）
+func find_stairs(tile_type: TileType) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for y in range(map_height):
+		for x in range(map_width):
+			if _tiles[y][x] == tile_type:
+				result.append(Vector2i(x, y))
+	return result
+
+
 ## 飛行フラグを考慮した移動可否
-## 地上：FLOOR・CORRIDOR可。飛行：FLOOR・CORRIDOR・OBSTACLE可（WALLは不可）
+## 地上：FLOOR・CORRIDOR・STAIRS可。飛行：FLOOR・CORRIDOR・OBSTACLE・STAIRS可（WALLは不可）
 func is_walkable_for(pos: Vector2i, flying: bool) -> bool:
 	var tile := get_tile(pos)
 	match tile:
-		TileType.FLOOR, TileType.CORRIDOR: return true
+		TileType.FLOOR, TileType.CORRIDOR, \
+		TileType.STAIRS_DOWN, TileType.STAIRS_UP: return true
 		TileType.OBSTACLE: return flying
 		_: return false

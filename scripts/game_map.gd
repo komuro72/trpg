@@ -9,17 +9,16 @@ const TILE_SET_DIR := "res://assets/images/tiles/"
 const DEFAULT_TILE_SET := "stone_00001"
 
 ## タイル画像が存在しない場合のフォールバック色
-const COLOR_FLOOR       := Color(0.40, 0.40, 0.40)
-const COLOR_WALL        := Color(0.20, 0.20, 0.20)
-const COLOR_OBSTACLE    := Color(0.55, 0.45, 0.35)
-const COLOR_CORRIDOR    := Color(0.30, 0.30, 0.35)
-const COLOR_GRID_LINE   := Color(0.0, 0.0, 0.0, 0.15)
+const COLOR_FLOOR         := Color(0.40, 0.40, 0.40)
+const COLOR_WALL          := Color(0.20, 0.20, 0.20)
+const COLOR_OBSTACLE      := Color(0.55, 0.45, 0.35)
+const COLOR_CORRIDOR      := Color(0.30, 0.30, 0.35)
+const COLOR_STAIRS_DOWN   := Color(0.60, 0.40, 0.20)
+const COLOR_STAIRS_UP     := Color(0.70, 0.60, 0.30)
+const COLOR_GRID_LINE     := Color(0.0, 0.0, 0.0, 0.15)
 
 const HANDCRAFTED_JSON_PATH  := "res://assets/master/maps/dungeon_handcrafted.json"
 const FALLBACK_JSON_PATH     := "res://assets/master/maps/dungeon_01.json"
-
-## 表示するフロア番号（0-indexed）
-const CURRENT_FLOOR := 0
 
 ## NPC パーティーに割り当てるカラープール（生成順に割り当て・使い回しなし）
 const _NPC_PARTY_COLORS: Array = [
@@ -33,6 +32,19 @@ const _NPC_PARTY_COLORS: Array = [
 	Color(1.00, 0.20, 0.20),  # 赤
 	Color(0.20, 0.90, 0.70),  # 青緑
 ]
+
+## フロアごとの生データ（JSON Dictionary）
+var _all_floor_data: Array = []
+## フロアごとの MapData（インデックス = フロアインデックス）
+var _all_map_data: Array[MapData] = []
+## フロアごとの EnemyManager リスト（インデックス = フロアインデックス）
+var _per_floor_enemies: Array = []  # Array of Array[EnemyManager]
+## フロアごとの NpcManager リスト（インデックス = フロアインデックス）
+var _per_floor_npcs: Array = []     # Array of Array[NpcManager]
+## 現在表示中のフロアインデックス（0 = 最上層）
+var _current_floor_index: int = 0
+## 階段踏みつけ後のクールダウン（連続遷移防止）
+var _stair_cooldown: float = 0.0
 
 var map_data: MapData
 var party: Party
@@ -95,25 +107,35 @@ func _load_handcrafted_dungeon() -> void:
 	var raw: Variant = JSON.parse_string(_read_file(HANDCRAFTED_JSON_PATH))
 	if raw != null and raw is Dictionary:
 		var floors: Array = ((raw as Dictionary).get("dungeon", {}) as Dictionary).get("floors", [])
-		if CURRENT_FLOOR < floors.size():
-			var floor_data := floors[CURRENT_FLOOR] as Dictionary
-			_tile_set_id = floor_data.get("tile_set", DEFAULT_TILE_SET) as String
-			map_data = DungeonBuilder.build_floor(floor_data)
+		if not floors.is_empty():
+			# 全フロアの MapData を事前構築する
+			for fd: Variant in floors:
+				var floor_data := fd as Dictionary
+				_all_floor_data.append(floor_data)
+				_all_map_data.append(DungeonBuilder.build_floor(floor_data))
+				_per_floor_enemies.append([])
+				_per_floor_npcs.append([])
+			_current_floor_index = 0
+			map_data = _all_map_data[0]
+			_tile_set_id = (_all_floor_data[0] as Dictionary).get("tile_set", DEFAULT_TILE_SET) as String
 			_finish_setup()
 			return
 
 	push_error("game_map: dungeon_handcrafted.json のパースに失敗しました。フォールバック使用")
-	map_data = MapData.load_from_json(FALLBACK_JSON_PATH)
+	_all_map_data.append(MapData.load_from_json(FALLBACK_JSON_PATH))
+	_all_floor_data.append({})
+	_per_floor_enemies.append([])
+	_per_floor_npcs.append([])
+	map_data = _all_map_data[0]
 	_finish_setup()
 
 
 ## セットアップ完了（map_dataが確定してから呼ぶ）
 func _finish_setup() -> void:
 	_load_tile_textures()
-	map_data.build_adjacency()
 	_setup_hero()
-	_setup_enemies()
-	_setup_npcs()
+	_setup_floor_enemies(_current_floor_index)
+	_setup_floor_npcs(_current_floor_index)
 	_setup_initial_allies()
 	_link_all_character_lists()
 	_setup_controller()
@@ -126,13 +148,20 @@ func _finish_setup() -> void:
 	queue_redraw()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	# 階段クールダウン
+	if _stair_cooldown > 0.0:
+		_stair_cooldown -= delta
+
 	# ゲームパッドアクション（ポーリング方式）
 	if Input.is_action_just_pressed("open_order_window"):
 		_toggle_order_window()
 
 	# 床アイテムの拾得チェック
 	_check_item_pickup()
+
+	# 階段踏み判定
+	_check_stairs_step()
 
 	# 会話中に敵が部屋に入ってきたら会話を中断する
 	if message_window == null or not message_window.is_dialogue_active():
@@ -193,13 +222,17 @@ func _setup_hero() -> void:
 	_hero_manager.activate()
 
 
-func _setup_enemies() -> void:
-	if map_data.enemy_parties.is_empty():
+func _setup_floor_enemies(floor_idx: int) -> void:
+	if floor_idx >= _all_map_data.size():
+		return
+	var fmap := _all_map_data[floor_idx]
+	if fmap.enemy_parties.is_empty():
 		return
 
+	var fems: Array = _per_floor_enemies[floor_idx] as Array
 	# enemy_parties の各パーティーごとに別々の EnemyManager を生成する
-	var idx := 0
-	for ep: Variant in map_data.enemy_parties:
+	var idx := floor_idx * 100  # ノード名が他フロアと衝突しないようにオフセット
+	for ep: Variant in fmap.enemy_parties:
 		var members: Array = (ep as Dictionary).get("members", [])
 		if members.is_empty():
 			continue
@@ -207,47 +240,63 @@ func _setup_enemies() -> void:
 		var em := EnemyManager.new()
 		em.name = "EnemyManager%d" % idx
 		add_child(em)
-		em.setup(members, hero, map_data, items)
+		em.setup(members, hero, fmap, items)
 		em.party_wiped.connect(_on_enemy_party_wiped)
-		# VisionSystem が視界管理を担うため、距離ベースのアクティブ化を無効化
 		em.set_vision_controlled(true)
-		enemy_managers.append(em)
+		fems.append(em)
 		idx += 1
 
 	# 全 EnemyManager の敵を結合したリストを各マネージャーに配布する
-	# BaseAI._is_passable() が他パーティーの敵座標も占有チェックに使用するため
 	var all_enemies: Array[Character] = []
-	for em: EnemyManager in enemy_managers:
-		all_enemies.append_array(em.get_enemies())
-	for em: EnemyManager in enemy_managers:
-		em.set_all_enemies(all_enemies)
+	for em_v: Variant in fems:
+		var em := em_v as EnemyManager
+		if em != null:
+			all_enemies.append_array(em.get_enemies())
+	for em_v: Variant in fems:
+		var em := em_v as EnemyManager
+		if em != null:
+			em.set_all_enemies(all_enemies)
+
+	# 現在フロアなら enemy_managers エイリアスを更新
+	if floor_idx == _current_floor_index:
+		enemy_managers.clear()
+		for em_v2: Variant in fems:
+			enemy_managers.append(em_v2 as EnemyManager)
 
 
-func _setup_npcs() -> void:
-	if map_data.npc_parties.is_empty():
+func _setup_floor_npcs(floor_idx: int) -> void:
+	if floor_idx >= _all_map_data.size():
+		return
+	var fmap := _all_map_data[floor_idx]
+	if fmap.npc_parties.is_empty():
 		return
 
 	# 全敵リストを収集（NPC の攻撃対象として渡す）
 	var all_enemies: Array[Character] = []
-	for em: EnemyManager in enemy_managers:
+	for em: EnemyManager in (_per_floor_enemies[floor_idx] as Array):
 		all_enemies.append_array(em.get_enemies())
 
-	var idx := 0
-	for np: Variant in map_data.npc_parties:
+	var fnms: Array = _per_floor_npcs[floor_idx] as Array
+	var idx := floor_idx * 100
+	for np: Variant in fmap.npc_parties:
 		var members: Array = (np as Dictionary).get("members", [])
 		if members.is_empty():
 			continue
 		var nm := NpcManager.new()
 		nm.name = "NpcManager%d" % idx
 		add_child(nm)
-		nm.setup(members, hero, map_data)
+		nm.setup(members, hero, fmap)
 		nm.set_vision_controlled(true)
 		nm.set_enemy_list(all_enemies)
-		# カラープールから順番に色を割り当てる
 		var color: Color = _NPC_PARTY_COLORS[idx % _NPC_PARTY_COLORS.size()] as Color
 		nm.set_party_color(color)
-		npc_managers.append(nm)
+		fnms.append(nm)
 		idx += 1
+
+	# 現在フロアなら npc_managers エイリアスを更新
+	if floor_idx == _current_floor_index:
+		npc_managers.clear()
+		npc_managers.assign(fnms)
 
 
 ## player_parties[0] の 2番目以降のメンバーを NpcManager として配置し、
@@ -331,17 +380,23 @@ func _setup_camera() -> void:
 	var gs := GlobalConstants.GRID_SIZE
 	var cam := Camera2D.new()
 	cam.name = "Camera"
-	cam.limit_left   = 0
-	cam.limit_right  = map_data.map_width  * gs
-	cam.limit_top    = 0
-	cam.limit_bottom = map_data.map_height * gs
 	add_child(cam)
+	_update_camera_limits(cam)
 
 	camera_controller = CameraController.new()
 	camera_controller.character = hero
 	camera_controller.camera    = cam
 	camera_controller.name      = "CameraController"
 	add_child(camera_controller)
+
+
+## カメラのリミットを現在の map_data に合わせて更新する
+func _update_camera_limits(cam: Camera2D) -> void:
+	var gs := GlobalConstants.GRID_SIZE
+	cam.limit_left   = 0
+	cam.limit_right  = map_data.map_width  * gs
+	cam.limit_top    = 0
+	cam.limit_bottom = map_data.map_height * gs
 
 
 func _setup_vision_system() -> void:
@@ -781,15 +836,158 @@ func _check_item_pickup() -> void:
 		queue_redraw()
 
 
+## 階段を踏んでいるかチェックし、踏んでいれば遷移する
+func _check_stairs_step() -> void:
+	if _stair_cooldown > 0.0:
+		return
+	if hero == null or not is_instance_valid(hero):
+		return
+	if hero.is_moving():
+		return
+	var tile := map_data.get_tile(hero.grid_pos)
+	if tile == MapData.TileType.STAIRS_DOWN:
+		_transition_floor(1)
+	elif tile == MapData.TileType.STAIRS_UP:
+		_transition_floor(-1)
+
+
+## フロアを遷移する
+## direction: +1 = 下（次フロア）、-1 = 上（前フロア）
+func _transition_floor(direction: int) -> void:
+	var new_floor := _current_floor_index + direction
+	if new_floor < 0 or new_floor >= _all_map_data.size():
+		return
+
+	_stair_cooldown = 1.5  # 遷移直後の再遷移を防ぐ
+
+	# ターゲットフロアの MapData を取得
+	var new_map := _all_map_data[new_floor]
+
+	# スポーン位置を決定（反対方向の階段タイル）
+	var spawn_tile_type := MapData.TileType.STAIRS_UP if direction > 0 else MapData.TileType.STAIRS_DOWN
+	var spawns := new_map.find_stairs(spawn_tile_type)
+	var spawn_pos: Vector2i
+	if not spawns.is_empty():
+		spawn_pos = spawns[0]
+	else:
+		# フォールバック：入口部屋の中心（MapData の player_parties から取得）
+		if not new_map.player_parties.is_empty():
+			var first_member: Variant = ((new_map.player_parties[0] as Dictionary).get("members", []) as Array)
+			if first_member is Array and (first_member as Array).size() > 0:
+				var m := (first_member as Array)[0] as Dictionary
+				spawn_pos = Vector2i(int(m.get("x", 5)), int(m.get("y", 5)))
+			else:
+				spawn_pos = Vector2i(5, 5)
+		else:
+			spawn_pos = Vector2i(5, 5)
+
+	# 現在フロアのマネージャーを非表示・VisionSystem から除外
+	for em: EnemyManager in enemy_managers:
+		if is_instance_valid(em):
+			vision_system.remove_enemy_manager(em)
+	for nm: NpcManager in npc_managers:
+		if is_instance_valid(nm):
+			vision_system.remove_npc_manager(nm)
+
+	# フロア切替
+	_current_floor_index = new_floor
+	map_data = new_map
+	_tile_set_id = (_all_floor_data[new_floor] as Dictionary).get("tile_set", DEFAULT_TILE_SET) as String
+	_load_tile_textures()
+
+	# hero のフロア更新・移動
+	hero.current_floor = new_floor
+	hero.grid_pos      = spawn_pos
+	hero.sync_position()
+
+	# 新フロアの敵・NPC がまだセットアップされていなければ行う
+	if (_per_floor_enemies[new_floor] as Array).is_empty() \
+			and not new_map.enemy_parties.is_empty():
+		_setup_floor_enemies(new_floor)
+	if (_per_floor_npcs[new_floor] as Array).is_empty() \
+			and not new_map.npc_parties.is_empty():
+		_setup_floor_npcs(new_floor)
+
+	# エイリアスを新フロアの管理リストに更新
+	enemy_managers.clear()
+	enemy_managers.assign(_per_floor_enemies[new_floor] as Array)
+	npc_managers.clear()
+	# パーティーに合流済みのNPCを除いた残りをセット
+	npc_managers.assign(_per_floor_npcs[new_floor] as Array)
+
+	# VisionSystem に新フロアのマネージャーを追加
+	for em: EnemyManager in enemy_managers:
+		if is_instance_valid(em):
+			vision_system.add_enemy_manager(em)
+			em.set_vision_system(vision_system)
+	for nm: NpcManager in npc_managers:
+		if is_instance_valid(nm):
+			vision_system.add_npc_manager(nm)
+			nm.set_vision_system(vision_system)
+			nm.activate()
+
+	# VisionSystem をフロア切替
+	vision_system.switch_floor(new_floor, new_map, hero)
+
+	# PlayerController の参照を更新
+	if player_controller != null:
+		player_controller.map_data = new_map
+
+	# カメラのリミットを更新
+	if camera_controller != null and is_instance_valid(camera_controller):
+		var cam := camera_controller.camera
+		if cam != null and is_instance_valid(cam):
+			_update_camera_limits(cam)
+
+	# キャラクターの表示を更新（フロアが違うキャラを非表示）
+	_update_character_visibility()
+
+	# ダイアログ強制クローズ
+	if message_window != null and message_window.is_dialogue_active():
+		_close_dialogue()
+
+	var dir_str := "下" if direction > 0 else "上"
+	if message_window != null:
+		message_window.show_message("階段を%sに進んだ（%dF）" % [dir_str, new_floor + 1])
+
+	queue_redraw()
+
+
+## フロアに応じてキャラクターの表示/非表示を切り替える
+func _update_character_visibility() -> void:
+	# 全フロアの敵を走査
+	for fi: int in range(_per_floor_enemies.size()):
+		var is_current := (fi == _current_floor_index)
+		for em: EnemyManager in (_per_floor_enemies[fi] as Array):
+			if is_instance_valid(em):
+				for ch: Character in em.get_enemies():
+					if is_instance_valid(ch):
+						# 表示は VisionSystem が制御するため、
+						# 別フロアの敵は強制非表示
+						if not is_current:
+							ch.visible = false
+	# NPC
+	for fi: int in range(_per_floor_npcs.size()):
+		var is_current := (fi == _current_floor_index)
+		for nm: NpcManager in (_per_floor_npcs[fi] as Array):
+			if is_instance_valid(nm):
+				for ch: Character in nm.get_members():
+					if is_instance_valid(ch):
+						if not is_current:
+							ch.visible = false
+
+
 ## タイル画像をプリロードする（画像がない場合はフォールバック色を使用）
 func _load_tile_textures() -> void:
 	_tile_textures.clear()
 	var base := TILE_SET_DIR + _tile_set_id + "/"
 	var names := {
-		MapData.TileType.FLOOR:    "floor.png",
-		MapData.TileType.WALL:     "wall.png",
-		MapData.TileType.OBSTACLE: "obstacle.png",
-		MapData.TileType.CORRIDOR: "corridor.png",
+		MapData.TileType.FLOOR:       "floor.png",
+		MapData.TileType.WALL:        "wall.png",
+		MapData.TileType.OBSTACLE:    "obstacle.png",
+		MapData.TileType.CORRIDOR:    "corridor.png",
+		MapData.TileType.STAIRS_DOWN: "stairs_down.png",
+		MapData.TileType.STAIRS_UP:   "stairs_up.png",
 	}
 	for tile_type: int in names:
 		var path: String = base + (names[tile_type] as String)
@@ -843,13 +1041,27 @@ func _draw() -> void:
 			else:
 				var fill_color: Color
 				match tile:
-					MapData.TileType.FLOOR:    fill_color = COLOR_FLOOR
-					MapData.TileType.OBSTACLE:   fill_color = COLOR_OBSTACLE
-					MapData.TileType.CORRIDOR: fill_color = COLOR_CORRIDOR
-					_:                         fill_color = COLOR_WALL
+					MapData.TileType.FLOOR:        fill_color = COLOR_FLOOR
+					MapData.TileType.OBSTACLE:     fill_color = COLOR_OBSTACLE
+					MapData.TileType.CORRIDOR:     fill_color = COLOR_CORRIDOR
+					MapData.TileType.STAIRS_DOWN:  fill_color = COLOR_STAIRS_DOWN
+					MapData.TileType.STAIRS_UP:    fill_color = COLOR_STAIRS_UP
+					_:                             fill_color = COLOR_WALL
 				draw_rect(rect, fill_color)
 
 			draw_rect(rect, COLOR_GRID_LINE, false)
+
+			# 階段タイルにシンボルを描画
+			if tile == MapData.TileType.STAIRS_DOWN or tile == MapData.TileType.STAIRS_UP:
+				var sym := "▼" if tile == MapData.TileType.STAIRS_DOWN else "▲"
+				var sym_color := Color(1.0, 0.95, 0.7, 0.9)
+				var font := ThemeDB.fallback_font
+				if font != null:
+					var fsize := int(float(gs) * 0.45)
+					var cx := float(x * gs) + float(gs) * 0.5
+					var cy := float(y * gs) + float(gs) * 0.7
+					draw_string(font, Vector2(cx - float(fsize) * 0.3, cy),
+						sym, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, sym_color)
 
 	# 床アイテムを描画（訪問済みタイルのみ）
 	for tile_v: Variant in _floor_items.keys():

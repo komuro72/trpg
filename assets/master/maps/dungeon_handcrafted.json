@@ -626,9 +626,229 @@
         ],
         "stairs": [
           {
-            "room": "r1_6",
-            "direction": "down"
+            "type": "stairs_down",
+            "x": 53,
+            "y": 29
           }
+        ]
+      },
+      {
+        "floor": 2,
+        "tile_set": "stone_00001",
+        "entrance_room": "r2_1",
+        "rooms": [
+          {
+            "id": "r2_1",
+            "name": "地下牢の入口",
+            "x": 2,
+            "y": 2,
+            "width": 14,
+            "height": 12,
+            "type": "normal",
+            "is_entrance": true,
+            "enemy_party": {
+              "members": [],
+              "items": []
+            }
+          },
+          {
+            "id": "r2_2",
+            "name": "囚人の広間",
+            "x": 22,
+            "y": 2,
+            "width": 16,
+            "height": 14,
+            "type": "normal",
+            "is_entrance": false,
+            "enemy_party": {
+              "members": [
+                { "enemy_id": "goblin-archer", "x": 25, "y": 6 },
+                { "enemy_id": "goblin-archer", "x": 30, "y": 8 },
+                { "enemy_id": "goblin-mage",   "x": 34, "y": 5 },
+                { "enemy_id": "harpy",          "x": 27, "y": 11 }
+              ],
+              "items": [
+                {
+                  "item_type": "bow",
+                  "category": "weapon",
+                  "item_name": "強化された短弓",
+                  "stats": { "attack_power": 6, "accuracy": 0.08 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "armor_cloth",
+                  "category": "armor",
+                  "item_name": "丈夫な革の服",
+                  "stats": { "physical_resistance": 6 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "potion_hp",
+                  "category": "consumable",
+                  "item_name": "回復薬",
+                  "stats": {},
+                  "effect": { "heal_hp": 30 },
+                  "quantity": 2,
+                  "image": "assets/images/items/potion_hp.png"
+                },
+                {
+                  "item_type": "potion_mp",
+                  "category": "consumable",
+                  "item_name": "魔力回復薬",
+                  "stats": {},
+                  "effect": { "restore_mp": 20 },
+                  "quantity": 1,
+                  "image": "assets/images/items/potion_mp.png"
+                }
+              ]
+            }
+          },
+          {
+            "id": "r2_3",
+            "name": "地下の奥地",
+            "x": 44,
+            "y": 2,
+            "width": 14,
+            "height": 12,
+            "type": "normal",
+            "is_entrance": false,
+            "enemy_party": {
+              "members": [
+                { "enemy_id": "dark-mage",   "x": 48, "y": 6 },
+                { "enemy_id": "dark-priest", "x": 53, "y": 8 },
+                { "enemy_id": "zombie",      "x": 46, "y": 10 },
+                { "enemy_id": "zombie",      "x": 52, "y": 11 }
+              ],
+              "items": [
+                {
+                  "item_type": "staff",
+                  "category": "weapon",
+                  "item_name": "呪われた魔法杖",
+                  "stats": { "magic_power": 10, "accuracy": 0.12 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "armor_robe",
+                  "category": "armor",
+                  "item_name": "闇の修道衣",
+                  "stats": { "magic_resistance": 9, "physical_resistance": 3 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "potion_hp",
+                  "category": "consumable",
+                  "item_name": "上位回復薬",
+                  "stats": {},
+                  "effect": { "heal_hp": 60 },
+                  "quantity": 2,
+                  "image": "assets/images/items/potion_hp.png"
+                }
+              ]
+            }
+          }
+        ],
+        "corridors": [
+          { "from": "r2_1", "to": "r2_2", "name": "錆びた牢獄の廊下" },
+          { "from": "r2_2", "to": "r2_3", "name": "闇へと続く通路" }
+        ],
+        "stairs": [
+          { "type": "stairs_up",   "x": 8,  "y": 7 },
+          { "type": "stairs_down", "x": 51, "y": 7 }
+        ]
+      },
+      {
+        "floor": 3,
+        "tile_set": "stone_00001",
+        "entrance_room": "r3_1",
+        "rooms": [
+          {
+            "id": "r3_1",
+            "name": "深淵の回廊",
+            "x": 2,
+            "y": 2,
+            "width": 14,
+            "height": 12,
+            "type": "normal",
+            "is_entrance": true,
+            "enemy_party": {
+              "members": [],
+              "items": []
+            }
+          },
+          {
+            "id": "r3_2",
+            "name": "暗黒の祭壇",
+            "x": 22,
+            "y": 2,
+            "width": 24,
+            "height": 20,
+            "type": "boss",
+            "is_entrance": false,
+            "enemy_party": {
+              "members": [
+                { "enemy_id": "dark-knight", "x": 30, "y": 8  },
+                { "enemy_id": "dark-knight", "x": 38, "y": 10 },
+                { "enemy_id": "dark-mage",   "x": 34, "y": 6  },
+                { "enemy_id": "dark-priest", "x": 41, "y": 7  },
+                { "enemy_id": "salamander",  "x": 27, "y": 16 },
+                { "enemy_id": "harpy",       "x": 43, "y": 14 }
+              ],
+              "items": [
+                {
+                  "item_type": "sword",
+                  "category": "weapon",
+                  "item_name": "漆黒の大剣",
+                  "stats": { "attack_power": 20, "accuracy": 0.15, "defense_strength": 8 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "shield",
+                  "category": "shield",
+                  "item_name": "闇の大盾",
+                  "stats": { "physical_resistance": 14, "defense_strength": 12 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "armor_plate",
+                  "category": "armor",
+                  "item_name": "漆黒の鎧",
+                  "stats": { "physical_resistance": 18, "magic_resistance": 8 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "staff",
+                  "category": "weapon",
+                  "item_name": "闇の大魔杖",
+                  "stats": { "magic_power": 18, "accuracy": 0.18 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "potion_hp",
+                  "category": "consumable",
+                  "item_name": "上位回復薬",
+                  "stats": {},
+                  "effect": { "heal_hp": 60 },
+                  "quantity": 3,
+                  "image": "assets/images/items/potion_hp.png"
+                },
+                {
+                  "item_type": "potion_mp",
+                  "category": "consumable",
+                  "item_name": "上位魔力回復薬",
+                  "stats": {},
+                  "effect": { "restore_mp": 40 },
+                  "quantity": 2,
+                  "image": "assets/images/items/potion_mp.png"
+                }
+              ]
+            }
+          }
+        ],
+        "corridors": [
+          { "from": "r3_1", "to": "r3_2", "name": "祭壇への回廊" }
+        ],
+        "stairs": [
+          { "type": "stairs_up", "x": 8, "y": 7 }
         ]
       }
     ]

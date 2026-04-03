@@ -2544,23 +2544,53 @@ assets/master/items/
 
 ---
 
-## Phase 11: フロア・ダンジョン拡張（未実装）
+## Phase 11: フロア・ダンジョン拡張
 
-### Phase 11-1: 階段実装・フロア遷移
+### Phase 11-1: 階段実装・フロア遷移（実装済み）
 
-#### 仕様
-- 階段を踏んだキャラのみ移動（パーティー分断あり）
-- 操作キャラが別フロアに移動したらカメラはそのキャラを追う
-- 残ったメンバーは AI 行動継続
-- 上のフロアへの移動も可能（往来自由）
-- 倒した敵はフロアをまたいでも復活しない
-- 敵も階段を使って別フロアに移動できる（原則は部屋を守るため自発的には移動しない）
-- フロアは縦方向につながったひとつの大きなダンジョンとして扱う（フロア単位の独立概念なし）
+#### 実装内容
 
-#### 設計メモ
-- MapData を複数フロア分保持する仕組みが必要（`floors: Array[MapData]`）
-- VisionSystem・CameraController・EnemyManager 等のフロア切替対応が必要
-- 現行の `CURRENT_FLOOR = 0` 定数を廃止して動的に管理
+**タイル・データ層**
+- `MapData.TileType`: `STAIRS_DOWN = 4`, `STAIRS_UP = 5` を追加
+- `GlobalConstants`: `TILE_STAIRS_DOWN = 4`, `TILE_STAIRS_UP = 5` 定数追加
+- `MapData.find_stairs(tile_type)`: 指定タイル種の全座標を返す
+- `MapData.is_walkable()` / `is_walkable_for()`: 階段を FLOOR 同等（地上・飛行とも通行可）として扱う
+
+**ダンジョンビルダー**
+- `DungeonBuilder.build_floor()`: 内部で `_place_stairs()` を呼び出し、JSON の `stairs` 配列をタイルに展開
+- JSON 形式: `"stairs": [{"type": "stairs_down"/"stairs_up", "x": int, "y": int}]`
+- `build_floor()` 末尾で `data.build_adjacency()` を呼ぶ（game_map.gd からは削除済み）
+
+**VisionSystem（マルチフロア対応）**
+- `_floor_visited: Array` / `_floor_visible_tiles: Array` でフロアごとに訪問・可視データを保持
+- `_visible_tiles` は現在フロアの辞書への参照（GDScript の参照セマンティクスを活用）
+- `switch_floor(floor_index, map_data, player)`: アクティブフロアを切り替え、参照を再バインド
+- `remove_enemy_manager(em)` を追加
+
+**game_map.gd（マルチフロア対応）**
+- `const CURRENT_FLOOR` を廃止。`var _current_floor_index: int = 0` に変更
+- `_all_floor_data: Array` / `_all_map_data: Array[MapData]`: 全フロアのデータを起動時一括構築
+- `_per_floor_enemies: Array` / `_per_floor_npcs: Array`: フロアごとの管理リスト
+- `map_data` / `enemy_managers` / `npc_managers` は現在フロアのエイリアス
+- `_setup_floor_enemies(idx)` / `_setup_floor_npcs(idx)`: 指定フロアの敵・NPC をセットアップ
+- 未訪問フロアは `_transition_floor()` での初訪問時に遅延セットアップ
+- `_check_stairs_step()`: hero が静止中かつ階段タイルを踏んでいれば遷移
+- `_transition_floor(direction)`: フロア遷移処理（マップ更新・hero 位置・VisionSystem・カメラリミット）
+- `_update_camera_limits(cam)`: camera2D のリミットを現在 map_data に合わせて更新
+- `_update_character_visibility()`: 非カレントフロアのキャラを強制非表示
+- 階段タイルを茶色/黄土色で描画。▼/▲ シンボルをフォールバックフォントで重ね描き
+- 遷移クールダウン 1.5 秒（`_stair_cooldown`）で連続遷移を防止
+
+**dungeon_handcrafted.json**
+- 3フロア構成に更新
+  - フロア0（廃墟）: r1_6 右奥に `stairs_down`（x:53, y:29）
+  - フロア1（地下牢）: `stairs_up`（x:8, y:7）+ `stairs_down`（x:51, y:7）。3部屋（入口・囚人の広間・地下の奥地）
+  - フロア2（深淵）: `stairs_up`（x:8, y:7）。2部屋（深淵の回廊・暗黒の祭壇[ボス部屋]）
+
+#### 当面の制限
+- パーティーメンバーはフロア遷移しない（hero のみ）
+- 敵は階段を使って移動しない（部屋守備 AI のまま）
+- right_panel の敵情報は旧フロアのままになる場合がある（将来対応）
 
 ### Phase 11-2: 10フロア対応・ダンジョン事前生成方式への移行
 

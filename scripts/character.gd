@@ -40,6 +40,9 @@ var is_flying:    bool = false
 ## 最後にダメージを与えたキャラクター（ドロップ帰属の追跡用）
 var last_attacker: Character = null
 
+## 現在いるフロアインデックス（0 = 最上層）
+var current_floor: int = 0
+
 ## バフ状態（一時的な防御力アップ。0=なし、>0=残り秒数）
 var defense_buff_timer: float = 0.0
 ## バフ中の防御ボーナス

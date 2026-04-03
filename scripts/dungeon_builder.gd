@@ -55,9 +55,14 @@ static func build_floor(floor_data: Dictionary) -> MapData:
 				data.set_area_name(corr_area_id, corr_name)
 			_carve_corridor(data, room_map[from_id] as Dictionary, room_map[to_id] as Dictionary)
 
+	# 階段タイルを配置
+	var stairs: Array = floor_data.get("stairs", [])
+	_place_stairs(data, stairs)
+
 	# スポーン情報を構築
 	_build_spawn_data(data, floor_data, rooms)
 
+	data.build_adjacency()
 	return data
 
 
@@ -170,3 +175,18 @@ static func _build_spawn_data(data: MapData, floor_data: Dictionary, rooms: Arra
 					"members":  members
 				})
 				party_id += 1
+
+
+## 階段タイルを配置する
+## stairs: [{"type": "stairs_down"/"stairs_up", "x": int, "y": int}, ...]
+static func _place_stairs(data: MapData, stairs: Array) -> void:
+	for stair: Variant in stairs:
+		var s := stair as Dictionary
+		var x: int = int(s.get("x", 0))
+		var y: int = int(s.get("y", 0))
+		var pos := Vector2i(x, y)
+		var stype := s.get("type", "") as String
+		if stype == "stairs_down":
+			data.set_tile(pos, MapData.TileType.STAIRS_DOWN)
+		elif stype == "stairs_up":
+			data.set_tile(pos, MapData.TileType.STAIRS_UP)

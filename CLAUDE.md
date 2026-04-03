@@ -738,14 +738,21 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
     - 全体方針→個別方針カーソル移動時は1列目（名前）から開始
     - バグ修正：`_get_char_front_texture()` が sprite_front ファイル不在のとき sprite_face にフォールバックするよう修正（CharacterGenerator 生成キャラは常に sprite_front パスが設定されるため、ファイル存在チェックが必要だった）
 - [ ] Phase 11: フロア・ダンジョン拡張
-  - [ ] Phase 11-1: 階段実装・フロア遷移
-    - 階段を踏んだキャラのみ移動（パーティー分断あり）
-    - 操作キャラが別フロアに移動したらカメラはそのキャラを追う
-    - 残ったメンバーは AI 行動継続
-    - 上のフロアへの移動も可能（往来自由）
-    - 倒した敵はフロアをまたいでも復活しない
-    - 敵も階段を使って別フロアに移動できる（原則は部屋を守るため自発的には移動しない）
-    - フロアは縦方向につながったひとつの大きなダンジョンとして扱う（フロア単位の独立概念なし）
+  - [x] Phase 11-1: 階段実装・フロア遷移
+    - 階段タイル（STAIRS_DOWN=4, STAIRS_UP=5）を TileType に追加。GlobalConstants に定数追加
+    - DungeonBuilder が JSON の `stairs` 配列（type/x/y 形式）から階段タイルを配置
+    - MapData.find_stairs(type) で階段座標を全検索
+    - VisionSystem をフロアインデックスごとに訪問済みエリア・可視タイルを管理（switch_floor()）
+    - game_map.gd: 全フロアの MapData を起動時に一括構築（_all_map_data[]）
+    - game_map.gd: フロアごとに EnemyManager・NpcManager を管理（_per_floor_enemies[], _per_floor_npcs[]）
+    - 未訪問フロアは初訪問時に敵・NPC をセットアップ（遅延初期化）
+    - _check_stairs_step(): hero が静止・階段タイルを踏んでいれば _transition_floor() を呼ぶ
+    - _transition_floor(): フロア番号更新・hero 位置更新・VisionSystem 切替・カメラリミット更新
+    - 階段タイルは茶色/黄土色で塗り、▼/▲ シンボルを重ねて表示
+    - 遷移クールダウン 1.5 秒（連続遷移防止）
+    - 倒した敵はフロアをまたいでも復活しない（EnemyManager が永続保持）
+    - dungeon_handcrafted.json: 3フロア構成。フロア0→r1_6 に下り階段、フロア1（地下牢・3部屋）、フロア2（深淵・2部屋）
+    - 当面の制限: パーティーメンバーはフロア遷移しない（hero のみ）・敵は階段を使わない
   - [ ] Phase 11-2: 10フロア対応・ダンジョン事前生成方式への移行
     - ダンジョンは10フロア構成を標準とする
     - 深いフロアほど強い敵を配置・アイテムの補正値も高くなる

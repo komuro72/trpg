@@ -32,6 +32,10 @@ const CLASS_NAME_JP: Dictionary = {
 	"scout":         "斥候",
 }
 
+## 階段タイル種別定数（MapData.TileType と対応）
+const TILE_STAIRS_DOWN: int = 4
+const TILE_STAIRS_UP:   int = 5
+
 ## アイテム補正キーの日本語名
 const STAT_NAME_JP: Dictionary = {
 	"attack_power":        "攻撃力",
