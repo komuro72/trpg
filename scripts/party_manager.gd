@@ -208,6 +208,11 @@ func _create_leader_ai(leader: Character) -> PartyLeaderAI:
 	return ai
 
 
+## アクティブ状態を返す（デバッグ用）
+func is_active() -> bool:
+	return _activated
+
+
 ## AI を明示的に起動する（VisionSystem 経由ではなく直接起動が必要な場合に使用）
 func activate() -> void:
 	if not _activated:

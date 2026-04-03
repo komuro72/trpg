@@ -98,6 +98,8 @@ func _input(event: InputEvent) -> void:
 			KEY_F1:
 				if MessageLog != null:
 					MessageLog.toggle_debug()
+			KEY_F2:
+				_print_debug_floor_info()
 			KEY_F5:
 				get_tree().reload_current_scene()
 
@@ -243,6 +245,9 @@ func _setup_floor_enemies(floor_idx: int) -> void:
 		em.setup(members, hero, fmap, items)
 		em.party_wiped.connect(_on_enemy_party_wiped)
 		em.set_vision_controlled(true)
+		# スポーン時にフロアインデックスをセット（クロスフロア攻撃防止）
+		for ch: Character in em.get_enemies():
+			ch.current_floor = floor_idx
 		fems.append(em)
 		idx += 1
 
@@ -290,6 +295,9 @@ func _setup_floor_npcs(floor_idx: int) -> void:
 		nm.set_enemy_list(all_enemies)
 		var color: Color = _NPC_PARTY_COLORS[idx % _NPC_PARTY_COLORS.size()] as Color
 		nm.set_party_color(color)
+		# スポーン時にフロアインデックスをセット（クロスフロア攻撃防止）
+		for ch: Character in nm.get_members():
+			ch.current_floor = floor_idx
 		fnms.append(nm)
 		idx += 1
 
@@ -426,11 +434,21 @@ func _setup_vision_system() -> void:
 		MessageLog.setup_area_filter(map_data, func() -> String:
 				return vision_system.get_current_area() if vision_system != null else "")
 
-	# NPC パーティーをゲーム開始時に即座にアクティブ化（探索行動を開始する）
+	# NPC パーティーをアクティブ化する。
 	# VisionSystem 配布後に呼ぶこと（explore 行動で VisionSystem を参照するため）
+	# 訪問済みエリアのNPCのみ即時アクティブ化。未訪問エリアのNPCはVisionSystemが
+	# update_visibility() 経由で自動アクティブ化する（プレイヤーが部屋に入ったとき）。
 	for nm: NpcManager in npc_managers:
 		if nm not in _pre_joined_npc_managers:
-			nm.activate()
+			var any_in_visited := false
+			for member: Character in nm.get_members():
+				if is_instance_valid(member):
+					var a := map_data.get_area(member.grid_pos)
+					if vision_system.is_area_visited(a):
+						any_in_visited = true
+						break
+			if any_in_visited:
+				nm.activate()
 
 
 func _setup_panels() -> void:
@@ -924,14 +942,43 @@ func _transition_floor(direction: int) -> void:
 		if is_instance_valid(nm):
 			vision_system.add_npc_manager(nm)
 			nm.set_vision_system(vision_system)
-			nm.activate()
+			# 訪問済みエリアのNPCのみ即時アクティブ化。未訪問エリアのNPCはVisionSystemが自動アクティブ化する
 
-	# VisionSystem をフロア切替
+	# VisionSystem をフロア切替（switch_floor で開始エリアが訪問済みになる）
 	vision_system.switch_floor(new_floor, new_map, hero)
+
+	# switch_floor 後に訪問済みエリアが確定したのでNPCをアクティブ化する
+	for nm: NpcManager in npc_managers:
+		if is_instance_valid(nm):
+			var any_in_visited := false
+			for member: Character in nm.get_members():
+				if is_instance_valid(member):
+					var a := new_map.get_area(member.grid_pos)
+					if vision_system.is_area_visited(a):
+						any_in_visited = true
+						break
+			if any_in_visited:
+				nm.activate()
 
 	# PlayerController の参照を更新
 	if player_controller != null:
 		player_controller.map_data = new_map
+		# 遷移直後フラグをセット（遷移先の階段タイルで即再遷移しないよう移動を許可）
+		player_controller.stair_just_transitioned = true
+		# blocking_characters を新フロアの敵・NPC で再構築（フロア間すり抜け防止）
+		player_controller.blocking_characters.clear()
+		for em: EnemyManager in enemy_managers:
+			if is_instance_valid(em):
+				player_controller.blocking_characters.append_array(em.get_enemies())
+		for nm: NpcManager in npc_managers:
+			if is_instance_valid(nm):
+				player_controller.blocking_characters.append_array(nm.get_members())
+		# 同フロアのパーティーメンバー（hero 以外）も追加
+		for member_var: Variant in party.members:
+			var ch := member_var as Character
+			if is_instance_valid(ch) and ch != hero \
+					and ch.current_floor == _current_floor_index:
+				player_controller.blocking_characters.append(ch)
 
 	# カメラのリミットを更新
 	if camera_controller != null and is_instance_valid(camera_controller):
@@ -975,6 +1022,107 @@ func _update_character_visibility() -> void:
 					if is_instance_valid(ch):
 						if not is_current:
 							ch.visible = false
+
+
+## F2 デバッグ情報をファイルに書き出す（フルスクリーン実行対応）
+## 出力先: user://debug_floor_info.txt
+func _print_debug_floor_info() -> void:
+	var lines: PackedStringArray = []
+	lines.append("=== DEBUG FLOOR INFO ===")
+	lines.append("current_floor: %d" % _current_floor_index)
+
+	lines.append("")
+	lines.append("--- Characters ---")
+	# プレイヤーパーティー
+	for member: Variant in party.members:
+		var ch := member as Character
+		if not is_instance_valid(ch):
+			continue
+		var cname := ch.character_data.character_name if ch.character_data != null else "?"
+		lines.append("  [%s] floor=%d grid_pos=%s visible=%s is_active=true (player_party)" % [
+			cname, ch.current_floor, str(ch.grid_pos), str(ch.visible)])
+	# 全フロアの敵
+	for fi: int in range(_per_floor_enemies.size()):
+		for em: EnemyManager in (_per_floor_enemies[fi] as Array):
+			if not is_instance_valid(em):
+				continue
+			var active := em.is_active()
+			for ch: Character in em.get_enemies():
+				if not is_instance_valid(ch):
+					continue
+				var cname := ch.character_data.character_name if ch.character_data != null else "?"
+				lines.append("  [%s] floor=%d grid_pos=%s visible=%s is_active=%s" % [
+					cname, fi, str(ch.grid_pos), str(ch.visible), str(active)])
+	# 全フロアのNPC
+	for fi: int in range(_per_floor_npcs.size()):
+		for pm: NpcManager in (_per_floor_npcs[fi] as Array):
+			if not is_instance_valid(pm):
+				continue
+			var active := pm.is_active()
+			for ch: Character in pm.get_members():
+				if not is_instance_valid(ch):
+					continue
+				var cname := ch.character_data.character_name if ch.character_data != null else "?"
+				lines.append("  [%s(NPC)] floor=%d grid_pos=%s visible=%s is_active=%s" % [
+					cname, fi, str(ch.grid_pos), str(ch.visible), str(active)])
+
+	lines.append("")
+	lines.append("--- Occupied Tiles (floor別) ---")
+	for fi: int in range(_per_floor_enemies.size()):
+		var tiles: Array[Vector2i] = []
+		for em: EnemyManager in (_per_floor_enemies[fi] as Array):
+			if not is_instance_valid(em):
+				continue
+			for ch: Character in em.get_enemies():
+				if is_instance_valid(ch) and ch.hp > 0:
+					for t: Vector2i in ch.get_occupied_tiles():
+						tiles.append(t)
+		if fi < _per_floor_npcs.size():
+			for pm: NpcManager in (_per_floor_npcs[fi] as Array):
+				if not is_instance_valid(pm):
+					continue
+				for ch: Character in pm.get_members():
+					if is_instance_valid(ch) and ch.hp > 0:
+						for t: Vector2i in ch.get_occupied_tiles():
+							tiles.append(t)
+		if fi == _current_floor_index:
+			for member: Variant in party.members:
+				var ch := member as Character
+				if is_instance_valid(ch) and ch.hp > 0:
+					for t: Vector2i in ch.get_occupied_tiles():
+						tiles.append(t)
+		lines.append("floor %d: %s" % [fi, str(tiles)])
+
+	lines.append("")
+	lines.append("--- Passable Check (blocking_characters) ---")
+	if player_controller != null:
+		lines.append("blocking_characters count: %d" % player_controller.blocking_characters.size())
+		var invalid_count := 0
+		for ch: Character in player_controller.blocking_characters:
+			if not is_instance_valid(ch):
+				invalid_count += 1
+		lines.append("  invalid entries: %d" % invalid_count)
+		var occupied: Array[Vector2i] = []
+		for ch: Character in player_controller.blocking_characters:
+			if is_instance_valid(ch):
+				for t: Vector2i in ch.get_occupied_tiles():
+					occupied.append(t)
+		lines.append("  occupied by blocking_characters: %s" % str(occupied))
+	lines.append("========================")
+
+	# ファイルに書き出す
+	var path := "user://debug_floor_info.txt"
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file != null:
+		for line: String in lines:
+			file.store_line(line)
+		file.close()
+		var abs_path := ProjectSettings.globalize_path(path)
+		if message_window != null:
+			message_window.show_message("[DEBUG] F2: %s に出力しました" % abs_path)
+	else:
+		if message_window != null:
+			message_window.show_message("[DEBUG] F2: ファイル書き込み失敗")
 
 
 ## タイル画像をプリロードする（画像がない場合はフォールバック色を使用）

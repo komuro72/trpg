@@ -7,6 +7,10 @@ extends RefCounted
 ## 通路の幅（中心から左右に何タイル広げるか）。1 → 3タイル幅の通路
 const CORRIDOR_HALF_WIDTH := 1
 
+## マップ四方に追加する境界壁のタイル数。
+## カメラリミット付近に到達できなくするためにキャラが歩けない壁領域を確保する
+const MAP_BORDER := 6
+
 
 ## 指定フロアのMapDataを構築して返す
 ## floor_data: DungeonGeneratorが生成したfloors[]の1要素
@@ -16,7 +20,7 @@ static func build_floor(floor_data: Dictionary) -> MapData:
 		push_error("DungeonBuilder: roomsが空です")
 		return MapData.new()
 
-	# マップサイズを全部屋の外接矩形から計算（余白2タイル）
+	# マップサイズを全部屋の外接矩形から計算
 	var max_x := 0
 	var max_y := 0
 	for room: Variant in rooms:
@@ -29,8 +33,11 @@ static func build_floor(floor_data: Dictionary) -> MapData:
 			max_x = rx + rw
 		if ry + rh > max_y:
 			max_y = ry + rh
-	var map_w := max_x + 2
-	var map_h := max_y + 2
+
+	# 四方に MAP_BORDER タイルの境界壁を追加（キャラがカメラリミット付近に到達できないようにする）
+	var offset := Vector2i(MAP_BORDER, MAP_BORDER)
+	var map_w := max_x + MAP_BORDER * 2 + 2
+	var map_h := max_y + MAP_BORDER * 2 + 2
 
 	var data := MapData.new()
 	data.init_all_walls(map_w, map_h)
@@ -38,7 +45,7 @@ static func build_floor(floor_data: Dictionary) -> MapData:
 	# 部屋を床に展開（外周1タイルは壁として保持）
 	for room: Variant in rooms:
 		var r := room as Dictionary
-		_carve_room(data, r)
+		_carve_room(data, r, offset)
 
 	# 通路を床に展開
 	var corridors: Array = floor_data.get("corridors", [])
@@ -53,23 +60,23 @@ static func build_floor(floor_data: Dictionary) -> MapData:
 			var corr_name := c.get("name", "") as String
 			if not corr_name.is_empty():
 				data.set_area_name(corr_area_id, corr_name)
-			_carve_corridor(data, room_map[from_id] as Dictionary, room_map[to_id] as Dictionary)
+			_carve_corridor(data, room_map[from_id] as Dictionary, room_map[to_id] as Dictionary, offset)
 
 	# 階段タイルを配置
 	var stairs: Array = floor_data.get("stairs", [])
-	_place_stairs(data, stairs)
+	_place_stairs(data, stairs, offset)
 
 	# スポーン情報を構築
-	_build_spawn_data(data, floor_data, rooms)
+	_build_spawn_data(data, floor_data, rooms, offset)
 
 	data.build_adjacency()
 	return data
 
 
 ## 部屋を床タイルに展開する（内部のみ、外周はWALL）
-static func _carve_room(data: MapData, room: Dictionary) -> void:
-	var rx: int = int(room.get("x",      0))
-	var ry: int = int(room.get("y",      0))
+static func _carve_room(data: MapData, room: Dictionary, offset: Vector2i) -> void:
+	var rx: int = int(room.get("x",      0)) + offset.x
+	var ry: int = int(room.get("y",      0)) + offset.y
 	var rw: int = int(room.get("width",  10))
 	var rh: int = int(room.get("height", 10))
 	var area_id := room.get("id", "") as String
@@ -86,11 +93,11 @@ static func _carve_room(data: MapData, room: Dictionary) -> void:
 
 
 ## 2部屋間をL字通路で接続する
-static func _carve_corridor(data: MapData, from_room: Dictionary, to_room: Dictionary) -> void:
-	var fx: int = int(from_room.get("x", 0)) + int(from_room.get("width",  10)) / 2
-	var fy: int = int(from_room.get("y", 0)) + int(from_room.get("height", 10)) / 2
-	var tx: int = int(to_room.get("x",   0)) + int(to_room.get("width",   10)) / 2
-	var ty: int = int(to_room.get("y",   0)) + int(to_room.get("height",  10)) / 2
+static func _carve_corridor(data: MapData, from_room: Dictionary, to_room: Dictionary, offset: Vector2i) -> void:
+	var fx: int = int(from_room.get("x", 0)) + int(from_room.get("width",  10)) / 2 + offset.x
+	var fy: int = int(from_room.get("y", 0)) + int(from_room.get("height", 10)) / 2 + offset.y
+	var tx: int = int(to_room.get("x",   0)) + int(to_room.get("width",   10)) / 2 + offset.x
+	var ty: int = int(to_room.get("y",   0)) + int(to_room.get("height",  10)) / 2 + offset.y
 
 	var hw := CORRIDOR_HALF_WIDTH
 	var area_id := "corridor_%s_%s" % [from_room.get("id", ""), to_room.get("id", "")]
@@ -127,8 +134,8 @@ static func _build_room_map(rooms: Array) -> Dictionary:
 	return m
 
 
-## MapDataのスポーン情報を構築する
-static func _build_spawn_data(data: MapData, floor_data: Dictionary, rooms: Array) -> void:
+## MapDataのスポーン情報を構築する（offset を加算して実マップ座標に変換する）
+static func _build_spawn_data(data: MapData, floor_data: Dictionary, rooms: Array, offset: Vector2i) -> void:
 	var entrance_id := floor_data.get("entrance_room", "") as String
 	var room_map    := _build_room_map(rooms)
 
@@ -140,10 +147,10 @@ static func _build_spawn_data(data: MapData, floor_data: Dictionary, rooms: Arra
 		if pp != null and pp is Dictionary:
 			pp_members = (pp as Dictionary).get("members", [])
 		if not pp_members.is_empty():
-			data.player_parties = [{"party_id": 1, "members": pp_members}]
+			data.player_parties = [{"party_id": 1, "members": _offset_members(pp_members, offset)}]
 		else:
-			var px: int = int(er.get("x", 2)) + int(er.get("width",  10)) / 2
-			var py: int = int(er.get("y", 2)) + int(er.get("height", 10)) / 2
+			var px: int = int(er.get("x", 2)) + int(er.get("width",  10)) / 2 + offset.x
+			var py: int = int(er.get("y", 2)) + int(er.get("height", 10)) / 2 + offset.y
 			data.player_parties = [
 				{"party_id": 1, "members": [{"character_id": "hero", "x": px, "y": py}]}
 			]
@@ -162,7 +169,7 @@ static func _build_spawn_data(data: MapData, floor_data: Dictionary, rooms: Arra
 			if not members.is_empty():
 				data.enemy_parties.append({
 					"party_id": party_id,
-					"members":  members,
+					"members":  _offset_members(members, offset),
 					"items":    (ep as Dictionary).get("items", [])
 				})
 				party_id += 1
@@ -172,18 +179,29 @@ static func _build_spawn_data(data: MapData, floor_data: Dictionary, rooms: Arra
 			if not members.is_empty():
 				data.npc_parties.append({
 					"party_id": party_id,
-					"members":  members
+					"members":  _offset_members(members, offset)
 				})
 				party_id += 1
 
 
+## メンバーリストの x/y 座標に offset を加算した新しいリストを返す
+static func _offset_members(members: Array, offset: Vector2i) -> Array:
+	var result: Array = []
+	for m: Variant in members:
+		var md := (m as Dictionary).duplicate()
+		md["x"] = int(md.get("x", 0)) + offset.x
+		md["y"] = int(md.get("y", 0)) + offset.y
+		result.append(md)
+	return result
+
+
 ## 階段タイルを配置する
 ## stairs: [{"type": "stairs_down"/"stairs_up", "x": int, "y": int}, ...]
-static func _place_stairs(data: MapData, stairs: Array) -> void:
+static func _place_stairs(data: MapData, stairs: Array, offset: Vector2i) -> void:
 	for stair: Variant in stairs:
 		var s := stair as Dictionary
-		var x: int = int(s.get("x", 0))
-		var y: int = int(s.get("y", 0))
+		var x: int = int(s.get("x", 0)) + offset.x
+		var y: int = int(s.get("y", 0)) + offset.y
 		var pos := Vector2i(x, y)
 		var stype := s.get("type", "") as String
 		if stype == "stairs_down":

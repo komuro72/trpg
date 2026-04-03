@@ -10,7 +10,9 @@ extends Node
 ##   - Camera2D.limit_* によるマップ端制限はそのまま維持
 
 ## デッドゾーン比率（画面サイズに対する割合）
-const DEAD_ZONE_RATIO: float = 0.40
+## X はパネル分だけ視野が狭くなるため早めにスクロールさせる
+const DEAD_ZONE_RATIO_X: float = 0.20
+const DEAD_ZONE_RATIO_Y: float = 0.40
 
 ## 追従速度の指数減衰係数（大きいほど速く追いつく）
 ## 10.0 → キャラ移動 0.3s 中に約 95% 追従
@@ -70,8 +72,8 @@ func _dead_zone_half_px() -> Vector2:
 	var panel_px := float(GlobalConstants.PANEL_TILES * GlobalConstants.GRID_SIZE)
 	var field_w  := vp_size.x - 2.0 * panel_px
 	return Vector2(
-		maxf(gs, field_w  * DEAD_ZONE_RATIO * 0.5),
-		maxf(gs, vp_size.y * DEAD_ZONE_RATIO * 0.5)
+		maxf(gs, field_w  * DEAD_ZONE_RATIO_X * 0.5),
+		maxf(gs, vp_size.y * DEAD_ZONE_RATIO_Y * 0.5)
 	)
 
 

@@ -164,6 +164,7 @@ assets/images/tiles/
 | ゲーム終了 | Esc（当面） | ポーズメニュー内で選択（将来実装） | |
 | ポーズメニュー | 未定（将来実装） | Start | |
 | AIデバッグパネル ON/OFF | F1 | — | |
+| デバッグ情報コンソール出力 | F2 | — | キャラ・フロア・占有タイル情報を user://debug_floor_info.txt に書き出し |
 | シーン再スタート | F5 | — | |
 
 ### メニュー内共通操作
@@ -753,6 +754,22 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
     - 倒した敵はフロアをまたいでも復活しない（EnemyManager が永続保持）
     - dungeon_handcrafted.json: 3フロア構成。フロア0→r1_6 に下り階段、フロア1（地下牢・3部屋）、フロア2（深淵・2部屋）
     - 当面の制限: パーティーメンバーはフロア遷移しない（hero のみ）・敵は階段を使わない
+    - [x] Phase 11-1 バグ修正（フロア遷移後の不具合）
+      - クロスフロアすり抜け・不可視攻撃バグの3点修正
+        1. `_setup_floor_enemies/npcs()` で敵・NPC スポーン時に `current_floor` をセット
+        2. `_transition_floor()` で `blocking_characters` を新フロアの敵・NPC に再構築
+        3. `party_leader_ai._assign_orders()` で別フロアのターゲットを null に排除
+      - NPC アクティブ化を訪問済みエリアのみに限定（起動時・フロア遷移時の両方）
+        - `vision_system.gd`: 未訪問エリアの NPC を `friendly_areas` から除外
+        - `game_map.gd`: 未訪問エリアの NPC は activate() しない
+      - 矢印キー長押しで階段を通り抜けてしまう問題を修正
+        - `player_controller.gd`: 階段タイル静止中は移動バッファをブロック
+        - `stair_just_transitioned` フラグで遷移直後（新フロアの階段タイル上）はブロック解除
+        - `_transition_floor()` でフラグをセット
+      - F2 デバッグキーを追加（`user://debug_floor_info.txt` に出力。MessageWindow でパスを通知）
+      - カメラ X 方向デッドゾーンを 0.40 → 0.20 に変更（進行方向の視野を改善）
+      - DungeonBuilder に `MAP_BORDER = 6` を追加（四方6タイルの境界壁。コンテンツを offset で移動）
+        - キャラがカメラリミット付近に物理的に到達できなくなり、マップ端での画面端寄りを解消
   - [ ] Phase 11-2: 10フロア対応・ダンジョン事前生成方式への移行
     - ダンジョンは10フロア構成を標準とする
     - 深いフロアほど強い敵を配置・アイテムの補正値も高くなる

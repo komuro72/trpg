@@ -186,6 +186,11 @@ func _assign_orders() -> void:
 			_:
 				target = _select_target_for(member)
 
+		# クロスフロアターゲット排除（別フロアのキャラを攻撃しない）
+		if target != null and is_instance_valid(target) \
+				and target.current_floor != member.current_floor:
+			target = null
+
 		unit_ai.receive_order({
 			"strategy":         effective_strat,
 			"target":           target,

@@ -59,6 +59,10 @@ var _target_index:  int = 0  # valid_targets.size() = キャンセル選択
 var _move_buffer: Vector2i = Vector2i.ZERO
 var _cursor: TargetCursor = null
 
+## フロア遷移直後に true にセット（game_map が設定）。
+## 遷移先の階段タイルから出るまで移動ブロックを解除する
+var stair_just_transitioned: bool = false
+
 ## ホールド開始時からのpre_delayカウントダウン（0以下で発動可能）
 var _pre_delay_remaining: float = 0.0
 
@@ -160,6 +164,21 @@ func _process_normal(_delta: float) -> void:
 	if character.is_moving():
 		_move_buffer = dir  # ZERO でも上書き（離したらキャンセル）
 		return
+
+	# 階段タイルに静止中は移動をブロック（game_map が遷移を処理する）
+	# stair_just_transitioned=true なら遷移直後 → ブロックせず移動を許可し、
+	# 階段タイルを出た時点でフラグをリセットして次回の遷移に備える
+	if map_data != null:
+		var cur_tile := map_data.get_tile(character.grid_pos)
+		var on_stairs := cur_tile == MapData.TileType.STAIRS_DOWN \
+				or cur_tile == MapData.TileType.STAIRS_UP
+		if on_stairs:
+			if not stair_just_transitioned:
+				_move_buffer = Vector2i.ZERO
+				return
+			# 遷移直後は通過させる（ブロックしない）
+		else:
+			stair_just_transitioned = false  # 階段タイルから出たらリセット
 
 	# アニメーション完了後：バッファ入力を優先し、次いで現在の入力を使用
 	var effective_dir := _move_buffer if _move_buffer != Vector2i.ZERO else dir
