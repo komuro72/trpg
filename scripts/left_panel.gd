@@ -233,6 +233,24 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 		"%s / %s / %s" % [bform_a, lowh_a, pickup_a],
 		HORIZONTAL_ALIGNMENT_LEFT, tw, fs_ord, ord_color)
 
+	# 消耗品表示（操作キャラのみ）
+	if _active_character != null and c == _active_character and c.character_data != null:
+		var consumables := c.character_data.get_consumables()
+		var item_text: String
+		if consumables.is_empty():
+			item_text = "[C] ―"
+		else:
+			var idx := c.character_data.selected_consumable_index
+			var sel := consumables[clampi(idx, 0, consumables.size() - 1)] as Dictionary
+			var iname: String = sel.get("item_name", "アイテム") as String
+			if consumables.size() > 1:
+				item_text = "[C] %s (%d/%d)" % [iname, idx + 1, consumables.size()]
+			else:
+				item_text = "[C] %s" % iname
+		_control.draw_string(_font,
+			Vector2(tx, mp_bar_y + bar_h + 46.0),
+			item_text, HORIZONTAL_ALIGNMENT_LEFT, tw, 9, Color(0.9, 0.85, 0.5))
+
 	# カード下区切り線
 	_control.draw_line(
 		Vector2(fx, fy + fh - 1),

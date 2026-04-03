@@ -73,6 +73,9 @@ var _pending_slot_data: Dictionary = {}
 ## クラスJSONから読み込んだスロットデータ
 var _slot_z: Dictionary = {}
 
+## 消耗品バー UI（game_map から設定）
+var consumable_bar: ConsumableBar = null
+
 
 func _ready() -> void:
 	_load_class_slots()
@@ -134,6 +137,16 @@ func _process(delta: float) -> void:
 
 
 func _process_normal(_delta: float) -> void:
+	# 消耗品スロット循環（LT/RT）
+	if Input.is_action_just_pressed("slot_prev"):
+		_cycle_consumable(-1)
+	elif Input.is_action_just_pressed("slot_next"):
+		_cycle_consumable(1)
+
+	# 消耗品使用（C/X）
+	if Input.is_action_just_pressed("use_item"):
+		_use_selected_consumable()
+
 	# 攻撃キーホールドでターゲット選択モードへ
 	if Input.is_action_pressed("attack"):
 		_move_buffer = Vector2i.ZERO
@@ -480,6 +493,53 @@ func _can_move_to(pos: Vector2i) -> bool:
 		if pos in blocker.get_occupied_tiles():
 			return false
 	return true
+
+
+# --------------------------------------------------------------------------
+# 消耗品
+# --------------------------------------------------------------------------
+
+## 消耗品スロットを循環する（dir: +1=次 / -1=前）
+func _cycle_consumable(dir: int) -> void:
+	if character == null or character.character_data == null:
+		return
+	var cd := character.character_data
+	var list := cd.get_consumables()
+	if list.is_empty():
+		return
+	cd.selected_consumable_index = \
+		(cd.selected_consumable_index + dir + list.size()) % list.size()
+	if consumable_bar != null:
+		consumable_bar.refresh()
+
+
+## 選択中の消耗品を使用する
+func _use_selected_consumable() -> void:
+	if character == null or character.character_data == null:
+		return
+	var cd := character.character_data
+	var item := cd.get_selected_consumable()
+	if item.is_empty():
+		return
+	var effect: Dictionary = item.get("effect", {}) as Dictionary
+	var heal_hp: int    = int(effect.get("heal_hp",    0))
+	var restore_mp: int = int(effect.get("restore_mp", 0))
+	# 使用条件チェック
+	if heal_hp > 0 and character.hp >= character.max_hp:
+		return
+	if restore_mp > 0 and character.mp >= character.max_mp:
+		return
+	# 使用実行
+	character.use_consumable(item)
+	cd.inventory.erase(item)
+	cd.selected_consumable_index = \
+		clampi(cd.selected_consumable_index, 0, cd.get_consumables().size() - 1)
+	var item_name: String = item.get("item_name", "アイテム") as String
+	var char_name: String = cd.character_name if not cd.character_name.is_empty() \
+		else String(character.name)
+	MessageLog.add_system("%s は %s を使った！" % [char_name, item_name])
+	if consumable_bar != null:
+		consumable_bar.refresh()
 
 
 # --------------------------------------------------------------------------

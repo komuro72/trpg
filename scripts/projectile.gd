@@ -7,6 +7,9 @@ extends Node2D
 
 const SPEED := 2000.0  # px/秒（移動での回避不可）
 
+const _ARROW_PATH      := "res://assets/images/projectiles/arrow.png"
+const _FIRE_BULLET_PATH := "res://assets/images/projectiles/fire_bullet.png"
+
 var _dest:       Vector2
 var _will_hit:   bool
 var _target:     Character
@@ -15,6 +18,9 @@ var _multiplier: float
 var _attacker:   Character
 var _is_magic:   bool
 var _done:       bool = false
+
+var _sprite:     Sprite2D = null
+var _direction:  Vector2  = Vector2.RIGHT
 
 
 ## 発射設定。add_child 後すぐに呼ぶこと。
@@ -29,6 +35,32 @@ func setup(from: Vector2, to: Vector2, will_hit: bool,
 	_multiplier = multiplier
 	_attacker   = attacker
 	_is_magic   = is_magic
+	_direction  = (to - from).normalized()
+
+	_setup_sprite()
+
+
+func _setup_sprite() -> void:
+	# 攻撃種別に応じた画像パスを選択
+	var img_path: String = _FIRE_BULLET_PATH if _is_magic else _ARROW_PATH
+
+	if not ResourceLoader.exists(img_path):
+		return  # 画像なし → _draw() のフォールバックを使用
+
+	var tex := load(img_path) as Texture2D
+	if tex == null:
+		return
+
+	_sprite = Sprite2D.new()
+	_sprite.texture = tex
+	# 画像サイズを飛翔体として適切なサイズ（32px）にスケール
+	var img_size := maxf(float(tex.get_width()), float(tex.get_height()))
+	if img_size > 0.0:
+		var scale_val := 32.0 / img_size
+		_sprite.scale = Vector2(scale_val, scale_val)
+	# 下向き（↓）が正方向の画像なので -PI/2 オフセットで右向きを基準に補正
+	_sprite.rotation = atan2(_direction.y, _direction.x) + PI / 2.0
+	add_child(_sprite)
 
 
 func _process(delta: float) -> void:
@@ -53,4 +85,6 @@ func _on_arrive() -> void:
 
 
 func _draw() -> void:
-	draw_circle(Vector2.ZERO, 5.0, Color(1.0, 0.8, 0.0))  # 黄色の円（仮素材）
+	if _sprite != null:
+		return  # 画像スプライトがあればフォールバック描画しない
+	draw_circle(Vector2.ZERO, 5.0, Color(1.0, 0.8, 0.0))  # 黄色の円（フォールバック）

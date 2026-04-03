@@ -50,6 +50,7 @@ var left_panel: LeftPanel
 var right_panel: RightPanel
 var message_window: MessageWindow
 var area_name_display: AreaNameDisplay
+var consumable_bar: ConsumableBar
 var dialogue_trigger: DialogueTrigger
 var order_window: OrderWindow
 
@@ -363,16 +364,17 @@ func _setup_vision_system() -> void:
 	if _hero_manager != null:
 		_hero_manager.set_vision_system(vision_system)
 
+	# MessageLog のエリアフィルタを設定（デバッグログをプレイヤーエリアに限定）
+	# nm.activate() より前に設定すること（activate 中に add_ai が呼ばれるため）
+	if MessageLog != null:
+		MessageLog.setup_area_filter(map_data, func() -> String:
+				return vision_system.get_current_area() if vision_system != null else "")
+
 	# NPC パーティーをゲーム開始時に即座にアクティブ化（探索行動を開始する）
 	# VisionSystem 配布後に呼ぶこと（explore 行動で VisionSystem を参照するため）
 	for nm: NpcManager in npc_managers:
 		if nm not in _pre_joined_npc_managers:
 			nm.activate()
-
-	# MessageLog のエリアフィルタを設定（デバッグログをプレイヤーエリアに限定）
-	if MessageLog != null:
-		MessageLog.setup_area_filter(map_data, func() -> String:
-				return vision_system.get_current_area() if vision_system != null else "")
 
 
 func _setup_panels() -> void:
@@ -401,6 +403,14 @@ func _setup_panels() -> void:
 	area_name_display = AreaNameDisplay.new()
 	area_name_display.name = "AreaNameDisplay"
 	add_child(area_name_display)
+
+	# 消耗品バー（部屋名の左側）
+	consumable_bar = ConsumableBar.new()
+	consumable_bar.name = "ConsumableBar"
+	add_child(consumable_bar)
+	consumable_bar.update_character(hero)
+	if player_controller != null:
+		player_controller.consumable_bar = consumable_bar
 
 	# 起動時の初期エリア名を表示
 	if vision_system != null:
@@ -501,6 +511,10 @@ func _on_switch_character_requested(new_char: Character) -> void:
 	# 左パネルのハイライトを更新
 	if left_panel != null:
 		left_panel.set_active_character(new_char)
+
+	# 消耗品バーを新キャラで更新
+	if consumable_bar != null:
+		consumable_bar.update_character(new_char)
 
 	party.set_active(new_char)
 
@@ -739,6 +753,10 @@ func _check_item_pickup() -> void:
 		var item := _floor_items[pos] as Dictionary
 		ch.character_data.inventory.append(item)
 		_floor_items.erase(pos)
+		# 操作キャラが消耗品を拾ったら ConsumableBar を更新
+		if ch.is_player_controlled and consumable_bar != null \
+				and (item.get("category", "") as String) == "consumable":
+			consumable_bar.refresh()
 		SoundManager.play(SoundManager.ITEM_GET)
 		var cname := ch.character_data.character_name \
 			if not ch.character_data.character_name.is_empty() else String(ch.name)

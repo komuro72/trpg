@@ -2475,13 +2475,51 @@ assets/master/items/
 
 ---
 
-### Phase 10-3: 消耗品の使用
+### Phase 10-3: 消耗品の使用 ✅ 完了
+
+#### 設計方針
+固定スロット管理は行わない。`CharacterData.inventory` 内の消耗品（`category=="consumable"`）リストを `selected_consumable_index` で循環選択して使用する。
+
+#### 操作仕様
+
+| 操作 | キーボード | ゲームパッド |
+|------|-----------|-------------|
+| アイテム使用（選択中） | C | X（Joypad Button 2） |
+| 前の消耗品に循環 | — | LT（Joypad Button 6） |
+| 次の消耗品に循環 | — | RT（Joypad Button 7） |
+
+#### 消耗品フォーマット（assets/master/items/）
+- `potion_hp.json`：`category: "consumable"`, `effect.heal_hp: 30`
+- `potion_mp.json`：`category: "consumable"`, `effect.restore_mp: 20`
+
+#### 使用条件
+- HPポーション → HP < max_hp のとき使用可
+- MPポーション → MP < max_mp のとき使用可
+- 使用後：inventory から削除、インデックスを再クランプ、MessageLog にシステムメッセージ
+
+#### 消耗品バー UI（ConsumableBar）
+
+- `scripts/consumable_bar.gd`（CanvasLayer, layer=11）
+- 配置：画面上部・部屋名ラベル（AreaNameDisplay）の左側。右端を部屋名左端から RIGHT_MARGIN=24px 空けて配置
+- 消耗品を `item_type` ごとにグループ化し横並び表示
+  - アイコン：カラーブロック（HP=赤、MP=青、その他=黄）
+  - カウント：「×n」テキスト
+  - 選択中グループ：白い枠でハイライト
+- `update_character(character)` / `refresh()` で再描画
+- 更新トリガー：操作キャラ切替・アイテム取得（消耗品のみ）・LT/RT循環・C/X使用後
+- 消耗品が0個のとき何も描画しない（visible フラグではなく空判定）
+- 左パネルへの消耗品表示（[C] アイテム名）は将来検討
 
 #### 変更ファイル
 | ファイル | 変更内容 |
 |---------|---------|
-| `scripts/player_controller.gd` | LT ホールド中の A/B/X/Y をアイテムスロット1〜4として処理 |
-| `scripts/character.gd` | `use_consumable(slot_index)` メソッド追加 |
+| `scripts/character_data.gd` | `selected_consumable_index`・`get_consumables()`・`get_selected_consumable()` 追加 |
+| `scripts/character.gd` | `use_consumable(item)` 追加（heal_hp → heal()、restore_mp → mp 直接加算） |
+| `scripts/player_controller.gd` | `_process_normal()` で `use_item`/`slot_prev`/`slot_next` 入力処理。`_cycle_consumable()`・`_use_selected_consumable()` 追加。`consumable_bar` 参照を追加し循環・使用後に `refresh()` |
+| `scripts/consumable_bar.gd` | 新規作成。CanvasLayer として消耗品バー UI を描画 |
+| `scripts/game_map.gd` | `_setup_panels()` で ConsumableBar を生成・PlayerController に渡す。操作キャラ切替時・アイテム拾得時に更新 |
+| `scripts/left_panel.gd` | アクティブキャラ欄に `[C] アイテム名 (n/total)` を表示（将来整理予定） |
+| `project.godot` | InputMap に `use_item`（C + Joypad 2）・`slot_prev`（Joypad 6）・`slot_next`（Joypad 7）追加 |
 
 ### Phase 10-4: 指示／ステータスウィンドウ統合 ✅ 完了
 

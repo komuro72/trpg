@@ -422,6 +422,19 @@ func heal(amount: int) -> void:
 	SoundManager.play(SoundManager.HEAL)
 
 
+## 消耗品を使用する（Phase 10-3〜）
+## item: inventory 内の辞書（category == "consumable"）
+func use_consumable(item: Dictionary) -> void:
+	var effect: Dictionary = item.get("effect", {}) as Dictionary
+	var heal_hp: int = int(effect.get("heal_hp", 0))
+	var restore_mp: int = int(effect.get("restore_mp", 0))
+	if heal_hp > 0:
+		heal(heal_hp)  # heal() 内で効果音を再生
+	if restore_mp > 0:
+		mp = mini(mp + restore_mp, max_mp)
+		SoundManager.play(SoundManager.HEAL)
+
+
 ## 防御バフを付与する（重複時はタイマーをリセット）
 func apply_defense_buff() -> void:
 	defense_buff_timer = DEFENSE_BUFF_DURATION

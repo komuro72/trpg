@@ -57,6 +57,9 @@ var magic_resistance:    int = 0  ## 魔法耐性の能力値
 ## インベントリ（アイテムインスタンスの辞書リスト。Phase 10-1〜）
 var inventory: Array = []
 
+## 消耗品選択インデックス（inventory内の消耗品リストのインデックス。Phase 10-3〜）
+var selected_consumable_index: int = 0
+
 ## 装備スロット（Phase 10-2〜）
 var equipped_weapon: Dictionary = {}  ## 装備中の武器（空= 未装備）
 var equipped_armor:  Dictionary = {}  ## 装備中の防具（空= 未装備）
@@ -140,6 +143,22 @@ static func load_from_json(path: String) -> CharacterData:
 	data.sprite_top_ready = ready
 
 	return data
+
+
+## inventory 内の消耗品（category == "consumable"）リストを返す
+func get_consumables() -> Array:
+	return inventory.filter(func(item: Variant) -> bool:
+		return (item as Dictionary).get("category", "") == "consumable")
+
+
+## 選択中の消耗品を返す（消耗品がなければ空辞書）
+## selected_consumable_index を自動クランプする
+func get_selected_consumable() -> Dictionary:
+	var list := get_consumables()
+	if list.is_empty():
+		return {}
+	selected_consumable_index = clampi(selected_consumable_index, 0, list.size() - 1)
+	return list[selected_consumable_index] as Dictionary
 
 
 ## アイテム辞書を inventory に追加し、equipped=true のものを装備スロットにセットする

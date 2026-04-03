@@ -20,21 +20,27 @@
               "members": [
                 { "class_id": "fighter-sword", "x": 5, "y": 6,
                   "items": [
-                    { "item_type": "sword",       "category": "weapon", "item_name": "古びた片手剣",     "stats": { "attack_power": 2, "accuracy": 0.03, "defense_strength": 1 }, "equipped": true },
-                    { "item_type": "armor_plate", "category": "armor",  "item_name": "傷んだ革鎧",       "stats": { "physical_resistance": 2 }, "equipped": true },
-                    { "item_type": "shield",      "category": "shield", "item_name": "木の盾",           "stats": { "physical_resistance": 1, "defense_strength": 1 }, "equipped": true }
+                    { "item_type": "sword",       "category": "weapon",     "item_name": "古びた片手剣",   "stats": { "attack_power": 2, "accuracy": 0.03, "defense_strength": 1 }, "equipped": true },
+                    { "item_type": "armor_plate", "category": "armor",      "item_name": "傷んだ革鎧",     "stats": { "physical_resistance": 2 }, "equipped": true },
+                    { "item_type": "shield",      "category": "shield",     "item_name": "木の盾",         "stats": { "physical_resistance": 1, "defense_strength": 1 }, "equipped": true },
+                    { "item_type": "potion_hp",   "category": "consumable", "item_name": "回復薬",         "stats": {}, "effect": { "heal_hp": 30 } },
+                    { "item_type": "potion_hp",   "category": "consumable", "item_name": "回復薬",         "stats": {}, "effect": { "heal_hp": 30 } }
                   ]
                 },
                 { "class_id": "archer",  "x": 7, "y": 6,
                   "items": [
-                    { "item_type": "bow",         "category": "weapon", "item_name": "粗末な弓",         "stats": { "attack_power": 2, "accuracy": 0.05 }, "equipped": true },
-                    { "item_type": "armor_cloth", "category": "armor",  "item_name": "薄いレザーコート",  "stats": { "physical_resistance": 1 }, "equipped": true }
+                    { "item_type": "bow",         "category": "weapon",     "item_name": "粗末な弓",       "stats": { "attack_power": 2, "accuracy": 0.05 }, "equipped": true },
+                    { "item_type": "armor_cloth", "category": "armor",      "item_name": "薄いレザーコート","stats": { "physical_resistance": 1 }, "equipped": true },
+                    { "item_type": "potion_hp",   "category": "consumable", "item_name": "回復薬",         "stats": {}, "effect": { "heal_hp": 30 } },
+                    { "item_type": "potion_hp",   "category": "consumable", "item_name": "回復薬",         "stats": {}, "effect": { "heal_hp": 30 } }
                   ]
                 },
                 { "class_id": "healer",  "x": 6, "y": 7,
                   "items": [
-                    { "item_type": "staff",      "category": "weapon", "item_name": "木の杖",           "stats": { "magic_power": 2, "accuracy": 0.03 }, "equipped": true },
-                    { "item_type": "armor_robe", "category": "armor",  "item_name": "粗末な修道服",      "stats": { "magic_resistance": 2 }, "equipped": true }
+                    { "item_type": "staff",      "category": "weapon",     "item_name": "木の杖",         "stats": { "magic_power": 2, "accuracy": 0.03 }, "equipped": true },
+                    { "item_type": "armor_robe", "category": "armor",      "item_name": "粗末な修道服",   "stats": { "magic_resistance": 2 }, "equipped": true },
+                    { "item_type": "potion_mp",  "category": "consumable", "item_name": "魔力回復薬",     "stats": {}, "effect": { "restore_mp": 20 } },
+                    { "item_type": "potion_hp",  "category": "consumable", "item_name": "回復薬",         "stats": {}, "effect": { "heal_hp": 30 } }
                   ]
                 }
               ]
@@ -57,8 +63,9 @@
                 { "enemy_id": "goblin-archer",  "x": 31, "y": 5 }
               ],
               "items": [
-                { "item_type": "bow",         "category": "weapon", "item_name": "粗末な短弓",       "stats": { "attack_power": 3, "accuracy": 0.05 },  "quantity": 1 },
-                { "item_type": "armor_cloth", "category": "armor",  "item_name": "ぼろけたレザーコート", "stats": { "physical_resistance": 3 }, "quantity": 1 }
+                { "item_type": "bow",         "category": "weapon",     "item_name": "粗末な短弓",         "stats": { "attack_power": 3, "accuracy": 0.05 }, "quantity": 1 },
+                { "item_type": "armor_cloth", "category": "armor",      "item_name": "ぼろけたレザーコート","stats": { "physical_resistance": 3 }, "quantity": 1 },
+                { "item_type": "potion_hp",   "category": "consumable", "item_name": "回復薬",             "stats": {}, "effect": { "heal_hp": 30 }, "quantity": 2 }
               ]
             }
           },
@@ -98,8 +105,9 @@
                 { "enemy_id": "zombie", "x": 9, "y": 23 }
               ],
               "items": [
-                { "item_type": "sword",       "category": "weapon", "item_name": "錆びた短剣",     "stats": { "attack_power": 4, "defense_strength": 1 }, "quantity": 1 },
-                { "item_type": "armor_plate", "category": "armor",  "item_name": "傷んだ鎧の残骸",  "stats": { "physical_resistance": 5 }, "quantity": 1 }
+                { "item_type": "sword",       "category": "weapon",     "item_name": "錆びた短剣",    "stats": { "attack_power": 4, "defense_strength": 1 }, "quantity": 1 },
+                { "item_type": "armor_plate", "category": "armor",      "item_name": "傷んだ鎧の残骸","stats": { "physical_resistance": 5 }, "quantity": 1 },
+                { "item_type": "potion_hp",   "category": "consumable", "item_name": "回復薬",        "stats": {}, "effect": { "heal_hp": 30 }, "quantity": 1 }
               ]
             },
             "npc_party": {
@@ -137,9 +145,11 @@
                 { "enemy_id": "goblin-mage",  "x": 31, "y": 20 }
               ],
               "items": [
-                { "item_type": "axe",         "category": "weapon", "item_name": "ホブゴブリンの戦斧",   "stats": { "attack_power": 9, "accuracy": 0.0, "defense_strength": 3 }, "quantity": 1 },
-                { "item_type": "armor_plate", "category": "armor",  "item_name": "分厚い革鎧",          "stats": { "physical_resistance": 8, "magic_resistance": 2 }, "quantity": 1 },
-                { "item_type": "staff",       "category": "weapon", "item_name": "古い魔法の杖",         "stats": { "magic_power": 6, "accuracy": 0.08 }, "quantity": 1 }
+                { "item_type": "axe",         "category": "weapon",     "item_name": "ホブゴブリンの戦斧","stats": { "attack_power": 9, "accuracy": 0.0, "defense_strength": 3 }, "quantity": 1 },
+                { "item_type": "armor_plate", "category": "armor",      "item_name": "分厚い革鎧",        "stats": { "physical_resistance": 8, "magic_resistance": 2 }, "quantity": 1 },
+                { "item_type": "staff",       "category": "weapon",     "item_name": "古い魔法の杖",       "stats": { "magic_power": 6, "accuracy": 0.08 }, "quantity": 1 },
+                { "item_type": "potion_hp",   "category": "consumable", "item_name": "回復薬",             "stats": {}, "effect": { "heal_hp": 30 }, "quantity": 1 },
+                { "item_type": "potion_mp",   "category": "consumable", "item_name": "魔力回復薬",         "stats": {}, "effect": { "restore_mp": 20 }, "quantity": 1 }
               ]
             }
           },
