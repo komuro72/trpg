@@ -16,7 +16,6 @@ const ICON_SIZE_RATIO: float = 0.50   # GRID_SIZE に対するアイコンサイ
 const COUNT_TEXT_W:    int   = 28     # "×n" テキスト確保幅（px）
 const ITEM_GAP:        int   = 6      # アイテム間余白（px）
 const H_PAD:           int   = 8      # バー左右内側余白（px）
-const RIGHT_MARGIN:    float = 24.0   # 部屋名ラベルとの間隔（px）
 
 var _character: Character = null
 var _control: Control
@@ -84,12 +83,11 @@ func _on_draw() -> void:
 	var box_h   := float(gs) * 0.65
 	var by      := float(gs) * 0.35
 
-	# 右端：フィールド中央の左側（部屋名ラベルとの間に RIGHT_MARGIN を確保）
+	# フィールド左半分の中央に配置
 	var vw      := _control.size.x
 	var field_w := float(vw - 2 * pw)
-	var cx      := float(pw) + field_w * 0.5
-	var right_x := cx - RIGHT_MARGIN
-	var bx      := right_x - total_w
+	var left_half_cx := float(pw) + field_w * 0.25
+	var bx      := left_half_cx - total_w * 0.5
 
 	# 背景
 	_control.draw_rect(Rect2(bx, by, total_w, box_h),
