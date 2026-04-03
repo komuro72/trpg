@@ -20,6 +20,7 @@ const H_PAD:           int   = 8      # バー左右内側余白（px）
 var _character: Character = null
 var _control: Control
 var _font: Font
+var _tex_cache: Dictionary = {}  # image_path -> Texture2D or null
 
 
 ## 操作キャラクターを設定して表示を更新する
@@ -44,6 +45,19 @@ func _ready() -> void:
 	_control.draw.connect(_on_draw)
 
 
+func _load_texture(image_path: String) -> Texture2D:
+	if image_path.is_empty():
+		return null
+	if _tex_cache.has(image_path):
+		return _tex_cache[image_path] as Texture2D
+	var res_path := "res://" + image_path
+	var tex: Texture2D = null
+	if ResourceLoader.exists(res_path):
+		tex = ResourceLoader.load(res_path, "Texture2D") as Texture2D
+	_tex_cache[image_path] = tex
+	return tex
+
+
 func _on_draw() -> void:
 	if _character == null or not is_instance_valid(_character) \
 			or _character.character_data == null:
@@ -56,7 +70,7 @@ func _on_draw() -> void:
 
 	# 種類ごとにグループ集計（インベントリ内の出現順を維持）
 	var group_keys: Array = []   # item_type の順序リスト
-	var groups:     Dictionary = {}  # item_type -> { count: int, item_name: String }
+	var groups:     Dictionary = {}  # item_type -> { count: int, item_name: String, image: String }
 	for item_v: Variant in consumables:
 		var item  := item_v as Dictionary
 		var itype := item.get("item_type", "unknown") as String
@@ -64,7 +78,8 @@ func _on_draw() -> void:
 			group_keys.append(itype)
 			groups[itype] = {
 				"count":     0,
-				"item_name": item.get("item_name", itype) as String
+				"item_name": item.get("item_name", itype) as String,
+				"image":     item.get("image", "") as String
 			}
 		(groups[itype] as Dictionary)["count"] = \
 			int((groups[itype] as Dictionary)["count"]) + 1
@@ -103,12 +118,17 @@ func _on_draw() -> void:
 		var info   := groups[itype] as Dictionary
 		var count  := int(info["count"])
 		var is_sel := (itype == sel_type)
-		var col    := ITEM_COLORS.get(itype, DEFAULT_COLOR) as Color
 
-		# アイコン（カラーブロック）
+		# アイコン（画像優先・なければカラーブロック）
 		var iy        := by + (box_h - float(icon_sz)) * 0.5
 		var icon_rect := Rect2(x, iy, float(icon_sz), float(icon_sz))
-		_control.draw_rect(icon_rect, col)
+		var img_path  := info["image"] as String
+		var tex       := _load_texture(img_path)
+		if tex != null:
+			_control.draw_texture_rect(tex, icon_rect, false)
+		else:
+			var col := ITEM_COLORS.get(itype, DEFAULT_COLOR) as Color
+			_control.draw_rect(icon_rect, col)
 		# 選択中：白い枠でハイライト
 		if is_sel:
 			_control.draw_rect(icon_rect, Color(1.0, 1.0, 1.0, 0.95), false, 2)

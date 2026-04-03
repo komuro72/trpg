@@ -5,5 +5,6 @@
 	"effect": {
 		"restore_mp": 20
 	},
-	"depth_scale": 0.3
+	"depth_scale": 0.3,
+	"image": "assets/images/items/potion_mp.png"
 }

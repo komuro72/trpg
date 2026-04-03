@@ -95,6 +95,8 @@ assets/images/tiles/
 - assets/master/names.json：名前ストック（性別ごと）
 - assets/images/characters/：味方キャラクターの画像（{class}_{sex}_{age}_{build}_{id}/ フォルダ構成）
 - assets/images/enemies/：敵キャラクターの画像
+- assets/images/items/：アイテム画像（potion_hp.png, potion_mp.png 等）
+- assets/images/projectiles/：飛翔体画像（arrow.png, fire_bullet.png 等）
 - JSONに画像ファイルパスを含めて一元管理
 - work/：作業用ファイル置き場（コードから参照しない。AI生成の元画像・参考資料など）
 - ※ work/ 配下はGodotのインポート対象外。フォルダ構成は自由に変更してよい
