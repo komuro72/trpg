@@ -499,16 +499,43 @@ func _can_move_to(pos: Vector2i) -> bool:
 # 消耗品
 # --------------------------------------------------------------------------
 
-## 消耗品スロットを循環する（dir: +1=次 / -1=前）
+## 消耗品スロットをグループ（item_type）単位で循環する（dir: +1=次 / -1=前）
 func _cycle_consumable(dir: int) -> void:
 	if character == null or character.character_data == null:
 		return
-	var cd := character.character_data
+	var cd   := character.character_data
 	var list := cd.get_consumables()
 	if list.is_empty():
 		return
-	cd.selected_consumable_index = \
-		(cd.selected_consumable_index + dir + list.size()) % list.size()
+
+	# グループキーリスト（出現順・重複なし）を構築
+	var group_keys: Array[String] = []
+	var seen: Dictionary = {}
+	for item_v: Variant in list:
+		var itype := (item_v as Dictionary).get("item_type", "") as String
+		if not seen.has(itype):
+			seen[itype] = true
+			group_keys.append(itype)
+
+	# 現在の選択グループを特定
+	var cur_type := ""
+	if cd.selected_consumable_index < list.size():
+		cur_type = (list[cd.selected_consumable_index] as Dictionary)\
+			.get("item_type", "") as String
+	var cur_grp := group_keys.find(cur_type)
+	if cur_grp < 0:
+		cur_grp = 0
+
+	# 次グループへ循環
+	var next_grp := (cur_grp + dir + group_keys.size()) % group_keys.size()
+	var next_type := group_keys[next_grp]
+
+	# next_type の最初のアイテムのインデックスへセット
+	for i: int in range(list.size()):
+		if (list[i] as Dictionary).get("item_type", "") == next_type:
+			cd.selected_consumable_index = i
+			break
+
 	if consumable_bar != null:
 		consumable_bar.refresh()
 
@@ -517,23 +544,47 @@ func _cycle_consumable(dir: int) -> void:
 func _use_selected_consumable() -> void:
 	if character == null or character.character_data == null:
 		return
-	var cd := character.character_data
+	var cd   := character.character_data
 	var item := cd.get_selected_consumable()
 	if item.is_empty():
 		return
 	var effect: Dictionary = item.get("effect", {}) as Dictionary
-	var heal_hp: int    = int(effect.get("heal_hp",    0))
+	var heal_hp:    int = int(effect.get("heal_hp",    0))
 	var restore_mp: int = int(effect.get("restore_mp", 0))
 	# 使用条件チェック
 	if heal_hp > 0 and character.hp >= character.max_hp:
 		return
 	if restore_mp > 0 and character.mp >= character.max_mp:
 		return
-	# 使用実行
+	if heal_hp == 0 and restore_mp == 0:
+		return
+
+	var used_type := item.get("item_type", "") as String
+
+	# 使用実行（heal / MP回復・効果音は use_consumable 内）
 	character.use_consumable(item)
-	cd.inventory.erase(item)
-	cd.selected_consumable_index = \
-		clampi(cd.selected_consumable_index, 0, cd.get_consumables().size() - 1)
+
+	# inventory から同グループの先頭1個を削除（remove_at で確実に1個だけ消す）
+	var inv := cd.inventory
+	for i: int in range(inv.size()):
+		var entry := inv[i] as Dictionary
+		if entry.get("item_type", "") == used_type \
+				and entry.get("category", "") == "consumable":
+			inv.remove_at(i)
+			break
+
+	# 使用後インデックス: 同グループに残りがあれば維持、なければクランプ
+	var remaining := cd.get_consumables()
+	var found_same := false
+	for i: int in range(remaining.size()):
+		if (remaining[i] as Dictionary).get("item_type", "") == used_type:
+			cd.selected_consumable_index = i
+			found_same = true
+			break
+	if not found_same:
+		cd.selected_consumable_index = \
+			clampi(cd.selected_consumable_index, 0, maxi(0, remaining.size() - 1))
+
 	var item_name: String = item.get("item_name", "アイテム") as String
 	var char_name: String = cd.character_name if not cd.character_name.is_empty() \
 		else String(character.name)
