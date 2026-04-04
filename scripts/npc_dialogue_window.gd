@@ -224,19 +224,32 @@ func _draw_panel(vp: Vector2, gs: float) -> void:
 				Color.WHITE)
 		y += float(fs_body) + 2.0
 
-		# クラス行
+		# クラス行＋ランク
 		for i: int in range(mem_count):
 			var member: Character = members[i]
 			var fx := face_start_x + float(i) * (face_sz + 10.0)
 			var cd: CharacterData = member.character_data
 			var cls_jp: String = GlobalConstants.CLASS_NAME_JP.get(
 				cd.class_id if cd != null else "", "") as String
+			var rank_str: String = cd.rank if cd != null else ""
+			var sub_fs := int(fs_body * 0.82)
+			var sub_y  := y + int(fs_body * 0.85)
 			if not cls_jp.is_empty():
 				_control.draw_string(_font,
-					Vector2(fx, y + int(fs_body * 0.85)),
+					Vector2(fx, sub_y),
 					cls_jp,
-					HORIZONTAL_ALIGNMENT_LEFT, face_sz, int(fs_body * 0.82),
+					HORIZONTAL_ALIGNMENT_LEFT, face_sz, sub_fs,
 					Color(0.65, 0.65, 0.88))
+			if not rank_str.is_empty():
+				var rank_col := Color(1.0, 0.40, 0.40) if rank_str in ["S", "A"] \
+					else Color(1.0, 0.65, 0.20)
+				var cls_w := _font.get_string_size(cls_jp, HORIZONTAL_ALIGNMENT_LEFT,
+					-1, sub_fs).x + 4.0
+				_control.draw_string(_font,
+					Vector2(fx + cls_w, sub_y),
+					"[%s]" % rank_str,
+					HORIZONTAL_ALIGNMENT_LEFT, face_sz - cls_w, sub_fs,
+					rank_col)
 		y += int(fs_body * 0.85) + 10.0
 
 	# セパレーター
