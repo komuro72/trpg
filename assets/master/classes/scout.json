@@ -7,8 +7,11 @@
   "base_defense": 3,
   "base_physical_resistance": 6,
   "base_magic_resistance": 4,
+  "attack_type": "melee",
+  "attack_range": 1,
   "pre_delay": 0.25,
   "post_delay": 0.4,
+  "max_sp": 60,
   "is_flying": false,
   "behavior_description": "素早い動きで死角から急所を突く。ヒット＆アウェイが得意。",
   "slots": {
@@ -19,7 +22,8 @@
       "range": 1,
       "damage_mult": 0.9,
       "pre_delay": 0.25,
-      "post_delay": 0.35
+      "post_delay": 0.35,
+      "sp_cost": 2
     },
     "X": {
       "name": "急所狙い",
@@ -32,6 +36,13 @@
       "post_delay": 0.5
     },
     "C": null,
-    "V": null
+    "V": {
+      "name": "スライディング",
+      "action": "sliding",
+      "type": "physical",
+      "sp_cost": 20,
+      "pre_delay": 0.0,
+      "post_delay": 0.0
+    }
   }
 }

@@ -63,6 +63,10 @@ var _cursor: TargetCursor = null
 ## 遷移先の階段タイルから出るまで移動ブロックを解除する
 var stair_just_transitioned: bool = false
 
+## 階段遷移クールダウン中に true（game_map が毎フレーム更新）。
+## クールダウン中は遷移が起きないため、階段上でも移動をブロックしない
+var stair_cooldown_active: bool = false
+
 ## ホールド開始時からのpre_delayカウントダウン（0以下で発動可能）
 var _pre_delay_remaining: float = 0.0
 
@@ -76,9 +80,17 @@ var _pending_slot_data: Dictionary = {}
 
 ## クラスJSONから読み込んだスロットデータ
 var _slot_z: Dictionary = {}
+var _slot_v: Dictionary = {}
+
+## V スロット使用中フラグ（ターゲット選択・発動中にどのスロットを使うか判別）
+var _using_v_slot: bool = false
 
 ## 消耗品バー UI（game_map から設定）
 var consumable_bar: ConsumableBar = null
+
+## V スロットクールダウン（秒）
+const V_SLOT_COOLDOWN: float = 2.0
+var _v_slot_cooldown: float = 0.0
 
 
 func _ready() -> void:
@@ -117,9 +129,14 @@ func _load_class_slots() -> void:
 	var z_data: Variant = slots.get("Z")
 	if z_data != null and z_data is Dictionary:
 		_slot_z = (z_data as Dictionary).duplicate()
+	var v_data: Variant = slots.get("V")
+	if v_data != null and v_data is Dictionary:
+		_slot_v = (v_data as Dictionary).duplicate()
 
 
 func _get_slot() -> Dictionary:
+	if _using_v_slot and not _slot_v.is_empty():
+		return _slot_v
 	return _slot_z if not _slot_z.is_empty() else DEFAULT_SLOT_Z.duplicate()
 
 
@@ -128,7 +145,19 @@ func _get_slot() -> Dictionary:
 # --------------------------------------------------------------------------
 
 func _process(delta: float) -> void:
-	if character == null or is_blocked:
+	# V スロットクールダウンのカウントダウン（is_blocked 中も進める）
+	if _v_slot_cooldown > 0.0:
+		_v_slot_cooldown = maxf(0.0, _v_slot_cooldown - delta)
+		if consumable_bar != null:
+			consumable_bar.v_slot_cooldown = _v_slot_cooldown
+			consumable_bar.refresh()
+
+	if character == null:
+		return
+	if is_blocked:
+		# ブロック中（メニュー等）はガードを解除する
+		if character.is_guarding:
+			character.is_guarding = false
 		return
 
 	match _mode:
@@ -151,11 +180,37 @@ func _process_normal(_delta: float) -> void:
 	if Input.is_action_just_pressed("use_item"):
 		_use_selected_consumable()
 
-	# 攻撃キーホールドでターゲット選択モードへ
+	# 特殊スキル（V/Y）
+	# インスタント系（sliding/whirlwind/rush/flame_circle）は just_pressed で即時発動
+	# ターゲット系（headshot/water_stun/buff_defense）は hold でターゲット選択モードへ
+	if not _slot_v.is_empty():
+		var v_action: String = _slot_v.get("action", "") as String
+		var instant_actions: Array = ["sliding", "whirlwind", "rush", "flame_circle"]
+		if instant_actions.has(v_action):
+			if Input.is_action_just_pressed("special_skill"):
+				if _v_slot_cooldown <= 0.0 and _has_v_slot_resources():
+					_execute_v_instant(v_action)
+		else:
+			if Input.is_action_pressed("special_skill"):
+				if _v_slot_cooldown <= 0.0 and _has_v_slot_resources():
+					_using_v_slot = true
+					_move_buffer  = Vector2i.ZERO
+					_enter_targeting()
+					return
+
+	# 攻撃キーホールドでターゲット選択モードへ（ガード中は先に解除）
 	if Input.is_action_pressed("attack"):
+		_using_v_slot = false
+		if character.is_guarding:
+			character.is_guarding = false
 		_move_buffer = Vector2i.ZERO
 		_enter_targeting()
 		return
+
+	# ガード（X/B ホールド）
+	var want_guard := Input.is_action_pressed("menu_back")
+	if character.is_guarding != want_guard:
+		character.is_guarding = want_guard
 
 	var dir := _get_input_direction()
 
@@ -166,17 +221,18 @@ func _process_normal(_delta: float) -> void:
 		return
 
 	# 階段タイルに静止中は移動をブロック（game_map が遷移を処理する）
-	# stair_just_transitioned=true なら遷移直後 → ブロックせず移動を許可し、
-	# 階段タイルを出た時点でフラグをリセットして次回の遷移に備える
+	# stair_just_transitioned=true なら遷移直後 → ブロックせず移動を許可する
+	# stair_cooldown_active=true ならクールダウン中で遷移は起きない → ブロック不要
+	# 上記いずれでもない（cooldown=0 かつ初回踏み）ときだけブロックして遷移を待つ
 	if map_data != null:
 		var cur_tile := map_data.get_tile(character.grid_pos)
 		var on_stairs := cur_tile == MapData.TileType.STAIRS_DOWN \
 				or cur_tile == MapData.TileType.STAIRS_UP
 		if on_stairs:
-			if not stair_just_transitioned:
+			if not stair_just_transitioned and not stair_cooldown_active:
 				_move_buffer = Vector2i.ZERO
 				return
-			# 遷移直後は通過させる（ブロックしない）
+			# 遷移直後またはクールダウン中は移動を許可する
 		else:
 			stair_just_transitioned = false  # 階段タイルから出たらリセット
 
@@ -228,11 +284,19 @@ func _process_firing(delta: float) -> void:
 # --------------------------------------------------------------------------
 
 func _enter_targeting() -> void:
+	var sd := _get_slot()
+	# MP/SP不足ならターゲット選択モードに入れない
+	var mp_cost := int(sd.get("mp_cost", 0))
+	if mp_cost > 0 and character.mp < mp_cost:
+		return
+	var sp_cost := int(sd.get("sp_cost", 0))
+	if sp_cost > 0 and character.sp < sp_cost:
+		return
+
 	_mode         = Mode.TARGETING
 	_move_buffer  = Vector2i.ZERO
 
 	# ホールド開始時点から pre_delay カウント開始
-	var sd := _get_slot()
 	_pre_delay_remaining = float(sd.get("pre_delay", 0.0))
 
 	_valid_targets = _get_sorted_targets()
@@ -249,6 +313,7 @@ func _enter_targeting() -> void:
 
 func _exit_targeting() -> void:
 	_mode = Mode.NORMAL
+	_using_v_slot = false
 	for t: Character in _valid_targets:
 		if is_instance_valid(t):
 			t.is_targeted = false
@@ -289,18 +354,32 @@ func _execute_pending() -> void:
 	_pre_delay_remaining = 0.0
 
 	if not is_instance_valid(_pending_target):
+		_using_v_slot      = false
 		_pending_target    = null
 		_pending_slot_data = {}
 		return
 
-	var sd:     Dictionary = _pending_slot_data
-	var action: String     = str(sd.get("action", "melee"))
+	var sd:       Dictionary = _pending_slot_data
+	var action:   String     = str(sd.get("action", "melee"))
+	var was_v:    bool       = _using_v_slot
 
 	if action == "melee":
 		_execute_melee(_pending_target, sd)
 	elif action == "ranged" or action == "ranged_area":
 		_execute_ranged(_pending_target, sd)
+	elif action == "water_stun":
+		_execute_water_stun(_pending_target, sd)
+	elif action == "heal":
+		_execute_heal(_pending_target, sd)
+	elif action == "buff_defense":
+		_execute_buff(_pending_target, sd)
+	elif action == "headshot":
+		_execute_headshot(_pending_target, sd)
 
+	if was_v:
+		_start_v_cooldown()
+
+	_using_v_slot      = false
 	_pending_target    = null
 	_pending_slot_data = {}
 
@@ -361,8 +440,21 @@ func _update_cursor() -> void:
 		tgt.is_targeted  = true
 
 
-## 有効なターゲットを前方±45°優先・距離順でソートして返す
+## 有効なターゲットを返す（heal/buff_defense は距離→HP昇順、それ以外は前方コーン優先）
 func _get_sorted_targets() -> Array[Character]:
+	var sd:     Dictionary = _get_slot()
+	var action: String     = str(sd.get("action", "melee"))
+	if action == "heal" or action == "buff_defense":
+		var targets := _get_valid_targets()
+		targets.sort_custom(func(a: Character, b: Character) -> bool:
+			var da := _dist_to(a)
+			var db := _dist_to(b)
+			if absf(da - db) > 0.01:
+				return da < db
+			var ra := float(a.hp) / float(maxi(a.max_hp, 1))
+			var rb := float(b.hp) / float(maxi(b.max_hp, 1))
+			return ra < rb)
+		return targets
 	return _sort_targets(_get_valid_targets())
 
 
@@ -398,22 +490,35 @@ func _dist_to(target: Character) -> float:
 	return Vector2(character.grid_pos).distance_to(Vector2(target.grid_pos))
 
 
-## 攻撃キーが現在ホールド中かを返す
+## アクティブスロットのキーが現在ホールド中かを返す
 func _is_slot_held() -> bool:
+	if _using_v_slot:
+		return Input.is_action_pressed("special_skill")
 	return Input.is_action_pressed("attack")
 
 
 ## 有効なターゲット一覧を返す（ソートなし）
 ## "melee" → マンハッタン距離、"ranged"/"ranged_area" → ユークリッド距離
+## "heal"/"buff_defense" → is_friendly な射程内の味方（自分除く）
 func _get_valid_targets() -> Array[Character]:
 	var sd:        Dictionary = _get_slot()
 	var action:    String     = str(sd.get("action", "melee"))
-	var range_val: int        = int(sd.get("range",  1))
+	var range_bonus: int = character.character_data.get_weapon_range_bonus() \
+		if character != null and character.character_data != null else 0
+	var range_val: int = int(sd.get("range", 1)) + range_bonus
 	var result: Array[Character] = []
 	for c: Character in blocking_characters:
 		if not is_instance_valid(c):
 			continue
-		# 味方キャラクター（仲間NPC含む）は攻撃対象にしない
+		if action == "heal" or action == "buff_defense":
+			# 射程内の is_friendly な味方（自分を除く）が対象
+			if not c.is_friendly or c == character:
+				continue
+			var dist: float = Vector2(character.grid_pos).distance_to(Vector2(c.grid_pos))
+			if dist <= float(range_val):
+				result.append(c)
+			continue
+		# 攻撃系: 味方キャラクターは対象にしない
 		if c.is_friendly:
 			continue
 		if action == "melee":
@@ -424,7 +529,8 @@ func _get_valid_targets() -> Array[Character]:
 			var dy: int = abs(c.grid_pos.y - character.grid_pos.y)
 			if dx + dy <= range_val:
 				result.append(c)
-		elif action == "ranged" or action == "ranged_area":
+		elif action == "ranged" or action == "ranged_area" or action == "water_stun" \
+				or action == "headshot":
 			var dist: float = Vector2(character.grid_pos).distance_to(Vector2(c.grid_pos))
 			if dist <= float(range_val):
 				result.append(c)
@@ -436,6 +542,12 @@ func _get_valid_targets() -> Array[Character]:
 # --------------------------------------------------------------------------
 
 func _execute_melee(target: Character, slot_data: Dictionary) -> void:
+	var mp_cost := int(slot_data.get("mp_cost", 0))
+	if mp_cost > 0:
+		character.use_mp(mp_cost)
+	var sp_cost := int(slot_data.get("sp_cost", 0))
+	if sp_cost > 0:
+		character.use_sp(sp_cost)
 	var dmg_mult: float = float(slot_data.get("damage_mult", 1.0))
 	character.face_toward(target.grid_pos)
 	var raw_damage := int(float(character.attack_power) * dmg_mult)
@@ -449,12 +561,40 @@ func _execute_melee(target: Character, slot_data: Dictionary) -> void:
 
 
 func _execute_ranged(target: Character, slot_data: Dictionary) -> void:
+	var mp_cost := int(slot_data.get("mp_cost", 0))
+	if mp_cost > 0:
+		character.use_mp(mp_cost)
+	var sp_cost := int(slot_data.get("sp_cost", 0))
+	if sp_cost > 0:
+		character.use_sp(sp_cost)
 	var dmg_mult: float = float(slot_data.get("damage_mult", 1.0))
 	character.face_toward(target.grid_pos)
-	var raw_damage := int(float(character.attack_power) * dmg_mult)
 	var is_magic   := (slot_data.get("type", "physical") as String) == "magic"
+	var base_power := character.magic_power if is_magic else character.attack_power
+	var raw_damage := int(float(base_power) * dmg_mult)
 	SoundManager.play_attack(character)
 	_spawn_projectile(target, raw_damage, is_magic)
+
+
+func _execute_water_stun(target: Character, slot_data: Dictionary) -> void:
+	var mp_cost := int(slot_data.get("mp_cost", 0))
+	if mp_cost > 0:
+		character.use_mp(mp_cost)
+	var dmg_mult      := float(slot_data.get("damage_mult", 0.5))
+	var stun_duration := float(slot_data.get("stun_duration", 3.0))
+	var raw_damage    := int(float(character.magic_power) * dmg_mult)
+	character.face_toward(target.grid_pos)
+	SoundManager.play(SoundManager.MAGIC_SHOOT)
+	# 水弾を発射（着弾時にダメージ＋スタン付与）
+	if map_node != null:
+		var proj := Projectile.new()
+		proj.z_index = 2
+		map_node.add_child(proj)
+		proj.setup(character.position, target.position, true, target,
+				raw_damage, 1.0, character, true, stun_duration, true)
+	var skill_name := str(slot_data.get("name", "水魔法"))
+	MessageLog.add_combat("[%s] %s → %s" % \
+		[skill_name, _char_name(character), _char_name(target)])
 
 
 func _spawn_projectile(target: Character, raw_damage: int, is_magic: bool = false) -> void:
@@ -465,6 +605,233 @@ func _spawn_projectile(target: Character, raw_damage: int, is_magic: bool = fals
 	map_node.add_child(proj)
 	proj.setup(character.position, target.position, true, target, raw_damage, 1.0,
 			character, is_magic)
+
+
+func _execute_heal(target: Character, slot_data: Dictionary) -> void:
+	var mp_cost := int(slot_data.get("mp_cost", 0))
+	if mp_cost > 0:
+		character.use_mp(mp_cost)
+	var heal_mult  := float(slot_data.get("heal_mult", 0.3))
+	var heal_amount := maxi(1, int(float(character.magic_power) * heal_mult))
+	character.face_toward(target.grid_pos)
+	# キャスト側エフェクト（外広がり・白金）
+	_spawn_heal_effect(character.position, "cast")
+	# 回復実行（heal() 内で HEAL SE 再生）
+	target.heal(heal_amount)
+	# ターゲット側エフェクト（内縮み・緑）
+	_spawn_heal_effect(target.position, "hit")
+	var skill_name := str(slot_data.get("name", "回復"))
+	MessageLog.add_combat("[%s] %s → %s +%d HP" % \
+		[skill_name, _char_name(character), _char_name(target), heal_amount])
+
+
+func _execute_buff(target: Character, slot_data: Dictionary) -> void:
+	var mp_cost := int(slot_data.get("mp_cost", 0))
+	if mp_cost > 0:
+		character.use_mp(mp_cost)
+	character.face_toward(target.grid_pos)
+	target.apply_defense_buff()
+	SoundManager.play(SoundManager.HEAL)
+	_spawn_heal_effect(character.position, "cast")
+	_spawn_heal_effect(target.position, "hit")
+	var skill_name := str(slot_data.get("name", "防御バフ"))
+	MessageLog.add_combat("[%s] %s → %s" % \
+		[skill_name, _char_name(character), _char_name(target)])
+
+
+func _spawn_heal_effect(pos: Vector2, eff_mode: String) -> void:
+	if map_node == null:
+		return
+	var effect := HealEffect.new()
+	effect.mode     = eff_mode
+	effect.position = pos
+	map_node.add_child(effect)
+
+
+func _char_name(c: Character) -> String:
+	if c.character_data != null and not c.character_data.character_name.is_empty():
+		return c.character_data.character_name
+	return str(c.name)
+
+
+# --------------------------------------------------------------------------
+# V スロット特殊スキル
+# --------------------------------------------------------------------------
+
+## V スロットを使用するための MP/SP リソースが足りているかチェック
+func _has_v_slot_resources() -> bool:
+	if character == null:
+		return false
+	var mp_cost := int(_slot_v.get("mp_cost", 0))
+	var sp_cost := int(_slot_v.get("sp_cost", 0))
+	if mp_cost > 0 and character.mp < mp_cost:
+		return false
+	if sp_cost > 0 and character.sp < sp_cost:
+		return false
+	return true
+
+
+## V スロットクールダウンを開始し ConsumableBar を更新する
+func _start_v_cooldown() -> void:
+	_v_slot_cooldown = V_SLOT_COOLDOWN
+	if consumable_bar != null:
+		consumable_bar.v_slot_cooldown = _v_slot_cooldown
+		consumable_bar.refresh()
+
+
+## インスタント V アクションを実行する（クールダウン開始後に各メソッドを呼ぶ）
+func _execute_v_instant(action: String) -> void:
+	_start_v_cooldown()
+	match action:
+		"sliding":      _execute_sliding()
+		"whirlwind":    _execute_whirlwind()
+		"rush":         _execute_rush()
+		"flame_circle": _execute_flame_circle()
+
+
+## 斥候：スライディング（3マスダッシュ・移動中無敵）
+func _execute_sliding() -> void:
+	var sp_cost := int(_slot_v.get("sp_cost", 20))
+	if sp_cost > 0:
+		character.use_sp(sp_cost)
+	var dir      := Character.dir_to_vec(character.facing)
+	var step_dur := 0.12 / GlobalConstants.game_speed
+	character.is_sliding = true
+	is_blocked = true
+	for _i: int in range(3):
+		if not is_instance_valid(character):
+			break
+		var next_pos := character.grid_pos + Vector2i(dir)
+		# 壁・障害物で止まる（キャラクターは通り抜け）
+		if map_data == null or not map_data.is_walkable_for(next_pos, character.is_flying):
+			break
+		character.move_to(next_pos, step_dur)
+		await get_tree().create_timer(step_dur + 0.02).timeout
+	if is_instance_valid(character):
+		character.is_sliding = false
+	is_blocked = false
+	SoundManager.play(SoundManager.MELEE_DAGGER)
+	if is_instance_valid(character):
+		MessageLog.add_combat("[スライディング] %s が突進！" % _char_name(character))
+
+
+## 斧戦士：振り回し（周囲8マスの敵全員にダメージ）
+func _execute_whirlwind() -> void:
+	var sp_cost  := int(_slot_v.get("sp_cost", 15))
+	if sp_cost > 0:
+		character.use_sp(sp_cost)
+	var dmg_mult   := float(_slot_v.get("damage_mult", 1.0))
+	var raw_damage := int(float(character.attack_power) * dmg_mult)
+	character.is_attacking = true
+	var hit_count := 0
+	for dx: int in range(-1, 2):
+		for dy: int in range(-1, 2):
+			if dx == 0 and dy == 0:
+				continue
+			var check_pos := character.grid_pos + Vector2i(dx, dy)
+			for ch: Character in blocking_characters:
+				if not is_instance_valid(ch) or ch.is_friendly or ch.hp <= 0:
+					continue
+				if check_pos in ch.get_occupied_tiles():
+					ch.take_damage(raw_damage, 1.0, character, false)
+					hit_count += 1
+					break
+	SoundManager.play_attack(character)
+	await get_tree().create_timer(0.5 / GlobalConstants.game_speed).timeout
+	if is_instance_valid(character):
+		character.is_attacking = false
+	if hit_count > 0:
+		MessageLog.add_combat("[振り回し] %s が周囲 %d 体を攻撃！" % [_char_name(character), hit_count])
+	else:
+		MessageLog.add_combat("[振り回し] %s が振り回した！（空振り）" % _char_name(character))
+
+
+## 剣士：突進斬り（向いている方向に最大2マス前進、経路上の敵にダメージ）
+func _execute_rush() -> void:
+	var sp_cost    := int(_slot_v.get("sp_cost", 15))
+	if sp_cost > 0:
+		character.use_sp(sp_cost)
+	var dmg_mult   := float(_slot_v.get("damage_mult", 1.2))
+	var raw_damage := int(float(character.attack_power) * dmg_mult)
+	var dir        := Character.dir_to_vec(character.facing)
+	var step_dur   := 0.15 / GlobalConstants.game_speed
+	character.is_attacking = true
+	is_blocked = true
+	var hit_count := 0
+	for _step: int in range(2):
+		if not is_instance_valid(character):
+			break
+		var next_pos := character.grid_pos + Vector2i(dir)
+		if map_data == null or not map_data.is_walkable_for(next_pos, false):
+			break
+		# 経路上の敵にダメージ
+		var enemy_here := _find_character_at(next_pos)
+		if enemy_here != null and not enemy_here.is_friendly:
+			enemy_here.take_damage(raw_damage, 1.0, character, false)
+			SoundManager.play_attack(character)
+			hit_count += 1
+		character.move_to(next_pos, step_dur)
+		await get_tree().create_timer(step_dur + 0.02).timeout
+	if is_instance_valid(character):
+		character.is_attacking = false
+	is_blocked = false
+	if hit_count > 0:
+		MessageLog.add_combat("[突進斬り] %s が %d 体を攻撃！" % [_char_name(character), hit_count])
+	else:
+		MessageLog.add_combat("[突進斬り] %s が突進！" % _char_name(character))
+
+
+## 弓使い：ヘッドショット（即死耐性なし→即死、あり→×3ダメージ）
+## ターゲット選択モード経由で呼ばれる
+func _execute_headshot(target: Character, slot_data: Dictionary) -> void:
+	var sp_cost := int(slot_data.get("sp_cost", 25))
+	if sp_cost > 0:
+		character.use_sp(sp_cost)
+	character.face_toward(target.grid_pos)
+	SoundManager.play(SoundManager.ARROW_SHOOT)
+	var is_immune: bool = false
+	if target.character_data != null:
+		is_immune = bool(target.character_data.instant_death_immune)
+	if is_immune:
+		var raw_damage := int(float(character.attack_power) * 3.0)
+		_spawn_projectile(target, raw_damage, false)
+		MessageLog.add_combat("[ヘッドショット] %s → %s ×3ダメージ" % \
+				[_char_name(character), _char_name(target)])
+	else:
+		_spawn_projectile(target, 99999, false)
+		MessageLog.add_combat("[ヘッドショット] %s → %s 即死！" % \
+				[_char_name(character), _char_name(target)])
+
+
+## 魔法使い(火)：炎陣（自分を中心に半径3マスの炎ゾーンを設置・2.5秒間継続ダメージ）
+func _execute_flame_circle() -> void:
+	var mp_cost     := int(_slot_v.get("mp_cost", 20))
+	if mp_cost > 0:
+		character.use_mp(mp_cost)
+	var dmg_mult    := float(_slot_v.get("damage_mult", 0.8))
+	var damage      := maxi(1, int(float(character.magic_power) * dmg_mult))
+	var radius      := int(_slot_v.get("range", 3))
+	var duration    := float(_slot_v.get("duration", 2.5))
+	var tick_ivl    := float(_slot_v.get("tick_interval", 0.5))
+	if map_node == null:
+		return
+	var flame := FlameCircle.new()
+	flame.z_index = 1
+	map_node.add_child(flame)
+	flame.setup(character.position, character.grid_pos, radius, damage,
+			duration, tick_ivl, character, blocking_characters)
+	SoundManager.play(SoundManager.FLAME_SHOOT)
+	MessageLog.add_combat("[炎陣] %s が炎を設置！（%d秒間）" % [_char_name(character), int(duration)])
+
+
+## 指定グリッド座標にいる最初のキャラクターを返す（なければ null）
+func _find_character_at(pos: Vector2i) -> Character:
+	for ch: Character in blocking_characters:
+		if not is_instance_valid(ch):
+			continue
+		if pos in ch.get_occupied_tiles():
+			return ch
+	return null
 
 
 # --------------------------------------------------------------------------
@@ -482,7 +849,11 @@ func _get_input_direction() -> Vector2i:
 func _try_move(dir: Vector2i) -> void:
 	var new_pos := character.grid_pos + dir
 	if _can_move_to(new_pos):
-		character.move_to(new_pos, MOVE_INTERVAL / GlobalConstants.game_speed)
+		# ガード中は移動速度50%（duration を2倍にする）
+		var duration := MOVE_INTERVAL / GlobalConstants.game_speed
+		if character.is_guarding:
+			duration *= 2.0
+		character.move_to(new_pos, duration)
 	else:
 		# 移動先に友好的キャラクターがいれば npc_bumped を発火する
 		for blocker: Character in blocking_characters:

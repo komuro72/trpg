@@ -9,6 +9,7 @@ extends CanvasLayer
 const ITEM_COLORS: Dictionary = {
 	"potion_hp": Color(0.85, 0.20, 0.20),   # 赤：HP回復
 	"potion_mp": Color(0.20, 0.40, 0.90),   # 青：MP回復
+	"potion_sp": Color(0.20, 0.80, 0.30),   # 緑：SP回復
 }
 const DEFAULT_COLOR := Color(1.0, 0.85, 0.15)  # 黄：その他消耗品
 
@@ -21,6 +22,9 @@ var _character: Character = null
 var _control: Control
 var _font: Font
 var _tex_cache: Dictionary = {}  # image_path -> Texture2D or null
+
+## V スロットのクールダウン残り秒数（player_controller が毎フレーム更新）
+var v_slot_cooldown: float = 0.0
 
 
 ## 操作キャラクターを設定して表示を更新する
@@ -59,6 +63,22 @@ func _load_texture(image_path: String) -> Texture2D:
 
 
 func _on_draw() -> void:
+	# V スロットクールダウン表示（消耗品がなくても表示する）
+	if v_slot_cooldown > 0.0 and _font != null:
+		var gs    := GlobalConstants.GRID_SIZE
+		var pw    := GlobalConstants.PANEL_TILES * gs
+		var by    := float(gs) * 0.35
+		var box_h := float(gs) * 0.65
+		var vw    := _control.size.x
+		var cx    := float(pw) + (float(vw - 2 * pw)) * 0.5
+		var cd_text := "V: %d" % ceili(v_slot_cooldown)
+		var bx    := cx + 80.0
+		_control.draw_rect(Rect2(bx - 4.0, by + 2.0, 54.0, box_h - 4.0),
+				Color(0.1, 0.05, 0.0, 0.75))
+		_control.draw_string(_font, Vector2(bx, by + box_h * 0.72),
+				cd_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 16,
+				Color(1.0, 0.65, 0.2, 0.95))
+
 	if _character == null or not is_instance_valid(_character) \
 			or _character.character_data == null:
 		return

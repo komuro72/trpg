@@ -10,6 +10,7 @@
   "attack_type": "melee",
   "attack_range": 1,
   "rank": "A",
+  "instant_death_immune": true,
   "pre_delay": 0.5,
   "post_delay": 0.7,
   "behavior_description": "漆黒の鎧を纏った人型の強敵。高い防御力を持ち絶対に逃げない。正面から堂々と突進して強力な一撃を放つ。",

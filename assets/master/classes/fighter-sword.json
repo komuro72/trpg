@@ -7,8 +7,11 @@
   "base_defense": 5,
   "base_physical_resistance": 12,
   "base_magic_resistance": 3,
+  "attack_type": "melee",
+  "attack_range": 1,
   "pre_delay": 0.3,
   "post_delay": 0.5,
+  "max_sp": 60,
   "is_flying": false,
   "behavior_description": "剣で近接攻撃する。正面からの真っ向勝負を好む。",
   "slots": {
@@ -19,7 +22,8 @@
       "range": 1,
       "damage_mult": 1.0,
       "pre_delay": 0.3,
-      "post_delay": 0.5
+      "post_delay": 0.5,
+      "sp_cost": 2
     },
     "X": {
       "name": "強斬撃",
@@ -31,6 +35,14 @@
       "post_delay": 0.6
     },
     "C": null,
-    "V": null
+    "V": {
+      "name": "突進斬り",
+      "action": "rush",
+      "type": "physical",
+      "damage_mult": 1.2,
+      "sp_cost": 15,
+      "pre_delay": 0.0,
+      "post_delay": 0.0
+    }
   }
 }

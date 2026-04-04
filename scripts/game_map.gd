@@ -154,6 +154,9 @@ func _process(delta: float) -> void:
 	# 階段クールダウン
 	if _stair_cooldown > 0.0:
 		_stair_cooldown -= delta
+	# PlayerController にクールダウン状態を通知（階段ブロック制御に使用）
+	if player_controller != null:
+		player_controller.stair_cooldown_active = (_stair_cooldown > 0.0)
 
 	# ゲームパッドアクション（ポーリング方式）
 	if Input.is_action_just_pressed("open_order_window"):
@@ -781,6 +784,18 @@ func _on_character_died(character: Character) -> void:
 
 ## 敵パーティー全滅シグナルを受け取り、アイテムを部屋の床に散らばらせる（部屋制圧方式）
 func _on_enemy_party_wiped(items: Array, room_id: String) -> void:
+	# 最終フロア（フロア4, インデックス4）での全滅チェック → ゲームクリア
+	var last_floor_index: int = _all_map_data.size() - 1
+	if _current_floor_index == last_floor_index:
+		var all_wiped := true
+		for em_v: Variant in _per_floor_enemies[last_floor_index]:
+			var em := em_v as EnemyManager
+			if is_instance_valid(em) and not em.get_members().is_empty():
+				all_wiped = false
+				break
+		if all_wiped:
+			_trigger_game_clear()
+
 	if items.is_empty():
 		return
 	# 部屋タイルを取得して FLOORのみに絞り、既存アイテムがないタイルを候補にする
@@ -807,6 +822,15 @@ func _on_enemy_party_wiped(items: Array, room_id: String) -> void:
 			message_window.show_message("アイテムが部屋に散らばった！（%d個）" % placed)
 		queue_redraw()
 		print("[GameMap] アイテム %d 個を部屋 %s に散布" % [placed, room_id])
+
+
+## ゲームクリア処理
+func _trigger_game_clear() -> void:
+	# 入力を無効化（F5リスタートは game_map._input で KEY_F5 直接マッチのため引き続き有効）
+	if player_controller != null:
+		player_controller.is_blocked = true
+	MessageLog.add_system("ダンジョンを制覇した！冒険者たちの名声は永遠に語り継がれるだろう。")
+	print("[GameMap] GAME CLEAR")
 
 
 ## アイテム画像テクスチャをキャッシュ付きで読み込む
@@ -1022,6 +1046,12 @@ func _update_character_visibility() -> void:
 					if is_instance_valid(ch):
 						if not is_current:
 							ch.visible = false
+	# パーティーメンバー（hero 以外）：current_floor が一致するフロアのみ表示
+	if party != null:
+		for member_var: Variant in party.members:
+			var ch := member_var as Character
+			if is_instance_valid(ch) and ch != hero:
+				ch.visible = (ch.current_floor == _current_floor_index)
 
 
 ## F2 デバッグ情報をファイルに書き出す（フルスクリーン実行対応）
@@ -1218,6 +1248,11 @@ func _draw() -> void:
 			continue
 		var item      := _floor_items[ipos] as Dictionary
 		var img_path  := item.get("image", "") as String
+		# image フィールドがない場合は item_type から導出
+		if img_path.is_empty():
+			var itype := item.get("item_type", "") as String
+			if not itype.is_empty():
+				img_path = "assets/images/items/" + itype + ".png"
 		var irect     := Rect2(ipos.x * gs + gs * 0.15, ipos.y * gs + gs * 0.15,
 			gs * 0.70, gs * 0.70)
 		var tex := _load_item_texture(img_path)

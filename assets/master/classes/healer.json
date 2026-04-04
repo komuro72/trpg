@@ -7,6 +7,11 @@
   "base_defense": 4,
   "base_physical_resistance": 3,
   "base_magic_resistance": 12,
+  "mp": 80,
+  "heal_mp_cost": 5,
+  "buff_mp_cost": 8,
+  "attack_type": "heal",
+  "attack_range": 4,
   "pre_delay": 0.4,
   "post_delay": 0.5,
   "is_flying": false,
@@ -16,8 +21,9 @@
       "name": "回復(小)",
       "action": "heal",
       "type": "support",
-      "range": 1,
+      "range": 4,
       "heal_mult": 0.3,
+      "mp_cost": 5,
       "pre_delay": 0.4,
       "post_delay": 0.4
     },
@@ -25,20 +31,22 @@
       "name": "回復(大)",
       "action": "heal",
       "type": "support",
-      "range": 1,
+      "range": 4,
       "heal_mult": 0.6,
+      "mp_cost": 10,
       "pre_delay": 0.8,
       "post_delay": 0.5
     },
-    "C": {
+    "C": null,
+    "V": {
       "name": "防御バフ",
       "action": "buff_defense",
       "type": "support",
-      "range": 1,
+      "range": 4,
       "buff_duration": 10.0,
+      "mp_cost": 8,
       "pre_delay": 0.5,
       "post_delay": 0.5
-    },
-    "V": null
+    }
   }
 }

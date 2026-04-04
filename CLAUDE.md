@@ -39,14 +39,16 @@ assets/images/characters/
     walk1.png    (1024x1024, 歩行パターン1・左足を出した状態)
     walk2.png    (1024x1024, 歩行パターン2・右足を出した状態)
     ready.png    (1024x1024, 構えポーズ・ターゲット選択中・攻撃モーション中)
+    guard.png    (1024x1024, ガード姿勢・X/Bホールド中。なければready.png→top.pngにフォールバック)
     front.png    (1024x1024, 全身正面・UI表示用)
     face.png     (256x256, frontから顔切り出し・左パネル表示用)
 
 assets/images/enemies/
   {enemy_type}_{sex}_{age}_{build}_{id}/
-    top.png / walk1.png / walk2.png / ready.png / front.png / face.png  （味方と同じ6ファイル構成・walk1/walk2は省略可）
+    top.png / walk1.png / walk2.png / ready.png / front.png / face.png  （味方と同じ構成・walk1/walk2/guard.pngは省略可）
 ```
-- 味方: class = fighter-sword, fighter-axe, archer, magician-fire, healer, scout
+- 味方: class = fighter-sword, fighter-axe, archer, magician-fire, magician-water, healer, scout
+  - ヒーラーは白系・魔法使い(水)は青〜水色系の画風（magician-fireの赤系・healerの白系と区別）
 - 敵: enemy_type = goblin, goblin-archer, goblin-mage, hobgoblin, dark-knight, dark-mage, dark-priest, wolf, zombie, harpy, salamander 等
 - sex: male, female
 - age: young, adult, elder
@@ -155,7 +157,7 @@ assets/images/tiles/
 |------|-----------|-------------|------|
 | 移動 | 矢印キー | 左スティック or 十字キー | |
 | 攻撃（短押し：通常 / 長押し：ため） | Z | A | クラスの攻撃タイプで近接/遠距離を自動切替 |
-| 防御・回避 | X | B | 将来実装。枠確保のみ |
+| ガード（ホールド） | X | B | ホールド中ガード姿勢。正面攻撃のブロック量3倍・移動速度50%・向き固定 |
 | アイテム使用 | C | X | 消耗品スロットで選択中のアイテムを使用（Phase 10-3で実装） |
 | 特殊スキル | V | Y | 将来実装。枠確保のみ |
 | 消耗品スロット循環選択 | 未定 | LT / RT | LTで前、RTで次（Phase 10-3で実装） |
@@ -237,21 +239,38 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 
 ## クラスシステム
 
-### 初期6クラス
-| クラス | ファイル名表記 | 武器タイプ | Z/A（攻撃） | 攻撃タイプ | C（第3・将来） |
-|--------|--------------|-----------|------------|----------|--------------|
-| 剣士 | fighter-sword | 剣 | 近接物理：斬撃 | melee | — |
-| 斧戦士 | fighter-axe | 斧 | 近接物理：振り下ろし | melee | — |
-| 弓使い | archer | 弓 | 遠距離物理：速射 | ranged | — |
-| 魔法使い(火) | magician-fire | 杖 | 遠距離魔法：火弾 | ranged | 火炎範囲 |
+### クラス一覧
+| クラス | ファイル名表記 | 武器タイプ | Z/A（攻撃） | 攻撃タイプ | V/Y（特殊スキル） |
+|--------|--------------|-----------|------------|----------|-----------------|
+| 剣士 | fighter-sword | 剣 | 近接物理：斬撃 | melee | 突進斬り |
+| 斧戦士 | fighter-axe | 斧 | 近接物理：振り下ろし | melee | 振り回し |
+| 弓使い | archer | 弓 | 遠距離物理：速射 | ranged | ヘッドショット |
+| 魔法使い(火) | magician-fire | 杖 | 遠距離魔法：火弾 | ranged | 炎陣 |
+| 魔法使い(水) | magician-water | 杖 | 遠距離魔法：水弾 | ranged | 無力化水魔法 |
 | ヒーラー | healer | 杖 | 支援：回復(単体) | heal | 防御バフ(単体) |
-| 斥候 | scout | ダガー | 近接物理：刺突 | melee | — |
+| 斥候 | scout | ダガー | 近接物理：刺突 | melee | スライディング |
 
 - 攻撃は Z/A の1ボタン。攻撃タイプ（melee/ranged）はクラスのスロット定義から自動判定
-- スロット最大4（ZXCV）、ゲームパッド対応を考慮（X/B は当面メニュー戻るに使用）
+- スロット最大4（ZXCV）、ゲームパッド対応を考慮（X/B はガード）
 - ヒーラーは攻撃手段を持たない（支援専用）
-- 将来拡張：魔法使いの属性分化（水・土・風）、支援系第2ジョブ、槍兵・飛翔系・両手武器系、状態異常回復（毒・麻痺実装後）
+- 将来拡張：魔法使いの属性分化（土・風）、支援系第2ジョブ、槍兵・飛翔系・両手武器系、状態異常回復（毒・麻痺実装後）
 - スロット4枠を超えるスキルの管理方法（入替・キャラ別・系統別）は将来決定
+
+### Vスロット特殊スキル仕様
+- **突進斬り（fighter-sword）**：向いている方向に最大2マス前進。経路上の敵全員にダメージ。次の空きマスに着地。壁・障害物で止まる。SP消費
+- **振り回し（fighter-axe）**：周囲1マス（斜め含む隣接8マス）の敵全員に通常攻撃相当のダメージ。SP消費
+- **ヘッドショット（archer）**：`instant_death_immune == false` の敵に即死。ボス級（`instant_death_immune == true`）には無効で通常の3倍ダメージ。SP消費大
+- **炎陣（magician-fire）**：自分を中心に半径3マスに設置。設置直後から2〜3秒間燃え続け複数回ヒット。敵のみ判定（巻き添えは将来課題）。MP消費大
+- **無力化水魔法（magician-water）**：単体・射程あり・MP消費大。命中した対象の攻撃・移動を2〜3秒間完全停止（回転エフェクト）。全種族共通。被弾時ダメージは受けるが持続時間は変わらない。ボス級には持続時間を短縮（将来調整）
+- **防御バフ（healer）**：単体・射程あり・MP消費（現状通り `buff_defense` アクション）
+- **スライディング（scout）**：向いている方向に3マス高速移動。移動中は無敵・敵をすり抜け可能。SP消費
+
+### 魔法使い（水）の仕様
+- クラスID：`magician-water`
+- 武器：杖 / 防具：ローブ / 盾：なし（`magician-fire` と同じ装備構成）
+- 画風：青〜水色系（`magician-fire` の赤系・`healer` の白系と区別）
+- Z/A：通常水弾（遠距離魔法・ダメージのみ）
+- V/Y：無力化水魔法（上記Vスロット仕様参照）
 
 ## キャラクター生成システム
 
@@ -379,7 +398,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 - [x] Phase 4: 攻撃バリエーション
   - 攻撃スロット
     - Z/A：攻撃（クラスの attack_type で近接/遠距離を自動切替。短押し：通常攻撃 / 長押し：ため攻撃）
-    - X/B：防御・回避（将来実装。枠確保のみ）
+    - X/B：ガード（ホールド中ガード姿勢。正面ブロック3倍・移動速度50%・向き固定）
     - C/X：アイテム使用（Phase 10-3で実装）
     - V/Y：特殊スキル（将来実装）
   - ターゲット選択モード（Phase 6-1で**ホールド方式**に変更済み）
@@ -738,7 +757,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
     - カーソル位置記憶：ウィンドウ閉じて再度開いたとき前回位置から再開
     - 全体方針→個別方針カーソル移動時は1列目（名前）から開始
     - バグ修正：`_get_char_front_texture()` が sprite_front ファイル不在のとき sprite_face にフォールバックするよう修正（CharacterGenerator 生成キャラは常に sprite_front パスが設定されるため、ファイル存在チェックが必要だった）
-- [ ] Phase 11: フロア・ダンジョン拡張
+- [x] Phase 11: フロア・ダンジョン拡張
   - [x] Phase 11-1: 階段実装・フロア遷移
     - 階段タイル（STAIRS_DOWN=4, STAIRS_UP=5）を TileType に追加。GlobalConstants に定数追加
     - DungeonBuilder が JSON の `stairs` 配列（type/x/y 形式）から階段タイルを配置
@@ -770,13 +789,168 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
       - カメラ X 方向デッドゾーンを 0.40 → 0.20 に変更（進行方向の視野を改善）
       - DungeonBuilder に `MAP_BORDER = 6` を追加（四方6タイルの境界壁。コンテンツを offset で移動）
         - キャラがカメラリミット付近に物理的に到達できなくなり、マップ端での画面端寄りを解消
-  - [ ] Phase 11-2: 10フロア対応・ダンジョン事前生成方式への移行
-    - ダンジョンは10フロア構成を標準とする
-    - 深いフロアほど強い敵を配置・アイテムの補正値も高くなる
-    - 配布時は Claude Code で事前に100〜1000個のダンジョンJSONを生成してストック、プレイ時にランダム選択
-    - F5 は単純なシーン再スタート（`get_tree().reload_current_scene()`）
-    - 開発中は手作りダンジョン（dungeon_handcrafted.json）を使用
+  - [x] Phase 11-2: 5フロア対応・ゲームクリア実装
+    - dungeon_handcrafted.json を3フロアから5フロアに拡張
+      - フロア0（地下1層）: 現状維持。下り階段あり
+      - フロア1（地下2層）: 現状維持（3部屋）。上り/下り階段あり
+      - フロア2（地下3層）: 現状維持（2部屋）。上り/下り階段を追加（フロア3へ）
+      - フロア3（地下4層）: 新規。3部屋。ホブゴブリン・ダークナイト・ダークメイジ・サラマンダーの混成
+      - フロア4（地下5層・最下層）: 新規。1部屋（深淵の玉座）。ボス構成（ダークナイト×2・ダークメイジ×1・ダークプリースト×1）。上り階段のみ
+    - フロアが深いほど敵が強くドロップアイテムの補正値も高い
+    - ゲームクリア判定: 最終フロア（インデックス4）の全敵パーティー全滅で `_trigger_game_clear()` 発火
+      - プレイヤー入力を無効化（`player_controller.is_blocked = true`）
+      - MessageLog にシステムメッセージ「ダンジョンを制覇した！…」を表示
+      - F5 リスタートは引き続き有効（`game_map._input()` の KEY_F5 直接マッチのため）
+    - Phase 11-2 バグ修正
+      - 魔法敵（ゴブリンメイジ・ダークメイジ・サラマンダー等）が攻撃しない問題: `party_leader_ai.gd` の `magic_power > 0` 条件が魔法攻撃キャラを WAIT に固定していたのを `heal_mp_cost > 0 or buff_mp_cost > 0` に修正
+      - 敵の初動が遅い問題: `unit_ai.gd` の move アクション開始時タイマーを `_get_move_interval()` から `0.0` に変更（最初の1歩の待ち時間を解消）
+      - 敵・NPCの移動速度が遅い問題: `MOVE_INTERVAL` を `1.2` → `0.40` 秒/タイルに変更（プレイヤー速度 0.30 s/タイルに近づけた）
+  - [x] Phase 11-3: MPバー表示・MP消費・アイテム一覧グループ化
+    - 左パネルの MP バー: max_mp > 0 のキャラのみ青いバーと「MP X/Y」テキストを表示
+    - `player_controller.gd`: `_execute_melee` / `_execute_ranged` でスロットの `mp_cost` を消費（`character.use_mp()`）
+    - `magician-fire.json` / `healer.json` に `"mp"` フィールドと各スロットの `"mp_cost"` を追加。healer には `heal_mp_cost` / `buff_mp_cost` も追加
+    - OrderWindow アイテム一覧: 同名アイテムを「剣 ×2」形式でグループ表示（`_cached_grouped` キャッシュ追加、カーソルはグループ単位で操作）
+  - [x] Phase 11-4: ヒーラー操作時の回復実装・回復エフェクト
+    - プレイヤー操作ヒーラーの回復行動
+      - `_get_valid_targets()`: `action=="heal"` または `"buff_defense"` のとき `is_friendly==true` のキャラ（自分除く）を対象にする
+      - ターゲット並び順: 距離順 → HP割合低い順（`_get_sorted_targets()` で heal/buff_defense 専用ソート）
+      - `_enter_targeting()` に MP不足チェックを追加（`mp_cost > character.mp` ならターゲット選択モードに入れない）
+      - `_execute_heal()`: `magic_power × heal_mult` で回復量を計算・`character.heal()` でHP回復・MP消費
+      - `_execute_buff()`: `apply_defense_buff()` でバフ付与・MP消費
+    - 回復射程仕様
+      - ヒーラーの回復は単体・射程あり（`healer.json` の各スロット `range` フィールドで管理。弓・炎と同じ仕組みで射程制限）
+      - `healer.json` の `attack_range`（AI用）および全スロット `range` を 1 → 4 に更新
+      - 将来の範囲魔法: 範囲内の味方全員を対象（実装時に `ranged_area` 相当の heal 版アクションを追加する設計）
+    - 回復エフェクト（案A採用: コード描画）
+      - `scripts/heal_effect.gd` 新規作成（Kenney素材に波紋系が存在しないため案A採用）
+      - キャスト側（ヒーラー）: `mode="cast"` → 白金系（`Color(1.0, 0.95, 0.6)`）の波紋リング3本が外へ広がる
+      - ターゲット側（回復される側）: `mode="hit"` → 緑〜白系のリングが内へ縮まる + 中央グロー
+      - 再生時間 0.6 秒（HitEffect の約 0.375 秒より遅め）、半径 `GRID_SIZE × 0.55`（HitEffect より大きめ）
+      - `_spawn_heal_effect(pos, mode)` を `player_controller.gd` に追加し、キャスト・ターゲット両方に発火
+      - HEAL SE は `character.heal()` 内の既存処理をそのまま使用
+  - [x] Phase 11-5: ガードシステム
+    - X/B ボタン（`menu_back` アクション）ホールドでガード発動
+      - `player_controller._process_normal()`: `Input.is_action_pressed("menu_back")` で `character.is_guarding` をセット/解除
+      - 攻撃キー入力時はガードを先に解除してからターゲット選択モードへ移行
+      - `is_blocked = true`（メニュー等）のとき `character.is_guarding = false` に強制解除
+    - ガード中の向き維持
+      - `character.move_to()`: `is_guarding = true` のとき facing を更新しない（guard_facing を維持）
+      - 後ずさり・横歩きに対応（`_apply_direction_rotation()` もスキップ）
+    - ガード中の移動速度
+      - `player_controller._try_move()`: duration を2倍（通常の50%速度）
+    - ガードグラフィック
+      - `character_data.sprite_top_guard: String = ""`（`sprites.top_guard` キーからロード）
+      - `character_generator.gd`: `data.sprite_top_guard = folder + "/guard.png"`（味方・敵共通）
+      - `character._tex_guard`: 起動時に事前ロード（`_load_walk_sprites()` 内）
+      - `_update_ready_sprite()` 優先順: `guard.png`（ガード中）> `ready.png`（ターゲット/攻撃中）> `top.png`（通常）
+      - guard.png がなければ ready.png にフォールバック、それもなければ top.png
+      - ガード中は歩行アニメをスキップ（`is_guarding` チェックを `is_targeting_mode or is_attacking` と並列追加）
+    - ガードダメージ軽減
+      - `character.take_damage()`: `is_guarding == true` かつ `dir_result == "front"` のとき
+        - 防御判定を自動成功（ダイスロールなし）
+        - `blocked = _calc_block_power("front") * 3`（通常の3倍のブロック量。将来バランス調整予定）
+      - 正面以外（側面・背面・方向不明）はガード効果なし（通常の防御判定）
+    - 画像フォーマット仕様追加
+      - `guard.png`（256×256 または 1024×1024、ガード姿勢・盾構え）
+      - 配置先: `assets/images/characters/{set}/guard.png`（味方）/ `assets/images/enemies/{set}/guard.png`（敵）
+      - なければフォールバックで ready.png → top.png を使用（敵は当面 guard.png なし）
 - [ ] Phase 12: ステージ・バランス調整
+  - [x] Phase 12-1: MP/SPシステム実装
+    - **CharacterData に追加したフィールド**
+      - `max_sp: int = 0`（非魔法クラス専用スタミナ上限）
+      - `instant_death_immune: bool = false`（ボス級は true）
+      - `friendly_fire: bool = false`（将来実装・当面 false 固定）
+    - **Character ランタイムフィールド**
+      - `sp: int` / `max_sp: int` を追加（`_init_stats()` で初期化）
+      - 自動回復：`_recover_mp_sp(delta)` を `_process()` から毎フレーム呼ぶ（速度 `MP_SP_RECOVERY_RATE = 3.0` /秒・端数蓄積方式）
+      - `use_sp(cost)` メソッド追加（`use_mp()` と同じ仕組み）
+      - `use_consumable()` に `restore_sp` 対応を追加
+    - **非魔法クラス JSON に追加**（`fighter-sword` / `fighter-axe` / `archer` / `scout`）
+      - `"max_sp": 60` をクラス定義に追加
+      - Z スロットに `"sp_cost": 2` を追加（通常攻撃の微量消費。回復速度と相殺される程度）
+    - **player_controller.gd**：`_execute_melee()` / `_execute_ranged()` で `sp_cost` を `use_sp()` で消費
+    - **左パネル（left_panel.gd）**
+      - `MAGIC_CLASS_IDS = ["magician-fire", "magician-water", "healer"]` 定数追加
+      - 魔法クラスは MPバー（濃い青 `Color(0.2, 0.5, 1.0)`）を表示
+      - 非魔法クラスは SPバー（水色 `Color(0.4, 0.8, 1.0)`）を表示（`max_sp > 0` のとき）
+    - **OrderWindow**：魔法クラスは「MP」行・非魔法クラスは「SP」行を表示（クラスIDで判定）
+    - **SPポーション**（`assets/master/items/potion_sp.json` 新規作成）
+      - `category: consumable` / `effect.restore_sp: 20`
+      - `consumable_bar.gd` に `potion_sp` の水色アイコン色を追加
+    - **ダンジョン**：fighter-sword・archer の初期装備に `potion_sp`（活力薬）を追加。goblin-archer パーティーのドロップにも追加
+  - [x] Phase 12-2: 水魔法使いクラス・スタンシステム実装
+    - **`magician-water` クラス追加**（`assets/master/classes/magician-water.json` 新規作成）
+      - Z: 水弾（ranged magic, range 5, mp_cost 3, damage_mult 0.8）
+      - X: 水流（ranged magic, range 5, mp_cost 10, damage_mult 1.5）
+      - V: 無力化水魔法（water_stun, magic, range 4, mp_cost 15, stun_duration 4.0s）
+      - `max_sp: 0`・`mp: 60`
+    - **スタンシステム（Character）**
+      - `is_stunned: bool` / `stun_timer: float` フィールド追加
+      - `apply_stun(duration)` メソッド：スタン付与・MessageLog に通知。重複スタンは残り時間を延長
+      - `_process()` でタイマー消化・解除時に `_sprite.rotation = 0` リセット
+      - スタン中は `_sprite.rotation += delta * 4.0` で視覚的なスピン表現
+      - `_update_modulate()` でスタン中はシアン点滅に上書き
+    - **UnitAI スタン対応**
+      - `_process()` 冒頭で `is_stunned == true` の場合は行動キューをクリア・IDLE に戻して早期 return
+    - **Projectile 水弾対応**
+      - `_WATER_BULLET_PATH` 定数追加（`water_bullet.png`・画像なければ水色フォールバック）
+      - `_is_water: bool` / `_stun_duration: float` フィールド追加
+      - `setup()` に `stun_duration` / `is_water` オプション引数追加
+      - `_on_arrive()` で `_stun_duration > 0` の場合 `target.apply_stun()` を呼ぶ
+      - フォールバック色：水=水色・火=オレンジ・矢=黄色
+    - **V スロット（player_controller）**
+      - `special_skill` InputAction 追加（V キー + Y ボタン）
+      - `_slot_v: Dictionary` / `_using_v_slot: bool` フィールド追加
+      - `_load_class_slots()` で V スロットをロード
+      - `_get_slot()` で `_using_v_slot == true` のとき `_slot_v` を返す
+      - `_is_slot_held()` で `_using_v_slot` に応じて `special_skill` / `attack` アクションを判定
+      - `_execute_water_stun()` メソッド追加：MP消費・水弾発射（stun_duration 付き）
+      - `_get_valid_targets()` で `water_stun` を `ranged` と同様に射程内の敵を対象
+    - **SPポーションアイコン色変更**：`consumable_bar.gd` の `potion_sp` 色を水色 → 緑（`Color(0.2, 0.8, 0.3)`）に変更
+    - **ボス系敵に `instant_death_immune: true` 追加**：dark_knight / dark_mage / dark_priest / hobgoblin
+    - **ダンジョン**：ゾンビの霊廟（r1_4）の NPC パーティーに `magician-water` メンバー追加（杖・ローブ・MPポーション×2 装備）
+  - [x] Phase 12-3: アイテム画像反映
+  - [x] Phase 12-4: Vスロット特殊スキル実装（7クラス）
+    - **共通基盤（`player_controller.gd`）**
+      - `V_SLOT_COOLDOWN = 2.0` / `_v_slot_cooldown: float` 追加。`_process()` でカウントダウン
+      - `_has_v_slot_resources()`: MP/SP不足チェック
+      - `_start_v_cooldown()`: クールダウン開始＋ConsumableBar 更新
+      - `_execute_v_instant(action)`: インスタント系ディスパッチャ（クールダウン先行開始）
+      - インスタント系（sliding/whirlwind/rush/flame_circle）: `is_action_just_pressed` で発動
+      - ターゲット系（headshot/water_stun/buff_defense）: `is_action_pressed` ホールド＋ターゲット選択モード
+      - `_enter_targeting()` に SP コストチェックを追加
+      - `_execute_pending()` で headshot 対応・V スロット実行後にクールダウン開始
+      - `_get_valid_targets()` に headshot を ranged 相当として追加
+    - **`character.gd`**: `is_sliding: bool = false` 追加。`take_damage()` でスライディング中はスキップ
+    - **`scripts/flame_circle.gd`** 新規作成: 炎陣エフェクト・tick ダメージノード
+    - **`consumable_bar.gd`**: `v_slot_cooldown: float` 追加・`_on_draw()` に "V: X秒" 表示を追加
+    - **スキル実装（`player_controller.gd`）**
+      - `_execute_sliding()`: 3マスダッシュ（await）・壁で止まる・キャラクター通り抜け可・is_blocked=true
+      - `_execute_whirlwind()`: 周囲8マス AoE・即時ダメージ・is_attacking フラグ（await で解除）
+      - `_execute_rush()`: 前方2マス前進（await）・経路の敵にダメージ・壁で止まる・is_blocked=true
+      - `_execute_headshot()`: ターゲット選択後に実行。immune=false→99999ダメージ（実質即死）、immune=true→×3ダメージ
+      - `_execute_flame_circle()`: FlameCircle ノードを map_node に追加・2.5秒間・0.5秒ごとに magic ダメージ
+      - `_find_character_at(pos)`: 指定グリッド座標のキャラクターを返すユーティリティ
+    - **クラス JSON 更新**
+      - `scout.json`: V=スライディング（sp_cost: 20）
+      - `fighter-axe.json`: V=振り回し（sp_cost: 15, damage_mult: 1.0）
+      - `fighter-sword.json`: V=突進斬り（sp_cost: 15, damage_mult: 1.2）
+      - `archer.json`: V=ヘッドショット（sp_cost: 25, range: 6, damage_mult: 3.0）
+      - `magician-fire.json`: V=炎陣（mp_cost: 20, range: 3, damage_mult: 0.8, duration: 2.5s, tick_interval: 0.5s）
+      - `magician-water.json`: V=無力化水魔法（Phase 12-2 から変更なし）
+      - `healer.json`: C スロットを null に変更、V=防御バフ（buff_defense・mp_cost: 8・range: 4）
+    - **床アイテムマーカー（`game_map.gd`）**
+      - `item.get("image", "")` が空のとき `item_type` から `assets/images/items/{item_type}.png` を導出
+      - `_load_item_texture()` 経由でテクスチャロード。画像なし時は黄色マーカーにフォールバック（既存挙動）
+      - 対応画像: `sword.png` / `axe.png` / `dagger.png` / `bow.png` / `staff.png` / `armor_plate.png` / `armor_cloth.png` / `armor_robe.png` / `shield.png` / `potion_hp.png` / `potion_mp.png` / `potion_sp.png`
+    - **OrderWindow アイテム一覧オーバーレイ（`_draw_item_list_overlay`）**
+      - `_item_tex_cache: Dictionary` と `_load_item_tex(item)` を追加（同パス導出ロジック）
+      - 各アイテム行の左端に `row_h - 6` サイズのアイコンを描画。テクスチャなし時はグレーブロック
+      - テキストはアイコン幅＋4px 右にオフセット
+    - **OrderWindow 装備欄（`_draw_status_section`・装備スロット部）**
+      - 武器・防具・盾スロット行の値列左端に `stat_h - 2` サイズのアイコンを描画
+    - **OrderWindow 所持アイテム欄（`_draw_status_section`・インベントリ部）**
+      - 未装備品リスト各行の左端にアイコンを描画
 - [ ] Phase 13: Steam配布準備
 
 ## アイテムシステム
@@ -795,6 +969,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 | 弓使い | 弓 | 服 | ✕ |
 | 斥候 | ダガー | 服 | ✕ |
 | 魔法使い(火) | 杖 | ローブ | ✕ |
+| 魔法使い(水) | 杖 | ローブ | ✕ |
 | ヒーラー | 杖 | ローブ | ✕ |
 
 - 戦士クラス（剣士・斧戦士）は盾を左手に持つ（グラフィック統一）
@@ -844,7 +1019,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 - 制圧時、敵パーティーの所持アイテムが**部屋の床タイルにランダムに散らばる**（1マスに1個）
 - 出現は1回きり（敵が戻っても再出現しない）
 - item_get 効果音を再生、メッセージウィンドウに通知（例：「アイテムが散らばった！」）
-- 表示：当面は共通アイコン、将来はアイテム種類別アイコン
+- 表示：アイテム種類別アイコン（`assets/images/items/{item_type}.png`。画像なし時は黄色マーカーにフォールバック）
 - **取得方法**：同じマスに移動したら自動取得。拾ったキャラ個人の inventory に未装備品として入る
 - プレイヤー操作キャラはフィルタなし（踏めば何でも拾う）
 - AIキャラは item_pickup 指示に従う（指示システム節を参照）
@@ -880,7 +1055,8 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 | ステータス | フィールド名（実装） | 説明 |
 |-----------|-------------------|------|
 | HP | `max_hp` / `hp` | ヒットポイント |
-| MP | `max_mp` / `mp` | マジックポイント（魔法使用時に消費） |
+| MP | `max_mp` / `mp` | マジックポイント。魔法クラス（magician-fire/magician-water/healer）専用 |
+| SP | `max_sp` / `sp` | スタミナポイント。非魔法クラス（fighter-sword/fighter-axe/archer/scout）専用 |
 | 攻撃力 | `attack_power` | 物理攻撃のダメージ（近接・遠距離共通） |
 | 命中精度 | `accuracy` | 物理攻撃の命中（近接・遠距離共通）。装備実装時に有効化 |
 | 魔法威力 | `magic_power` | 魔法ダメージ・回復量の共通値（攻撃魔法・回復魔法の両方に効く） |
@@ -891,6 +1067,8 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 | 移動速度 | `move_speed` | 単位：秒/タイル（標準0.4） |
 | 統率力（leadership） | `leadership` | リーダー側。クラス・ランクから算出して確定後不変。当面は値のみ保持 |
 | 従順度（obedience） | `obedience` | 個体側（0.0〜1.0）。クラス・種族・ランクから算出して確定後不変。当面は値のみ保持 |
+| 即死耐性 | `instant_death_immune` | bool。デフォルト false。ボス級は true（ヘッドショット無効・無力化水魔法短縮） |
+| 巻き添え | `friendly_fire` | bool。デフォルト false（将来実装。範囲攻撃が味方・他パーティーにも当たる仕様） |
 
 - 魔法命中精度は `accuracy` と共通（magic_power 系は攻撃・回復とも同じ命中扱い）
 - 回復魔法は必ず命中するため、ヒーラー（attack_type="heal"）には OrderWindow の命中精度行を表示しない
@@ -898,6 +1076,17 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 - 耐性はクラス基準値 × ランク補正 × 体格補正 × 性別補正 × 年齢補正で決定
 - 軽減方式：逓減カーブ（軽減率 = 能力値 / (能力値 + 100)。100で50%、200で67%）
 - OrderWindow では数値のみ表示（%表記はしない）
+
+### MP/SPシステム
+- **魔法クラス**（`magician-fire` / `magician-water` / `healer`）：`mp` / `max_mp` を使用
+- **非魔法クラス**（`fighter-sword` / `fighter-axe` / `archer` / `scout`）：`sp` / `max_sp` を使用
+- バー表示（左パネル）：MPは濃い青・SPは水色系。それぞれのクラスで対応するバーのみ表示
+- 通常攻撃（Z）：全クラス微量消費（自動回復と相殺される程度）
+- 特殊スキル（V）：魔法クラスはMP消費大・非魔法クラスはSP消費大
+- ヒーラーのZ（回復）はMP消費大（例外扱い）
+- 自動回復：MP・SP ともに時間経過でゆっくり回復
+- 回復アイテム：MPポーション（魔法クラス用）・SPポーション（非魔法クラス用）に分離
+- 敵キャラクターは当面 SP/MP システムを持たない（AI の行動クールタイムで代替）
 
 ### 命中・被ダメージ計算
 
@@ -1057,6 +1246,8 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 - 複数パーティーによるアイテム分配：現在は部屋制圧時にフィールドに散らばったアイテムを早い者勝ちで取得
 - BGM
 - ポーズメニュー（ゲーム終了・オプション設定などを含むメニュー）：Startボタンで開く。現在はStartボタン未割り当て
+- 巻き添え（`friendly_fire`）：範囲攻撃（炎陣など）が味方・他パーティーにも当たる仕様。`CharacterData.friendly_fire: bool`（当面 false 固定）で管理し、将来切り替え可能にする
+- 大型ボスの即死耐性設計：`instant_death_immune: bool`（ボス級は true）。ヘッドショット無効・無力化水魔法持続短縮。敵 JSON でフラグを設定できる設計にする
 
 ## 参照ファイル
 - docs/spec.md：詳細仕様書（実装前に参照すること）

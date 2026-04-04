@@ -184,27 +184,41 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 		Vector2(tx, fy + float(pad) + 13.0),
 		header, HORIZONTAL_ALIGNMENT_LEFT, tw, 13, Color.WHITE)
 
-	# HPバー
-	var hp_ratio := float(c.hp) / float(c.max_hp) if c.max_hp > 0 else 0.0
-	var bar_y    := fy + float(pad) + 20.0
-	var bar_h    := 7.0
-	_draw_bar(tx, bar_y, tw, bar_h, hp_ratio)
-	_control.draw_string(_font,
-		Vector2(tx, bar_y + bar_h + 10.0),
-		"HP %d/%d" % [c.hp, c.max_hp],
-		HORIZONTAL_ALIGNMENT_LEFT, tw, 10, Color(0.75, 0.75, 0.75))
+	# HPバー・MPバー（絶対値表示）
+	# ゲージ幅は HP_REF / MP_REF を基準とした絶対値。
+	# 背景（暗）= バー全幅、中間（薄暗）= max_hp/REF まで、前景（色付き）= current/REF まで。
+	var bar_y := fy + float(pad) + 20.0
+	var bar_h := 7.0
 
-	# MPバー（将来用：空）
-	var mp_bar_y := bar_y + bar_h + 18.0
-	_draw_bar(tx, mp_bar_y, tw, bar_h, 0.0)
+	var hp_cur_r := minf(float(c.hp)    / HP_REF, 1.0)
+	var hp_max_r := minf(float(c.max_hp)/ HP_REF, 1.0)
+	_draw_bar(tx, bar_y, tw, bar_h, hp_cur_r, Color.TRANSPARENT, hp_max_r)
+
+	var content_y := bar_y + bar_h + 4.0   # バー直下の開始 y
+	var class_id := c.character_data.class_id if c.character_data != null else ""
+	if class_id in MAGIC_CLASS_IDS:
+		# 魔法クラス：MPバー（濃い青）
+		if c.max_mp > 0:
+			var mp_cur_r := minf(float(c.mp)    / MP_REF, 1.0)
+			var mp_max_r := minf(float(c.max_mp)/ MP_REF, 1.0)
+			_draw_bar(tx, content_y, tw, bar_h, mp_cur_r, Color(0.2, 0.5, 1.0), mp_max_r)
+			content_y += bar_h + 4.0
+	else:
+		# 非魔法クラス：SPバー（水色）
+		if c.max_sp > 0:
+			var sp_cur_r := minf(float(c.sp)    / SP_REF, 1.0)
+			var sp_max_r := minf(float(c.max_sp)/ SP_REF, 1.0)
+			_draw_bar(tx, content_y, tw, bar_h, sp_cur_r, Color(0.4, 0.8, 1.0), sp_max_r)
+			content_y += bar_h + 4.0
 
 	# 状態テキスト
 	var cond     := _condition(c)
 	var cond_col := Color(0.4, 0.9, 0.4) if cond == "healthy" \
 		else (Color(1.0, 0.8, 0.2) if cond == "wounded" else Color(1.0, 0.35, 0.35))
 	_control.draw_string(_font,
-		Vector2(tx, mp_bar_y + bar_h + 10.0),
+		Vector2(tx, content_y + 10.0),
 		cond, HORIZONTAL_ALIGNMENT_LEFT, tw, 10, cond_col)
+	content_y += 13.0
 
 	# 指示状態（OrderWindow の COL_LABELS と完全一致する表記）
 	var ord: Dictionary = c.current_order
@@ -225,11 +239,11 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 	var ord_color := Color(0.55, 0.90, 0.65)
 	var fs_ord := 9
 	_control.draw_string(_font,
-		Vector2(tx, mp_bar_y + bar_h + 22.0),
+		Vector2(tx, content_y + 9.0),
 		"%s / %s / %s" % [move_a, combat_a, target_a],
 		HORIZONTAL_ALIGNMENT_LEFT, tw, fs_ord, ord_color)
 	_control.draw_string(_font,
-		Vector2(tx, mp_bar_y + bar_h + 34.0),
+		Vector2(tx, content_y + 21.0),
 		"%s / %s / %s" % [bform_a, lowh_a, pickup_a],
 		HORIZONTAL_ALIGNMENT_LEFT, tw, fs_ord, ord_color)
 
@@ -248,7 +262,7 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 			else:
 				item_text = "[C] %s" % iname
 		_control.draw_string(_font,
-			Vector2(tx, mp_bar_y + bar_h + 46.0),
+			Vector2(tx, content_y + 33.0),
 			item_text, HORIZONTAL_ALIGNMENT_LEFT, tw, 9, Color(0.9, 0.85, 0.5))
 
 	# カード下区切り線
@@ -258,17 +272,40 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 		Color(0.25, 0.25, 0.30, 0.7), 1)
 
 
-func _draw_bar(x: float, y: float, w: float, h: float, ratio: float) -> void:
-	_control.draw_rect(Rect2(x, y, w, h), Color(0.15, 0.15, 0.18))
-	if ratio > 0.0:
+## HP/MP/SP の絶対値表示用基準値（これがバー全幅に対応する量）
+const HP_REF: float = 300.0
+const MP_REF: float = 120.0
+const SP_REF: float = 120.0
+
+## 魔法クラスのID一覧（MPバーを表示するクラス。それ以外はSPバーを表示）
+const MAGIC_CLASS_IDS: Array = ["magician-fire", "magician-water", "healer"]
+
+## fill_ratio  : 前景（現在値）の幅 = w * fill_ratio
+## fill_color  : 前景色の指定（TRANSPARENT なら HP 残量で自動色分け）
+## max_ratio   : 中間層（最大値）の幅 = w * max_ratio。1.0 なら全幅
+func _draw_bar(x: float, y: float, w: float, h: float, fill_ratio: float,
+		fill_color: Color = Color.TRANSPARENT, max_ratio: float = 1.0) -> void:
+	# 暗い全幅背景
+	_control.draw_rect(Rect2(x, y, w, h), Color(0.10, 0.10, 0.13))
+	# 中間層（最大値の位置まで赤く表示 → 前景で覆われた部分が現在値、残りが減少量）
+	var cap_w := w * clampf(max_ratio, 0.0, 1.0)
+	if cap_w > 0.0:
+		_control.draw_rect(Rect2(x, y, cap_w, h), Color(0.55, 0.10, 0.10))
+	# 前景（現在値）
+	if fill_ratio > 0.0:
 		var fill: Color
-		if ratio > 0.6:
-			fill = Color(0.25, 0.80, 0.30)
-		elif ratio > 0.3:
-			fill = Color(0.90, 0.70, 0.10)
+		if fill_color.a > 0.0:
+			fill = fill_color
 		else:
-			fill = Color(0.90, 0.20, 0.20)
-		_control.draw_rect(Rect2(x, y, w * clampf(ratio, 0.0, 1.0), h), fill)
+			# HP 色: max に対する割合で色分け
+			var ratio_of_max := fill_ratio / max_ratio if max_ratio > 0.0 else 0.0
+			if ratio_of_max > 0.6:
+				fill = Color(0.25, 0.80, 0.30)
+			elif ratio_of_max > 0.3:
+				fill = Color(0.90, 0.70, 0.10)
+			else:
+				fill = Color(0.90, 0.20, 0.20)
+		_control.draw_rect(Rect2(x, y, w * clampf(fill_ratio, 0.0, 1.0), h), fill)
 
 
 func _condition(c: Character) -> String:

@@ -12,7 +12,7 @@ const NAMES_JSON_PATH := "res://assets/master/names.json"
 const CLASS_JSON_DIR  := "res://assets/master/classes/"
 
 const KNOWN_CLASSES: Array = [
-	"fighter-sword", "fighter-axe", "magician-fire", "archer", "healer", "scout"
+	"fighter-sword", "fighter-axe", "magician-fire", "magician-water", "archer", "healer", "scout"
 ]
 
 ## ランク補正（hp / attack / defense 共通）
@@ -122,6 +122,12 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	data.post_delay         = float(class_json.get("post_delay", 0.5))
 	data.is_flying          = bool(class_json.get("is_flying",  false))
 	data.behavior_description = str(class_json.get("behavior_description", ""))
+	data.attack_type        = str(class_json.get("attack_type",  "melee"))
+	data.attack_range       = int(class_json.get("attack_range", 1))
+	data.max_mp             = int(class_json.get("mp",            0))
+	data.max_sp             = int(class_json.get("max_sp",        0))
+	data.heal_mp_cost       = int(class_json.get("heal_mp_cost",  0))
+	data.buff_mp_cost       = int(class_json.get("buff_mp_cost",  0))
 
 	var folder: String = GRAPHIC_SET_DIR + str(chosen_set.get("folder", ""))
 	data.image_set        = folder
@@ -129,6 +135,7 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	data.sprite_walk1     = folder + "/walk1.png"
 	data.sprite_walk2     = folder + "/walk2.png"
 	data.sprite_top_ready = folder + "/ready.png"
+	data.sprite_top_guard = folder + "/guard.png"
 	data.sprite_front     = folder + "/front.png"
 	data.sprite_face      = folder + "/face.png"
 
@@ -173,6 +180,7 @@ static func apply_enemy_graphics(data: CharacterData) -> void:
 	data.sprite_walk1     = folder + "/walk1.png"
 	data.sprite_walk2     = folder + "/walk2.png"
 	data.sprite_top_ready = folder + "/ready.png"
+	data.sprite_top_guard = folder + "/guard.png"
 	data.sprite_front     = folder + "/front.png"
 	data.sprite_face      = folder + "/face.png"
 	data.sex   = str(chosen_set.get("sex",   data.sex))

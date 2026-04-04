@@ -99,12 +99,16 @@ var _message_window: MessageWindow = null
 var _log_mode:   bool = false
 var _log_scroll: int  = 0
 
+## アイテム画像テクスチャキャッシュ（img_path -> Texture2D or null）
+var _item_tex_cache: Dictionary = {}
+
 ## アイテム画面の状態
 enum _ItemMode { OFF, ITEM_LIST, ACTION_MENU, TRANSFER_SELECT }
 var _item_mode:          _ItemMode = _ItemMode.OFF
 var _item_char:          Character = null   ## アイテムを見ているキャラ
 var _item_cursor:        int       = 0
 var _cached_unequipped:  Array     = []     ## _item_char の未装備アイテムリスト（キャッシュ）
+var _cached_grouped:     Array     = []     ## 同名アイテムをまとめたグループリスト（表示用）
 var _selected_item:      Dictionary = {}    ## ITEM_LIST で選んだアイテム
 var _action_items:       Array[String] = [] ## ACTION_MENU の選択肢
 var _action_cursor:      int       = 0
@@ -297,6 +301,7 @@ func _execute_submenu(member_index: int, submenu_index: int) -> void:
 		1:  # アイテム：未装備品一覧を開く
 			_item_char          = ch
 			_cached_unequipped  = _get_unequipped_items(ch)
+			_rebuild_grouped()
 			_item_cursor        = 0
 			_item_mode          = _ItemMode.ITEM_LIST
 
@@ -308,12 +313,12 @@ func _handle_item_input() -> void:
 			if Input.is_action_just_pressed("ui_up"):
 				_item_cursor = maxi(0, _item_cursor - 1)
 			elif Input.is_action_just_pressed("ui_down"):
-				_item_cursor = mini(_cached_unequipped.size() - 1, _item_cursor + 1)
+				_item_cursor = mini(_cached_grouped.size() - 1, _item_cursor + 1)
 			elif Input.is_action_just_pressed("attack") \
 					or Input.is_action_just_pressed("ui_accept") \
 					or Input.is_action_just_pressed("ui_right"):
-				if not _cached_unequipped.is_empty() and _item_cursor < _cached_unequipped.size():
-					_selected_item = _cached_unequipped[_item_cursor] as Dictionary
+				if not _cached_grouped.is_empty() and _item_cursor < _cached_grouped.size():
+					_selected_item = (_cached_grouped[_item_cursor] as Dictionary)["item"] as Dictionary
 					_action_items  = _build_action_items(_item_char, _selected_item)
 					if not _action_items.is_empty():
 						_action_cursor = 0
@@ -339,7 +344,8 @@ func _handle_item_input() -> void:
 						MessageLog.add_system(
 							"%s は %s を装備した" % [_get_char_name(_item_char), iname])
 					_cached_unequipped = _get_unequipped_items(_item_char)
-					_item_cursor = mini(_item_cursor, maxi(0, _cached_unequipped.size() - 1))
+					_rebuild_grouped()
+					_item_cursor = mini(_item_cursor, maxi(0, _cached_grouped.size() - 1))
 					_item_mode   = _ItemMode.ITEM_LIST
 				elif action == "渡す":
 					_transfer_cursor = 0
@@ -367,12 +373,31 @@ func _handle_item_input() -> void:
 							"%s は %s に %s を渡した" % [
 								_get_char_name(_item_char), _get_char_name(to_ch), iname])
 					_cached_unequipped = _get_unequipped_items(_item_char)
-					_item_cursor = mini(_item_cursor, maxi(0, _cached_unequipped.size() - 1))
+					_rebuild_grouped()
+					_item_cursor = mini(_item_cursor, maxi(0, _cached_grouped.size() - 1))
 					_item_mode   = _ItemMode.ITEM_LIST
 			elif Input.is_action_just_pressed("ui_cancel") \
 					or Input.is_action_just_pressed("menu_back") \
 					or Input.is_action_just_pressed("ui_left"):
 				_item_mode = _ItemMode.ACTION_MENU
+
+
+## 同名アイテムをグループ化して _cached_grouped を再構築する
+## 各エントリ: {"item": Dictionary, "count": int}（最初に見つかったアイテムを代表として使用）
+func _rebuild_grouped() -> void:
+	_cached_grouped = []
+	for item_v: Variant in _cached_unequipped:
+		var item := item_v as Dictionary
+		var iname: String = item.get("item_name", "") as String
+		var merged := false
+		for g_v: Variant in _cached_grouped:
+			var g := g_v as Dictionary
+			if (g["item"] as Dictionary).get("item_name", "") == iname:
+				g["count"] = int(g["count"]) + 1
+				merged = true
+				break
+		if not merged:
+			_cached_grouped.append({"item": item, "count": 1})
 
 
 ## 対象キャラの未装備アイテムを返す（装備スロットに入っていないもの）
@@ -525,7 +550,11 @@ func _get_stat_rows(ch: Character) -> Array:
 	var cd: CharacterData = ch.character_data
 
 	rows.append({"label": "HP",           "type": "hp_mp",  "current": ch.hp,   "max": ch.max_hp})
-	rows.append({"label": "MP",           "type": "hp_mp",  "current": ch.mp,   "max": ch.max_mp})
+	var _magic_classes: Array = ["magician-fire", "magician-water", "healer"]
+	if cd.class_id in _magic_classes:
+		rows.append({"label": "MP",       "type": "hp_mp",  "current": ch.mp,   "max": ch.max_mp})
+	else:
+		rows.append({"label": "SP",       "type": "hp_mp",  "current": ch.sp,   "max": ch.max_sp})
 	rows.append({"label": "攻撃力",        "type": "num",    "base": ch.attack_power,
 		"bonus": cd.get_weapon_attack_bonus()})
 	if ch.magic_power > 0 or cd.magic_power > 0:
@@ -546,7 +575,7 @@ func _get_stat_rows(ch: Character) -> Array:
 		"base": cd.magic_resistance, "bonus": mag_equip})
 	rows.append({"label": "攻撃タイプ",    "type": "str",
 		"value": ATTACK_TYPE_LABELS.get(cd.attack_type, cd.attack_type) as String})
-	rows.append({"label": "射程(タイル)",  "type": "num",    "base": cd.attack_range, "bonus": 0})
+	rows.append({"label": "射程(タイル)",  "type": "num",    "base": cd.attack_range, "bonus": cd.get_weapon_range_bonus()})
 	rows.append({"label": "攻撃溜め(秒)",  "type": "float",  "base": cd.pre_delay,    "bonus": 0.0})
 	rows.append({"label": "攻撃硬直(秒)",  "type": "float",  "base": cd.post_delay,   "bonus": 0.0})
 	rows.append({"label": "ランク",        "type": "str",    "value": cd.rank})
@@ -1023,10 +1052,18 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 		var equip    : Dictionary = sd_arr[1] as Dictionary
 		_control.draw_string(_font, Vector2(lbl_x, y + stat_h * 0.75),
 			slot_lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_lbl)
+		var eq_icon_sz := stat_h - 2.0
 		if equip.is_empty():
 			_control.draw_string(_font, Vector2(base_x, y + stat_h * 0.75),
 				"（なし）", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_dim)
 		else:
+			# 装備アイコン
+			var eq_icon_rect := Rect2(base_x, y + 1.0, eq_icon_sz, eq_icon_sz)
+			var etex := _load_item_tex(equip)
+			if etex != null:
+				_control.draw_texture_rect(etex, eq_icon_rect, false)
+			else:
+				_control.draw_rect(eq_icon_rect, Color(0.35, 0.35, 0.50, 0.60))
 			var ename: String = equip.get("item_name", "？") as String
 			var estats: Dictionary = equip.get("stats", {}) as Dictionary
 			var eparts: Array = []
@@ -1041,9 +1078,9 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 						else:
 							eparts.append("%s+%d" % [jp, int(v)])
 			var estat_str := "" if eparts.is_empty() else " [%s]" % ", ".join(eparts)
-			_control.draw_string(_font, Vector2(base_x, y + stat_h * 0.75),
+			_control.draw_string(_font, Vector2(base_x + eq_icon_sz + 3.0, y + stat_h * 0.75),
 				ename + estat_str,
-				HORIZONTAL_ALIGNMENT_LEFT, stats_avail * 0.52, fs_stat, c_val)
+				HORIZONTAL_ALIGNMENT_LEFT, stats_avail * 0.52 - eq_icon_sz - 3.0, fs_stat, c_val)
 		y += stat_h
 
 	# ── 所持アイテム ──────────────────────────────────────────────────────────
@@ -1052,16 +1089,39 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 	_control.draw_string(_font, Vector2(lbl_x, y + float(fs_stat)),
 		"所持アイテム", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_head)
 	y += float(fs_stat) + 6.0
-	# 未装備品のみ表示（装備スロットに入っているアイテムは除外）
+	# 未装備品のみ表示（同名アイテムは「×n」でまとめ表示）
 	var inv: Array = _get_unequipped_items(ch)
-	if inv.is_empty():
+	# 同名グループ化
+	var inv_groups: Array = []
+	for item_v2: Variant in inv:
+		var item_d2 := item_v2 as Dictionary
+		var iname2: String = item_d2.get("item_name", "") as String
+		var merged2 := false
+		for g2_v: Variant in inv_groups:
+			var g2 := g2_v as Dictionary
+			if (g2["item"] as Dictionary).get("item_name", "") == iname2:
+				g2["count"] = int(g2["count"]) + 1
+				merged2 = true
+				break
+		if not merged2:
+			inv_groups.append({"item": item_d2, "count": 1})
+	if inv_groups.is_empty():
 		_control.draw_string(_font, Vector2(lbl_x, y + stat_h * 0.75),
 			"（なし）", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_dim)
 	else:
-		for item: Variant in inv:
-			var item_d := item as Dictionary
+		var inv_icon_sz := stat_h - 2.0
+		for g_v2: Variant in inv_groups:
+			var g2    := g_v2 as Dictionary
+			var item_d := g2["item"] as Dictionary
+			var count2 := int(g2["count"])
+			# アイコン描画
+			var inv_icon_rect := Rect2(lbl_x, y + 1.0, inv_icon_sz, inv_icon_sz)
+			var inv_tex := _load_item_tex(item_d)
+			if inv_tex != null:
+				_control.draw_texture_rect(inv_tex, inv_icon_rect, false)
+			else:
+				_control.draw_rect(inv_icon_rect, Color(0.35, 0.35, 0.50, 0.60))
 			var iname: String = item_d.get("item_name", "???") as String
-			var icat:  String = item_d.get("category",  "") as String
 			var stats_d: Dictionary = item_d.get("stats", {}) as Dictionary
 			# 主要補正値の要約（attack_power/magic_power/physical_resistance 等）
 			var stat_strs: Array = []
@@ -1073,16 +1133,34 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 			var effect_d: Dictionary = item_d.get("effect", {}) as Dictionary
 			for ek: String in effect_d:
 				stat_strs.append("%s:%d" % [ek, int(effect_d[ek])])
-			var qty: int = int(item_d.get("quantity", 1))
-			var qty_str := " x%d" % qty if qty > 1 else ""
+			var qty_str := " ×%d" % count2 if count2 > 1 else ""
 			var stat_str := " [%s]" % ", ".join(stat_strs) if not stat_strs.is_empty() else ""
-			_control.draw_string(_font, Vector2(lbl_x, y + stat_h * 0.75),
+			_control.draw_string(_font, Vector2(lbl_x + inv_icon_sz + 3.0, y + stat_h * 0.75),
 				iname + qty_str + stat_str, HORIZONTAL_ALIGNMENT_LEFT,
-				avail, fs_stat, c_val)
+				avail - inv_icon_sz - 3.0, fs_stat, c_val)
 			y += stat_h
 
 
 # ── ユーティリティ ────────────────────────────────────────────────────────────
+
+## アイテム辞書からアイコン画像を読み込む（image フィールド優先・なければ item_type から導出）
+func _load_item_tex(item: Dictionary) -> Texture2D:
+	var img_path := item.get("image", "") as String
+	if img_path.is_empty():
+		var itype := item.get("item_type", "") as String
+		if not itype.is_empty():
+			img_path = "assets/images/items/" + itype + ".png"
+	if img_path.is_empty():
+		return null
+	if _item_tex_cache.has(img_path):
+		return _item_tex_cache[img_path] as Texture2D
+	var res_path := "res://" + img_path
+	var tex: Texture2D = null
+	if ResourceLoader.exists(res_path):
+		tex = ResourceLoader.load(res_path, "Texture2D") as Texture2D
+	_item_tex_cache[img_path] = tex
+	return tex
+
 
 func _get_col_xs(px: float, panel_w: float, pad: float) -> Array[float]:
 	var avail  := panel_w - pad * 2.0
@@ -1122,8 +1200,8 @@ func _draw_item_overlay(main_px: float, main_py: float, main_pw: float,
 func _draw_item_list_overlay(ox: float, main_py: float, ow: float,
 		pad: float, fs_body: int, fs_stat: int, row_h: float) -> void:
 	var title_h: float = float(fs_body) + 10.0
-	var items := _cached_unequipped
-	var list_rows: int = maxi(1, items.size())
+	var groups := _cached_grouped
+	var list_rows: int = maxi(1, groups.size())
 	var oh: float = pad + title_h + 8.0 + float(list_rows) * row_h + pad
 	var oy := main_py + 80.0
 
@@ -1136,18 +1214,30 @@ func _draw_item_list_overlay(ox: float, main_py: float, ow: float,
 		HORIZONTAL_ALIGNMENT_LEFT, ow - pad * 2.0, fs_body, Color(0.88, 0.88, 1.00))
 
 	var y := oy + pad + title_h + 8.0
-	if items.is_empty():
+	if groups.is_empty():
 		_control.draw_string(_font, Vector2(ox + pad, y + row_h * 0.70),
 			"アイテムなし", HORIZONTAL_ALIGNMENT_LEFT, ow - pad * 2.0,
 			fs_stat, Color(0.50, 0.50, 0.60))
 	else:
-		for ii: int in range(items.size()):
-			var item := items[ii] as Dictionary
+		var icon_sz := row_h - 6.0
+		for ii: int in range(groups.size()):
+			var group := groups[ii] as Dictionary
+			var item  := group["item"] as Dictionary
+			var count := int(group["count"])
 			var is_cur := (ii == _item_cursor)
 			if is_cur:
 				_control.draw_rect(Rect2(ox + 2.0, y, ow - 4.0, row_h),
 					Color(0.20, 0.28, 0.55, 0.80))
+			# アイコン描画
+			var icon_rect := Rect2(ox + pad, y + 3.0, icon_sz, icon_sz)
+			var itex := _load_item_tex(item)
+			if itex != null:
+				_control.draw_texture_rect(itex, icon_rect, false)
+			else:
+				_control.draw_rect(icon_rect, Color(0.35, 0.35, 0.50, 0.70))
+			var text_x := ox + pad + icon_sz + 4.0
 			var iname: String = item.get("item_name", "？") as String
+			var count_str := " ×%d" % count if count > 1 else ""
 			# 主要補正値サマリ（日本語表記）
 			var stats_d: Dictionary = item.get("stats", {}) as Dictionary
 			var parts: Array = []
@@ -1167,7 +1257,7 @@ func _draw_item_list_overlay(ox: float, main_py: float, ow: float,
 			var stat_str := "" if parts.is_empty() else " [%s]" % ", ".join(parts)
 			var can_equip := _can_equip(_item_char, item)
 			var equip_mark := "◆" if can_equip else "  "
-			var txt := "%s %s%s" % [equip_mark, iname, stat_str]
+			var txt := "%s %s%s%s" % [equip_mark, iname, count_str, stat_str]
 			# 装備可能：通常色（白/黄）、装備不可：灰色
 			var c: Color
 			if is_cur:
@@ -1176,8 +1266,8 @@ func _draw_item_list_overlay(ox: float, main_py: float, ow: float,
 				c = Color(0.90, 0.90, 0.95)
 			else:
 				c = Color(0.50, 0.50, 0.58)
-			_control.draw_string(_font, Vector2(ox + pad, y + row_h * 0.70),
-				txt, HORIZONTAL_ALIGNMENT_LEFT, ow - pad * 2.0, fs_stat, c)
+			_control.draw_string(_font, Vector2(text_x, y + row_h * 0.70),
+				txt, HORIZONTAL_ALIGNMENT_LEFT, ow - pad * 2.0 - icon_sz - 4.0, fs_stat, c)
 			y += row_h
 
 

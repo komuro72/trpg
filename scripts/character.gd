@@ -32,9 +32,12 @@ var hp:           int  = 1
 var max_hp:       int  = 1
 var mp:           int  = 0
 var max_mp:       int  = 0
+var sp:           int  = 0   ## スタミナポイント（非魔法クラス専用。魔法クラスは0のまま）
+var max_sp:       int  = 0
 var attack_power: int  = 1
 var magic_power:  int  = 0
 var defense:      int  = 0
+var attack_range: int  = 1   ## 装備補正込みの射程（refresh_stats_from_equipment() で更新）
 var is_flying:    bool = false
 
 ## 最後にダメージを与えたキャラクター（ドロップ帰属の追跡用）
@@ -42,6 +45,19 @@ var last_attacker: Character = null
 
 ## 現在いるフロアインデックス（0 = 最上層）
 var current_floor: int = 0
+
+## MP/SP 自動回復の端数蓄積（整数回復のロスをなくす）
+var _mp_recovery_accum: float = 0.0
+var _sp_recovery_accum: float = 0.0
+## MP/SP の自動回復速度（毎秒）
+const MP_SP_RECOVERY_RATE: float = 3.0
+
+## スタン状態（水魔法等で発生。is_stunned=true 中は UnitAI が行動をスキップする）
+var is_stunned:   bool  = false
+var stun_timer:   float = 0.0
+
+## スライディング中フラグ（斥候の特殊スキル中は take_damage() を無視する）
+var is_sliding:   bool  = false
 
 ## バフ状態（一時的な防御力アップ。0=なし、>0=残り秒数）
 var defense_buff_timer: float = 0.0
@@ -95,6 +111,11 @@ var is_attacking: bool = false:
 		is_attacking = value
 		_update_ready_sprite()
 var is_targeted: bool = false         # ターゲットとして選択されている
+## ガード中フラグ（player_controller が X/B ホールド中にセット）
+var is_guarding: bool = false:
+	set(value):
+		is_guarding = value
+		_update_ready_sprite()
 
 var _sprite: Sprite2D
 var _has_texture: bool = false
@@ -103,6 +124,7 @@ var _has_texture: bool = false
 var _tex_top:   Texture2D = null
 var _tex_walk1: Texture2D = null
 var _tex_walk2: Texture2D = null
+var _tex_guard: Texture2D = null
 
 ## 視覚的位置補間（グリッド単位の瞬時移動を滑らかに見せる）
 ## grid_pos・衝突判定は move_to() で即時更新。position だけを補間する
@@ -124,6 +146,23 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_update_modulate()
 	_update_visual_move(delta)
+	_recover_mp_sp(delta)
+	# スタンタイマーを消化する
+	if stun_timer > 0.0:
+		stun_timer -= delta
+		if stun_timer <= 0.0:
+			stun_timer = 0.0
+			is_stunned = false
+			if _sprite != null:
+				_sprite.rotation = 0.0
+	elif is_stunned:
+		# 念のため（タイマーが0なのに stunned のまま残るケースの保護）
+		is_stunned = false
+		if _sprite != null:
+			_sprite.rotation = 0.0
+	# スタン中はスプライトを回転させてふらふら表現
+	if is_stunned and _sprite != null:
+		_sprite.rotation += delta * 4.0
 	# バフタイマーを消化する
 	if defense_buff_timer > 0.0:
 		defense_buff_timer -= delta
@@ -142,6 +181,13 @@ func _update_modulate() -> void:
 	# ターゲットとして選択中：白く輝かせる
 	if is_targeted:
 		_sprite.modulate = Color(1.5, 1.5, 1.5, 1.0)
+		return
+
+	# スタン中：シアン点滅
+	if is_stunned:
+		var t2 := Time.get_ticks_msec() / 1000.0
+		var pulse := (sin(t2 * TAU * 3.0) + 1.0) * 0.5
+		_sprite.modulate = Color.WHITE.lerp(Color(0.3, 0.9, 1.0), 0.5 + pulse * 0.5)
 		return
 
 	# HP状態による色
@@ -165,6 +211,8 @@ func _init_stats() -> void:
 	hp           = max_hp
 	max_mp       = character_data.max_mp
 	mp           = max_mp
+	max_sp       = character_data.max_sp
+	sp           = max_sp
 	attack_power = character_data.attack_power
 	magic_power  = character_data.magic_power
 	defense      = character_data.defense
@@ -179,6 +227,7 @@ func refresh_stats_from_equipment() -> void:
 		return
 	attack_power = character_data.attack_power + character_data.get_weapon_attack_bonus()
 	magic_power  = character_data.magic_power  + character_data.get_weapon_magic_bonus()
+	attack_range = character_data.attack_range + character_data.get_weapon_range_bonus()
 
 
 func _setup_sprite() -> void:
@@ -233,6 +282,7 @@ func _load_top_sprite() -> void:
 func _load_walk_sprites() -> void:
 	_tex_walk1 = null
 	_tex_walk2 = null
+	_tex_guard = null
 	if character_data == null:
 		return
 	var w1 := character_data.sprite_walk1
@@ -241,15 +291,31 @@ func _load_walk_sprites() -> void:
 	var w2 := character_data.sprite_walk2
 	if not w2.is_empty() and ResourceLoader.exists(w2):
 		_tex_walk2 = load(w2) as Texture2D
+	var gd := character_data.sprite_top_guard
+	if not gd.is_empty() and ResourceLoader.exists(gd):
+		_tex_guard = load(gd) as Texture2D
 
 
-## ターゲット選択モード・攻撃モーション中に応じてスプライトを切り替える
-## sprite_top_ready が設定されていれば構え画像を、なければ通常画像を使う
+## ターゲット選択モード・攻撃モーション中・ガード中に応じてスプライトを切り替える
+## 優先順: guard.png（ガード中）> ready.png（ターゲット/攻撃中）> top.png（通常）
 func _update_ready_sprite() -> void:
 	if _sprite == null or character_data == null:
 		return
-	var use_ready := (is_targeting_mode or is_attacking) and not character_data.sprite_top_ready.is_empty()
-	var path := character_data.sprite_top_ready if use_ready else character_data.sprite_top
+	var path: String
+	if is_guarding:
+		# ガード中: guard.png → ready.png → top の順でフォールバック
+		if not character_data.sprite_top_guard.is_empty() \
+				and ResourceLoader.exists(character_data.sprite_top_guard):
+			path = character_data.sprite_top_guard
+		elif not character_data.sprite_top_ready.is_empty() \
+				and ResourceLoader.exists(character_data.sprite_top_ready):
+			path = character_data.sprite_top_ready
+		else:
+			path = character_data.sprite_top
+	else:
+		var use_ready := (is_targeting_mode or is_attacking) \
+				and not character_data.sprite_top_ready.is_empty()
+		path = character_data.sprite_top_ready if use_ready else character_data.sprite_top
 	if path.is_empty() or not ResourceLoader.exists(path):
 		return  # テクスチャなし状態を維持
 	var tex: Texture2D = load(path)
@@ -337,17 +403,18 @@ func sync_position() -> void:
 ## duration: 視覚的な移動にかける時間（秒）。呼び出し側の移動間隔に合わせること
 ## grid_pos は半マス到達時点（進捗50%）で更新される
 func move_to(new_grid_pos: Vector2i, duration: float = 0.4) -> void:
-	var d := new_grid_pos - grid_pos
-	if d.x > 0:
-		facing = Direction.RIGHT
-	elif d.x < 0:
-		facing = Direction.LEFT
-	elif d.y > 0:
-		facing = Direction.DOWN
-	elif d.y < 0:
-		facing = Direction.UP
-
-	_apply_direction_rotation()
+	# ガード中は向きを変更しない（guard_facing を維持）
+	if not is_guarding:
+		var d := new_grid_pos - grid_pos
+		if d.x > 0:
+			facing = Direction.RIGHT
+		elif d.x < 0:
+			facing = Direction.LEFT
+		elif d.y > 0:
+			facing = Direction.DOWN
+		elif d.y < 0:
+			facing = Direction.UP
+		_apply_direction_rotation()
 
 	# grid_pos は半マス到達で更新する（_update_visual_move で処理）
 	_pending_grid_pos   = new_grid_pos
@@ -389,7 +456,8 @@ func _update_visual_move(delta: float) -> void:
 
 	# スプライトフレームを進捗（0→1）で切り替え
 	# シーケンス: 0%～25%=walk1, 25%～50%=top, 50%～75%=walk2, 75%～100%=top
-	if not (is_targeting_mode or is_attacking):
+	# ガード中・ターゲット/攻撃モード中は歩行アニメをスキップ
+	if not (is_targeting_mode or is_attacking or is_guarding):
 		if _tex_walk1 != null or _tex_walk2 != null:
 			var frame := int(t * 4.0) % 4
 			match frame:
@@ -404,9 +472,29 @@ func _update_visual_move(delta: float) -> void:
 			grid_pos = _pending_grid_pos
 			_grid_pos_committed = true
 		_visual_duration = 0.0
-		# 補間完了 → top に戻す（構えモード中は _update_ready_sprite() に任せる）
-		if not (is_targeting_mode or is_attacking) and _tex_top != null:
+		# 補間完了 → top に戻す（構え/ガードモード中は _update_ready_sprite() に任せる）
+		if not (is_targeting_mode or is_attacking or is_guarding) and _tex_top != null:
 			_sprite.texture = _tex_top
+
+
+## MP/SP を時間経過で自動回復する（_process() から毎フレーム呼ぶ）
+func _recover_mp_sp(delta: float) -> void:
+	if max_mp > 0 and mp < max_mp:
+		_mp_recovery_accum += MP_SP_RECOVERY_RATE * delta
+		var gain := int(_mp_recovery_accum)
+		if gain > 0:
+			mp = mini(mp + gain, max_mp)
+			_mp_recovery_accum -= float(gain)
+	else:
+		_mp_recovery_accum = 0.0
+	if max_sp > 0 and sp < max_sp:
+		_sp_recovery_accum += MP_SP_RECOVERY_RATE * delta
+		var gain := int(_sp_recovery_accum)
+		if gain > 0:
+			sp = mini(sp + gain, max_sp)
+			_sp_recovery_accum -= float(gain)
+	else:
+		_sp_recovery_accum = 0.0
 
 
 ## MP を消費する。消費可能なら true を返す
@@ -416,6 +504,16 @@ func use_mp(cost: int) -> bool:
 	if mp < cost:
 		return false
 	mp -= cost
+	return true
+
+
+## SP を消費する。消費可能なら true を返す
+func use_sp(cost: int) -> bool:
+	if cost <= 0:
+		return true
+	if sp < cost:
+		return false
+	sp -= cost
 	return true
 
 
@@ -431,16 +529,28 @@ func use_consumable(item: Dictionary) -> void:
 	var effect: Dictionary = item.get("effect", {}) as Dictionary
 	var heal_hp: int = int(effect.get("heal_hp", 0))
 	var restore_mp: int = int(effect.get("restore_mp", 0))
+	var restore_sp: int = int(effect.get("restore_sp", 0))
 	if heal_hp > 0:
 		heal(heal_hp)  # heal() 内で効果音を再生
 	if restore_mp > 0:
 		mp = mini(mp + restore_mp, max_mp)
+		SoundManager.play(SoundManager.HEAL)
+	if restore_sp > 0:
+		sp = mini(sp + restore_sp, max_sp)
 		SoundManager.play(SoundManager.HEAL)
 
 
 ## 防御バフを付与する（重複時はタイマーをリセット）
 func apply_defense_buff() -> void:
 	defense_buff_timer = DEFENSE_BUFF_DURATION
+
+
+## スタンを付与する（duration 秒間 is_stunned=true。UnitAI の行動をスキップさせる）
+func apply_stun(duration: float) -> void:
+	is_stunned = true
+	stun_timer = maxf(stun_timer, duration)  # 残り時間が長い方を採用
+	var char_name := character_data.character_name if character_data != null else str(name)
+	MessageLog.add_combat("[スタン] %s がスタンした（%.1f秒）" % [char_name, duration])
 
 
 ## バフ込みの防御力を返す
@@ -455,6 +565,8 @@ func get_effective_defense() -> int:
 ## attacker:        ダメージ源（方向判定・ドロップ帰属追跡用。null 可）
 func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character = null,
 		attack_is_magic: bool = false) -> void:
+	if is_sliding:
+		return  # スライディング中は無敵
 	if attacker != null:
 		last_attacker = attacker
 
@@ -465,11 +577,16 @@ func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character =
 	if attacker != null and character_data != null:
 		dir_result = _calc_attack_direction(attacker)
 		if dir_result != "back":
-			var acc := character_data.defense_accuracy if "defense_accuracy" in character_data else 0.0
-			var roll := randf()
-			if roll < acc:
+			# ガード中＋正面攻撃：自動成功＋ブロック量3倍
+			if is_guarding and dir_result == "front":
 				defense_succeeded = true
-				blocked = _calc_block_power(dir_result)
+				blocked = _calc_block_power(dir_result) * 3
+			else:
+				var acc := character_data.defense_accuracy if "defense_accuracy" in character_data else 0.0
+				var roll := randf()
+				if roll < acc:
+					defense_succeeded = true
+					blocked = _calc_block_power(dir_result)
 
 	# 2. 防御強度を差し引き
 	var after_block: int = maxi(0, int(float(raw_amount) * multiplier) - get_effective_defense() - blocked)
@@ -632,6 +749,18 @@ func _spawn_hit_effect(actual_damage: int) -> void:
 		return
 	var effect := HitEffect.new()
 	effect.damage = actual_damage
+	effect.position = position
+	parent.add_child(effect)
+
+
+## 回復エフェクトを生成する（AI・プレイヤー両方から呼び出し可能）
+## eff_mode: "cast"（キャスト側・外広がり）または "hit"（ターゲット側・内縮み）
+func spawn_heal_effect(eff_mode: String) -> void:
+	var parent := get_parent()
+	if parent == null:
+		return
+	var effect := HealEffect.new()
+	effect.mode     = eff_mode
 	effect.position = position
 	parent.add_child(effect)
 

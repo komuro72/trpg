@@ -7,8 +7,11 @@
   "base_defense": 3,
   "base_physical_resistance": 5,
   "base_magic_resistance": 4,
+  "attack_type": "ranged",
+  "attack_range": 5,
   "pre_delay": 0.4,
   "post_delay": 0.5,
+  "max_sp": 60,
   "is_flying": false,
   "behavior_description": "弓で遠距離攻撃する。距離を保ちながら狙い撃つ。",
   "slots": {
@@ -19,7 +22,8 @@
       "range": 5,
       "damage_mult": 0.9,
       "pre_delay": 0.3,
-      "post_delay": 0.4
+      "post_delay": 0.4,
+      "sp_cost": 2
     },
     "X": {
       "name": "狙い撃ち",
@@ -31,6 +35,15 @@
       "post_delay": 0.5
     },
     "C": null,
-    "V": null
+    "V": {
+      "name": "ヘッドショット",
+      "action": "headshot",
+      "type": "physical",
+      "range": 6,
+      "damage_mult": 3.0,
+      "sp_cost": 25,
+      "pre_delay": 0.5,
+      "post_delay": 0.5
+    }
   }
 }

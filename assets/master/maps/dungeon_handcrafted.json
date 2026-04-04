@@ -75,6 +75,16 @@
                         "heal_hp": 30
                       },
                       "image": "assets/images/items/potion_hp.png"
+                    },
+                    {
+                      "item_type": "potion_sp",
+                      "category": "consumable",
+                      "item_name": "活力薬",
+                      "stats": {},
+                      "effect": {
+                        "restore_sp": 20
+                      },
+                      "image": "assets/images/items/potion_sp.png"
                     }
                   ]
                 },
@@ -121,6 +131,16 @@
                         "heal_hp": 30
                       },
                       "image": "assets/images/items/potion_hp.png"
+                    },
+                    {
+                      "item_type": "potion_sp",
+                      "category": "consumable",
+                      "item_name": "活力薬",
+                      "stats": {},
+                      "effect": {
+                        "restore_sp": 20
+                      },
+                      "image": "assets/images/items/potion_sp.png"
                     }
                   ]
                 },
@@ -235,6 +255,17 @@
                   },
                   "quantity": 2,
                   "image": "assets/images/items/potion_hp.png"
+                },
+                {
+                  "item_type": "potion_sp",
+                  "category": "consumable",
+                  "item_name": "活力薬",
+                  "stats": {},
+                  "effect": {
+                    "restore_sp": 20
+                  },
+                  "quantity": 1,
+                  "image": "assets/images/items/potion_sp.png"
                 }
               ]
             }
@@ -403,6 +434,40 @@
                         "magic_resistance": 3
                       },
                       "equipped": true
+                    }
+                  ]
+                },
+                {
+                  "character_id": "magician-water",
+                  "x": 9,
+                  "y": 20,
+                  "items": [
+                    {
+                      "item_type": "staff",
+                      "category": "weapon",
+                      "item_name": "水晶の杖",
+                      "stats": {
+                        "magic_power": 3,
+                        "accuracy": 0.05
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "armor_robe",
+                      "category": "armor",
+                      "item_name": "薄い魔道衣",
+                      "stats": {
+                        "magic_resistance": 3
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "potion_mp",
+                      "category": "consumable",
+                      "item_name": "魔力薬",
+                      "effect": { "restore_mp": 20 },
+                      "quantity": 2,
+                      "image": "assets/images/items/potion_mp.png"
                     }
                   ]
                 }
@@ -848,7 +913,223 @@
           { "from": "r3_1", "to": "r3_2", "name": "祭壇への回廊" }
         ],
         "stairs": [
-          { "type": "stairs_up", "x": 8, "y": 7 }
+          { "type": "stairs_up",   "x": 8,  "y": 7  },
+          { "type": "stairs_down", "x": 42, "y": 18 }
+        ]
+      },
+      {
+        "floor": 4,
+        "tile_set": "stone_00001",
+        "entrance_room": "r4_1",
+        "rooms": [
+          {
+            "id": "r4_1",
+            "name": "奈落の入口",
+            "x": 2,
+            "y": 2,
+            "width": 12,
+            "height": 10,
+            "type": "normal",
+            "is_entrance": true,
+            "enemy_party": {
+              "members": [],
+              "items": []
+            }
+          },
+          {
+            "id": "r4_2",
+            "name": "暗黒騎士団の前哨",
+            "x": 20,
+            "y": 2,
+            "width": 16,
+            "height": 14,
+            "type": "normal",
+            "is_entrance": false,
+            "enemy_party": {
+              "members": [
+                { "enemy_id": "hobgoblin",   "x": 25, "y": 6  },
+                { "enemy_id": "hobgoblin",   "x": 30, "y": 9  },
+                { "enemy_id": "dark-knight", "x": 33, "y": 7  },
+                { "enemy_id": "goblin-mage", "x": 28, "y": 12 }
+              ],
+              "items": [
+                {
+                  "item_type": "axe",
+                  "category": "weapon",
+                  "item_name": "ホブゴブリンの重戦斧",
+                  "stats": { "attack_power": 16, "accuracy": 0.0, "defense_strength": 4 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "armor_plate",
+                  "category": "armor",
+                  "item_name": "強化された黒鎧",
+                  "stats": { "physical_resistance": 14, "magic_resistance": 4 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "shield",
+                  "category": "shield",
+                  "item_name": "黒鉄の盾",
+                  "stats": { "physical_resistance": 10, "defense_strength": 8 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "potion_hp",
+                  "category": "consumable",
+                  "item_name": "上位回復薬",
+                  "stats": {},
+                  "effect": { "heal_hp": 60 },
+                  "quantity": 2,
+                  "image": "assets/images/items/potion_hp.png"
+                }
+              ]
+            }
+          },
+          {
+            "id": "r4_3",
+            "name": "闇の魔術師の間",
+            "x": 42,
+            "y": 2,
+            "width": 16,
+            "height": 14,
+            "type": "normal",
+            "is_entrance": false,
+            "enemy_party": {
+              "members": [
+                { "enemy_id": "dark-knight", "x": 46, "y": 6  },
+                { "enemy_id": "dark-mage",   "x": 52, "y": 5  },
+                { "enemy_id": "dark-mage",   "x": 55, "y": 10 },
+                { "enemy_id": "salamander",  "x": 49, "y": 12 }
+              ],
+              "items": [
+                {
+                  "item_type": "sword",
+                  "category": "weapon",
+                  "item_name": "暗黒騎士の剣",
+                  "stats": { "attack_power": 18, "accuracy": 0.14, "defense_strength": 6 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "staff",
+                  "category": "weapon",
+                  "item_name": "暗黒の魔術杖",
+                  "stats": { "magic_power": 16, "accuracy": 0.16 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "armor_robe",
+                  "category": "armor",
+                  "item_name": "暗黒の魔術師衣",
+                  "stats": { "magic_resistance": 14, "physical_resistance": 5 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "potion_hp",
+                  "category": "consumable",
+                  "item_name": "上位回復薬",
+                  "stats": {},
+                  "effect": { "heal_hp": 60 },
+                  "quantity": 2,
+                  "image": "assets/images/items/potion_hp.png"
+                },
+                {
+                  "item_type": "potion_mp",
+                  "category": "consumable",
+                  "item_name": "上位魔力回復薬",
+                  "stats": {},
+                  "effect": { "restore_mp": 40 },
+                  "quantity": 1,
+                  "image": "assets/images/items/potion_mp.png"
+                }
+              ]
+            }
+          }
+        ],
+        "corridors": [
+          { "from": "r4_1", "to": "r4_2", "name": "奈落の廊下" },
+          { "from": "r4_2", "to": "r4_3", "name": "闇に染まった通路" }
+        ],
+        "stairs": [
+          { "type": "stairs_up",   "x": 8,  "y": 7  },
+          { "type": "stairs_down", "x": 53, "y": 11 }
+        ]
+      },
+      {
+        "floor": 5,
+        "tile_set": "stone_00001",
+        "entrance_room": "r5_1",
+        "rooms": [
+          {
+            "id": "r5_1",
+            "name": "深淵の玉座",
+            "x": 8,
+            "y": 4,
+            "width": 30,
+            "height": 22,
+            "type": "boss",
+            "is_entrance": false,
+            "enemy_party": {
+              "members": [
+                { "enemy_id": "dark-knight", "x": 18, "y": 10 },
+                { "enemy_id": "dark-knight", "x": 28, "y": 10 },
+                { "enemy_id": "dark-mage",   "x": 23, "y": 8  },
+                { "enemy_id": "dark-priest", "x": 33, "y": 12 }
+              ],
+              "items": [
+                {
+                  "item_type": "sword",
+                  "category": "weapon",
+                  "item_name": "深淵の魔剣",
+                  "stats": { "attack_power": 24, "accuracy": 0.18, "defense_strength": 10 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "shield",
+                  "category": "shield",
+                  "item_name": "深淵の盾",
+                  "stats": { "physical_resistance": 18, "defense_strength": 14 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "armor_plate",
+                  "category": "armor",
+                  "item_name": "深淵の鎧",
+                  "stats": { "physical_resistance": 22, "magic_resistance": 10 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "staff",
+                  "category": "weapon",
+                  "item_name": "深淵の大魔杖",
+                  "stats": { "magic_power": 22, "accuracy": 0.20 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "potion_hp",
+                  "category": "consumable",
+                  "item_name": "上位回復薬",
+                  "stats": {},
+                  "effect": { "heal_hp": 60 },
+                  "quantity": 3,
+                  "image": "assets/images/items/potion_hp.png"
+                },
+                {
+                  "item_type": "potion_mp",
+                  "category": "consumable",
+                  "item_name": "上位魔力回復薬",
+                  "stats": {},
+                  "effect": { "restore_mp": 40 },
+                  "quantity": 2,
+                  "image": "assets/images/items/potion_mp.png"
+                }
+              ]
+            }
+          }
+        ],
+        "corridors": [],
+        "stairs": [
+          { "type": "stairs_up", "x": 22, "y": 6 }
         ]
       }
     ]

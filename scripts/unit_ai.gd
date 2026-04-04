@@ -10,7 +10,7 @@ extends Node
 enum Strategy   { ATTACK, FLEE, WAIT }
 enum PathMethod { DIRECT, ASTAR, ASTAR_FLANK }
 
-const MOVE_INTERVAL  := 1.2  ## タイル移動の間隔・基準値（秒）。game_speed=1.0 時の標準速度
+const MOVE_INTERVAL  := 0.40  ## タイル移動の間隔・基準値（秒）。game_speed=1.0 時の標準速度
 const WAIT_DURATION  := 3.0  ## wait アクションの待機時間・基準値（秒）
 const QUEUE_MIN_LEN  := 3    ## キューがこれ以下になったら補充するしきい値
 
@@ -157,6 +157,14 @@ func _process(delta: float) -> void:
 	if _member.is_player_controlled:
 		return
 
+	# スタン中は行動をスキップしてキューをクリア
+	if _member.is_stunned:
+		if _state != _State.IDLE:
+			_state = _State.IDLE
+			_member.is_attacking = false
+		_queue.clear()
+		return
+
 	_reeval_timer -= delta
 	if _reeval_timer <= 0.0:
 		_reeval_timer = _REEVAL_FALLBACK
@@ -219,7 +227,7 @@ func _start_action(action: Dictionary) -> void:
 				return
 			_goal  = goal
 			_state = _State.MOVING
-			_timer = _get_move_interval()
+			_timer = 0.0  ## 最初の1歩は即時開始
 
 		"move_to_formation":
 			var fgoal := _formation_move_goal()
@@ -228,7 +236,7 @@ func _start_action(action: Dictionary) -> void:
 				return
 			_goal  = fgoal
 			_state = _State.MOVING
-			_timer = _get_move_interval()
+			_timer = 0.0  ## 最初の1歩は即時開始
 
 		"move_to_explore":
 			var goal_var: Variant = action.get("goal", null)
@@ -241,7 +249,7 @@ func _start_action(action: Dictionary) -> void:
 				return
 			_goal  = goal
 			_state = _State.MOVING
-			_timer = _get_move_interval()
+			_timer = 0.0  ## 最初の1歩は即時開始
 
 		"flee":
 			if _target == null or not is_instance_valid(_target):
@@ -253,7 +261,7 @@ func _start_action(action: Dictionary) -> void:
 				return
 			_goal  = goal
 			_state = _State.MOVING
-			_timer = _get_move_interval()
+			_timer = 0.0  ## 最初の1歩は即時開始
 
 		"attack":
 			if _target == null or not is_instance_valid(_target):
@@ -274,7 +282,7 @@ func _start_action(action: Dictionary) -> void:
 				_complete_action()
 				return
 			var tgt := tgt_var as Character
-			var range_val := _member.character_data.attack_range if _member.character_data else 1
+			var range_val := _member.attack_range if _member.character_data else 1
 			if _manhattan(_member.grid_pos, tgt.grid_pos) <= range_val:
 				_complete_action()
 				return
@@ -284,7 +292,7 @@ func _start_action(action: Dictionary) -> void:
 				return
 			_goal  = goal
 			_state = _State.MOVING
-			_timer = _get_move_interval()
+			_timer = 0.0  ## 最初の1歩は即時開始
 
 		"heal":
 			var tgt_var: Variant = action.get("target", null)
@@ -292,7 +300,7 @@ func _start_action(action: Dictionary) -> void:
 				_complete_action()
 				return
 			var tgt := tgt_var as Character
-			var range_val := _member.character_data.attack_range if _member.character_data else 1
+			var range_val := _member.attack_range if _member.character_data else 1
 			if _manhattan(_member.grid_pos, tgt.grid_pos) > range_val:
 				_complete_action()
 				return
@@ -301,9 +309,10 @@ func _start_action(action: Dictionary) -> void:
 			if _member.use_mp(cost):
 				var power := _member.character_data.magic_power if _member.character_data else 0
 				var hp_before := tgt.hp
-				tgt.heal(power)
+				tgt.heal(power)  # heal() 内で HEAL SE 再生
 				tgt.log_heal(_member, power, hp_before)
-				SoundManager.play(SoundManager.HEAL)
+				_member.spawn_heal_effect("cast")
+				tgt.spawn_heal_effect("hit")
 			_state = _State.WAITING
 			_timer = _member.character_data.post_delay if _member.character_data else 0.5
 
@@ -313,7 +322,7 @@ func _start_action(action: Dictionary) -> void:
 				_complete_action()
 				return
 			var tgt := tgt_var as Character
-			var range_val := _member.character_data.attack_range if _member.character_data else 1
+			var range_val := _member.attack_range if _member.character_data else 1
 			if _manhattan(_member.grid_pos, tgt.grid_pos) > range_val:
 				_complete_action()
 				return
@@ -321,6 +330,9 @@ func _start_action(action: Dictionary) -> void:
 			var cost := _member.character_data.buff_mp_cost if _member.character_data else 0
 			if _member.use_mp(cost):
 				tgt.apply_defense_buff()
+				SoundManager.play(SoundManager.HEAL)
+				_member.spawn_heal_effect("cast")
+				tgt.spawn_heal_effect("hit")
 			_state = _State.WAITING
 			_timer = _member.character_data.post_delay if _member.character_data else 0.5
 
@@ -582,7 +594,7 @@ func _calc_attack_goal(target: Character, method: PathMethod) -> Vector2i:
 	var atype := _get_attack_type()
 	if atype == "ranged" or atype == "magic":
 		# 遠距離（物理/魔法）：射程内ならその場で攻撃。射程外なら射程内の最近傍タイルへ
-		var range_val := _member.character_data.attack_range if _member.character_data else 5
+		var range_val := _member.attack_range if _member.character_data else 5
 		var dist := _manhattan(_member.grid_pos, target.grid_pos)
 		if dist <= range_val:
 			return _member.grid_pos
@@ -848,7 +860,7 @@ func _can_attack_target(target: Character, atype: String) -> bool:
 		return false
 	match atype:
 		"ranged", "magic":
-			var range_val := _member.character_data.attack_range if _member.character_data else 5
+			var range_val := _member.attack_range if _member.character_data else 5
 			return _manhattan(_member.grid_pos, target.grid_pos) <= range_val
 		"dive":
 			# 降下攻撃：飛行キャラが地上キャラに隣接して攻撃（ターゲットは地上のみ）
@@ -902,10 +914,17 @@ func _generate_buff_queue() -> Array:
 
 
 ## 回復対象（パーティー内で HP50% 以下かつ最もHPが低いキャラ）を返す
+## _all_members は敵＋NPC合算リストのため、_player（hero）は含まれない。
+## _player を別途チェックして漏れを防ぐ。
 func _find_heal_target() -> Character:
 	var best: Character = null
-	var best_ratio := 0.51  # 50% 以下のみ対象
-	for ch: Character in _all_members:
+	var best_ratio := 0.60  # wounded（60% 以下）のみ対象
+	# _all_members（NPC 合算）と _player（hero）を合わせて探索
+	var candidates: Array[Character] = []
+	candidates.assign(_all_members)
+	if _player != null and is_instance_valid(_player) and not candidates.has(_player):
+		candidates.append(_player)
+	for ch: Character in candidates:
 		if not is_instance_valid(ch) or ch.hp <= 0:
 			continue
 		if not ch.is_friendly:
@@ -918,8 +937,13 @@ func _find_heal_target() -> Character:
 
 
 ## バフ対象（パーティー内でバフが切れているキャラ）を返す
+## _player（hero）も対象に含める。
 func _find_buff_target() -> Character:
-	for ch: Character in _all_members:
+	var candidates: Array[Character] = []
+	candidates.assign(_all_members)
+	if _player != null and is_instance_valid(_player) and not candidates.has(_player):
+		candidates.append(_player)
+	for ch: Character in candidates:
 		if not is_instance_valid(ch) or ch.hp <= 0:
 			continue
 		if not ch.is_friendly:

@@ -7,42 +7,55 @@ extends Node2D
 
 const SPEED := 2000.0  # px/秒（移動での回避不可）
 
-const _ARROW_PATH      := "res://assets/images/projectiles/arrow.png"
-const _FIRE_BULLET_PATH := "res://assets/images/projectiles/fire_bullet.png"
+const _ARROW_PATH        := "res://assets/images/projectiles/arrow.png"
+const _FIRE_BULLET_PATH  := "res://assets/images/projectiles/fire_bullet.png"
+const _WATER_BULLET_PATH := "res://assets/images/projectiles/water_bullet.png"
 
-var _dest:       Vector2
-var _will_hit:   bool
-var _target:     Character
-var _damage:     int
-var _multiplier: float
-var _attacker:   Character
-var _is_magic:   bool
-var _done:       bool = false
+var _dest:           Vector2
+var _will_hit:       bool
+var _target:         Character
+var _damage:         int
+var _multiplier:     float
+var _attacker:       Character
+var _is_magic:       bool
+var _is_water:       bool  = false  ## 水系魔法フラグ（水弾・無力化水魔法）
+var _stun_duration:  float = 0.0   ## スタン持続秒数（0=スタンなし）
+var _done:           bool  = false
 
 var _sprite:     Sprite2D = null
 var _direction:  Vector2  = Vector2.RIGHT
 
 
 ## 発射設定。add_child 後すぐに呼ぶこと。
+## stun_duration > 0 のとき着弾時にターゲットをスタンさせる
 func setup(from: Vector2, to: Vector2, will_hit: bool,
 		target: Character, damage: int, multiplier: float,
-		attacker: Character = null, is_magic: bool = false) -> void:
-	position    = from
-	_dest       = to
-	_will_hit   = will_hit
-	_target     = target
-	_damage     = damage
-	_multiplier = multiplier
-	_attacker   = attacker
-	_is_magic   = is_magic
-	_direction  = (to - from).normalized()
+		attacker: Character = null, is_magic: bool = false,
+		stun_duration: float = 0.0, is_water: bool = false) -> void:
+	position        = from
+	_dest           = to
+	_will_hit       = will_hit
+	_target         = target
+	_damage         = damage
+	_multiplier     = multiplier
+	_attacker       = attacker
+	_is_magic       = is_magic
+	_stun_duration  = stun_duration
+	_is_water       = is_water
+	_direction      = (to - from).normalized()
 
 	_setup_sprite()
 
 
 func _setup_sprite() -> void:
 	# 攻撃種別に応じた画像パスを選択
-	var img_path: String = _FIRE_BULLET_PATH if _is_magic else _ARROW_PATH
+	var img_path: String
+	if _is_water:
+		img_path = _WATER_BULLET_PATH
+	elif _is_magic:
+		img_path = _FIRE_BULLET_PATH
+	else:
+		img_path = _ARROW_PATH
 
 	if not ResourceLoader.exists(img_path):
 		return  # 画像なし → _draw() のフォールバックを使用
@@ -53,10 +66,10 @@ func _setup_sprite() -> void:
 
 	_sprite = Sprite2D.new()
 	_sprite.texture = tex
-	# 画像サイズを飛翔体として適切なサイズ（32px）にスケール
+	# 画像サイズを飛翔体として適切なサイズ（64px）にスケール
 	var img_size := maxf(float(tex.get_width()), float(tex.get_height()))
 	if img_size > 0.0:
-		var scale_val := 32.0 / img_size
+		var scale_val := 64.0 / img_size
 		_sprite.scale = Vector2(scale_val, scale_val)
 	# 下向き（↓）が正方向の画像なので -PI/2 オフセットで右向きを基準に補正
 	_sprite.rotation = atan2(_direction.y, _direction.x) + PI / 2.0
@@ -78,13 +91,24 @@ func _process(delta: float) -> void:
 func _on_arrive() -> void:
 	_done = true
 	if _will_hit and is_instance_valid(_target):
-		_target.take_damage(_damage, _multiplier, _attacker, _is_magic)
-		print("[Player] 遠距離攻撃 → %s  HP:%d/%d" % \
-				[_target.name, _target.hp, _target.max_hp])
+		if _damage > 0:
+			_target.take_damage(_damage, _multiplier, _attacker, _is_magic)
+			print("[Player] 遠距離攻撃 → %s  HP:%d/%d" % \
+					[_target.name, _target.hp, _target.max_hp])
+		if _stun_duration > 0.0:
+			_target.apply_stun(_stun_duration)
 	queue_free()
 
 
 func _draw() -> void:
 	if _sprite != null:
 		return  # 画像スプライトがあればフォールバック描画しない
-	draw_circle(Vector2.ZERO, 5.0, Color(1.0, 0.8, 0.0))  # 黄色の円（フォールバック）
+	# 弾種別のフォールバック色
+	var col: Color
+	if _is_water:
+		col = Color(0.3, 0.7, 1.0)  # 水色
+	elif _is_magic:
+		col = Color(1.0, 0.4, 0.0)  # オレンジ（火）
+	else:
+		col = Color(1.0, 0.8, 0.0)  # 黄色（矢）
+	draw_circle(Vector2.ZERO, 5.0, col)

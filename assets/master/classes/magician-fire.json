@@ -7,6 +7,9 @@
   "base_defense": 2,
   "base_physical_resistance": 2,
   "base_magic_resistance": 10,
+  "mp": 60,
+  "attack_type": "magic",
+  "attack_range": 5,
   "pre_delay": 0.5,
   "post_delay": 0.6,
   "is_flying": false,
@@ -18,6 +21,7 @@
       "type": "magic",
       "range": 5,
       "damage_mult": 1.0,
+      "mp_cost": 5,
       "pre_delay": 0.4,
       "post_delay": 0.5
     },
@@ -27,6 +31,7 @@
       "type": "magic",
       "range": 5,
       "damage_mult": 2.0,
+      "mp_cost": 10,
       "pre_delay": 0.8,
       "post_delay": 0.6
     },
@@ -37,9 +42,21 @@
       "range": 4,
       "area_radius": 2,
       "damage_mult": 1.5,
+      "mp_cost": 15,
       "pre_delay": 1.0,
       "post_delay": 0.8
     },
-    "V": null
+    "V": {
+      "name": "炎陣",
+      "action": "flame_circle",
+      "type": "magic",
+      "range": 3,
+      "damage_mult": 0.8,
+      "mp_cost": 20,
+      "duration": 2.5,
+      "tick_interval": 0.5,
+      "pre_delay": 0.0,
+      "post_delay": 0.0
+    }
   }
 }
