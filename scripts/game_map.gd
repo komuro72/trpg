@@ -378,8 +378,18 @@ func _link_all_character_lists() -> void:
 		all_enemies.append_array(em.get_enemies())
 	for nm: NpcManager in npc_managers:
 		all_combatants.append_array(nm.get_members())
+	# 敵 AI に渡す友好キャラ一覧（プレイヤーパーティー＋未加入 NPC）
+	var all_friendlies: Array[Character] = []
+	for member_var: Variant in party.members:
+		var ch := member_var as Character
+		if is_instance_valid(ch):
+			all_friendlies.append(ch)
+	for nm: NpcManager in npc_managers:
+		if is_instance_valid(nm):
+			all_friendlies.append_array(nm.get_members())
 	for em: EnemyManager in enemy_managers:
 		em.set_all_members(all_combatants)
+		em.set_friendly_list(all_friendlies)
 	for nm: NpcManager in npc_managers:
 		nm.set_all_members(all_combatants)
 	# hero マネージャーにも衝突回避リストと攻撃対象リストを渡す

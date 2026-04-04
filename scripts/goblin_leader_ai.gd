@@ -28,8 +28,8 @@ func _evaluate_party_strategy() -> Strategy:
 	if alive_ratio < 0.5:
 		return Strategy.FLEE
 
-	# プレイヤーが生存していれば攻撃
-	if _player != null and is_instance_valid(_player) and _player.hp > 0:
+	# 友好キャラが生存していれば攻撃
+	if _has_alive_friendly():
 		return Strategy.ATTACK
 
 	return Strategy.WAIT
@@ -42,6 +42,6 @@ func _get_strategy_change_reason() -> String:
 	return super._get_strategy_change_reason()
 
 
-## 攻撃ターゲット: プレイヤー
-func _select_target_for(_member: Character) -> Character:
-	return _player
+## 攻撃ターゲット: 最近傍の友好キャラ
+func _select_target_for(member: Character) -> Character:
+	return _find_nearest_friendly(member)

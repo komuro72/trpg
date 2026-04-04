@@ -23,11 +23,11 @@ func _create_unit_ai(member: Character) -> UnitAI:
 
 ## パーティー全体の戦略を評価する（絶対に FLEE しない）
 func _evaluate_party_strategy() -> Strategy:
-	if _player != null and is_instance_valid(_player) and _player.hp > 0:
+	if _has_alive_friendly():
 		return Strategy.ATTACK
 	return Strategy.WAIT
 
 
-## 攻撃ターゲット: プレイヤー
-func _select_target_for(_member: Character) -> Character:
-	return _player
+## 攻撃ターゲット: 最近傍の友好キャラ
+func _select_target_for(member: Character) -> Character:
+	return _find_nearest_friendly(member)

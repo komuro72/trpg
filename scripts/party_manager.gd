@@ -78,6 +78,12 @@ func set_all_members(all_members: Array[Character]) -> void:
 		_leader_ai.set_all_members(all_members)
 
 
+## 攻撃対象となる友好キャラ一覧を LeaderAI に渡す（敵 AI 用）
+func set_friendly_list(friendlies: Array[Character]) -> void:
+	if _leader_ai != null:
+		_leader_ai.set_friendly_list(friendlies)
+
+
 ## 後方互換エイリアス（game_map が set_all_enemies() を呼んでいるため）
 func set_all_enemies(all_enemies: Array[Character]) -> void:
 	set_all_members(all_enemies)

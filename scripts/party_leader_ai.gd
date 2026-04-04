@@ -25,6 +25,7 @@ var log_enabled:     bool  = true  ## false にするとログ出力を抑制す
 var joined_to_player: bool = false ## true の場合は _player を隊形基準として使用する（合流済み NPC パーティー）
 var _reeval_timer:   float = 0.0
 var _initial_count:  int   = 0  ## 初期メンバー数（逃走判定の基準）
+var _friendly_list:  Array[Character] = []  ## 攻撃対象の友好キャラ一覧（敵 AI 用）
 
 
 ## メンバー・プレイヤー・マップデータをセットアップし、各メンバーの UnitAI を生成する
@@ -46,6 +47,38 @@ func setup(members: Array[Character], player: Character, map_data: MapData,
 
 	# 初回オーダー発行
 	_assign_orders()
+
+
+## 攻撃対象となる友好キャラ一覧を設定する（敵 AI のターゲット選択に使用）
+func set_friendly_list(friendlies: Array[Character]) -> void:
+	_friendly_list = friendlies
+
+
+## 生存している友好キャラが1体以上いるか判定する
+func _has_alive_friendly() -> bool:
+	for f: Character in _friendly_list:
+		if is_instance_valid(f) and f.hp > 0:
+			return true
+	return _player != null and is_instance_valid(_player) and _player.hp > 0
+
+
+## 指定メンバーから最も近い生存友好キャラを返す（_player フォールバック付き）
+func _find_nearest_friendly(member: Character) -> Character:
+	var closest: Character = null
+	var min_dist := INF
+	for f: Character in _friendly_list:
+		if not is_instance_valid(f) or f.hp <= 0:
+			continue
+		if f.current_floor != member.current_floor:
+			continue
+		var dist := float((f.grid_pos - member.grid_pos).length())
+		if dist < min_dist:
+			min_dist = dist
+			closest = f
+	if closest == null and is_instance_valid(_player) and _player.hp > 0 \
+			and _player.current_floor == member.current_floor:
+		return _player
+	return closest
 
 
 ## 全パーティー合算メンバーリストを各 UnitAI に反映する
