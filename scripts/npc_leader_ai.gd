@@ -27,6 +27,44 @@ func _evaluate_party_strategy() -> Strategy:
 	return Strategy.EXPLORE
 
 
+## 探索時の移動方針（フロアランクに基づいて階段移動を決定）
+## party_score = average(attack_power + physical_resistance + magic_resistance + defense_accuracy)
+## FLOOR_RANK との比較で上下フロア移動を決定する
+func _get_explore_move_policy() -> String:
+	if _party_members.is_empty():
+		return "explore"
+	# パーティースコアを計算
+	var total_score := 0.0
+	var count := 0
+	for m: Character in _party_members:
+		if is_instance_valid(m) and m.character_data != null:
+			var cd := m.character_data
+			total_score += float(cd.attack_power + cd.physical_resistance \
+				+ cd.magic_resistance + cd.defense_accuracy)
+			count += 1
+	if count == 0:
+		return "explore"
+	var party_score := total_score / float(count)
+	# 現在フロアインデックスを取得（いずれかのメンバーから）
+	var current_floor := 0
+	for m: Character in _party_members:
+		if is_instance_valid(m):
+			current_floor = m.current_floor
+			break
+	var floor_count: int = GlobalConstants.FLOOR_RANK.size()
+	# 次フロアが存在する場合、スコアが十分なら下へ
+	if current_floor + 1 < floor_count:
+		var next_rank := GlobalConstants.FLOOR_RANK.get(current_floor + 1, 100) as int
+		if party_score >= float(next_rank):
+			return "stairs_down"
+	# 前フロアが存在する場合、スコアが現フロア基準の半分未満なら退却
+	if current_floor > 0:
+		var this_rank := GlobalConstants.FLOOR_RANK.get(current_floor, 0) as int
+		if party_score < float(this_rank) * 0.5:
+			return "stairs_up"
+	return "explore"
+
+
 ## 戦略変更の理由
 func _get_strategy_change_reason() -> String:
 	if _party_strategy == Strategy.ATTACK:

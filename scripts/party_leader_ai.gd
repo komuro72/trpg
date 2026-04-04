@@ -62,6 +62,15 @@ func set_vision_system(vs: VisionSystem) -> void:
 			unit_ai.set_vision_system(vs)
 
 
+## MapData を更新し各 UnitAI に反映する（フロア遷移時に game_map から呼ばれる）
+func set_map_data(new_map_data: MapData) -> void:
+	_map_data = new_map_data
+	for unit_ai_var: Variant in _unit_ais.values():
+		var unit_ai := unit_ai_var as UnitAI
+		if unit_ai != null:
+			unit_ai.set_map_data(new_map_data)
+
+
 func _process(delta: float) -> void:
 	_reeval_timer -= delta
 	if _reeval_timer <= 0.0:
@@ -141,7 +150,7 @@ func _assign_orders() -> void:
 			else:
 				effective_strat = int(Strategy.ATTACK)
 			if member.is_friendly:
-				move_policy = "explore"
+				move_policy = _get_explore_move_policy()
 		else:
 			# 回復・バフ専用キャラ（heal_mp_cost > 0 または buff_mp_cost > 0）は常に WAIT を渡す
 			# UnitAI._generate_queue() の先頭で heal/buff キューが自動生成される
@@ -311,6 +320,11 @@ func _get_strategy_change_reason() -> String:
 ## メンバーに対応する UnitAI を生成する（サブクラスで種別に応じて切り替える）
 func _create_unit_ai(_member: Character) -> UnitAI:
 	return UnitAI.new()
+
+
+## 探索時の移動方針を返す（NpcLeaderAI でオーバーライドしてフロアランク判断を追加）
+func _get_explore_move_policy() -> String:
+	return "explore"
 
 
 ## パーティー全体の戦略を評価する（サブクラスがオーバーライドする）

@@ -24,13 +24,19 @@ const SPRITE_SOURCE_HEIGHT: int = 1024
 
 ## クラスIDから日本語名への変換テーブル
 const CLASS_NAME_JP: Dictionary = {
-	"fighter-sword": "剣士",
-	"fighter-axe":   "斧戦士",
-	"archer":        "弓使い",
-	"magician-fire": "魔法使い",
-	"healer":        "ヒーラー",
-	"scout":         "斥候",
+	"fighter-sword":   "剣士",
+	"fighter-axe":     "斧戦士",
+	"archer":          "弓使い",
+	"magician-fire":   "魔法使い",
+	"magician-water":  "魔法使い(水)",
+	"healer":          "ヒーラー",
+	"scout":           "斥候",
 }
+
+## フロア難易度ランク（フロアインデックス → 強さスコア基準値）
+## NPC が同フロアに留まるか上下するかの判断に使用
+## member_score = attack_power + physical_resistance + magic_resistance + defense_accuracy
+const FLOOR_RANK: Dictionary = {0: 10, 1: 25, 2: 40, 3: 60, 4: 100}
 
 ## 階段タイル種別定数（MapData.TileType と対応）
 const TILE_STAIRS_DOWN: int = 4

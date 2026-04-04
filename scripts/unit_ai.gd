@@ -68,6 +68,11 @@ func set_all_members(all_members: Array[Character]) -> void:
 	_all_members = all_members
 
 
+## MapData を更新する（フロア遷移時に game_map から呼ばれる）
+func set_map_data(new_map_data: MapData) -> void:
+	_map_data = new_map_data
+
+
 ## VisionSystem をセットする（explore 移動方針に必要）
 func set_vision_system(vs: VisionSystem) -> void:
 	_vision_system = vs
@@ -422,6 +427,12 @@ func _fallback_evaluate() -> void:
 # --------------------------------------------------------------------------
 
 func _generate_queue(strategy: Strategy, target: Character) -> Array:
+	# フロア追従（最優先）：hero が別フロアにいる仲間は行動指示に関わらず階段を目指す
+	if _member != null and is_instance_valid(_member) and _member.is_friendly \
+			and _player != null and is_instance_valid(_player) \
+			and _member.current_floor != _player.current_floor:
+		return _generate_floor_follow_queue()
+
 	# 回復・バフ行動は戦略に関わらず最優先でキューに積む
 	var heal_q := _generate_heal_queue()
 	if not heal_q.is_empty():
@@ -470,6 +481,10 @@ func _generate_queue(strategy: Strategy, target: Character) -> Array:
 			match _move_policy:
 				"explore":
 					return _generate_explore_queue()
+				"stairs_down":
+					return _generate_stair_queue(1)
+				"stairs_up":
+					return _generate_stair_queue(-1)
 				"standby":
 					return [{"action": "wait"}]
 				_:
@@ -486,6 +501,55 @@ func _generate_explore_queue() -> Array:
 	if target_pos == Vector2i(-1, -1) or target_pos == _member.grid_pos:
 		return [{"action": "wait"}]
 	return [{"action": "move_to_explore", "goal": target_pos}]
+
+
+## フロア追従キューを生成する（hero が別フロアにいる仲間専用）
+## hero のフロアに向かう方向の階段を目標地点として A* 経路探索する
+func _generate_floor_follow_queue() -> Array:
+	if _map_data == null or _member == null or not is_instance_valid(_member):
+		return [{"action": "wait"}]
+	if _player == null or not is_instance_valid(_player):
+		return [{"action": "wait"}]
+	var direction := sign(_player.current_floor - _member.current_floor)
+	var stair_type := MapData.TileType.STAIRS_DOWN if direction > 0 \
+		else MapData.TileType.STAIRS_UP
+	var stairs := _map_data.find_stairs(stair_type)
+	if stairs.is_empty():
+		return [{"action": "wait"}]
+	# 最近傍の階段を選ぶ
+	var best := stairs[0]
+	var best_dist := _manhattan(_member.grid_pos, best)
+	for s: Vector2i in stairs:
+		var d := _manhattan(_member.grid_pos, s)
+		if d < best_dist:
+			best_dist = d
+			best      = s
+	# すでに階段タイルにいる場合は待機（game_map が遷移を処理する）
+	if best == _member.grid_pos:
+		return [{"action": "wait"}]
+	return [{"action": "move_to_explore", "goal": best}]
+
+
+## 階段移動キューを生成する（move_policy == "stairs_down"/"stairs_up" 時に使用）
+## 未加入 NPC のフロアランク判断による階段移動に使用する
+func _generate_stair_queue(direction: int) -> Array:
+	if _map_data == null or _member == null or not is_instance_valid(_member):
+		return [{"action": "wait"}]
+	var stair_type := MapData.TileType.STAIRS_DOWN if direction > 0 \
+		else MapData.TileType.STAIRS_UP
+	var stairs := _map_data.find_stairs(stair_type)
+	if stairs.is_empty():
+		return [{"action": "wait"}]
+	var best := stairs[0]
+	var best_dist := _manhattan(_member.grid_pos, best)
+	for s: Vector2i in stairs:
+		var d := _manhattan(_member.grid_pos, s)
+		if d < best_dist:
+			best_dist = d
+			best      = s
+	if best == _member.grid_pos:
+		return [{"action": "wait"}]  # game_map が遷移を処理する
+	return [{"action": "move_to_explore", "goal": best}]
 
 
 ## 探索目標タイルを選ぶ
@@ -730,7 +794,7 @@ func _manhattan(a: Vector2i, b: Vector2i) -> int:
 ## 現在の移動方針制約が満たされているか確認する
 func _formation_satisfied() -> bool:
 	match _move_policy:
-		"spread", "standby", "explore":
+		"spread", "standby", "explore", "stairs_down", "stairs_up":
 			return true
 		"cluster":
 			if _leader_ref == null or not is_instance_valid(_leader_ref) \
@@ -759,7 +823,7 @@ func _formation_satisfied() -> bool:
 ## ターゲットが移動方針ゾーン内にいるか確認する（ゾーン外の敵は追わない）
 func _target_in_formation_zone(target: Character) -> bool:
 	match _move_policy:
-		"spread", "explore":
+		"spread", "explore", "stairs_down", "stairs_up":
 			return true
 		"standby":
 			# 待機中は隣接マスの敵のみ攻撃
@@ -828,6 +892,9 @@ func _is_passable(pos: Vector2i) -> bool:
 			continue
 		if other == _member:
 			continue
+		# 別フロアのキャラはブロックしない（マルチフロア対応）
+		if other.current_floor != _member.current_floor:
+			continue
 		# 飛行同士はブロックし合う。地上同士もブロックし合う。飛行↔地上は通過可能
 		if other.is_flying != _member.is_flying:
 			continue
@@ -835,7 +902,9 @@ func _is_passable(pos: Vector2i) -> bool:
 			return false
 	# _player == _member の場合（hero の自己AI）は自分のタイルをブロックしない
 	if _player != null and is_instance_valid(_player) and _player != _member:
-		if _player.is_flying == _member.is_flying and pos in _player.get_occupied_tiles():
+		if _player.current_floor == _member.current_floor \
+				and _player.is_flying == _member.is_flying \
+				and pos in _player.get_occupied_tiles():
 			return false
 	return true
 

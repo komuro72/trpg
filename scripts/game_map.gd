@@ -45,6 +45,10 @@ var _per_floor_npcs: Array = []     # Array of Array[NpcManager]
 var _current_floor_index: int = 0
 ## 階段踏みつけ後のクールダウン（連続遷移防止）
 var _stair_cooldown: float = 0.0
+## パーティーメンバー・NPC の階段踏みつけクールダウン（hero のクールダウンとは独立）
+var _member_stair_cooldown: float = 0.0
+## パーティーメンバー → NpcManager マッピング（フロア遷移時の map_data 更新に使用）
+var _member_to_npc_manager: Dictionary = {}  # Character -> NpcManager
 
 var map_data: MapData
 var party: Party
@@ -154,6 +158,8 @@ func _process(delta: float) -> void:
 	# 階段クールダウン
 	if _stair_cooldown > 0.0:
 		_stair_cooldown -= delta
+	if _member_stair_cooldown > 0.0:
+		_member_stair_cooldown -= delta
 	# PlayerController にクールダウン状態を通知（階段ブロック制御に使用）
 	if player_controller != null:
 		player_controller.stair_cooldown_active = (_stair_cooldown > 0.0)
@@ -165,8 +171,11 @@ func _process(delta: float) -> void:
 	# 床アイテムの拾得チェック
 	_check_item_pickup()
 
-	# 階段踏み判定
+	# 階段踏み判定（hero）
 	_check_stairs_step()
+	# 階段踏み判定（パーティーメンバー・未加入 NPC）
+	_check_party_member_stairs()
+	_check_npc_member_stairs()
 
 	# 会話中に敵が部屋に入ってきたら会話を中断する
 	if message_window == null or not message_window.is_dialogue_active():
@@ -713,6 +722,8 @@ func _merge_npc_into_player_party(nm: NpcManager) -> void:
 			# プレイヤーパーティーの白リングに統一。is_leader は false（hero が維持）
 			member.party_color = Color.WHITE
 			member.is_leader = false
+			# フロア遷移時の map_data 更新用マッピングを記録
+			_member_to_npc_manager[member] = nm
 	# VisionSystem の管理から外す（常に表示）
 	if vision_system != null:
 		vision_system.remove_npc_manager(nm)
@@ -892,6 +903,197 @@ func _check_item_pickup() -> void:
 		queue_redraw()
 
 
+## blocking_characters を現在フロアの敵・NPC・非操作パーティーメンバーで再構築する
+func _rebuild_blocking_characters() -> void:
+	if player_controller == null:
+		return
+	var active_char := player_controller.character
+	player_controller.blocking_characters.clear()
+	for em: EnemyManager in enemy_managers:
+		if is_instance_valid(em):
+			player_controller.blocking_characters.append_array(em.get_enemies())
+	for nm: NpcManager in npc_managers:
+		if is_instance_valid(nm):
+			player_controller.blocking_characters.append_array(nm.get_members())
+	for member_var: Variant in party.members:
+		var ch := member_var as Character
+		if is_instance_valid(ch) and ch != active_char \
+				and ch.current_floor == _current_floor_index:
+			player_controller.blocking_characters.append(ch)
+
+
+## パーティーメンバーが階段にいるかチェックし、hero と別フロアならば遷移させる
+func _check_party_member_stairs() -> void:
+	if _member_stair_cooldown > 0.0:
+		return
+	if party == null:
+		return
+	for member_var: Variant in party.members:
+		var ch := member_var as Character
+		if not is_instance_valid(ch) or ch == hero:
+			continue
+		if ch.current_floor == _current_floor_index:
+			continue  # hero と同フロア・遷移不要
+		if ch.is_moving():
+			continue
+		# hero に向かう方向の階段タイルかチェック
+		if ch.current_floor < 0 or ch.current_floor >= _all_map_data.size():
+			continue
+		var direction := sign(_current_floor_index - ch.current_floor)
+		var member_map := _all_map_data[ch.current_floor] as MapData
+		var tile := member_map.get_tile(ch.grid_pos)
+		var expected_type := MapData.TileType.STAIRS_DOWN if direction > 0 \
+			else MapData.TileType.STAIRS_UP
+		if tile == expected_type:
+			_transition_member_floor(ch, direction)
+			return  # 1フレームに1人まで
+
+
+## パーティーメンバーを direction 方向のフロアに遷移させる（hero と同じ処理を流用）
+func _transition_member_floor(ch: Character, direction: int) -> void:
+	var new_floor := ch.current_floor + direction
+	if new_floor < 0 or new_floor >= _all_map_data.size():
+		return
+	var new_map := _all_map_data[new_floor] as MapData
+	# 着地位置: hero の隣接空きタイルに分散
+	var spawn_pos := _find_free_adjacent_to(hero.grid_pos, new_map, ch.is_flying)
+	if spawn_pos == Vector2i(-1, -1):
+		spawn_pos = hero.grid_pos  # フォールバック（稀に重なる可能性あり）
+	# キャラのフロア・位置を更新
+	ch.current_floor = new_floor
+	ch.grid_pos      = spawn_pos
+	ch.sync_position()
+	# NpcManager の map_data を更新（UnitAI の pathfinding に反映）
+	var nm := _member_to_npc_manager.get(ch) as NpcManager
+	if nm != null and is_instance_valid(nm):
+		nm.set_map_data(new_map)
+	# blocking_characters を再構築
+	_rebuild_blocking_characters()
+	# キャラクター表示を更新
+	_update_character_visibility()
+	_member_stair_cooldown = 1.0
+	var dir_str := "下" if direction > 0 else "上"
+	if message_window != null:
+		var cname := ch.character_data.character_name if ch.character_data != null else ch.name
+		message_window.show_message("%s が階段を%sに進んだ（%dF）" % [cname, dir_str, new_floor + 1])
+	queue_redraw()
+
+
+## 未加入 NPC が階段にいるかチェックし、フロアランクに基づいて遷移させる
+func _check_npc_member_stairs() -> void:
+	if _member_stair_cooldown > 0.0:
+		return
+	for fi: int in range(_per_floor_npcs.size()):
+		for nm_v: Variant in (_per_floor_npcs[fi] as Array):
+			var nm := nm_v as NpcManager
+			if not is_instance_valid(nm):
+				continue
+			for ch: Character in nm.get_members():
+				if not is_instance_valid(ch) or ch.hp <= 0 or ch.is_moving():
+					continue
+				if ch.current_floor < 0 or ch.current_floor >= _all_map_data.size():
+					continue
+				var member_map := _all_map_data[ch.current_floor] as MapData
+				var tile := member_map.get_tile(ch.grid_pos)
+				var direction := 0
+				if tile == MapData.TileType.STAIRS_DOWN:
+					direction = 1
+				elif tile == MapData.TileType.STAIRS_UP:
+					direction = -1
+				else:
+					continue
+				var new_floor_idx := ch.current_floor + direction
+				if new_floor_idx < 0 or new_floor_idx >= _all_map_data.size():
+					continue
+				_transition_npc_floor(nm, direction)
+				return  # 1フレームに1パーティーまで
+
+
+## 未加入 NPC パーティーを direction 方向のフロアに遷移させる
+func _transition_npc_floor(nm: NpcManager, direction: int) -> void:
+	if nm == null or not is_instance_valid(nm):
+		return
+	var members := nm.get_members()
+	if members.is_empty():
+		return
+	var old_floor: int = (members[0] as Character).current_floor
+	var new_floor := old_floor + direction
+	if new_floor < 0 or new_floor >= _all_map_data.size():
+		return
+	var new_map := _all_map_data[new_floor] as MapData
+	# 新フロアがまだセットアップされていなければ初期化
+	if (_per_floor_enemies[new_floor] as Array).is_empty() and not new_map.enemy_parties.is_empty():
+		_setup_floor_enemies(new_floor)
+	if (_per_floor_npcs[new_floor] as Array).is_empty() and not new_map.npc_parties.is_empty():
+		_setup_floor_npcs(new_floor)
+	# 着地位置: 新フロアの逆方向階段付近に分散
+	var spawn_type := MapData.TileType.STAIRS_UP if direction > 0 else MapData.TileType.STAIRS_DOWN
+	var spawn_stairs := new_map.find_stairs(spawn_type)
+	var base_spawn := Vector2i(5, 5)
+	if not spawn_stairs.is_empty():
+		base_spawn = spawn_stairs[0]
+	# 全メンバーを新フロアに移動
+	for member: Character in members:
+		if not is_instance_valid(member):
+			continue
+		member.current_floor = new_floor
+		var spread_pos := _find_free_adjacent_to(base_spawn, new_map, member.is_flying)
+		if spread_pos == Vector2i(-1, -1):
+			spread_pos = base_spawn
+		member.grid_pos = spread_pos
+		member.sync_position()
+	# NpcManager の map_data を更新
+	nm.set_map_data(new_map)
+	# _per_floor_npcs の管理を更新
+	(_per_floor_npcs[old_floor] as Array).erase(nm)
+	(_per_floor_npcs[new_floor] as Array).append(nm)
+	# 新フロアの敵リストを NpcManager に設定
+	var new_enemies: Array[Character] = []
+	for em: EnemyManager in (_per_floor_enemies[new_floor] as Array):
+		if is_instance_valid(em):
+			new_enemies.append_array(em.get_enemies())
+	nm.set_enemy_list(new_enemies)
+	# VisionSystem・npc_managers を更新
+	if old_floor == _current_floor_index:
+		npc_managers.erase(nm)
+		if vision_system != null:
+			vision_system.remove_npc_manager(nm)
+	if new_floor == _current_floor_index:
+		npc_managers.append(nm)
+		if vision_system != null:
+			vision_system.add_npc_manager(nm)
+			nm.set_vision_system(vision_system)
+		# 新フロア現フロアへ到着：dialogue_trigger を更新
+		if dialogue_trigger != null:
+			dialogue_trigger.setup(hero, npc_managers, enemy_managers, vision_system, map_data)
+	_update_character_visibility()
+	_member_stair_cooldown = 1.0
+	queue_redraw()
+
+
+## center の隣接タイルの中で通行可能かつ未占有のタイルを返す
+## 空きがなければ Vector2i(-1, -1) を返す
+func _find_free_adjacent_to(center: Vector2i, map_ref: MapData,
+		is_flying: bool = false) -> Vector2i:
+	var offsets: Array[Vector2i] = [
+		Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+		Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1),
+	]
+	for offset: Vector2i in offsets:
+		var pos := center + offset
+		if not map_ref.is_walkable_for(pos, is_flying):
+			continue
+		var occupied := false
+		for m_var: Variant in party.members:
+			var m := m_var as Character
+			if is_instance_valid(m) and m.grid_pos == pos:
+				occupied = true
+				break
+		if not occupied:
+			return pos
+	return Vector2i(-1, -1)
+
+
 ## 階段を踏んでいるかチェックし、踏んでいれば遷移する
 func _check_stairs_step() -> void:
 	if _stair_cooldown > 0.0:
@@ -1004,19 +1206,7 @@ func _transition_floor(direction: int) -> void:
 		# 遷移直後フラグをセット（遷移先の階段タイルで即再遷移しないよう移動を許可）
 		player_controller.stair_just_transitioned = true
 		# blocking_characters を新フロアの敵・NPC で再構築（フロア間すり抜け防止）
-		player_controller.blocking_characters.clear()
-		for em: EnemyManager in enemy_managers:
-			if is_instance_valid(em):
-				player_controller.blocking_characters.append_array(em.get_enemies())
-		for nm: NpcManager in npc_managers:
-			if is_instance_valid(nm):
-				player_controller.blocking_characters.append_array(nm.get_members())
-		# 同フロアのパーティーメンバー（hero 以外）も追加
-		for member_var: Variant in party.members:
-			var ch := member_var as Character
-			if is_instance_valid(ch) and ch != hero \
-					and ch.current_floor == _current_floor_index:
-				player_controller.blocking_characters.append(ch)
+		_rebuild_blocking_characters()
 
 	# カメラのリミットを更新
 	if camera_controller != null and is_instance_valid(camera_controller):

@@ -56,6 +56,13 @@ func set_vision_system(vs: VisionSystem) -> void:
 		_leader_ai.set_vision_system(vs)
 
 
+## MapData を更新し LeaderAI 経由で各 UnitAI に反映する（フロア遷移時に使用）
+func set_map_data(new_map_data: MapData) -> void:
+	_map_data = new_map_data
+	if _leader_ai != null:
+		_leader_ai.set_map_data(new_map_data)
+
+
 ## 全パーティー合算メンバーリストを設定する（game_map が全マネージャー生成後に呼ぶ）
 func set_all_members(all_members: Array[Character]) -> void:
 	_all_members = all_members

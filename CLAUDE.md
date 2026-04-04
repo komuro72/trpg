@@ -775,7 +775,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
     - 遷移クールダウン 1.5 秒（連続遷移防止）
     - 倒した敵はフロアをまたいでも復活しない（EnemyManager が永続保持）
     - dungeon_handcrafted.json: 3フロア構成。フロア0→r1_6 に下り階段、フロア1（地下牢・3部屋）、フロア2（深淵・2部屋）
-    - 当面の制限: パーティーメンバーはフロア遷移しない（hero のみ）・敵は階段を使わない
+    - 敵は階段を使わない（hero・パーティーメンバー・未加入 NPC のみ遷移する）
     - [x] Phase 11-1 バグ修正（フロア遷移後の不具合）
       - クロスフロアすり抜け・不可視攻撃バグの3点修正
         1. `_setup_floor_enemies/npcs()` で敵・NPC スポーン時に `current_floor` をセット
@@ -973,6 +973,24 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
     - **ConsumableBar**：選択モード中（`is_selecting=true`）は先頭に「—」枠を追加。ゼロ消耗品でも選択モード中は表示
     - **project.godot**：`switch_char_prev`（LB/Button9）・`switch_char_next`（RB/Button10）を追加。旧 `slot_prev`/`slot_next` を空に（未使用）
     - **game_map.gd**：`player_controller.switch_char_requested` シグナルを接続。`_party_sorted_members` を初期設定時およびキャラ切り替え後に更新
+  - [x] Phase 12-7: パーティーメンバー・未加入 NPC のフロア遷移
+    - **パーティーメンバーの階段使用**
+      - `unit_ai.gd`: `_generate_queue()` 冒頭で hero と別フロアの仲間を検出 → `_generate_floor_follow_queue()` で適切な階段タイルへ A* 誘導
+      - `game_map.gd`: `_check_party_member_stairs()` で仲間が階段タイルに静止したら `_transition_member_floor()` を呼んで遷移
+      - `_transition_member_floor()`: hero の隣接空きタイルに着地・NpcManager の `map_data` 更新・`blocking_characters` 再構築
+      - `_member_stair_cooldown` 変数でパーティー遷移クールダウンを hero の `_stair_cooldown` とは独立管理
+    - **未加入 NPC のフロアランク判断**
+      - `global_constants.gd`: `FLOOR_RANK = {0:10, 1:25, 2:40, 3:60, 4:100}` 追加
+      - `npc_leader_ai.gd`: `_get_explore_move_policy()` 追加（`attack_power + physical_resistance + magic_resistance + defense_accuracy` の平均スコアと `FLOOR_RANK` を比較して `"stairs_down"` / `"stairs_up"` / `"explore"` を返す）
+      - `party_leader_ai.gd`: `_get_explore_move_policy()` 仮想メソッド追加・EXPLORE 戦略の `move_policy` 設定をこのメソッド経由に変更
+      - `unit_ai.gd`: `"stairs_down"` / `"stairs_up"` move_policy で `_generate_stair_queue()` を生成
+      - `game_map.gd`: `_check_npc_member_stairs()` で全フロアの NPC を監視・`_transition_npc_floor()` で NPC パーティーを遷移
+    - **共通基盤**
+      - `unit_ai.gd`: `set_map_data()` 追加・`_is_passable()` に別フロアキャラを除外するクロスフロアフィルターを追加
+      - `party_leader_ai.gd`: `set_map_data()` 追加（UnitAI に伝播）
+      - `party_manager.gd`: `set_map_data()` 追加（LeaderAI に伝播）
+      - `game_map.gd`: `_rebuild_blocking_characters()` 追加（`_transition_floor()` でも流用）・`_find_free_adjacent_to()` 追加・`_member_to_npc_manager` マッピング追加
+      - `global_constants.gd`: `CLASS_NAME_JP` に `"magician-water"` を追加
 - [ ] Phase 13: Steam配布準備
 
 ## アイテムシステム
