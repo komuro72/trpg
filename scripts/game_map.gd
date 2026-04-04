@@ -255,7 +255,11 @@ func _setup_floor_enemies(floor_idx: int) -> void:
 		em.name = "EnemyManager%d" % idx
 		add_child(em)
 		em.setup(members, hero, fmap, items)
-		em.party_wiped.connect(_on_enemy_party_wiped)
+		var fi_capture: int = floor_idx
+		em.party_wiped.connect(
+			func(items: Array, room_id: String) -> void:
+				_on_enemy_party_wiped(items, room_id, fi_capture)
+		)
 		em.set_vision_controlled(true)
 		# スポーン時にフロアインデックスをセット（クロスフロア攻撃防止）
 		for ch: Character in em.get_enemies():
@@ -724,6 +728,8 @@ func _merge_npc_into_player_party(nm: NpcManager) -> void:
 			member.is_leader = false
 			# フロア遷移時の map_data 更新用マッピングを記録
 			_member_to_npc_manager[member] = nm
+	# 合流済みフラグを立てる（NPC が hero を隊形基準として追従するようになる）
+	nm.set_joined_to_player(true)
 	# VisionSystem の管理から外す（常に表示）
 	if vision_system != null:
 		vision_system.remove_npc_manager(nm)
@@ -808,10 +814,10 @@ func _on_character_died(character: Character) -> void:
 
 
 ## 敵パーティー全滅シグナルを受け取り、アイテムを部屋の床に散らばらせる（部屋制圧方式）
-func _on_enemy_party_wiped(items: Array, room_id: String) -> void:
+func _on_enemy_party_wiped(items: Array, room_id: String, floor_idx: int) -> void:
 	# 最終フロア（フロア4, インデックス4）での全滅チェック → ゲームクリア
 	var last_floor_index: int = _all_map_data.size() - 1
-	if _current_floor_index == last_floor_index:
+	if floor_idx == last_floor_index:
 		var all_wiped := true
 		for em_v: Variant in _per_floor_enemies[last_floor_index]:
 			var em := em_v as EnemyManager
@@ -823,30 +829,35 @@ func _on_enemy_party_wiped(items: Array, room_id: String) -> void:
 
 	if items.is_empty():
 		return
-	# 部屋タイルを取得して FLOORのみに絞り、既存アイテムがないタイルを候補にする
-	var candidates: Array[Vector2i] = []
 	if room_id.is_empty():
-		# エリアIDが取れない場合はドロップをスキップ
 		return
-	for tile: Vector2i in map_data.get_tiles_in_area(room_id):
-		if map_data.get_tile(tile) == MapData.TileType.FLOOR and not _floor_items.has(tile):
+	if floor_idx < 0 or floor_idx >= _all_map_data.size():
+		return
+	# フロア別アイテム辞書を取得（なければ作成）
+	if not _floor_items.has(floor_idx):
+		_floor_items[floor_idx] = {}
+	var floor_dict := _floor_items[floor_idx] as Dictionary
+	# 該当フロアの MapData でタイルを検索する
+	var fmap := _all_map_data[floor_idx] as MapData
+	var candidates: Array[Vector2i] = []
+	for tile: Vector2i in fmap.get_tiles_in_area(room_id):
+		if fmap.get_tile(tile) == MapData.TileType.FLOOR and not floor_dict.has(tile):
 			candidates.append(tile)
 	if candidates.is_empty():
 		return
-	# シャッフルして items の数だけタイルを割り当て（最大 candidates.size() 個）
 	candidates.shuffle()
 	var placed := 0
 	for item_v: Variant in items:
 		if placed >= candidates.size():
 			break
-		_floor_items[candidates[placed]] = item_v as Dictionary
+		floor_dict[candidates[placed]] = item_v as Dictionary
 		placed += 1
 	if placed > 0:
 		SoundManager.play(SoundManager.ITEM_GET)
 		if message_window != null:
 			message_window.show_message("アイテムが部屋に散らばった！（%d個）" % placed)
 		queue_redraw()
-		print("[GameMap] アイテム %d 個を部屋 %s に散布" % [placed, room_id])
+		print("[GameMap] アイテム %d 個をフロア%d 部屋 %s に散布" % [placed, floor_idx, room_id])
 
 
 ## ゲームクリア処理
@@ -880,16 +891,20 @@ func _check_item_pickup() -> void:
 		var ch := member_v as Character
 		if not is_instance_valid(ch) or ch.character_data == null:
 			continue
+		var ch_floor := ch.current_floor
+		if not _floor_items.has(ch_floor):
+			continue
+		var floor_dict := _floor_items[ch_floor] as Dictionary
 		var pos := ch.grid_pos
-		if not _floor_items.has(pos):
+		if not floor_dict.has(pos):
 			continue
 		# item_pickup 指示確認（プレイヤー操作キャラは常に拾う）
 		var pickup_order: String = ch.current_order.get("item_pickup", "passive") as String
 		if pickup_order == "avoid" and not ch.is_player_controlled:
 			continue
-		var item := _floor_items[pos] as Dictionary
+		var item := floor_dict[pos] as Dictionary
 		ch.character_data.inventory.append(item)
-		_floor_items.erase(pos)
+		floor_dict.erase(pos)
 		# 操作キャラが消耗品を拾ったら ConsumableBar を更新
 		if ch.is_player_controlled and consumable_bar != null \
 				and (item.get("category", "") as String) == "consumable":
@@ -1013,6 +1028,16 @@ func _check_npc_member_stairs() -> void:
 				elif tile == MapData.TileType.STAIRS_UP:
 					direction = -1
 				else:
+					continue
+				# 意図チェック：NPC が実際にこの方向の階段を目指しているときのみ遷移する
+				# （探索中に偶然階段を踏んだだけの場合は遷移しない）
+				var policy := nm.get_explore_move_policy()
+				var intended_dir := 0
+				if policy == "stairs_down":
+					intended_dir = 1
+				elif policy == "stairs_up":
+					intended_dir = -1
+				if intended_dir == 0 or intended_dir != direction:
 					continue
 				var new_floor_idx := ch.current_floor + direction
 				if new_floor_idx < 0 or new_floor_idx >= _all_map_data.size():
@@ -1462,12 +1487,13 @@ func _draw() -> void:
 					draw_string(font, Vector2(cx - float(fsize) * 0.3, cy),
 						sym, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, sym_color)
 
-	# 床アイテムを描画（訪問済みタイルのみ）
-	for tile_v: Variant in _floor_items.keys():
+	# 床アイテムを描画（現在フロア・訪問済みタイルのみ）
+	var cur_floor_items := _floor_items.get(_current_floor_index, {}) as Dictionary
+	for tile_v: Variant in cur_floor_items.keys():
 		var ipos  := tile_v as Vector2i
 		if use_vision and not visible_tiles.has(ipos):
 			continue
-		var item      := _floor_items[ipos] as Dictionary
+		var item      := cur_floor_items[ipos] as Dictionary
 		var img_path  := item.get("image", "") as String
 		# image フィールドがない場合は item_type から導出
 		if img_path.is_empty():

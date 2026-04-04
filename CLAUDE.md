@@ -991,6 +991,30 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
       - `party_manager.gd`: `set_map_data()` 追加（LeaderAI に伝播）
       - `game_map.gd`: `_rebuild_blocking_characters()` 追加（`_transition_floor()` でも流用）・`_find_free_adjacent_to()` 追加・`_member_to_npc_manager` マッピング追加
       - `global_constants.gd`: `CLASS_NAME_JP` に `"magician-water"` を追加
+  - [x] Phase 12-7 バグ修正
+    - **NPC パーティーがプレイヤーを追従する問題**
+      - 原因：`party_leader_ai._assign_orders()` で formation_ref の決定ロジックが未加入 NPC パーティーにも `_player` を渡していた
+      - 修正：`joined_to_player` フラグを `PartyLeaderAI` / `PartyManager` に追加。合流済みの場合のみ `formation_ref = _player` に設定。未加入 NPC リーダーは `formation_ref = null`（自由行動）
+      - `game_map._merge_npc_into_player_party()` で `nm.set_joined_to_player(true)` を呼んでフラグを伝播
+    - **仲間の「同じ部屋」指示が機能しない問題**
+      - 原因：`unit_ai._formation_satisfied()` の "same_room" 判定で、通路タイル（area_id が空文字）の場合に常に true を返していた
+      - 修正：自分またはリーダーが通路にいる場合はマンハッタン距離 ≤3 のフォールバック判定に切り替え
+      - `_target_in_formation_zone()` の "same_room" でも同様の修正を適用
+    - **ヒーラーが他パーティーの NPC に回復・バフをかける問題**
+      - 原因：`UnitAI._find_heal_target()` / `_find_buff_target()` が `_all_members` 全体を対象にしていた
+      - 修正：`_party_peers: Array[Character]` フィールドを追加し、`PartyLeaderAI.setup()` が `unit_ai.set_party_peers(members)` を呼ぶ。heal/buff ターゲット候補を自パーティーメンバー＋hero に限定
+    - **アイテムが未訪問フロアに出現する問題**
+      - 原因：`_floor_items` が `{Vector2i: item}` のフラット辞書であり、全フロアのアイテムが混在していた
+      - 修正：`_floor_items` を `{floor_idx: {Vector2i: item}}` のネスト構造に変更。`_setup_floor_enemies()` のラムダで floor_idx をキャプチャ。`_check_item_pickup()` と描画処理も `ch.current_floor` / `_current_floor_index` を参照するよう更新
+    - **キャラクターが A* 経路探索で階段タイルを通り抜ける問題**
+      - 原因：`unit_ai._astar()` が階段タイルを中間ノードとして通過可能として扱っていた
+      - 修正：`_astar()` で階段タイルを中間ノードとしてスキップ（`move_policy` が "stairs_down"/"stairs_up" の場合、またはゴールが階段タイルの場合は除外しない）
+      - `_find_adjacent_goal()` で階段でないタイルを優先候補として選択（`best_on_stair` フラグで管理）
+      - `_find_explore_target()` で階段タイルをフィルタリング（非階段タイルが存在する場合のみ）
+      - `_generate_queue()` 冒頭で `move_policy` が階段系以外にもかかわらず階段上にいる場合は隣接の非階段タイルへ移動するフォールバック
+      - `_find_non_stair_adjacent()` / `_is_stair_tile()` ヘルパー追加
+    - **未加入 NPC のフロア遷移：意図しない方向への遷移を防止**
+      - `game_map._check_npc_member_stairs()` で NpcManager の `get_explore_move_policy()` を確認し、`"stairs_down"` / `"stairs_up"` の意図がない場合は遷移をスキップ
 - [ ] Phase 13: Steam配布準備
 
 ## アイテムシステム

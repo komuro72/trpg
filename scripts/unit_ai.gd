@@ -24,7 +24,8 @@ enum _State { IDLE, MOVING, WAITING, ATTACKING_PRE, ATTACKING_POST }
 var _member:      Character                   ## 担当キャラクター
 var _player:      Character                   ## プレイヤー（ターゲット・_is_passable 用）
 var _map_data:    MapData
-var _all_members: Array[Character] = []       ## 全パーティー合算（占有チェック用）
+var _all_members:  Array[Character] = []       ## 全パーティー合算（占有チェック用）
+var _party_peers:  Array[Character] = []       ## 同一パーティーメンバー（heal/buff ターゲット限定用）
 var _vision_system: VisionSystem = null       ## 探索行動（explore）に使用
 
 ## ステートマシン
@@ -66,6 +67,12 @@ func setup(member: Character, player: Character, map_data: MapData,
 
 func set_all_members(all_members: Array[Character]) -> void:
 	_all_members = all_members
+
+
+## heal/buff ターゲット検索に使う同一パーティーメンバーリストを設定する
+## PartyLeaderAI.setup() から呼ばれ、自分の管理メンバーのみをセットする
+func set_party_peers(peers: Array[Character]) -> void:
+	_party_peers = peers
 
 
 ## MapData を更新する（フロア遷移時に game_map から呼ばれる）
@@ -433,6 +440,14 @@ func _generate_queue(strategy: Strategy, target: Character) -> Array:
 			and _member.current_floor != _player.current_floor:
 		return _generate_floor_follow_queue()
 
+	# 階段タイルに乗ったまま待機しない（他キャラの通行を塞がないようにする）
+	# 意図的に階段を使う場合（stairs_down/up ポリシー）および階段上での wait は除く
+	if _is_stair_tile(_member.grid_pos) \
+			and _move_policy != "stairs_down" and _move_policy != "stairs_up":
+		var off_stair := _find_non_stair_adjacent(_member.grid_pos)
+		if off_stair != _member.grid_pos:
+			return [{"action": "move_to_explore", "goal": off_stair}]
+
 	# 回復・バフ行動は戦略に関わらず最優先でキューに積む
 	var heal_q := _generate_heal_queue()
 	if not heal_q.is_empty():
@@ -568,22 +583,26 @@ func _find_explore_target() -> Vector2i:
 			unvisited.append(area_id)
 
 	if unvisited.is_empty():
-		# 全訪問済み → ランダムなエリアを巡回
+		# 全訪問済み → ランダムなエリアを巡回（階段以外のタイルを選ぶ）
 		var random_area := all_areas[randi() % all_areas.size()]
 		var tiles := _map_data.get_tiles_in_area(random_area)
 		if tiles.is_empty():
 			return Vector2i(-1, -1)
-		return tiles[randi() % tiles.size()]
+		var non_stair := tiles.filter(func(t: Vector2i) -> bool: return not _is_stair_tile(t))
+		var pool: Array[Vector2i] = non_stair if not non_stair.is_empty() else tiles
+		return pool[randi() % pool.size()]
 
-	# 最近傍の未訪問エリアを選ぶ（各エリアの代表タイルで判定）
+	# 最近傍の未訪問エリアを選ぶ（各エリアの代表タイルで判定・階段以外を優先）
 	var best_pos  := Vector2i(-1, -1)
 	var best_dist := 999999
 	for area_id: String in unvisited:
 		var tiles := _map_data.get_tiles_in_area(area_id)
 		if tiles.is_empty():
 			continue
-		# エリア内の中央付近のタイルを代表とする
-		var mid := tiles[tiles.size() / 2]
+		# 階段以外のタイルを優先して代表タイルを選ぶ
+		var non_stair := tiles.filter(func(t: Vector2i) -> bool: return not _is_stair_tile(t))
+		var pool: Array[Vector2i] = non_stair if not non_stair.is_empty() else tiles
+		var mid := pool[pool.size() / 2]
 		var d   := _manhattan(_member.grid_pos, mid)
 		if d < best_dist and d > 0:
 			best_dist = d
@@ -692,18 +711,40 @@ func _find_adjacent_goal(target: Character) -> Vector2i:
 	var d := target.grid_pos - _member.grid_pos
 	if abs(d.x) + abs(d.y) == 1:
 		return _member.grid_pos
-	var best      := _member.grid_pos
-	var best_dist := 999999
+	var best           := _member.grid_pos
+	var best_dist      := 999999
+	var best_on_stair  := true  # 非階段タイルを優先
 	for offset: Vector2i in [Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0)]:
 		var candidate := target.grid_pos + offset
 		if candidate == _member.grid_pos:
 			return candidate
 		if _is_passable(candidate):
-			var dist := _manhattan(_member.grid_pos, candidate)
-			if dist < best_dist:
-				best_dist = dist
-				best = candidate
+			var dist     := _manhattan(_member.grid_pos, candidate)
+			var on_stair := _is_stair_tile(candidate)
+			# 非階段タイルを優先。同種類（stair/non-stair）なら近い方を選ぶ
+			if (best_on_stair and not on_stair) \
+					or (best_on_stair == on_stair and dist < best_dist):
+				best_dist     = dist
+				best          = candidate
+				best_on_stair = on_stair
 	return best
+
+
+## 現在地に隣接する非階段タイル（通行可能）を返す。なければ現在地を返す
+func _find_non_stair_adjacent(pos: Vector2i) -> Vector2i:
+	for offset: Vector2i in [Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0)]:
+		var candidate := pos + offset
+		if _is_passable(candidate) and not _is_stair_tile(candidate):
+			return candidate
+	return pos
+
+
+## 指定タイルが階段（上り・下り）かどうか返す
+func _is_stair_tile(pos: Vector2i) -> bool:
+	if _map_data == null:
+		return false
+	var t := _map_data.get_tile(pos)
+	return t == MapData.TileType.STAIRS_DOWN or t == MapData.TileType.STAIRS_UP
 
 
 func _find_flank_goal(target: Character) -> Vector2i:
@@ -773,6 +814,11 @@ func _astar(start: Vector2i, goal: Vector2i) -> Array[Vector2i]:
 			var neighbor := current + offset
 			if not _is_passable(neighbor):
 				continue
+			# 階段タイルはゴール以外では中間経由地点として使わない
+			# （意図しない階段使用を防ぐ。ゴールが階段 or stairs ポリシー時は除く）
+			if _is_stair_tile(neighbor) and neighbor != goal \
+					and _move_policy != "stairs_down" and _move_policy != "stairs_up":
+				continue
 			var tentative_g: int = (g_score.get(current, 99999) as int) + 1
 			if tentative_g < (g_score.get(neighbor, 99999) as int):
 				came_from[neighbor] = current
@@ -810,7 +856,9 @@ func _formation_satisfied() -> bool:
 			var my_area     := _map_data.get_area(_member.grid_pos)
 			var leader_area := _map_data.get_area(_leader_ref.grid_pos)
 			if my_area.is_empty() or leader_area.is_empty():
-				return true
+				# どちらかが通路にいる場合：近距離（3タイル以内）なら満足とみなす
+				# 遠い場合は未満足 → リーダーに向かって移動する
+				return _manhattan(_member.grid_pos, _leader_ref.grid_pos) <= 3
 			return my_area == leader_area
 		"guard_room":
 			if _guard_room_area.is_empty() or _map_data == null:
@@ -844,7 +892,8 @@ func _target_in_formation_zone(target: Character) -> bool:
 			var target_area: String = _map_data.get_area(target.grid_pos)
 			var leader_area: String = _map_data.get_area(_leader_ref.grid_pos)
 			if target_area.is_empty() or leader_area.is_empty():
-				return true
+				# 通路にいる場合は近距離チェックで代替
+				return _manhattan(_member.grid_pos, _leader_ref.grid_pos) <= 3
 			return target_area == leader_area
 		"guard_room":
 			if _guard_room_area.is_empty() or _map_data == null:
@@ -982,15 +1031,15 @@ func _generate_buff_queue() -> Array:
 			{"action": "buff", "target": buff_target}]
 
 
-## 回復対象（パーティー内で HP50% 以下かつ最もHPが低いキャラ）を返す
-## _all_members は敵＋NPC合算リストのため、_player（hero）は含まれない。
-## _player を別途チェックして漏れを防ぐ。
+## 回復対象（同一パーティー内で HP50% 以下かつ最もHPが低いキャラ）を返す
+## _party_peers（自パーティーメンバー）と _player（hero）のみを対象とする。
+## 未加入 NPC など他パーティーのキャラは対象外。
 func _find_heal_target() -> Character:
 	var best: Character = null
 	var best_ratio := 0.60  # wounded（60% 以下）のみ対象
-	# _all_members（NPC 合算）と _player（hero）を合わせて探索
+	# _party_peers（自パーティーメンバー）と _player（hero）を合わせて探索
 	var candidates: Array[Character] = []
-	candidates.assign(_all_members)
+	candidates.assign(_party_peers)
 	if _player != null and is_instance_valid(_player) and not candidates.has(_player):
 		candidates.append(_player)
 	for ch: Character in candidates:
@@ -1005,11 +1054,12 @@ func _find_heal_target() -> Character:
 	return best
 
 
-## バフ対象（パーティー内でバフが切れているキャラ）を返す
-## _player（hero）も対象に含める。
+## バフ対象（同一パーティー内でバフが切れているキャラ）を返す
+## _party_peers（自パーティーメンバー）と _player（hero）のみを対象とする。
+## 未加入 NPC など他パーティーのキャラは対象外。
 func _find_buff_target() -> Character:
 	var candidates: Array[Character] = []
-	candidates.assign(_all_members)
+	candidates.assign(_party_peers)
 	if _player != null and is_instance_valid(_player) and not candidates.has(_player):
 		candidates.append(_player)
 	for ch: Character in candidates:

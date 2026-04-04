@@ -22,6 +22,7 @@ var _unit_ais:      Dictionary = {}  ## member.name -> UnitAI
 var _party_strategy: Strategy = Strategy.WAIT
 var _prev_strategy:  Strategy = Strategy.WAIT  ## 前回の戦略（変更検出用）
 var log_enabled:     bool  = true  ## false にするとログ出力を抑制する（一時パーティー用）
+var joined_to_player: bool = false ## true の場合は _player を隊形基準として使用する（合流済み NPC パーティー）
 var _reeval_timer:   float = 0.0
 var _initial_count:  int   = 0  ## 初期メンバー数（逃走判定の基準）
 
@@ -40,6 +41,7 @@ func setup(members: Array[Character], player: Character, map_data: MapData,
 		unit_ai.name = "UnitAI_" + member.name
 		add_child(unit_ai)
 		unit_ai.setup(member, player, map_data, all_members)
+		unit_ai.set_party_peers(members)  ## heal/buff は自パーティーメンバー限定
 		_unit_ais[member.name] = unit_ai
 
 	# 初回オーダー発行
@@ -130,9 +132,14 @@ func _assign_orders() -> void:
 		var formation_ref: Character = null
 		if member.is_friendly:
 			move_policy = order.get("move", "same_room") as String
-			# 1人パーティーまたは自分がリーダーの場合は _player（英雄）を基準にする
 			if leader_char == null or leader_char == member:
-				if _player != null and is_instance_valid(_player):
+				# この member がリーダー（または1人パーティー）の場合：
+				# ① hero がこのパーティーのリーダー（hero パーティー）
+				# ② 合流済み NPC パーティー（joined_to_player フラグ）
+				# のいずれかであれば hero を隊形基準にする。
+				# それ以外（未加入 NPC）は formation_ref = null のまま（NPC リーダーは自由行動）。
+				if _player != null and is_instance_valid(_player) \
+						and (leader_char == _player or joined_to_player):
 					formation_ref = _player
 			else:
 				formation_ref = leader_char
@@ -325,6 +332,11 @@ func _create_unit_ai(_member: Character) -> UnitAI:
 ## 探索時の移動方針を返す（NpcLeaderAI でオーバーライドしてフロアランク判断を追加）
 func _get_explore_move_policy() -> String:
 	return "explore"
+
+
+## 現在の探索移動方針を外部に公開する（game_map が NPC の階段意図を判定するために使用）
+func get_explore_move_policy() -> String:
+	return _get_explore_move_policy()
 
 
 ## パーティー全体の戦略を評価する（サブクラスがオーバーライドする）

@@ -32,6 +32,7 @@ var _map_data:   MapData
 var _activated:  bool = false
 var _vision_controlled: bool = false
 var suppress_ai_log: bool = false        ## true ならリーダーAIのログ出力を抑制する
+var joined_to_player: bool = false       ## true なら隊形基準を _player（hero）にする（合流済み NPC パーティー）
 var _all_members: Array[Character] = []  ## 全パーティー合算（AI 起動時に渡す）
 var _drop_items:  Array = []             ## ドロップアイテム（全滅時に party_wiped で転送）
 var _room_id:     String = ""            ## このパーティーが属する部屋のエリアID
@@ -54,6 +55,13 @@ func set_party_color(color: Color) -> void:
 func set_vision_system(vs: VisionSystem) -> void:
 	if _leader_ai != null:
 		_leader_ai.set_vision_system(vs)
+
+
+## 現在の探索移動方針を返す（game_map が NPC の階段使用意図を判定するために使用）
+func get_explore_move_policy() -> String:
+	if _leader_ai != null:
+		return _leader_ai.get_explore_move_policy()
+	return "explore"
 
 
 ## MapData を更新し LeaderAI 経由で各 UnitAI に反映する（フロア遷移時に使用）
@@ -220,6 +228,13 @@ func is_active() -> bool:
 	return _activated
 
 
+## プレイヤーパーティー合流フラグを設定し、LeaderAI に伝播する
+func set_joined_to_player(value: bool) -> void:
+	joined_to_player = value
+	if _leader_ai != null:
+		_leader_ai.joined_to_player = value
+
+
 ## AI を明示的に起動する（VisionSystem 経由ではなく直接起動が必要な場合に使用）
 func activate() -> void:
 	if not _activated:
@@ -237,6 +252,7 @@ func _start_ai() -> void:
 	_leader_ai = _create_leader_ai(_leader)
 	if suppress_ai_log:
 		_leader_ai.log_enabled = false
+	_leader_ai.joined_to_player = joined_to_player  # 合流フラグを伝播
 	add_child(_leader_ai)
 	_leader_ai.setup(_members, _player, _map_data, _all_members)
 

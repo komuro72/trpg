@@ -107,7 +107,7 @@ func _draw() -> void:
 	if _sprite != null:
 		return  # 画像スプライトがあればフォールバック描画しない
 	# 弾種別のフォールバック色
-	var col: Color
+	var col: Color	
 	if _is_water:
 		col = Color(0.3, 0.7, 1.0)  # 水色
 	elif _is_magic:
