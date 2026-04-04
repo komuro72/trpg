@@ -939,7 +939,7 @@ func _check_party_member_stairs() -> void:
 		# hero に向かう方向の階段タイルかチェック
 		if ch.current_floor < 0 or ch.current_floor >= _all_map_data.size():
 			continue
-		var direction := sign(_current_floor_index - ch.current_floor)
+		var direction: int = sign(_current_floor_index - ch.current_floor)
 		var member_map := _all_map_data[ch.current_floor] as MapData
 		var tile := member_map.get_tile(ch.grid_pos)
 		var expected_type := MapData.TileType.STAIRS_DOWN if direction > 0 \
@@ -955,10 +955,22 @@ func _transition_member_floor(ch: Character, direction: int) -> void:
 	if new_floor < 0 or new_floor >= _all_map_data.size():
 		return
 	var new_map := _all_map_data[new_floor] as MapData
-	# 着地位置: hero の隣接空きタイルに分散
-	var spawn_pos := _find_free_adjacent_to(hero.grid_pos, new_map, ch.is_flying)
-	if spawn_pos == Vector2i(-1, -1):
-		spawn_pos = hero.grid_pos  # フォールバック（稀に重なる可能性あり）
+	# 着地位置: 遷移先フロアの階段タイルを基準に配置
+	# hero と同じ階段タイルへ向かい、空いていればそこに、塞がっていれば隣接タイルに
+	var spawn_type := MapData.TileType.STAIRS_UP if direction > 0 else MapData.TileType.STAIRS_DOWN
+	var stair_tiles := new_map.find_stairs(spawn_type)
+	var stair_center := hero.grid_pos  # デフォルトは hero と同位置（フォールバック）
+	if not stair_tiles.is_empty():
+		stair_center = stair_tiles[0]
+	# 階段タイル自体が空いていれば直接着地、塞がっていれば隣接タイルを探す
+	var spawn_pos := stair_center
+	for m_var: Variant in party.members:
+		var m := m_var as Character
+		if is_instance_valid(m) and m.grid_pos == stair_center:
+			spawn_pos = _find_free_adjacent_to(stair_center, new_map, ch.is_flying)
+			if spawn_pos == Vector2i(-1, -1):
+				spawn_pos = stair_center
+			break
 	# キャラのフロア・位置を更新
 	ch.current_floor = new_floor
 	ch.grid_pos      = spawn_pos
@@ -974,7 +986,7 @@ func _transition_member_floor(ch: Character, direction: int) -> void:
 	_member_stair_cooldown = 1.0
 	var dir_str := "下" if direction > 0 else "上"
 	if message_window != null:
-		var cname := ch.character_data.character_name if ch.character_data != null else ch.name
+		var cname: String = ch.character_data.character_name if ch.character_data != null else ch.name
 		message_window.show_message("%s が階段を%sに進んだ（%dF）" % [cname, dir_str, new_floor + 1])
 	queue_redraw()
 
@@ -1033,14 +1045,19 @@ func _transition_npc_floor(nm: NpcManager, direction: int) -> void:
 	if not spawn_stairs.is_empty():
 		base_spawn = spawn_stairs[0]
 	# 全メンバーを新フロアに移動
+	# 1人目は階段タイルに直接着地、2人目以降は隣接タイルへ分散
+	var placed_positions: Array[Vector2i] = []
 	for member: Character in members:
 		if not is_instance_valid(member):
 			continue
 		member.current_floor = new_floor
-		var spread_pos := _find_free_adjacent_to(base_spawn, new_map, member.is_flying)
-		if spread_pos == Vector2i(-1, -1):
-			spread_pos = base_spawn
-		member.grid_pos = spread_pos
+		var land_pos := base_spawn
+		if base_spawn in placed_positions:
+			land_pos = _find_free_adjacent_to(base_spawn, new_map, member.is_flying)
+			if land_pos == Vector2i(-1, -1):
+				land_pos = base_spawn
+		placed_positions.append(land_pos)
+		member.grid_pos = land_pos
 		member.sync_position()
 	# NpcManager の map_data を更新
 	nm.set_map_data(new_map)

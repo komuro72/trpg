@@ -510,7 +510,7 @@ func _generate_floor_follow_queue() -> Array:
 		return [{"action": "wait"}]
 	if _player == null or not is_instance_valid(_player):
 		return [{"action": "wait"}]
-	var direction := sign(_player.current_floor - _member.current_floor)
+	var direction: int = sign(_player.current_floor - _member.current_floor)
 	var stair_type := MapData.TileType.STAIRS_DOWN if direction > 0 \
 		else MapData.TileType.STAIRS_UP
 	var stairs := _map_data.find_stairs(stair_type)
