@@ -1,0 +1,55 @@
+class_name BuffEffect
+extends Node2D
+
+## 防御バフエフェクト（Phase 12-6: ヒーラーのVスロット防御バフ）
+## バフが有効な間キャラクターに重ねて表示し続ける永続エフェクト。
+## 外部から queue_free() されるまで回転を継続する。
+## HealEffect と異なり、自分では削除しない（character.gd が寿命を管理）。
+
+## 六角形塗りつぶし色（半透明の緑）
+const FILL_COLOR:  Color = Color(0.2, 0.9, 0.4, 0.15)
+## 六角形枠線色
+const LINE_COLOR:  Color = Color(0.2, 0.9, 0.4, 0.80)
+## 外周リング色（少し明るい緑）
+const RING_COLOR:  Color = Color(0.45, 1.0, 0.55, 0.55)
+## 枠線幅
+const LINE_WIDTH:  float = 2.0
+## 外周リング幅
+const RING_WIDTH:  float = 1.5
+## 回転速度（rad/s）: PI/3 = 60°/秒
+const ROT_SPEED:   float = PI / 3.0
+
+
+func _ready() -> void:
+	z_index = 1   # スプライト（z=0）より手前・HitEffect（親ノードに追加）より後ろ
+
+
+func _process(delta: float) -> void:
+	rotation += ROT_SPEED * delta
+	queue_redraw()
+
+
+func _draw() -> void:
+	var gs    := float(GlobalConstants.GRID_SIZE)
+	var r     := gs * 0.60   # 六角形の外接円半径
+	var r_out := gs * 0.74   # 外周リングの半径
+
+	# 6頂点を計算（ノード自体が回転するため角度オフセットは不要）
+	var pts := PackedVector2Array()
+	for i: int in range(6):
+		var angle := float(i) * PI / 3.0
+		pts.append(Vector2(cos(angle), sin(angle)) * r)
+
+	# 六角形の塗り（低アルファ）
+	var fill_colors := PackedColorArray()
+	for _i: int in range(6):
+		fill_colors.append(FILL_COLOR)
+	draw_polygon(pts, fill_colors)
+
+	# 六角形の枠線（polyline は自動クローズしないので先頭点を末尾に追加）
+	var closed_pts := PackedVector2Array(pts)
+	closed_pts.append(pts[0])
+	draw_polyline(closed_pts, LINE_COLOR, LINE_WIDTH, true)
+
+	# 外周リング
+	draw_arc(Vector2.ZERO, r_out, 0.0, TAU, 64, RING_COLOR, RING_WIDTH, true)

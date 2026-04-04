@@ -263,7 +263,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 - **ヘッドショット（archer）**：`instant_death_immune == false` の敵に即死。ボス級（`instant_death_immune == true`）には無効で通常の3倍ダメージ。SP消費大
 - **炎陣（magician-fire）**：自分を中心に半径3マスに設置。設置直後から2〜3秒間燃え続け複数回ヒット。敵のみ判定（巻き添えは将来課題）。MP消費大
 - **無力化水魔法（magician-water）**：単体・射程あり・MP消費大。命中した対象の攻撃・移動を2〜3秒間完全停止（回転エフェクト）。全種族共通。被弾時ダメージは受けるが持続時間は変わらない。ボス級には持続時間を短縮（将来調整）
-- **防御バフ（healer）**：単体・射程あり・MP消費（現状通り `buff_defense` アクション）
+- **防御バフ（healer）**：単体・射程あり・MP消費（`buff_defense` アクション）。バフ中は半透明の緑色六角形バリアエフェクト（`BuffEffect.gd`）がキャラクターに重ねて表示される。バフ終了時に自動削除。重複付与時はタイマーリセット＋エフェクト再生成
 - **スライディング（scout）**：向いている方向に3マス高速移動。移動中は無敵・敵をすり抜け可能。SP消費
 
 ### 魔法使い（水）の仕様
@@ -955,6 +955,17 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
     - **OrderWindow 所持アイテム欄（`_draw_status_section`・インベントリ部）**
       - 未装備品リスト各行の左端にアイコンを描画
   - [x] Phase 12-5: 操作体系変更・LB/RBキャラ切り替え・C/Xホールド消耗品選択
+  - [x] Phase 12-6: 防御バフのバリアエフェクト実装
+    - `scripts/buff_effect.gd` 新規作成（コード描画・永続エフェクト）
+      - 半透明の緑色六角形（塗り＋枠線）を `draw_polygon()` + `draw_polyline()` で描画
+      - 外周リングを `draw_arc()` で重ねる（半径 GRID_SIZE × 0.74）
+      - ゆっくり回転（60°/秒・`ROT_SPEED = PI/3`）
+      - 自身では削除しない（`character.gd` が寿命を管理）
+    - `character.gd` 修正
+      - `_buff_effect: Node2D` フィールド追加
+      - `apply_defense_buff()`: エフェクトを生成して `add_child()`。重複付与時は再生成でリセット
+      - `_remove_buff_effect()` ヘルパー追加
+      - バフタイマー消化時（`defense_buff_timer <= 0`）に `_remove_buff_effect()` を呼ぶ
     - **LB/RB（通常時）**：パーティーメンバーを表示順で循環切り替え。`switch_char_requested` シグナルで `game_map._on_switch_character_requested()` を呼び出し
     - **C/Xホールド**：消耗品選択モード。前回選択位置からスタート（初回は「なし」枠 index=-1）
     - **ホールド中LB/RB**：「なし」枠込みの消耗品リストを前/次に循環（キャラ切り替えは無効）

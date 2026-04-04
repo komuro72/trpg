@@ -65,6 +65,8 @@ var defense_buff_timer: float = 0.0
 const DEFENSE_BUFF_BONUS: int = 3
 ## バフ持続時間（秒）
 const DEFENSE_BUFF_DURATION: float = 10.0
+## バリアエフェクトノード（バフ中のみ存在。null=バフなし or 未生成）
+var _buff_effect: Node2D = null
 ## フレンドリーフラグ（NPC など味方側キャラクターに設定。緑のリングで表示）
 var is_friendly: bool = false
 
@@ -168,6 +170,7 @@ func _process(delta: float) -> void:
 		defense_buff_timer -= delta
 		if defense_buff_timer <= 0.0:
 			defense_buff_timer = 0.0
+			_remove_buff_effect()
 
 
 ## HP・モードに応じてスプライトの色を更新する
@@ -540,9 +543,22 @@ func use_consumable(item: Dictionary) -> void:
 		SoundManager.play(SoundManager.HEAL)
 
 
-## 防御バフを付与する（重複時はタイマーをリセット）
+## 防御バフを付与する（重複時はタイマーをリセット・エフェクトも再生成）
 func apply_defense_buff() -> void:
 	defense_buff_timer = DEFENSE_BUFF_DURATION
+	# 既存エフェクトがあれば削除してから再生成（タイマーリセット時に視覚的なフィードバック）
+	_remove_buff_effect()
+	var effect := BuffEffect.new()
+	effect.z_index = 1
+	add_child(effect)
+	_buff_effect = effect
+
+
+## バリアエフェクトを削除する
+func _remove_buff_effect() -> void:
+	if _buff_effect != null and is_instance_valid(_buff_effect):
+		_buff_effect.queue_free()
+	_buff_effect = null
 
 
 ## スタンを付与する（duration 秒間 is_stunned=true。UnitAI の行動をスキップさせる）
