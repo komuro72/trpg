@@ -33,9 +33,10 @@ var _activated:  bool = false
 var _vision_controlled: bool = false
 var suppress_ai_log: bool = false        ## true ならリーダーAIのログ出力を抑制する
 var joined_to_player: bool = false       ## true なら隊形基準を _player（hero）にする（合流済み NPC パーティー）
-var _all_members: Array[Character] = []  ## 全パーティー合算（AI 起動時に渡す）
-var _drop_items:  Array = []             ## ドロップアイテム（全滅時に party_wiped で転送）
-var _room_id:     String = ""            ## このパーティーが属する部屋のエリアID
+var _all_members:    Array[Character] = []  ## 全パーティー合算（AI 起動時に渡す）
+var _friendly_list:  Array[Character] = []  ## 攻撃対象の友好キャラ一覧（敵 AI 用・activate 時に渡す）
+var _drop_items:     Array = []             ## ドロップアイテム（全滅時に party_wiped で転送）
+var _room_id:        String = ""            ## このパーティーが属する部屋のエリアID
 
 
 ## VisionSystem から呼ばれる。true なら距離ベースのアクティブ化を無効にする
@@ -78,8 +79,9 @@ func set_all_members(all_members: Array[Character]) -> void:
 		_leader_ai.set_all_members(all_members)
 
 
-## 攻撃対象となる友好キャラ一覧を LeaderAI に渡す（敵 AI 用）
+## 攻撃対象となる友好キャラ一覧を保存し、LeaderAI が既に起動済みなら即座に渡す
 func set_friendly_list(friendlies: Array[Character]) -> void:
+	_friendly_list = friendlies
 	if _leader_ai != null:
 		_leader_ai.set_friendly_list(friendlies)
 
@@ -259,6 +261,8 @@ func _start_ai() -> void:
 	if suppress_ai_log:
 		_leader_ai.log_enabled = false
 	_leader_ai.joined_to_player = joined_to_player  # 合流フラグを伝播
+	if not _friendly_list.is_empty():
+		_leader_ai.set_friendly_list(_friendly_list)
 	add_child(_leader_ai)
 	_leader_ai.setup(_members, _player, _map_data, _all_members)
 
