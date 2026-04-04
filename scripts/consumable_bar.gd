@@ -26,6 +26,12 @@ var _tex_cache: Dictionary = {}  # image_path -> Texture2D or null
 ## V スロットのクールダウン残り秒数（player_controller が毎フレーム更新）
 var v_slot_cooldown: float = 0.0
 
+## 消耗品選択モード中かどうか（player_controller が設定）
+var is_selecting: bool = false
+
+## 選択モード中の選択インデックス（-1=なし枠）
+var select_index: int = -1
+
 
 ## 操作キャラクターを設定して表示を更新する
 func update_character(character: Character) -> void:
@@ -85,7 +91,8 @@ func _on_draw() -> void:
 
 	var cd          := _character.character_data
 	var consumables := cd.get_consumables()
-	if consumables.is_empty():
+	# 選択モード以外かつ消耗品が空の場合は非表示
+	if consumables.is_empty() and not is_selecting:
 		return
 
 	# 種類ごとにグループ集計（インベントリ内の出現順を維持）
@@ -104,19 +111,36 @@ func _on_draw() -> void:
 		(groups[itype] as Dictionary)["count"] = \
 			int((groups[itype] as Dictionary)["count"]) + 1
 
+	# 選択モード中は先頭に「なし（—）」スロットを追加
+	var show_none_slot := is_selecting
+
 	# 選択中アイテムの種別を取得
-	var sel      := cd.get_selected_consumable()
-	var sel_type := sel.get("item_type", "") as String if not sel.is_empty() else ""
+	var sel_type := ""
+	if is_selecting:
+		# 選択モード中は select_index で判定（-1=なし枠）
+		if select_index >= 0 and select_index < consumables.size():
+			sel_type = (consumables[select_index] as Dictionary).get("item_type", "") as String
+		# select_index == -1 のときは sel_type="" のまま（なし枠をハイライト）
+	else:
+		var sel := cd.get_selected_consumable()
+		sel_type = sel.get("item_type", "") as String if not sel.is_empty() else ""
 
 	# レイアウト計算
 	var gs      := GlobalConstants.GRID_SIZE
 	var pw      := GlobalConstants.PANEL_TILES * gs
 	var icon_sz := int(float(gs) * ICON_SIZE_RATIO)
 	var item_w  := icon_sz + COUNT_TEXT_W
+	var none_w  := icon_sz + ITEM_GAP  # なし枠は「×n」なしで幅を詰める
 	var n       := group_keys.size()
 	var total_w := float(n * item_w + (n - 1) * ITEM_GAP + H_PAD * 2)
+	if show_none_slot:
+		total_w += float(none_w + ITEM_GAP)
 	var box_h   := float(gs) * 0.65
 	var by      := float(gs) * 0.35
+
+	# バーが空（消耗品0・選択モードのみ）でも最小幅を確保
+	if group_keys.is_empty() and show_none_slot:
+		total_w = float(none_w + H_PAD * 2)
 
 	# フィールド左半分の中央に配置
 	var vw      := _control.size.x
@@ -131,13 +155,30 @@ func _on_draw() -> void:
 	_control.draw_rect(Rect2(bx, by, total_w, box_h),
 		Color(0.65, 0.55, 0.30, 0.80), false, 1)
 
-	# 各アイテムグループを描画
 	var x := bx + float(H_PAD)
+
+	# 「なし（—）」スロットを先頭に描画（選択モード中のみ）
+	if show_none_slot:
+		var iy        := by + (box_h - float(icon_sz)) * 0.5
+		var icon_rect := Rect2(x, iy, float(icon_sz), float(icon_sz))
+		# 灰色の「—」ブロック
+		_control.draw_rect(icon_rect, Color(0.35, 0.35, 0.35, 0.85))
+		if _font != null:
+			var text_x := x + float(icon_sz) * 0.5
+			var text_y := by + box_h * 0.68
+			_control.draw_string(_font, Vector2(text_x - 3.0, text_y),
+				"\u2014", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.85, 0.85, 0.85, 0.95))
+		# なし枠が選択中（sel_type == "" かつ選択モード）ならハイライト
+		if is_selecting and select_index < 0:
+			_control.draw_rect(icon_rect, Color(1.0, 1.0, 1.0, 0.95), false, 2)
+		x += float(none_w + ITEM_GAP)
+
+	# 各アイテムグループを描画
 	for key_v: Variant in group_keys:
 		var itype  := key_v as String
 		var info   := groups[itype] as Dictionary
 		var count  := int(info["count"])
-		var is_sel := (itype == sel_type)
+		var is_sel := (itype == sel_type) and (not is_selecting or select_index >= 0)
 
 		# アイコン（画像優先・なければカラーブロック）
 		var iy        := by + (box_h - float(icon_sz)) * 0.5

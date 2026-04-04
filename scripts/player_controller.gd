@@ -29,6 +29,9 @@ var is_blocked: bool = false
 ## 移動先に友好的キャラクターがいたときに発火するシグナル（会話トリガー用）
 signal npc_bumped(npc_member: Character)
 
+## パーティーメンバー切り替えリクエストシグナル（game_map が処理）
+signal switch_char_requested(new_char: Character)
+
 ## 移動アニメーションの1タイルあたりの時間・基準値（秒）
 ## この定数が移動速度を決める。game_speed で割った値が実効値になる
 ## 【旧方式との違い】タイマーによる移動間隔制御を廃止し、アニメーション完了を
@@ -88,6 +91,15 @@ var _using_v_slot: bool = false
 ## 消耗品バー UI（game_map から設定）
 var consumable_bar: ConsumableBar = null
 
+## パーティーメンバーリスト（game_map から設定。LB/RBキャラ切り替えに使用）
+var _party_sorted_members: Array[Character] = []
+
+## 消耗品選択モード（C/Xホールド中）
+var _consumable_select_mode: bool = false
+
+## 前回選択していた消耗品グループインデックス（-1=なし）
+var _last_consumable_index: int = -1
+
 ## V スロットクールダウン（秒）
 const V_SLOT_COOLDOWN: float = 2.0
 var _v_slot_cooldown: float = 0.0
@@ -101,12 +113,28 @@ func _ready() -> void:
 ## _process でのポーリング（is_action_just_pressed）は他ボタンホールド中に
 ## 取りこぼす場合があるため、_input() で毎イベントを直接受け取る方式に変更
 func _input(event: InputEvent) -> void:
-	if _mode != Mode.TARGETING:
+	# ターゲット選択モード中：LB/RBでターゲット循環
+	if _mode == Mode.TARGETING:
+		if event.is_action_pressed("cycle_target_next", false):
+			_cycle_direction = 1
+		elif event.is_action_pressed("cycle_target_prev", false):
+			_cycle_direction = -1
 		return
-	if event.is_action_pressed("cycle_target_next", false):
-		_cycle_direction = 1
-	elif event.is_action_pressed("cycle_target_prev", false):
-		_cycle_direction = -1
+
+	# 消耗品選択モード中：LB/RBで消耗品循環
+	if _consumable_select_mode:
+		if event.is_action_pressed("switch_char_next", false):
+			_cycle_consumable_select(1)
+		elif event.is_action_pressed("switch_char_prev", false):
+			_cycle_consumable_select(-1)
+		return
+
+	# 通常モード：LB/RBでキャラクター切り替え
+	if _mode == Mode.NORMAL and not is_blocked:
+		if event.is_action_pressed("switch_char_next", false):
+			_switch_character(1)
+		elif event.is_action_pressed("switch_char_prev", false):
+			_switch_character(-1)
 
 
 # --------------------------------------------------------------------------
@@ -158,6 +186,9 @@ func _process(delta: float) -> void:
 		# ブロック中（メニュー等）はガードを解除する
 		if character.is_guarding:
 			character.is_guarding = false
+		# 消耗品選択モードも解除する
+		if _consumable_select_mode:
+			_exit_consumable_select(false)
 		return
 
 	match _mode:
@@ -170,15 +201,18 @@ func _process(delta: float) -> void:
 
 
 func _process_normal(_delta: float) -> void:
-	# 消耗品スロット循環（LB/RB）。ターゲット選択モード中は使わない（_input()でLB/RBをターゲット循環に使う）
-	if Input.is_action_just_pressed("slot_prev"):
-		_cycle_consumable(-1)
-	elif Input.is_action_just_pressed("slot_next"):
-		_cycle_consumable(1)
+	# C/X ホールド：消耗品選択モード
+	# 攻撃ホールド中は無効（_mode が TARGETING/FIRING に移行するため、ここには来ない）
+	var c_held := Input.is_action_pressed("use_item")
+	if c_held and not _consumable_select_mode:
+		_enter_consumable_select()
+	elif not c_held and _consumable_select_mode:
+		_exit_consumable_select(true)  # リリース時に使用を試みる
 
-	# 消耗品使用（C/X）
-	if Input.is_action_just_pressed("use_item"):
-		_use_selected_consumable()
+	# 消耗品選択モード中はその他のアクションを抑制（V/Y・移動はブロックしない）
+	if _consumable_select_mode:
+		_process_guard_and_move(_delta)
+		return
 
 	# 特殊スキル（V/Y）
 	# インスタント系（sliding/whirlwind/rush/flame_circle）は just_pressed で即時発動
@@ -207,7 +241,12 @@ func _process_normal(_delta: float) -> void:
 		_enter_targeting()
 		return
 
-	# ガード（X/B ホールド）
+	_process_guard_and_move(_delta)
+
+
+## ガード入力・移動入力を処理する（通常モード・消耗品選択モード共通）
+func _process_guard_and_move(_delta: float) -> void:
+	# ガード（X/B ホールド）。消耗品選択モード中は C/X を use_item が使うため競合しない
 	var want_guard := Input.is_action_pressed("menu_back")
 	if character.is_guarding != want_guard:
 		character.is_guarding = want_guard
@@ -889,6 +928,103 @@ func _can_move_to(pos: Vector2i) -> bool:
 # 消耗品
 # --------------------------------------------------------------------------
 
+## キャラクター切り替え（LB/RB 通常時）
+## _party_sorted_members の現在キャラの隣を選んで switch_char_requested を発火する
+func _switch_character(dir: int) -> void:
+	if _party_sorted_members.is_empty() or character == null:
+		return
+	var idx := _party_sorted_members.find(character)
+	if idx < 0:
+		idx = 0
+	var total := _party_sorted_members.size()
+	if total <= 1:
+		return
+	var next_idx := (idx + dir + total) % total
+	var next_char := _party_sorted_members[next_idx]
+	if is_instance_valid(next_char) and next_char != character:
+		switch_char_requested.emit(next_char)
+
+
+## 消耗品選択モード開始（C/X ホールド時）
+func _enter_consumable_select() -> void:
+	_consumable_select_mode = true
+	if character == null or character.character_data == null:
+		return
+	var cd   := character.character_data
+	var list := cd.get_consumables()
+	# 前回選択していたグループインデックスを復元。なければ -1（なし）からスタート
+	if _last_consumable_index >= 0 and _last_consumable_index < list.size():
+		cd.selected_consumable_index = _last_consumable_index
+	else:
+		cd.selected_consumable_index = -1  # 初回・前回選択が無効な場合は「なし」からスタート
+	# ConsumableBar を選択モード表示に切り替え
+	if consumable_bar != null:
+		consumable_bar.is_selecting = true
+		consumable_bar.select_index = cd.selected_consumable_index
+		consumable_bar.refresh()
+
+
+## 消耗品選択モード終了（C/X リリース時）
+## do_use=true なら「なし」以外が選択中の場合に使用を試みる
+func _exit_consumable_select(do_use: bool) -> void:
+	_consumable_select_mode = false
+	if do_use and character != null and character.character_data != null:
+		var cd   := character.character_data
+		var list := cd.get_consumables()
+		if list.size() > 0 and cd.selected_consumable_index >= 0:
+			# 「なし」でなければ使用
+			_last_consumable_index = cd.selected_consumable_index
+			_use_selected_consumable()
+		else:
+			# 「なし」が選択中の場合は使用しない
+			_last_consumable_index = -1
+	# ConsumableBar を通常表示に戻す
+	if consumable_bar != null:
+		consumable_bar.is_selecting = false
+		consumable_bar.select_index = -1
+		consumable_bar.refresh()
+
+
+## 消耗品選択モード中の LB/RB によるグループ循環
+## -1（なし）→ グループ0 → グループ1 → … → 最後 → -1（なし） の順で循環
+func _cycle_consumable_select(dir: int) -> void:
+	if character == null or character.character_data == null:
+		return
+	var cd   := character.character_data
+	var list := cd.get_consumables()
+	if list.is_empty():
+		return
+	# グループキーリストを構築
+	var group_keys: Array[String] = []
+	var seen: Dictionary = {}
+	for item_v: Variant in list:
+		var itype := (item_v as Dictionary).get("item_type", "") as String
+		if not seen.has(itype):
+			seen[itype] = true
+			group_keys.append(itype)
+	var group_count := group_keys.size()
+	# 現在のグループインデックス（-1=なし枠）
+	var cur_type := ""
+	if cd.selected_consumable_index >= 0 and cd.selected_consumable_index < list.size():
+		cur_type = (list[cd.selected_consumable_index] as Dictionary).get("item_type", "") as String
+	var cur_grp := group_keys.find(cur_type)  # -1 ならなし枠
+	# 循環計算（-1=なし枠 を含めて group_count+1 の循環）
+	var total := group_count + 1
+	var grp_idx := (cur_grp + 1 + dir + total) % total - 1  # -1=なし枠
+	if grp_idx < 0:
+		# なし枠を選択
+		cd.selected_consumable_index = -1
+	else:
+		var next_type := group_keys[grp_idx]
+		for i: int in range(list.size()):
+			if (list[i] as Dictionary).get("item_type", "") == next_type:
+				cd.selected_consumable_index = i
+				break
+	if consumable_bar != null:
+		consumable_bar.select_index = cd.selected_consumable_index
+		consumable_bar.refresh()
+
+
 ## 消耗品スロットをグループ（item_type）単位で循環する（dir: +1=次 / -1=前）
 func _cycle_consumable(dir: int) -> void:
 	if character == null or character.character_data == null:
@@ -941,12 +1077,15 @@ func _use_selected_consumable() -> void:
 	var effect: Dictionary = item.get("effect", {}) as Dictionary
 	var heal_hp:    int = int(effect.get("heal_hp",    0))
 	var restore_mp: int = int(effect.get("restore_mp", 0))
+	var restore_sp: int = int(effect.get("restore_sp", 0))
 	# 使用条件チェック
 	if heal_hp > 0 and character.hp >= character.max_hp:
 		return
 	if restore_mp > 0 and character.mp >= character.max_mp:
 		return
-	if heal_hp == 0 and restore_mp == 0:
+	if restore_sp > 0 and character.sp >= character.max_sp:
+		return
+	if heal_hp == 0 and restore_mp == 0 and restore_sp == 0:
 		return
 
 	var used_type := item.get("item_type", "") as String

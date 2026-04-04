@@ -515,6 +515,8 @@ func _setup_dialogue_system() -> void:
 	# 矢印キーバンプによる会話トリガーを接続
 	if player_controller != null:
 		player_controller.npc_bumped.connect(_on_npc_bumped)
+		player_controller.switch_char_requested.connect(_on_switch_character_requested)
+		player_controller._party_sorted_members.assign(party.sorted_members())
 
 	# MessageWindow の会話シグナルを接続
 	if message_window != null:
@@ -594,6 +596,9 @@ func _on_switch_character_requested(new_char: Character) -> void:
 		consumable_bar.update_character(new_char)
 
 	party.set_active(new_char)
+
+	# LB/RBキャラ切り替え用リストを更新
+	player_controller._party_sorted_members.assign(party.sorted_members())
 
 
 func _on_npc_bumped(npc_member: Character) -> void:
