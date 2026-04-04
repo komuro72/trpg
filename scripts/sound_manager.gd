@@ -62,6 +62,12 @@ func _preload_streams() -> void:
 			_streams[sound_id] = load(path) as AudioStream
 
 
+## Master バスの音量を設定する（0.0〜1.0）
+func set_volume(vol: float) -> void:
+	var db := linear_to_db(clampf(vol, 0.0001, 1.0))
+	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), db)
+
+
 ## 指定 ID のサウンドを再生する
 ## 空きプレイヤーがなければ最も古いチャンネルを上書き
 func play(sound_id: int) -> void:

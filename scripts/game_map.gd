@@ -78,6 +78,7 @@ var _item_tex_cache: Dictionary = {}  # image_path -> Texture2D or null
 var _dialogue_npc_manager: NpcManager  ## 現在会話中の NpcManager
 var _dialogue_npc_initiates: bool = false
 var npc_dialogue_window: NpcDialogueWindow  ## NPC会話専用ウィンドウ
+var pause_menu: PauseMenu  ## ポーズメニュー
 
 
 func _ready() -> void:
@@ -96,8 +97,11 @@ func _input(event: InputEvent) -> void:
 			KEY_ESCAPE:
 				if order_window != null and order_window.visible:
 					order_window.close_window()
-				else:
-					get_tree().quit()
+				elif pause_menu != null:
+					if pause_menu.is_open():
+						pause_menu.close()
+					else:
+						pause_menu.open()
 			KEY_TAB:
 				_toggle_order_window()
 			KEY_F1:
@@ -152,6 +156,7 @@ func _finish_setup() -> void:
 	_setup_dialogue_system()
 	_merge_pre_joined_allies()
 	_setup_order_window()
+	_setup_pause_menu()
 	queue_redraw()
 
 
@@ -222,6 +227,15 @@ func _setup_hero() -> void:
 	hero.sync_position()
 
 	hero.is_friendly = true  # _assign_orders() で current_order.move を適用するために必要
+
+	# セーブデータの主人公名を適用する（性別に応じた名前を使用）
+	var active_save := SaveManager.get_active_save()
+	if active_save != null and hero.character_data != null:
+		var sex_str := hero.character_data.sex
+		if sex_str == "female" and not active_save.hero_name_female.is_empty():
+			hero.character_data.character_name = active_save.hero_name_female
+		elif sex_str == "male" and not active_save.hero_name_male.is_empty():
+			hero.character_data.character_name = active_save.hero_name_male
 
 	party = Party.new()
 	party.add_member(hero)
@@ -568,6 +582,12 @@ func _setup_order_window() -> void:
 	order_window.switch_requested.connect(_on_switch_character_requested)
 
 
+func _setup_pause_menu() -> void:
+	pause_menu = PauseMenu.new()
+	pause_menu.name = "PauseMenu"
+	add_child(pause_menu)
+
+
 ## Tab キーで指示ウィンドウを開閉する（誰を操作中でも開ける・閲覧専用モードあり）
 func _toggle_order_window() -> void:
 	if order_window == null:
@@ -865,6 +885,7 @@ func _trigger_game_clear() -> void:
 	# 入力を無効化（F5リスタートは game_map._input で KEY_F5 直接マッチのため引き続き有効）
 	if player_controller != null:
 		player_controller.is_blocked = true
+	SaveManager.record_clear()
 	MessageLog.add_system("ダンジョンを制覇した！冒険者たちの名声は永遠に語り継がれるだろう。")
 	print("[GameMap] GAME CLEAR")
 
@@ -943,18 +964,19 @@ func _rebuild_blocking_characters() -> void:
 			player_controller.blocking_characters.append(ch)
 
 
-## パーティーメンバーが階段にいるかチェックし、hero と別フロアならば遷移させる
+## パーティーメンバーが階段にいるかチェックし、操作キャラと別フロアならば遷移させる
 func _check_party_member_stairs() -> void:
 	if _member_stair_cooldown > 0.0:
 		return
 	if party == null:
 		return
+	var active_char := player_controller.character if player_controller != null else hero
 	for member_var: Variant in party.members:
 		var ch := member_var as Character
-		if not is_instance_valid(ch) or ch == hero:
+		if not is_instance_valid(ch) or ch == active_char:
 			continue
 		if ch.current_floor == _current_floor_index:
-			continue  # hero と同フロア・遷移不要
+			continue  # 操作キャラと同フロア・遷移不要
 		if ch.is_moving():
 			continue
 		# hero に向かう方向の階段タイルかチェック
@@ -1146,11 +1168,13 @@ func _find_free_adjacent_to(center: Vector2i, map_ref: MapData,
 func _check_stairs_step() -> void:
 	if _stair_cooldown > 0.0:
 		return
-	if hero == null or not is_instance_valid(hero):
+	# 現在の操作キャラ（リーダー以外の場合もある）を使用
+	var active_char := player_controller.character if player_controller != null else hero
+	if active_char == null or not is_instance_valid(active_char):
 		return
-	if hero.is_moving():
+	if active_char.is_moving():
 		return
-	var tile := map_data.get_tile(hero.grid_pos)
+	var tile := map_data.get_tile(active_char.grid_pos)
 	if tile == MapData.TileType.STAIRS_DOWN:
 		_transition_floor(1)
 	elif tile == MapData.TileType.STAIRS_UP:
@@ -1165,6 +1189,7 @@ func _transition_floor(direction: int) -> void:
 		return
 
 	_stair_cooldown = 1.5  # 遷移直後の再遷移を防ぐ
+	SaveManager.update_floor(new_floor)
 
 	# ターゲットフロアの MapData を取得
 	var new_map := _all_map_data[new_floor]
@@ -1201,10 +1226,11 @@ func _transition_floor(direction: int) -> void:
 	_tile_set_id = (_all_floor_data[new_floor] as Dictionary).get("tile_set", DEFAULT_TILE_SET) as String
 	_load_tile_textures()
 
-	# hero のフロア更新・移動
-	hero.current_floor = new_floor
-	hero.grid_pos      = spawn_pos
-	hero.sync_position()
+	# 操作キャラのフロア更新・移動（リーダー以外を操作中の場合はそのキャラを移動）
+	var active_char := player_controller.character if player_controller != null else hero
+	active_char.current_floor = new_floor
+	active_char.grid_pos      = spawn_pos
+	active_char.sync_position()
 
 	# 新フロアの敵・NPC がまだセットアップされていなければ行う
 	if (_per_floor_enemies[new_floor] as Array).is_empty() \
@@ -1264,6 +1290,10 @@ func _transition_floor(direction: int) -> void:
 
 	# キャラクターの表示を更新（フロアが違うキャラを非表示）
 	_update_character_visibility()
+
+	# 右パネルを新フロアの enemy_managers / map_data で更新
+	if right_panel != null:
+		right_panel.setup(enemy_managers, vision_system, map_data)
 
 	# ダイアログ強制クローズ
 	if message_window != null and message_window.is_dialogue_active():

@@ -1,5 +1,6 @@
 # プロジェクト概要
-リアルタイムタクティクスRPG（仮題未定）
+リアルタイムタクティクスRPG
+ゲームタイトル：Rally the Parties
 
 ## ジャンル・コンセプト
 - リアルタイム進行（ターン制なし）
@@ -49,7 +50,7 @@ assets/images/enemies/
 ```
 - 味方: class = fighter-sword, fighter-axe, archer, magician-fire, magician-water, healer, scout
   - ヒーラーは白系・魔法使い(水)は青〜水色系の画風（magician-fireの赤系・healerの白系と区別）
-- 敵: enemy_type = goblin, goblin-archer, goblin-mage, hobgoblin, dark-knight, dark-mage, dark-priest, wolf, zombie, harpy, salamander 等
+- 敵: enemy_type = goblin, goblin-archer, goblin-mage, hobgoblin, dark-knight, dark-mage, dark-priest, wolf, zombie, harpy, salamander, skeleton, skeleton-archer, lich, demon, dark-lord 等
 - sex: male, female
 - age: young, adult, elder
 - build: slim, medium, muscular
@@ -164,8 +165,7 @@ assets/images/tiles/
 | 消耗品循環選択（C/Xホールド中） | — | LB / RB | LBで前、RBで次（「なし」枠あり） |
 | ターゲット循環（攻撃ホールド中） | 矢印キー | LB / RB | |
 | 指示／ステータスウィンドウ | Tab | Select / Back | |
-| ゲーム終了 | Esc（当面） | ポーズメニュー内で選択（将来実装） | |
-| ポーズメニュー | 未定（将来実装） | Start | |
+| ポーズメニュー開閉 | Esc | Start | |
 | AIデバッグパネル ON/OFF | F1 | — | |
 | デバッグ情報コンソール出力 | F2 | — | キャラ・フロア・占有タイル情報を user://debug_floor_info.txt に書き出し |
 | シーン再スタート | F5 | — | |
@@ -248,12 +248,12 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 | 弓使い | archer | 弓 | 遠距離物理：速射 | ranged | ヘッドショット |
 | 魔法使い(火) | magician-fire | 杖 | 遠距離魔法：火弾 | ranged | 炎陣 |
 | 魔法使い(水) | magician-water | 杖 | 遠距離魔法：水弾 | ranged | 無力化水魔法 |
-| ヒーラー | healer | 杖 | 支援：回復(単体) | heal | 防御バフ(単体) |
+| ヒーラー | healer | 杖 | 支援：回復(単体)／アンデッド特効 | heal | 防御バフ(単体) |
 | 斥候 | scout | ダガー | 近接物理：刺突 | melee | スライディング |
 
 - 攻撃は Z/A の1ボタン。攻撃タイプ（melee/ranged）はクラスのスロット定義から自動判定
 - スロット最大4（ZXCV）、ゲームパッド対応を考慮（X/B はガード）
-- ヒーラーは攻撃手段を持たない（支援専用）
+- ヒーラーは通常の攻撃手段を持たない（支援専用）。ただし is_undead=true の敵はZ攻撃のターゲットに含め、回復量をダメージとして適用（アンデッド特効）
 - 将来拡張：魔法使いの属性分化（土・風）、支援系第2ジョブ、槍兵・飛翔系・両手武器系、状態異常回復（毒・麻痺実装後）
 - スロット4枠を超えるスキルの管理方法（入替・キャラ別・系統別）は将来決定
 
@@ -618,7 +618,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
     - attack (Z) → Joypad Button 0（A）（Phase 10-2 で attack_melee から改名・1ボタン統合）
     - menu_back (X) → Joypad Button 1（B）（メニュー戻る。フィールドでは当面未使用）
     - open_order_window → Joypad Button 4（Back/Select）のみ。キーボード Tab は _input() で KEY_TAB 直接マッチ
-    - game_quit → キーボード Esc は _input() で KEY_ESCAPE 直接マッチ。Start ボタンは将来のポーズメニュー用に予約
+    - ポーズメニュー開閉 → キーボード Esc は game_map._input() で KEY_ESCAPE 直接マッチ。Start ボタン（JOY_BUTTON_START）は pause_menu.gd の PROCESS_MODE_ALWAYS _input() でトグル処理
     - 移動（ui_up/down/left/right）は Godot デフォルトで D-pad・左スティック対応済み
     - デバッグ機能（F1/F5）はキーボードのみ
     - game_map.gd: ゲームパッドは _process() で is_action_just_pressed ポーリング、キーボード Tab/Esc は _input() で physical_keycode 直接マッチ
@@ -626,9 +626,10 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
     - LB（Joypad Button 9）後退サイクルバグ修正：_refresh_targets() がキャンセル状態を毎フレームリセットしていた問題を修正（was_cancel フラグで保持）
   - [x] Phase 9-3: 飛翔体グラフィック
     - 飛翔体画像を assets/images/projectiles/ に配置
-      - arrow.png（矢：弓使い・ゴブリンアーチャー）
+      - arrow.png（矢：弓使い・ゴブリンアーチャー・スケルトンアーチャー）
       - fire_bullet.png（火属性魔法弾：魔法使い(火)・ゴブリンメイジ・ダークメイジ・サラマンダー）
-    - 判定ロジック：`attack_type=="ranged"` かつ `is_magic==false → arrow.png`、`is_magic==true → fire_bullet.png`
+      - thunder_bullet.png（雷属性魔法弾：デーモン専用・is_magic=true）
+    - 判定ロジック：`attack_type=="ranged"` かつ `is_magic==false → arrow.png`、`is_magic==true → fire_bullet.png`（thunder_bullet はキャラクター固有指定で上書き）
     - 飛行方向に合わせて rotation で回転（下向き正方向の画像を `-PI/2` オフセットで補正）。軌道は直線
     - ヒーラー・ダークプリーストの回復・バフは飛翔体なし（別途エフェクト）
     - 画像がない場合は黄色の円（フォールバック）を表示
@@ -1097,7 +1098,57 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
       - r1_4 fighter-sword → `fighter-sword_female_young_slim_00002`、r1_4 healer → `healer_male_young_slim_00009`、r1_4 magician-water → `magician-water_female_young_slim_00014`
       - r1_5 scout → `scout_female_young_slim_00012`、r1_5 magician-fire → `magician-fire_male_young_slim_00007`、r1_5 archer → `archer_male_young_slim_00005`
       - r1_6 fighter-sword → `fighter-sword_female_young_slim_00002`、r1_6 healer → `healer_male_young_slim_00009`、r1_6 scout → `scout_male_young_slim_00011`
-- [ ] Phase 13: Steam配布準備
+- [ ] Phase 12-11: アンデッド・新敵種実装
+  - CharacterData に `is_undead: bool = false` フィールド追加
+  - skeleton / skeleton-archer / lich / demon / dark-lord の JSON マスターデータ作成・enemies_list.json に追加
+  - **アンデッド特効（ヒーラー）**
+    - `_get_valid_targets()` に is_undead=true の敵を追加（heal アクション時）
+    - `_execute_heal()` でターゲットがアンデッドの場合は `character.heal()` ではなく `take_damage()` を呼ぶ（回復量をダメージとして適用）
+  - **thunder_bullet 飛翔体**（デーモン専用）
+    - `Projectile` に `_THUNDER_BULLET_PATH` 定数追加（`assets/images/projectiles/thunder_bullet.png`）
+    - demon.json の `projectile_type: "thunder_bullet"` でキャラクター固有指定。画像なし時は紫色フォールバック
+  - **炎陣（FlameCircle）のAI呼び出し対応**
+    - `FlameCircle` を AI 側（DarkLordUnitAI）からも生成できるようスタティックメソッドまたはシグナル経由で map_node に追加できる設計に変更
+    - dark-lord の攻撃アクションとして炎陣を使用
+  - **ワープ移動（DarkLordUnitAI専用）**
+    - `DarkLordUnitAI.gd` 新規作成
+    - 3秒間隔（`game_speed` 除算）でランダムな空きタイルにワープ（`character.sync_position()` で瞬間移動）
+    - ワープ直後に炎陣を設置する行動パターン
+  - **リッチの交互魔法弾**
+    - LichUnitAI が攻撃ごとに fire_bullet / water_bullet を交互に切り替えて発射
+  - dungeon_handcrafted.json のフロア4ボス構成に dark-lord を追加
+- [x] Phase 13: タイトル・セーブ・メニューシステム
+  - [x] **セーブシステム基盤**
+    - `scripts/save_data.gd`（class_name SaveData）：slot_index / exists / hero_name_male / hero_name_female / current_floor / clear_count / playtime / to_dict() / from_dict() / format_playtime()
+    - `scripts/save_manager.gd`（Autoload: SaveManager）：get_save_data() / write_save() / has_any_save() / start_session() / get_active_save() / flush_playtime() / update_floor() / record_clear()
+    - `project.godot`：SaveManager を autoload に追加
+  - [x] **タイトル画面**（`scripts/title_screen.gd` / `scenes/title_screen.tscn`）
+    - 背景画像（assets/images/ui/title_bg.png、なければグラデーションフォールバック）
+    - "Rally the Parties" ゴールド文字＋サブタイトル「リアルタイムタクティクスRPG」
+    - "Press any button / key" 点滅（0.55s間隔）
+    - 任意キー/ボタン押下 → main_menu.tscn へ遷移
+    - `project.godot` メインシーンを game_map.tscn → title_screen.tscn に変更
+  - [x] **メインメニュー**（`scripts/main_menu.gd` / `scenes/main_menu.tscn`）
+    - 状態機械：MAIN / SLOT_SELECT_NEW / OVERWRITE_CONFIRM / NAME_INPUT / SLOT_SELECT_CONT / OPTIONS
+    - 「続きから始める」はセーブがある場合のみ表示
+    - セーブスロット3枠：フロア・クリア回数・プレイ時間・主人公名を表示
+    - 上書き確認ダイアログ
+    - 名前入力（LineEdit ×2：男性名・女性名）。空白時はランダム生成（character_name はゲーム開始後に適用）
+    - オプション画面：音量（←→）・ゲーム速度（←→）・主人公名（表示のみ）・ゲーム終了・← 戻る
+  - [x] **ポーズメニュー**（`scripts/pause_menu.gd`）
+    - `process_mode = PROCESS_MODE_ALWAYS`・`get_tree().paused = true/false`
+    - Startボタン（JOY_BUTTON_START）でトグル開閉（open のみ PROCESS_MODE_ALWAYS で処理）
+    - 状態機械：MAIN / OPTIONS / RETURN_CONFIRM
+    - 項目：オプション・タイトルへ戻る（確認あり・flush_playtime() 後に title_screen.tscn へ遷移）・ゲームに戻る
+    - オプション：音量・ゲーム速度（ゲーム終了は表示しない）
+  - [x] **game_map.gd 修正**
+    - `_setup_hero()` 後に SaveManager.get_active_save() から性別に応じた主人公名を character_data.character_name に適用
+    - `_trigger_game_clear()` で SaveManager.record_clear() を呼ぶ
+    - `_transition_floor()` で SaveManager.update_floor(new_floor) を呼ぶ
+    - `_input()` の KEY_ESCAPE をポーズメニュー開閉に変更（旧 get_tree().quit() を廃止）
+    - `_setup_pause_menu()` で PauseMenu をインスタンス化・add_child
+  - [x] **SoundManager.set_volume()** 追加（linear_to_db 変換して Master バスに適用）
+- [ ] Phase 14: Steam配布準備
 
 ## アイテムシステム
 
@@ -1215,6 +1266,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 | 統率力（leadership） | `leadership` | リーダー側。クラス・ランクから算出して確定後不変。当面は値のみ保持 |
 | 従順度（obedience） | `obedience` | 個体側（0.0〜1.0）。クラス・種族・ランクから算出して確定後不変。当面は値のみ保持 |
 | 即死耐性 | `instant_death_immune` | bool。デフォルト false。ボス級は true（ヘッドショット無効・無力化水魔法短縮） |
+| アンデッド | `is_undead` | bool。デフォルト false。skeleton / skeleton-archer / lich が true。ヒーラーの回復魔法が特効（回復量をダメージとして適用）。物理耐性極高・魔法はある程度有効 |
 | 巻き添え | `friendly_fire` | bool。デフォルト false（将来実装。範囲攻撃が味方・他パーティーにも当たる仕様） |
 
 - 魔法命中精度は `accuracy` と共通（magic_power 系は攻撃・回復とも同じ命中扱い）
@@ -1290,6 +1342,11 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 | ダークナイト | 近接 | 人間型の強敵 |
 | ダークメイジ | 遠距離（魔法） | 人間型。後方から魔法攻撃 |
 | ダークプリースト | 支援（回復・バリア） | 人間型。後方で仲間を回復・強化 |
+| スケルトン | 近接 | アンデッド（is_undead=true）。physical_resistance極高で物理攻撃ほぼ無効・魔法はある程度有効・ヒーラーの回復魔法が特効 |
+| スケルトンアーチャー | 遠距離（弓） | アンデッド（is_undead=true）。スケルトンと同じ耐性特性。遠距離から弓で攻撃 |
+| リッチ | 遠距離（魔法・火水交互） | アンデッド（is_undead=true）。火弾と水弾を交互に放つ。スケルトンと同じ耐性特性 |
+| デーモン | 遠距離（魔法・thunder_bullet） | 飛行（is_flying=true）。雷属性魔法弾を使う強敵 |
+| 魔王（ダークロード） | 遠距離（炎陣・範囲）＋ワープ移動 | ラスボス専用（フロア4のみ）。instant_death_immune=true。3秒間隔（game_speed除算）でランダムワープ移動。炎陣をAI側から呼び出して範囲攻撃 |
 
 ### 攻撃仕様
 - 攻撃タイプ（CharacterData.attack_type）
@@ -1392,7 +1449,6 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 - お金の概念・商店：アイテムシステム完成後に改めて設計
 - 複数パーティーによるアイテム分配：現在は部屋制圧時にフィールドに散らばったアイテムを早い者勝ちで取得
 - BGM
-- ポーズメニュー（ゲーム終了・オプション設定などを含むメニュー）：Startボタンで開く。現在はStartボタン未割り当て
 - 巻き添え（`friendly_fire`）：範囲攻撃（炎陣など）が味方・他パーティーにも当たる仕様。`CharacterData.friendly_fire: bool`（当面 false 固定）で管理し、将来切り替え可能にする
 - 大型ボスの即死耐性設計：`instant_death_immune: bool`（ボス級は true）。ヘッドショット無効・無力化水魔法持続短縮。敵 JSON でフラグを設定できる設計にする
 

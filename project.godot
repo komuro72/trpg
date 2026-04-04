@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="trpg"
-run/main_scene="res://scenes/game_map.tscn"
+run/main_scene="res://scenes/title_screen.tscn"
 config/features=PackedStringArray("4.6", "Mobile")
 config/icon="res://icon.svg"
 
@@ -20,6 +20,7 @@ config/icon="res://icon.svg"
 GlobalConstants="*res://scripts/global_constants.gd"
 SoundManager="*res://scripts/sound_manager.gd"
 MessageLog="*res://scripts/message_log.gd"
+SaveManager="*res://scripts/save_manager.gd"
 
 [display]
 
