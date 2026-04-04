@@ -247,23 +247,27 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 		"%s / %s / %s" % [bform_a, lowh_a, pickup_a],
 		HORIZONTAL_ALIGNMENT_LEFT, tw, fs_ord, ord_color)
 
-	# 消耗品表示（操作キャラのみ）
-	if _active_character != null and c == _active_character and c.character_data != null:
+	# 消耗品表示（全キャラ。所持品なしの場合は非表示）
+	if c.character_data != null:
 		var consumables := c.character_data.get_consumables()
-		var item_text: String
-		if consumables.is_empty():
-			item_text = "[C] ―"
-		else:
-			var idx := c.character_data.selected_consumable_index
-			var sel := consumables[clampi(idx, 0, consumables.size() - 1)] as Dictionary
-			var iname: String = sel.get("item_name", "アイテム") as String
-			if consumables.size() > 1:
-				item_text = "[C] %s (%d/%d)" % [iname, idx + 1, consumables.size()]
-			else:
-				item_text = "[C] %s" % iname
-		_control.draw_string(_font,
-			Vector2(tx, content_y + 33.0),
-			item_text, HORIZONTAL_ALIGNMENT_LEFT, tw, 9, Color(0.9, 0.85, 0.5))
+		if not consumables.is_empty():
+			# 同名アイテムをまとめて「名前×N」形式に集約
+			var counts: Dictionary = {}
+			var order: Array = []
+			for item: Dictionary in consumables:
+				var iname: String = item.get("item_name", "アイテム") as String
+				if not counts.has(iname):
+					counts[iname] = 0
+					order.append(iname)
+				counts[iname] = int(counts[iname]) + 1
+			var parts: Array = []
+			for iname: String in order:
+				var n: int = int(counts[iname])
+				parts.append("%s×%d" % [iname, n] if n > 1 else iname as String)
+			var item_text: String = "消: " + "  ".join(parts)
+			_control.draw_string(_font,
+				Vector2(tx, content_y + 33.0),
+				item_text, HORIZONTAL_ALIGNMENT_LEFT, tw, 9, Color(0.9, 0.85, 0.5))
 
 	# カード下区切り線
 	_control.draw_line(
