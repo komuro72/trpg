@@ -37,8 +37,8 @@ var _pending_save: SaveData = null
 
 ## オプション
 var _opt_cursor:    int   = 0
-var _opt_volume:    float = 1.0
-var _opt_speed_idx: int   = 1   ## 1 = 1.0x
+var _opt_volume:    float = 0.5
+var _opt_speed_idx: int   = 0   ## 0 = 0.5x
 
 # --------------------------------------------------------------------------
 # UI
@@ -61,7 +61,10 @@ func _ready() -> void:
 	if ResourceLoader.exists(bg_path):
 		_tex_bg = load(bg_path) as Texture2D
 
-	# オプションを GlobalConstants の現在値に同期
+	# デフォルト値を適用してから現在値に同期
+	# （設定の永続化なし・起動のたびにデフォルト値で開始）
+	SoundManager.set_volume(_opt_volume)
+	GlobalConstants.game_speed = _SPEED_OPTS[_opt_speed_idx]
 	_opt_volume    = _read_bus_volume()
 	_opt_speed_idx = _speed_index_of(GlobalConstants.game_speed)
 

@@ -16,7 +16,7 @@ var GRID_SIZE: int = 64
 ## ゲーム速度倍率（1.0 = 標準速度）
 ## 将来の設定画面からここを変更することで全体の速度が変わる
 ## 移動間隔は各定数 ÷ game_speed で決まる（2.0 = 2倍速、0.5 = 半速）
-var game_speed: float = 1.0
+var game_speed: float = 0.5
 
 ## スプライト素材のソース解像度（差し替え時もここを変えるだけでスケールが追従する）
 const SPRITE_SOURCE_WIDTH: int = 512
