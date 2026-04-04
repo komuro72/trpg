@@ -349,6 +349,9 @@ func _merge_pre_joined_allies() -> void:
 			nm.activate()
 			_merge_npc_into_player_party(nm)
 	_pre_joined_npc_managers.clear()
+	# 合流後に LB/RB キャラ切り替えリストを更新する
+	if player_controller != null:
+		player_controller._party_sorted_members.assign(party.sorted_members())
 
 
 ## 敵・NPC 合算の衝突回避リストを全マネージャーに配布する
@@ -717,6 +720,9 @@ func _merge_npc_into_player_party(nm: NpcManager) -> void:
 	npc_managers.erase(nm)
 	# dialogue_trigger の参照リストも更新
 	dialogue_trigger.setup(hero, npc_managers, enemy_managers, vision_system, map_data)
+	# LB/RB キャラ切り替えリストを更新
+	if player_controller != null:
+		player_controller._party_sorted_members.assign(party.sorted_members())
 
 
 ## プレイヤー側が NPC パーティーに合流する（NPC リーダーがリーダーになる）
@@ -743,6 +749,9 @@ func _merge_player_into_npc_party(nm: NpcManager) -> void:
 		vision_system.remove_npc_manager(nm)
 	npc_managers.erase(nm)
 	dialogue_trigger.setup(hero, npc_managers, enemy_managers, vision_system, map_data)
+	# LB/RB キャラ切り替えリストを更新
+	if player_controller != null:
+		player_controller._party_sorted_members.assign(party.sorted_members())
 
 
 ## NPC パーティーのリーダー名を返す
