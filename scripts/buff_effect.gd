@@ -6,8 +6,6 @@ extends Node2D
 ## 外部から queue_free() されるまで回転を継続する。
 ## HealEffect と異なり、自分では削除しない（character.gd が寿命を管理）。
 
-## 六角形塗りつぶし色（半透明の緑）
-const FILL_COLOR:  Color = Color(0.2, 0.9, 0.4, 0.15)
 ## 六角形枠線色
 const LINE_COLOR:  Color = Color(0.2, 0.9, 0.4, 0.80)
 ## 枠線幅
@@ -34,12 +32,6 @@ func _draw() -> void:
 	for i: int in range(6):
 		var angle := float(i) * PI / 3.0
 		pts.append(Vector2(cos(angle), sin(angle)) * r)
-
-	# 六角形の塗り（低アルファ）
-	var fill_colors := PackedColorArray()
-	for _i: int in range(6):
-		fill_colors.append(FILL_COLOR)
-	draw_polygon(pts, fill_colors)
 
 	# 六角形の枠線（polyline は自動クローズしないので先頭点を末尾に追加）
 	var closed_pts := PackedVector2Array(pts)
