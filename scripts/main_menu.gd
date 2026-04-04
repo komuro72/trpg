@@ -251,13 +251,14 @@ func _name_input_confirm() -> void:
 
 
 func _opt_confirm() -> void:
-	match _opt_cursor:
-		_opt_item_count() - 1:  # ← 戻る
-			_apply_options()
-			_set_state(_State.MAIN)
-		_opt_item_count() - 2:  # ゲーム終了（最後から2番目）
-			_apply_options()
-			get_tree().quit()
+	var last := _opt_item_count() - 1
+	var second_last := _opt_item_count() - 2
+	if _opt_cursor == last:       # ← 戻る
+		_apply_options()
+		_set_state(_State.MAIN)
+	elif _opt_cursor == second_last:  # ゲーム終了
+		_apply_options()
+		get_tree().quit()
 
 
 func _apply_options() -> void:

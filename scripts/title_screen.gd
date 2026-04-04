@@ -62,38 +62,25 @@ func _on_draw() -> void:
 
 	# ─── 背景 ───────────────────────────────────────────────────
 	if _tex_bg != null:
-		_control.draw_texture_rect(_tex_bg, Rect2(Vector2.ZERO, vp), false)
+		# 幅に合わせて均等スケール。画像が縦長なら下部をクロップ（伸長しない）
+		var tw := float(_tex_bg.get_width())
+		var th := float(_tex_bg.get_height())
+		if tw > 0.0 and th > 0.0:
+			# ソース矩形：幅フル・高さは画面アスペクト分のみ（上から）
+			var src_h := tw * vp.y / vp.x
+			src_h = minf(src_h, th)  # 画像高さを超えないようにクランプ
+			var src_rect := Rect2(0.0, 0.0, tw, src_h)
+			_control.draw_texture_rect_region(_tex_bg, Rect2(Vector2.ZERO, vp), src_rect)
 	else:
 		# 暗いグラデーション風（2段重ね）
 		_control.draw_rect(Rect2(Vector2.ZERO, vp), Color(0.04, 0.04, 0.10))
 		_control.draw_rect(Rect2(0.0, vp.y * 0.55, vp.x, vp.y * 0.45),
 			Color(0.02, 0.02, 0.07, 0.80))
 
-	# ─── タイトルロゴ ────────────────────────────────────────────
-	var title_font_size := 80
-	var title := "Rally the Parties"
-	# 影
-	_control.draw_string(_font,
-		Vector2(2.0, vp.y * 0.38 + 2.0), title,
-		HORIZONTAL_ALIGNMENT_CENTER, vp.x, title_font_size,
-		Color(0.0, 0.0, 0.0, 0.6))
-	# 本体（ゴールド系）
-	_control.draw_string(_font,
-		Vector2(0.0, vp.y * 0.38), title,
-		HORIZONTAL_ALIGNMENT_CENTER, vp.x, title_font_size,
-		Color(1.0, 0.88, 0.55))
-
-	# ─── サブタイトル ─────────────────────────────────────────────
-	_control.draw_string(_font,
-		Vector2(0.0, vp.y * 0.38 + 64.0),
-		"リアルタイムタクティクスRPG",
-		HORIZONTAL_ALIGNMENT_CENTER, vp.x, 22,
-		Color(0.75, 0.75, 0.85, 0.80))
-
 	# ─── プロンプト（点滅） ─────────────────────────────────────
 	if _show_prompt:
 		_control.draw_string(_font,
-			Vector2(0.0, vp.y * 0.72),
+			Vector2(0.0, vp.y * 0.88),
 			"Press any button / key",
 			HORIZONTAL_ALIGNMENT_CENTER, vp.x, 26,
 			Color(0.90, 0.90, 0.90, 0.90))
