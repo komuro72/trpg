@@ -10,12 +10,8 @@ extends Node2D
 const FILL_COLOR:  Color = Color(0.2, 0.9, 0.4, 0.15)
 ## 六角形枠線色
 const LINE_COLOR:  Color = Color(0.2, 0.9, 0.4, 0.80)
-## 外周リング色（少し明るい緑）
-const RING_COLOR:  Color = Color(0.45, 1.0, 0.55, 0.55)
 ## 枠線幅
 const LINE_WIDTH:  float = 2.0
-## 外周リング幅
-const RING_WIDTH:  float = 1.5
 ## 回転速度（rad/s）: PI/3 = 60°/秒
 const ROT_SPEED:   float = PI / 3.0
 
@@ -32,7 +28,6 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	var gs    := float(GlobalConstants.GRID_SIZE)
 	var r     := gs * 0.60   # 六角形の外接円半径
-	var r_out := gs * 0.74   # 外周リングの半径
 
 	# 6頂点を計算（ノード自体が回転するため角度オフセットは不要）
 	var pts := PackedVector2Array()
@@ -50,6 +45,3 @@ func _draw() -> void:
 	var closed_pts := PackedVector2Array(pts)
 	closed_pts.append(pts[0])
 	draw_polyline(closed_pts, LINE_COLOR, LINE_WIDTH, true)
-
-	# 外周リング
-	draw_arc(Vector2.ZERO, r_out, 0.0, TAU, 64, RING_COLOR, RING_WIDTH, true)
