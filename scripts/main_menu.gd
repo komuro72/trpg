@@ -380,6 +380,7 @@ func _destroy_name_fields() -> void:
 
 
 ## LineEdit フォーカス中は方向キー以外を LineEdit に渡す（Enterで次フィールドへ）
+## ゲームパッドも同様に処理する
 func _handle_name_input_passthrough(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var ke := event as InputEventKey
@@ -401,6 +402,38 @@ func _handle_name_input_passthrough(event: InputEvent) -> void:
 			KEY_ESCAPE, KEY_X:
 				_blur_name_fields()
 				_name_focus = 2
+	elif event is InputEventJoypadButton:
+		var jb := event as InputEventJoypadButton
+		if not jb.pressed:
+			return
+		match jb.button_index:
+			JOY_BUTTON_A:  # 決定：次のフィールドへ（キーボードの Enter 相当）
+				_blur_name_fields()
+				_name_focus = wrapi(_name_focus + 1, 0, 3)
+				_sync_name_focus()
+			JOY_BUTTON_B:  # キャンセル：決定ボタンへ
+				_blur_name_fields()
+				_name_focus = 2
+				_sync_name_focus()
+			JOY_BUTTON_DPAD_UP:
+				_blur_name_fields()
+				_name_focus = wrapi(_name_focus - 1, 0, 3)
+				_sync_name_focus()
+			JOY_BUTTON_DPAD_DOWN:
+				_blur_name_fields()
+				_name_focus = wrapi(_name_focus + 1, 0, 3)
+				_sync_name_focus()
+	elif event is InputEventJoypadMotion:
+		var jm := event as InputEventJoypadMotion
+		if jm.axis == JOY_AXIS_LEFT_Y:
+			if jm.axis_value < -0.5:
+				_blur_name_fields()
+				_name_focus = wrapi(_name_focus - 1, 0, 3)
+				_sync_name_focus()
+			elif jm.axis_value > 0.5:
+				_blur_name_fields()
+				_name_focus = wrapi(_name_focus + 1, 0, 3)
+				_sync_name_focus()
 
 
 # --------------------------------------------------------------------------
