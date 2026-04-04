@@ -97,9 +97,6 @@ var _party_sorted_members: Array[Character] = []
 ## 消耗品選択モード（C/Xホールド中）
 var _consumable_select_mode: bool = false
 
-## 前回選択していた消耗品グループインデックス（-1=なし）
-var _last_consumable_index: int = -1
-
 ## V スロットクールダウン（秒）
 const V_SLOT_COOLDOWN: float = 2.0
 var _v_slot_cooldown: float = 0.0
@@ -946,18 +943,13 @@ func _switch_character(dir: int) -> void:
 
 
 ## 消耗品選択モード開始（C/X ホールド時）
+## 現在の選択位置を維持したまま選択モードに入る（フォーカスは変わらない）
 func _enter_consumable_select() -> void:
 	_consumable_select_mode = true
 	if character == null or character.character_data == null:
 		return
-	var cd   := character.character_data
-	var list := cd.get_consumables()
-	# 前回選択していたグループインデックスを復元。なければ -1（なし）からスタート
-	if _last_consumable_index >= 0 and _last_consumable_index < list.size():
-		cd.selected_consumable_index = _last_consumable_index
-	else:
-		cd.selected_consumable_index = -1  # 初回・前回選択が無効な場合は「なし」からスタート
-	# ConsumableBar を選択モード表示に切り替え
+	var cd := character.character_data
+	# ConsumableBar を選択モード表示に切り替え（select_index は現在値を渡す）
 	if consumable_bar != null:
 		consumable_bar.is_selecting = true
 		consumable_bar.select_index = cd.selected_consumable_index
@@ -969,15 +961,10 @@ func _enter_consumable_select() -> void:
 func _exit_consumable_select(do_use: bool) -> void:
 	_consumable_select_mode = false
 	if do_use and character != null and character.character_data != null:
-		var cd   := character.character_data
-		var list := cd.get_consumables()
-		if list.size() > 0 and cd.selected_consumable_index >= 0:
-			# 「なし」でなければ使用
-			_last_consumable_index = cd.selected_consumable_index
+		var cd := character.character_data
+		# selected_consumable_index >= 0 なら使用（-1=「なし」は不使用）
+		if cd.selected_consumable_index >= 0:
 			_use_selected_consumable()
-		else:
-			# 「なし」が選択中の場合は使用しない
-			_last_consumable_index = -1
 	# ConsumableBar を通常表示に戻す
 	if consumable_bar != null:
 		consumable_bar.is_selecting = false
@@ -985,8 +972,24 @@ func _exit_consumable_select(do_use: bool) -> void:
 		consumable_bar.refresh()
 
 
+## このキャラクターがアイテムを使用できるか判定する
+## max_mp==0のキャラにMPポーションは不要・max_sp==0のキャラにSPポーションは不要
+func _is_consumable_usable_by_char(item: Dictionary) -> bool:
+	if character == null or character.character_data == null:
+		return true
+	var effect     := item.get("effect", {}) as Dictionary
+	var restore_mp := int(effect.get("restore_mp", 0))
+	var restore_sp := int(effect.get("restore_sp", 0))
+	if restore_mp > 0 and character.max_mp == 0:
+		return false
+	if restore_sp > 0 and character.max_sp == 0:
+		return false
+	return true
+
+
 ## 消耗品選択モード中の LB/RB によるグループ循環
-## -1（なし）→ グループ0 → グループ1 → … → 最後 → -1（なし） の順で循環
+## -1（なし）→ 使用可能グループ0 → … → 最後 → -1（なし） の順で循環
+## 使用できない消耗品種別（MPポーション/SPポーション）はスキップする
 func _cycle_consumable_select(dir: int) -> void:
 	if character == null or character.character_data == null:
 		return
@@ -994,23 +997,26 @@ func _cycle_consumable_select(dir: int) -> void:
 	var list := cd.get_consumables()
 	if list.is_empty():
 		return
-	# グループキーリストを構築
+	# 使用可能なグループキーリストを構築（使えない種別は除外）
 	var group_keys: Array[String] = []
 	var seen: Dictionary = {}
 	for item_v: Variant in list:
-		var itype := (item_v as Dictionary).get("item_type", "") as String
-		if not seen.has(itype):
+		var item  := item_v as Dictionary
+		var itype := item.get("item_type", "") as String
+		if not seen.has(itype) and _is_consumable_usable_by_char(item):
 			seen[itype] = true
 			group_keys.append(itype)
+	if group_keys.is_empty():
+		return
 	var group_count := group_keys.size()
 	# 現在のグループインデックス（-1=なし枠）
 	var cur_type := ""
 	if cd.selected_consumable_index >= 0 and cd.selected_consumable_index < list.size():
 		cur_type = (list[cd.selected_consumable_index] as Dictionary).get("item_type", "") as String
-	var cur_grp := group_keys.find(cur_type)  # -1 ならなし枠
+	var cur_grp := group_keys.find(cur_type)  # 使用可能グループに見つからなければ -1（なし枠扱い）
 	# 循環計算（-1=なし枠 を含めて group_count+1 の循環）
-	var total := group_count + 1
-	var grp_idx := (cur_grp + 1 + dir + total) % total - 1  # -1=なし枠
+	var total    := group_count + 1
+	var grp_idx  := (cur_grp + 1 + dir + total) % total - 1  # -1=なし枠
 	if grp_idx < 0:
 		# なし枠を選択
 		cd.selected_consumable_index = -1
@@ -1078,13 +1084,7 @@ func _use_selected_consumable() -> void:
 	var heal_hp:    int = int(effect.get("heal_hp",    0))
 	var restore_mp: int = int(effect.get("restore_mp", 0))
 	var restore_sp: int = int(effect.get("restore_sp", 0))
-	# 使用条件チェック
-	if heal_hp > 0 and character.hp >= character.max_hp:
-		return
-	if restore_mp > 0 and character.mp >= character.max_mp:
-		return
-	if restore_sp > 0 and character.sp >= character.max_sp:
-		return
+	# 効果のないアイテムは使用しない
 	if heal_hp == 0 and restore_mp == 0 and restore_sp == 0:
 		return
 
