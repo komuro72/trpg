@@ -91,8 +91,11 @@ func _process(delta: float) -> void:
 func _on_arrive() -> void:
 	_done = true
 	if _will_hit and is_instance_valid(_target):
+		# attacker が既に解放されている場合は null として渡す
+		var safe_attacker: Character = _attacker \
+				if is_instance_valid(_attacker) else null
 		if _damage > 0:
-			_target.take_damage(_damage, _multiplier, _attacker, _is_magic)
+			_target.take_damage(_damage, _multiplier, safe_attacker, _is_magic)
 			print("[Player] 遠距離攻撃 → %s  HP:%d/%d" % \
 					[_target.name, _target.hp, _target.max_hp])
 		if _stun_duration > 0.0:
