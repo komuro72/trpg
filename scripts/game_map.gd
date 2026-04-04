@@ -551,6 +551,7 @@ func _setup_dialogue_system() -> void:
 	add_child(npc_dialogue_window)
 	npc_dialogue_window.choice_confirmed.connect(_on_dialogue_choice)
 	npc_dialogue_window.dismissed.connect(_on_dialogue_dismissed)
+	npc_dialogue_window.party_full_closed.connect(_on_party_full_closed)
 
 
 # --------------------------------------------------------------------------
@@ -656,6 +657,12 @@ func _on_dialogue_requested(nm: NpcManager, npc_initiates: bool) -> void:
 	else:
 		MessageLog.add_system("%s のパーティーに話しかけた" % npc_name)
 
+	# パーティー満員チェック（最大人数を超えて仲間にはできない）
+	if party.members.size() >= GlobalConstants.MAX_PARTY_MEMBERS:
+		if npc_dialogue_window != null:
+			npc_dialogue_window.show_party_full(nm)
+		return
+
 	# NPC会話専用ウィンドウを表示（ゲームを一時停止）
 	if npc_dialogue_window != null:
 		npc_dialogue_window.show_dialogue(nm, npc_initiates)
@@ -688,6 +695,11 @@ func _on_dialogue_choice(choice_id: String) -> void:
 
 func _on_dialogue_dismissed() -> void:
 	MessageLog.add_system("誘いを断った")
+	_close_dialogue()
+
+
+func _on_party_full_closed() -> void:
+	MessageLog.add_system("パーティーが満員のため仲間にできなかった")
 	_close_dialogue()
 
 

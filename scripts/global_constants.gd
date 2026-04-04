@@ -33,6 +33,9 @@ const CLASS_NAME_JP: Dictionary = {
 	"scout":           "斥候",
 }
 
+## パーティー最大人数（これを超えて仲間にはできない）
+const MAX_PARTY_MEMBERS: int = 12
+
 ## フロア難易度ランク（フロアインデックス → 強さスコア基準値）
 ## NPC が同フロアに留まるか上下するかの判断に使用
 ## member_score = attack_power + physical_resistance + magic_resistance + defense_accuracy

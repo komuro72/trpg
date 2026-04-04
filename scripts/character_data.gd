@@ -23,8 +23,9 @@ var image_set:        String = ""
 var sprite_top:       String = ""  # フィールド表示用（真上から見た画像）
 var sprite_walk1:     String = ""  # 歩行パターン1・左足（未設定時は sprite_top を使用）
 var sprite_walk2:     String = ""  # 歩行パターン2・右足（未設定時は sprite_top を使用）
-var sprite_top_ready: String = ""  # ターゲット選択中の構え画像（未設定時は sprite_top を使用）
-var sprite_top_guard: String = ""  # ガード中の画像（未設定時は sprite_top_ready → sprite_top にフォールバック）
+var sprite_top_ready:  String = ""  # ターゲット選択中の構え画像（未設定時は sprite_top を使用）
+var sprite_top_guard:  String = ""  # ガード中の画像（未設定時は sprite_top_ready → sprite_top にフォールバック）
+var sprite_top_attack: String = ""  # 攻撃モーション中の画像（未設定時は sprite_top_ready → sprite_top にフォールバック）
 var sprite_front:     String = ""  # UI・ステータス画面用（全身正面画像）
 var sprite_face:      String = ""  # 顔アイコン（LeftPanel 表示用）
 
@@ -150,7 +151,8 @@ static func load_from_json(path: String) -> CharacterData:
 	if ready.is_empty():
 		ready = d.get("ready_image", "") as String
 	data.sprite_top_ready = ready
-	data.sprite_top_guard = sprites.get("top_guard", "") as String
+	data.sprite_top_guard  = sprites.get("top_guard",  "") as String
+	data.sprite_top_attack = sprites.get("top_attack", "") as String
 
 	return data
 

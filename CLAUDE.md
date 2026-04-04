@@ -1061,6 +1061,42 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
       - 修正①：`PartyLeaderAI` に `_friendly_list` と `_find_nearest_friendly()` / `_has_alive_friendly()` を追加。各敵リーダー AI の `_evaluate_party_strategy()` / `_select_target_for()` をこれらを使うよう変更
       - 修正②：`PartyManager` に `_friendly_list` フィールドを追加して保存し、`_start_ai()` 内で `_leader_ai` 生成直後に `set_friendly_list()` を渡す
       - `game_map._link_all_character_lists()` でパーティーメンバー＋未加入 NPC を `all_friendlies` としてまとめ、全敵マネージャーに配布
+- [x] Phase 12-9: 左パネル改修・パーティー上限・NPC配置集約
+  - [x] **左パネルから MAP 表示を削除・12人対応**
+    - `left_panel.gd`：`minimap_h`（下25%）を廃止し全高さをキャラクター表示に使用
+    - `MAX_CARD_HEIGHT = 100`（1人あたりカード最大高さ）を定数追加。人数が少なくても大きくなりすぎない
+    - `GlobalConstants.MAX_PARTY_MEMBERS = 12` を追加
+  - [x] **パーティー満員ガード（NpcDialogueWindow）**
+    - `_State.PARTY_FULL` 状態を追加。`show_party_full(nm)` メソッドで表示
+    - 「これ以上仲間にできません（最大 N 人）」とNPC顔画像を表示し、Z/A・X/B で閉じる
+    - `party_full_closed` シグナルを追加。`game_map._on_party_full_closed()` でログ記録・ダイアログを閉じる
+    - `game_map._on_dialogue_requested()` で `party.members.size() >= MAX_PARTY_MEMBERS` をチェックし満員時は会話ウィンドウの代わりに満員メッセージを表示
+  - [x] **NPC配置をフロア0に集約（4部屋・11人）**
+    - `dungeon_handcrafted.json` 修正：フロア0の r1_3〜r1_6 をすべて NPC 専用部屋（敵なし）に変更
+    - r1_2（ゴブリンの集会所）のみ敵部屋として残す
+    - NPC 配置（計11人・クラスバランスを考慮）：
+      - r1_3「傭兵の集会所」: archer + fighter-axe（2人）
+      - r1_4「廃教会」: fighter-sword + healer + magician-water（3人、既存）
+      - r1_5「冒険者の野営地」: scout + magician-fire + archer（3人）
+      - r1_6「探索者の拠点」: fighter-sword + healer + scout（3人）
+    - 各 NPC は初期装備持ち（プレイヤー初期装備相当の弱め装備）
+- [x] Phase 12-10: attack.png スプライト対応・image_set 固定割り当て
+  - [x] **`attack.png` スプライト対応**
+    - `character_data.gd`：`sprite_top_attack: String = ""` フィールド追加（`sprites.top_attack` キーからロード）
+    - `character_generator.gd`：`generate_character()` / `apply_enemy_graphics()` で `sprite_top_attack = folder + "/attack.png"` を設定
+    - `character.gd`：`_tex_attack: Texture2D = null` フィールド追加。`_load_walk_sprites()` でロード
+    - `character.gd`：`_update_ready_sprite()` に `is_attacking` 専用分岐を追加。優先順: `guard.png`（ガード中）> `attack.png`（攻撃中）> `ready.png`（ターゲット選択中）> `top.png`（通常）
+  - [x] **`apply_image_set_override()` 追加と image_set 固定割り当て**
+    - `character_generator.gd`：`apply_image_set_override(data, folder_name)` 静的メソッド追加。フォルダ名からスプライトパスを一括設定し `_used_image_sets` に登録
+    - `npc_manager.gd`：`setup()` で `image_set` フィールドを読み取り `_spawn_member()` に渡す。`_spawn_member()` に `image_set_override: String = ""` 引数追加
+    - `dungeon_handcrafted.json`：プレイヤーパーティー3人・NPC11人の全14キャラに `image_set` を固定割り当て
+      - hero (fighter-sword) → `fighter-sword_male_young_slim_00001`
+      - player archer → `archer_female_young_slim_00006`
+      - player healer → `healer_female_young_slim_00010`
+      - r1_3 archer → `archer_male_young_slim_00005`、r1_3 fighter-axe → `fighter-axe_female_young_slim_00004`
+      - r1_4 fighter-sword → `fighter-sword_female_young_slim_00002`、r1_4 healer → `healer_male_young_slim_00009`、r1_4 magician-water → `magician-water_female_young_slim_00014`
+      - r1_5 scout → `scout_female_young_slim_00012`、r1_5 magician-fire → `magician-fire_male_young_slim_00007`、r1_5 archer → `archer_male_young_slim_00005`
+      - r1_6 fighter-sword → `fighter-sword_female_young_slim_00002`、r1_6 healer → `healer_male_young_slim_00009`、r1_6 scout → `scout_male_young_slim_00011`
 - [ ] Phase 13: Steam配布準備
 
 ## アイテムシステム

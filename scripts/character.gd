@@ -123,10 +123,11 @@ var _sprite: Sprite2D
 var _has_texture: bool = false
 
 ## 歩行アニメーション用キャッシュテクスチャ（_load_walk_sprites() で設定）
-var _tex_top:   Texture2D = null
-var _tex_walk1: Texture2D = null
-var _tex_walk2: Texture2D = null
-var _tex_guard: Texture2D = null
+var _tex_top:    Texture2D = null
+var _tex_walk1:  Texture2D = null
+var _tex_walk2:  Texture2D = null
+var _tex_guard:  Texture2D = null
+var _tex_attack: Texture2D = null
 
 ## 視覚的位置補間（グリッド単位の瞬時移動を滑らかに見せる）
 ## grid_pos・衝突判定は move_to() で即時更新。position だけを補間する
@@ -283,9 +284,10 @@ func _load_top_sprite() -> void:
 ##   画像パスを明示する。例: "walk1": "res://assets/images/characters/test/walk1.png"
 ##   Godot でインポート済みの画像のみ有効（.import ファイルが必要）。
 func _load_walk_sprites() -> void:
-	_tex_walk1 = null
-	_tex_walk2 = null
-	_tex_guard = null
+	_tex_walk1  = null
+	_tex_walk2  = null
+	_tex_guard  = null
+	_tex_attack = null
 	if character_data == null:
 		return
 	var w1 := character_data.sprite_walk1
@@ -297,10 +299,13 @@ func _load_walk_sprites() -> void:
 	var gd := character_data.sprite_top_guard
 	if not gd.is_empty() and ResourceLoader.exists(gd):
 		_tex_guard = load(gd) as Texture2D
+	var atk := character_data.sprite_top_attack
+	if not atk.is_empty() and ResourceLoader.exists(atk):
+		_tex_attack = load(atk) as Texture2D
 
 
 ## ターゲット選択モード・攻撃モーション中・ガード中に応じてスプライトを切り替える
-## 優先順: guard.png（ガード中）> ready.png（ターゲット/攻撃中）> top.png（通常）
+## 優先順: guard.png（ガード中）> attack.png（攻撃中）> ready.png（ターゲット選択中）> top.png（通常）
 func _update_ready_sprite() -> void:
 	if _sprite == null or character_data == null:
 		return
@@ -315,8 +320,18 @@ func _update_ready_sprite() -> void:
 			path = character_data.sprite_top_ready
 		else:
 			path = character_data.sprite_top
+	elif is_attacking:
+		# 攻撃中: attack.png → ready.png → top の順でフォールバック
+		if not character_data.sprite_top_attack.is_empty() \
+				and ResourceLoader.exists(character_data.sprite_top_attack):
+			path = character_data.sprite_top_attack
+		elif not character_data.sprite_top_ready.is_empty() \
+				and ResourceLoader.exists(character_data.sprite_top_ready):
+			path = character_data.sprite_top_ready
+		else:
+			path = character_data.sprite_top
 	else:
-		var use_ready := (is_targeting_mode or is_attacking) \
+		var use_ready := is_targeting_mode \
 				and not character_data.sprite_top_ready.is_empty()
 		path = character_data.sprite_top_ready if use_ready else character_data.sprite_top
 	if path.is_empty() or not ResourceLoader.exists(path):

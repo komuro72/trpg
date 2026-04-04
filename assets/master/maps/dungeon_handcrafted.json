@@ -23,6 +23,7 @@
               "members": [
                 {
                   "class_id": "fighter-sword",
+                  "image_set": "fighter-sword_male_young_slim_00001",
                   "x": 5,
                   "y": 6,
                   "items": [
@@ -90,6 +91,7 @@
                 },
                 {
                   "class_id": "archer",
+                  "image_set": "archer_female_young_slim_00006",
                   "x": 7,
                   "y": 6,
                   "items": [
@@ -146,6 +148,7 @@
                 },
                 {
                   "class_id": "healer",
+                  "image_set": "healer_female_young_slim_00010",
                   "x": 6,
                   "y": 7,
                   "items": [
@@ -272,7 +275,7 @@
           },
           {
             "id": "r1_3",
-            "name": "狼の縄張り",
+            "name": "傭兵の集会所",
             "x": 40,
             "y": 2,
             "width": 12,
@@ -280,46 +283,90 @@
             "type": "normal",
             "is_entrance": false,
             "enemy_party": {
+              "members": [],
+              "items": []
+            },
+            "npc_party": {
               "members": [
                 {
-                  "enemy_id": "wolf",
+                  "character_id": "archer",
+                  "image_set": "archer_male_young_slim_00005",
                   "x": 43,
-                  "y": 5
+                  "y": 5,
+                  "items": [
+                    {
+                      "item_type": "bow",
+                      "category": "weapon",
+                      "item_name": "使い込んだ弓",
+                      "stats": {
+                        "attack_power": 3,
+                        "accuracy": 0.05
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "armor_cloth",
+                      "category": "armor",
+                      "item_name": "革製コート",
+                      "stats": {
+                        "physical_resistance": 2
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "potion_hp",
+                      "category": "consumable",
+                      "item_name": "回復薬",
+                      "stats": {},
+                      "effect": { "heal_hp": 30 },
+                      "image": "assets/images/items/potion_hp.png"
+                    }
+                  ]
                 },
                 {
-                  "enemy_id": "wolf",
+                  "character_id": "fighter-axe",
+                  "image_set": "fighter-axe_female_young_slim_00004",
                   "x": 47,
-                  "y": 8
-                },
-                {
-                  "enemy_id": "wolf",
-                  "x": 44,
-                  "y": 10
-                },
-                {
-                  "enemy_id": "wolf",
-                  "x": 49,
-                  "y": 6
-                }
-              ],
-              "items": [
-                {
-                  "item_type": "potion_hp",
-                  "category": "consumable",
-                  "item_name": "赤い薬草",
-                  "stats": {},
-                  "effect": {
-                    "heal_hp": 30
-                  },
-                  "quantity": 2,
-                  "image": "assets/images/items/potion_hp.png"
+                  "y": 8,
+                  "items": [
+                    {
+                      "item_type": "axe",
+                      "category": "weapon",
+                      "item_name": "鉄の斧",
+                      "stats": {
+                        "attack_power": 3,
+                        "accuracy": 0.03,
+                        "defense_strength": 1
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "armor_plate",
+                      "category": "armor",
+                      "item_name": "革鎧",
+                      "stats": {
+                        "physical_resistance": 3
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "shield",
+                      "category": "shield",
+                      "item_name": "木の盾",
+                      "stats": {
+                        "physical_resistance": 2,
+                        "defense_strength": 2
+                      },
+                      "equipped": true
+                    }
+                  ]
                 }
               ]
             }
           },
           {
             "id": "r1_4",
-            "name": "ゾンビの霊廟",
+            "name": "廃教会",
             "x": 2,
             "y": 18,
             "width": 12,
@@ -327,55 +374,14 @@
             "type": "normal",
             "is_entrance": false,
             "enemy_party": {
-              "members": [
-                {
-                  "enemy_id": "zombie",
-                  "x": 5,
-                  "y": 21
-                },
-                {
-                  "enemy_id": "zombie",
-                  "x": 9,
-                  "y": 23
-                }
-              ],
-              "items": [
-                {
-                  "item_type": "sword",
-                  "category": "weapon",
-                  "item_name": "錆びた短剣",
-                  "stats": {
-                    "attack_power": 4,
-                    "defense_strength": 1
-                  },
-                  "quantity": 1
-                },
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "傷んだ鎧の残骸",
-                  "stats": {
-                    "physical_resistance": 5
-                  },
-                  "quantity": 1
-                },
-                {
-                  "item_type": "potion_hp",
-                  "category": "consumable",
-                  "item_name": "回復薬",
-                  "stats": {},
-                  "effect": {
-                    "heal_hp": 30
-                  },
-                  "quantity": 1,
-                  "image": "assets/images/items/potion_hp.png"
-                }
-              ]
+              "members": [],
+              "items": []
             },
             "npc_party": {
               "members": [
                 {
                   "character_id": "fighter-sword",
+                  "image_set": "fighter-sword_female_young_slim_00002",
                   "x": 7,
                   "y": 20,
                   "items": [
@@ -413,6 +419,7 @@
                 },
                 {
                   "character_id": "healer",
+                  "image_set": "healer_male_young_slim_00009",
                   "x": 8,
                   "y": 20,
                   "items": [
@@ -439,6 +446,7 @@
                 },
                 {
                   "character_id": "magician-water",
+                  "image_set": "magician-water_female_young_slim_00014",
                   "x": 9,
                   "y": 20,
                   "items": [
@@ -476,7 +484,7 @@
           },
           {
             "id": "r1_5",
-            "name": "魔術師の書斎",
+            "name": "冒険者の野営地",
             "x": 20,
             "y": 18,
             "width": 14,
@@ -484,88 +492,114 @@
             "type": "normal",
             "is_entrance": false,
             "enemy_party": {
+              "members": [],
+              "items": []
+            },
+            "npc_party": {
               "members": [
                 {
-                  "enemy_id": "hobgoblin",
+                  "character_id": "scout",
+                  "image_set": "scout_female_young_slim_00012",
+                  "x": 24,
+                  "y": 21,
+                  "items": [
+                    {
+                      "item_type": "dagger",
+                      "category": "weapon",
+                      "item_name": "切れ味の悪いダガー",
+                      "stats": {
+                        "attack_power": 3,
+                        "accuracy": 0.06
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "armor_cloth",
+                      "category": "armor",
+                      "item_name": "布のコート",
+                      "stats": {
+                        "physical_resistance": 2
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "potion_hp",
+                      "category": "consumable",
+                      "item_name": "回復薬",
+                      "stats": {},
+                      "effect": { "heal_hp": 30 },
+                      "image": "assets/images/items/potion_hp.png"
+                    }
+                  ]
+                },
+                {
+                  "character_id": "magician-fire",
+                  "image_set": "magician-fire_male_young_slim_00007",
                   "x": 26,
-                  "y": 23
+                  "y": 24,
+                  "items": [
+                    {
+                      "item_type": "staff",
+                      "category": "weapon",
+                      "item_name": "木の魔道杖",
+                      "stats": {
+                        "magic_power": 3,
+                        "accuracy": 0.05
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "armor_robe",
+                      "category": "armor",
+                      "item_name": "赤い魔道衣",
+                      "stats": {
+                        "magic_resistance": 3
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "potion_mp",
+                      "category": "consumable",
+                      "item_name": "魔力薬",
+                      "stats": {},
+                      "effect": { "restore_mp": 20 },
+                      "image": "assets/images/items/potion_mp.png"
+                    }
+                  ]
                 },
                 {
-                  "enemy_id": "goblin",
-                  "x": 23,
-                  "y": 22
-                },
-                {
-                  "enemy_id": "goblin",
-                  "x": 29,
-                  "y": 25
-                },
-                {
-                  "enemy_id": "goblin-mage",
-                  "x": 31,
-                  "y": 20
-                }
-              ],
-              "items": [
-                {
-                  "item_type": "axe",
-                  "category": "weapon",
-                  "item_name": "ホブゴブリンの戦斧",
-                  "stats": {
-                    "attack_power": 9,
-                    "accuracy": 0.0,
-                    "defense_strength": 3
-                  },
-                  "quantity": 1
-                },
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "分厚い革鎧",
-                  "stats": {
-                    "physical_resistance": 8,
-                    "magic_resistance": 2
-                  },
-                  "quantity": 1
-                },
-                {
-                  "item_type": "staff",
-                  "category": "weapon",
-                  "item_name": "古い魔法の杖",
-                  "stats": {
-                    "magic_power": 6,
-                    "accuracy": 0.08
-                  },
-                  "quantity": 1
-                },
-                {
-                  "item_type": "potion_hp",
-                  "category": "consumable",
-                  "item_name": "回復薬",
-                  "stats": {},
-                  "effect": {
-                    "heal_hp": 30
-                  },
-                  "quantity": 1,
-                  "image": "assets/images/items/potion_hp.png"
-                },
-                {
-                  "item_type": "potion_mp",
-                  "category": "consumable",
-                  "item_name": "魔力回復薬",
-                  "stats": {},
-                  "effect": {
-                    "restore_mp": 20
-                  },
-                  "quantity": 1,
-                  "image": "assets/images/items/potion_mp.png"
+                  "character_id": "archer",
+                  "image_set": "archer_male_young_slim_00005",
+                  "x": 28,
+                  "y": 22,
+                  "items": [
+                    {
+                      "item_type": "bow",
+                      "category": "weapon",
+                      "item_name": "使い込んだ弓",
+                      "stats": {
+                        "attack_power": 3,
+                        "accuracy": 0.05
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "armor_cloth",
+                      "category": "armor",
+                      "item_name": "革製コート",
+                      "stats": {
+                        "physical_resistance": 2
+                      },
+                      "equipped": true
+                    }
+                  ]
                 }
               ]
             }
           },
           {
             "id": "r1_6",
-            "name": "闇の司令室",
+            "name": "探索者の拠点",
             "x": 40,
             "y": 18,
             "width": 16,
@@ -573,80 +607,118 @@
             "type": "normal",
             "is_entrance": false,
             "enemy_party": {
+              "members": [],
+              "items": []
+            },
+            "npc_party": {
               "members": [
                 {
-                  "enemy_id": "dark-knight",
-                  "x": 46,
-                  "y": 23
-                },
-                {
-                  "enemy_id": "dark-mage",
-                  "x": 51,
-                  "y": 21
-                },
-                {
-                  "enemy_id": "dark-priest",
-                  "x": 53,
-                  "y": 26
-                },
-                {
-                  "enemy_id": "salamander",
+                  "character_id": "fighter-sword",
+                  "image_set": "fighter-sword_female_young_slim_00002",
                   "x": 44,
-                  "y": 27
-                }
-              ],
-              "items": [
-                {
-                  "item_type": "sword",
-                  "category": "weapon",
-                  "item_name": "漆黒の騎士剣",
-                  "stats": {
-                    "attack_power": 14,
-                    "accuracy": 0.12,
-                    "defense_strength": 5
-                  },
-                  "quantity": 1
+                  "y": 23,
+                  "items": [
+                    {
+                      "item_type": "sword",
+                      "category": "weapon",
+                      "item_name": "錆びた剣",
+                      "stats": {
+                        "attack_power": 3,
+                        "accuracy": 0.03,
+                        "defense_strength": 1
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "armor_plate",
+                      "category": "armor",
+                      "item_name": "傷んだ鎧",
+                      "stats": {
+                        "physical_resistance": 3
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "shield",
+                      "category": "shield",
+                      "item_name": "鉄の盾",
+                      "stats": {
+                        "physical_resistance": 2,
+                        "defense_strength": 2
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "potion_hp",
+                      "category": "consumable",
+                      "item_name": "回復薬",
+                      "stats": {},
+                      "effect": { "heal_hp": 30 },
+                      "image": "assets/images/items/potion_hp.png"
+                    }
+                  ]
                 },
                 {
-                  "item_type": "shield",
-                  "category": "shield",
-                  "item_name": "鋼の盾",
-                  "stats": {
-                    "physical_resistance": 8,
-                    "defense_strength": 7
-                  },
-                  "quantity": 1
+                  "character_id": "healer",
+                  "image_set": "healer_male_young_slim_00009",
+                  "x": 50,
+                  "y": 25,
+                  "items": [
+                    {
+                      "item_type": "staff",
+                      "category": "weapon",
+                      "item_name": "癒しの杖",
+                      "stats": {
+                        "magic_power": 3,
+                        "accuracy": 0.05
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "armor_robe",
+                      "category": "armor",
+                      "item_name": "薄い修道衣",
+                      "stats": {
+                        "magic_resistance": 3
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "potion_mp",
+                      "category": "consumable",
+                      "item_name": "魔力回復薬",
+                      "stats": {},
+                      "effect": { "restore_mp": 20 },
+                      "image": "assets/images/items/potion_mp.png"
+                    }
+                  ]
                 },
                 {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "ダークナイトの鎧",
-                  "stats": {
-                    "physical_resistance": 12,
-                    "magic_resistance": 4
-                  },
-                  "quantity": 1
-                },
-                {
-                  "item_type": "staff",
-                  "category": "weapon",
-                  "item_name": "闇の詠唱杖",
-                  "stats": {
-                    "magic_power": 11,
-                    "accuracy": 0.15
-                  },
-                  "quantity": 1
-                },
-                {
-                  "item_type": "potion_hp",
-                  "category": "consumable",
-                  "item_name": "上位回復薬",
-                  "stats": {},
-                  "effect": {
-                    "heal_hp": 60
-                  },
-                  "quantity": 1,
-                  "image": "assets/images/items/potion_hp.png"
+                  "character_id": "scout",
+                  "image_set": "scout_male_young_slim_00011",
+                  "x": 46,
+                  "y": 27,
+                  "items": [
+                    {
+                      "item_type": "dagger",
+                      "category": "weapon",
+                      "item_name": "切れ味の悪いダガー",
+                      "stats": {
+                        "attack_power": 3,
+                        "accuracy": 0.06
+                      },
+                      "equipped": true
+                    },
+                    {
+                      "item_type": "armor_cloth",
+                      "category": "armor",
+                      "item_name": "布のコート",
+                      "stats": {
+                        "physical_resistance": 2
+                      },
+                      "equipped": true
+                    }
+                  ]
                 }
               ]
             }

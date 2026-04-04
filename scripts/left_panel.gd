@@ -3,7 +3,7 @@ extends CanvasLayer
 
 ## 左パネル：味方ステータス表示
 ## Phase 5: フェイスアイコン・名前・HPバー・MPバー・状態テキストを表示
-##          アクティブキャラクターは青枠でハイライト。下25%はミニマップ予約エリア
+##          アクティブキャラクターは青枠でハイライト。最大 GlobalConstants.MAX_PARTY_MEMBERS 人まで表示
 
 var _party: Party
 var _active_character: Character
@@ -42,11 +42,10 @@ func _process(_delta: float) -> void:
 func _update_icon_nodes() -> void:
 	if _party == null:
 		return
-	var gs        := GlobalConstants.GRID_SIZE
-	var pw        := GlobalConstants.PANEL_TILES * gs
-	var vh        := _control.size.y
-	var minimap_h := int(vh * 0.25)
-	var ally_h    := vh - minimap_h
+	var gs     := GlobalConstants.GRID_SIZE
+	var pw     := GlobalConstants.PANEL_TILES * gs
+	var vh     := _control.size.y
+	var ally_h := int(vh)
 	# ソート済みメンバーリストを使用（リーダー先頭・加入順）
 	var members := _party.sorted_members()
 	var count   := members.size()
@@ -66,7 +65,7 @@ func _update_icon_nodes() -> void:
 	if count == 0:
 		return
 
-	var card_h := ally_h / count
+	var card_h := mini(ally_h / maxi(count, 1), MAX_CARD_HEIGHT)
 	for i: int in range(count):
 		var member := members[i] as Character
 		if not is_instance_valid(member):
@@ -111,11 +110,10 @@ func _update_icon_nodes() -> void:
 func _on_draw() -> void:
 	if _party == null:
 		return
-	var gs         := GlobalConstants.GRID_SIZE
-	var pw         := GlobalConstants.PANEL_TILES * gs
-	var vh         := _control.size.y
-	var minimap_h  := int(vh * 0.25)
-	var ally_h     := vh - minimap_h
+	var gs     := GlobalConstants.GRID_SIZE
+	var pw     := GlobalConstants.PANEL_TILES * gs
+	var vh     := _control.size.y
+	var ally_h := vh
 
 	# パネル背景
 	_control.draw_rect(Rect2(0, 0, pw, vh), Color(0.08, 0.08, 0.12, 0.92))
@@ -127,19 +125,11 @@ func _on_draw() -> void:
 	var members := _party.sorted_members()
 	var count   := members.size()
 	if count > 0:
-		var card_h := ally_h / count
+		var card_h := mini(int(ally_h) / maxi(count, 1), MAX_CARD_HEIGHT)
 		for i: int in range(count):
 			var member := members[i] as Character
 			if is_instance_valid(member):
 				_draw_ally_card(member, 0.0, float(i * card_h), float(pw), float(card_h))
-
-	# ミニマップ予約エリア
-	_control.draw_rect(Rect2(0, ally_h, pw, minimap_h), Color(0.04, 0.04, 0.06, 0.95))
-	_control.draw_line(Vector2(0, ally_h), Vector2(pw, ally_h), Color(0.3, 0.3, 0.4, 0.8), 1)
-	if _font != null:
-		_control.draw_string(_font,
-			Vector2(float(pw) * 0.5 - 16.0, float(ally_h) + float(minimap_h) * 0.55),
-			"MAP", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.4, 0.4, 0.5, 0.7))
 
 
 func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -> void:
@@ -273,6 +263,9 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 		Vector2(fx + fw, fy + fh - 1),
 		Color(0.25, 0.25, 0.30, 0.7), 1)
 
+
+## 1人あたりのカード最大高さ（px）。人数が少なくても大きくなりすぎないようにする
+const MAX_CARD_HEIGHT: int = 100
 
 ## HP/MP/SP の絶対値表示用基準値（これがバー全幅に対応する量）
 const HP_REF: float = 300.0

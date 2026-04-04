@@ -23,11 +23,12 @@ func setup(spawn_list: Array, player: Character, map_data: MapData, drop_items: 
 	_player   = player
 	_map_data = map_data
 	for spawn_info: Variant in spawn_list:
-		var info     := spawn_info as Dictionary
-		var class_id: String = info.get("character_id", info.get("class_id", "fighter-sword")) as String
-		var pos      := Vector2i(int(info.get("x", 0)), int(info.get("y", 0)))
-		var items    := info.get("items", []) as Array
-		var member   := _spawn_member(class_id, pos)
+		var info              := spawn_info as Dictionary
+		var class_id: String   = info.get("character_id", info.get("class_id", "fighter-sword")) as String
+		var pos               := Vector2i(int(info.get("x", 0)), int(info.get("y", 0)))
+		var items             := info.get("items", []) as Array
+		var image_set_override: String = info.get("image_set", "") as String
+		var member            := _spawn_member(class_id, pos, image_set_override)
 		# 初期装備を付与する
 		if member.character_data != null and not items.is_empty():
 			member.character_data.apply_initial_items(items)
@@ -35,7 +36,8 @@ func setup(spawn_list: Array, player: Character, map_data: MapData, drop_items: 
 
 
 ## CharacterGenerator でキャラクターを生成してスポーンする
-func _spawn_member(class_id: String, grid_pos: Vector2i) -> Character:
+## image_set_override: JSON で指定されたフォルダ名（空ならランダム選択のまま）
+func _spawn_member(class_id: String, grid_pos: Vector2i, image_set_override: String = "") -> Character:
 	var member := Character.new()
 	member.grid_pos          = grid_pos
 	member.placeholder_color = Color(0.2, 0.9, 0.3)
@@ -43,6 +45,8 @@ func _spawn_member(class_id: String, grid_pos: Vector2i) -> Character:
 
 	var generated_data := CharacterGenerator.generate_character(class_id)
 	if generated_data != null:
+		if not image_set_override.is_empty():
+			CharacterGenerator.apply_image_set_override(generated_data, image_set_override)
 		member.character_data = generated_data
 	else:
 		var fallback := CharacterData.new()

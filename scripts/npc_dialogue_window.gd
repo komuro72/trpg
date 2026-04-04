@@ -11,11 +11,13 @@ extends CanvasLayer
 signal choice_confirmed(choice_id: String)
 ## ウィンドウが閉じられたとき発火する（断る / Xキャンセル）
 signal dismissed()
+## パーティー満員ウィンドウが閉じられたとき発火する
+signal party_full_closed()
 
 const CHOICE_JOIN_US := "join_us"
 const CHOICE_CANCEL  := "cancel"
 
-enum _State { HIDDEN, MAIN, CONFIRM }
+enum _State { HIDDEN, MAIN, CONFIRM, PARTY_FULL }
 
 var _state:          _State     = _State.HIDDEN
 var _npc_manager:    NpcManager = null
@@ -40,6 +42,15 @@ func _ready() -> void:
 	_control.process_mode  = Node.PROCESS_MODE_ALWAYS
 	add_child(_control)
 	_control.draw.connect(_on_draw)
+
+
+## パーティー満員のため仲間にできない旨を表示する
+func show_party_full(nm: NpcManager) -> void:
+	_npc_manager    = nm
+	_state          = _State.PARTY_FULL
+	visible         = true
+	get_tree().paused = true
+	_control.queue_redraw()
 
 
 ## NPC との会話ウィンドウを表示してゲームを一時停止する
@@ -104,6 +115,12 @@ func _handle_input() -> void:
 				# Xキーで確認ダイアログからメイン選択肢に戻る
 				_state = _State.MAIN
 
+		_State.PARTY_FULL:
+			if Input.is_action_just_pressed("attack") \
+					or Input.is_action_just_pressed("ui_accept") \
+					or Input.is_action_just_pressed("menu_back"):
+				party_full_closed.emit()
+
 
 func _on_draw() -> void:
 	if _state == _State.HIDDEN or _font == null:
@@ -147,9 +164,12 @@ func _draw_panel(vp: Vector2, gs: float) -> void:
 
 	if _state == _State.MAIN:
 		panel_h += row_cho * 2.0 + 4.0 + 8.0        # 選択肢 2 行
-	else:  # CONFIRM
+	elif _state == _State.CONFIRM:
 		panel_h += float(fs_body) + 12.0            # 確認テキスト
 		panel_h += row_cho * 2.0 + 4.0 + 8.0        # はい/いいえ 2 行
+	else:  # PARTY_FULL
+		panel_h += float(fs_body) + 12.0            # 満員メッセージ
+		panel_h += row_cho + 8.0                    # 閉じるボタン 1 行
 
 	panel_h += float(fs_hint) + pad                 # ヒント + 下余白
 	panel_h = maxf(panel_h, gs * 3.5)
@@ -282,7 +302,7 @@ func _draw_panel(vp: Vector2, gs: float) -> void:
 			Color(0.48, 0.48, 0.58))
 
 	# ── 確認ダイアログ（CONFIRM 状態） ────────────────────────────────────
-	else:
+	elif _state == _State.CONFIRM:
 		_control.draw_string(_font,
 			Vector2(px + pad, y + float(fs_body)),
 			"本当に仲間にしますか？",
@@ -310,6 +330,32 @@ func _draw_panel(vp: Vector2, gs: float) -> void:
 		_control.draw_string(_font,
 			Vector2(px + pad, py + panel_h - pad * 0.6),
 			"↑↓:選択   Z/A:決定   X/B:戻る",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs_hint,
+			Color(0.48, 0.48, 0.58))
+
+	# ── パーティー満員メッセージ（PARTY_FULL 状態） ──────────────────────
+	else:
+		_control.draw_string(_font,
+			Vector2(px + pad, y + float(fs_body)),
+			"これ以上仲間にできません（最大 %d 人）" % GlobalConstants.MAX_PARTY_MEMBERS,
+			HORIZONTAL_ALIGNMENT_LEFT, panel_w - pad * 2.0, fs_body,
+			Color(1.0, 0.65, 0.25))
+		y += float(fs_body) + 12.0
+
+		# 閉じるボタン（常にハイライト）
+		_control.draw_rect(
+			Rect2(px + pad, y, panel_w - pad * 2.0, row_cho),
+			Color(0.22, 0.32, 0.62, 0.75))
+		_control.draw_string(_font,
+			Vector2(px + pad + 4.0,
+				y + float(fs_body) + (row_cho - float(fs_body)) * 0.5 + 2.0),
+			"▶  閉じる",
+			HORIZONTAL_ALIGNMENT_LEFT, panel_w - pad * 2.0 - 4.0, fs_body, Color.WHITE)
+
+		# ヒント
+		_control.draw_string(_font,
+			Vector2(px + pad, py + panel_h - pad * 0.6),
+			"Z/A・X/B:閉じる",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, fs_hint,
 			Color(0.48, 0.48, 0.58))
 

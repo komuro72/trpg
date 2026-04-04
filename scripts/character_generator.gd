@@ -130,20 +130,44 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	data.buff_mp_cost       = int(class_json.get("buff_mp_cost",  0))
 
 	var folder: String = GRAPHIC_SET_DIR + str(chosen_set.get("folder", ""))
-	data.image_set        = folder
-	data.sprite_top       = folder + "/top.png"
-	data.sprite_walk1     = folder + "/walk1.png"
-	data.sprite_walk2     = folder + "/walk2.png"
-	data.sprite_top_ready = folder + "/ready.png"
-	data.sprite_top_guard = folder + "/guard.png"
-	data.sprite_front     = folder + "/front.png"
-	data.sprite_face      = folder + "/face.png"
+	data.image_set         = folder
+	data.sprite_top        = folder + "/top.png"
+	data.sprite_walk1      = folder + "/walk1.png"
+	data.sprite_walk2      = folder + "/walk2.png"
+	data.sprite_top_ready  = folder + "/ready.png"
+	data.sprite_top_guard  = folder + "/guard.png"
+	data.sprite_top_attack = folder + "/attack.png"
+	data.sprite_front      = folder + "/front.png"
+	data.sprite_face       = folder + "/face.png"
 
 	# 使用済みとして登録
 	_used_names[char_name] = true
 	_used_image_sets[str(chosen_set.get("folder", ""))] = true
 
 	return data
+
+
+## JSON の image_set フィールドで指定されたフォルダ名を CharacterData に適用する
+## folder_name: 例 "fighter-sword_male_young_slim_00001"（res://... プレフィックスなし）
+static func apply_image_set_override(data: CharacterData, folder_name: String) -> void:
+	if data == null or folder_name.is_empty():
+		return
+	var folder: String = GRAPHIC_SET_DIR + folder_name
+	data.image_set         = folder
+	data.sprite_top        = folder + "/top.png"
+	data.sprite_walk1      = folder + "/walk1.png"
+	data.sprite_walk2      = folder + "/walk2.png"
+	data.sprite_top_ready  = folder + "/ready.png"
+	data.sprite_top_guard  = folder + "/guard.png"
+	data.sprite_top_attack = folder + "/attack.png"
+	data.sprite_front      = folder + "/front.png"
+	data.sprite_face       = folder + "/face.png"
+	var info := _parse_folder_name(folder_name)
+	if not info.is_empty():
+		data.sex   = str(info.get("sex",   data.sex))
+		data.age   = str(info.get("age",   data.age))
+		data.build = str(info.get("build", data.build))
+	_used_image_sets[folder_name] = true
 
 
 ## assets/images/enemies/ を走査して利用可能な敵グラフィックセット情報を返す
@@ -175,14 +199,15 @@ static func apply_enemy_graphics(data: CharacterData) -> void:
 		return
 	var chosen_set: Dictionary = sets[randi() % sets.size()]
 	var folder: String = ENEMY_GRAPHIC_SET_DIR + str(chosen_set.get("folder", ""))
-	data.image_set        = folder
-	data.sprite_top       = folder + "/top.png"
-	data.sprite_walk1     = folder + "/walk1.png"
-	data.sprite_walk2     = folder + "/walk2.png"
-	data.sprite_top_ready = folder + "/ready.png"
-	data.sprite_top_guard = folder + "/guard.png"
-	data.sprite_front     = folder + "/front.png"
-	data.sprite_face      = folder + "/face.png"
+	data.image_set         = folder
+	data.sprite_top        = folder + "/top.png"
+	data.sprite_walk1      = folder + "/walk1.png"
+	data.sprite_walk2      = folder + "/walk2.png"
+	data.sprite_top_ready  = folder + "/ready.png"
+	data.sprite_top_guard  = folder + "/guard.png"
+	data.sprite_top_attack = folder + "/attack.png"
+	data.sprite_front      = folder + "/front.png"
+	data.sprite_face       = folder + "/face.png"
 	data.sex   = str(chosen_set.get("sex",   data.sex))
 	data.age   = str(chosen_set.get("age",   data.age))
 	data.build = str(chosen_set.get("build", data.build))
