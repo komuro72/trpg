@@ -45,6 +45,7 @@ var _opt_speed_idx: int   = 1   ## 1 = 1.0x
 # --------------------------------------------------------------------------
 var _control: Control = null
 var _font:    Font    = null
+var _tex_bg:  Texture2D = null
 
 # メインメニュー項目（動的に組み立て）
 var _main_items: Array[String] = []
@@ -54,6 +55,11 @@ func _ready() -> void:
 	GlobalConstants.initialize(get_viewport().get_visible_rect().size)
 
 	_font = ThemeDB.fallback_font
+
+	# 背景画像（タイトル画面と共通）
+	var bg_path := "res://assets/images/ui/title_bg.png"
+	if ResourceLoader.exists(bg_path):
+		_tex_bg = load(bg_path) as Texture2D
 
 	# オプションを GlobalConstants の現在値に同期
 	_opt_volume    = _read_bus_volume()
@@ -324,19 +330,21 @@ func _opt_change(dir: int) -> void:
 func _create_name_fields() -> void:
 	var vp := _control.size
 	var cx := vp.x * 0.5
+	var cy := vp.y * 0.5
+	var fw := 320.0
 
 	_name_male_edit = LineEdit.new()
 	_name_male_edit.placeholder_text = "男性名（空白でランダム）"
 	_name_male_edit.max_length = 12
-	_name_male_edit.size = Vector2(320.0, 40.0)
-	_name_male_edit.position = Vector2(cx - 160.0, vp.y * 0.46)
+	_name_male_edit.size = Vector2(fw, 40.0)
+	_name_male_edit.position = Vector2(cx - fw * 0.5, cy - 50.0)
 	_control.add_child(_name_male_edit)
 
 	_name_female_edit = LineEdit.new()
 	_name_female_edit.placeholder_text = "女性名（空白でランダム）"
 	_name_female_edit.max_length = 12
-	_name_female_edit.size = Vector2(320.0, 40.0)
-	_name_female_edit.position = Vector2(cx - 160.0, vp.y * 0.54)
+	_name_female_edit.size = Vector2(fw, 40.0)
+	_name_female_edit.position = Vector2(cx - fw * 0.5, cy + 40.0)
 	_control.add_child(_name_female_edit)
 
 	_name_focus = 0
@@ -404,28 +412,31 @@ func _on_draw() -> void:
 		return
 	var vp := _control.size
 
-	# 背景
-	_control.draw_rect(Rect2(Vector2.ZERO, vp), Color(0.06, 0.06, 0.10))
+	# ─── 背景（タイトル画面と同じ幅フィット・下部クロップ）
+	if _tex_bg != null:
+		var tw := float(_tex_bg.get_width())
+		var th := float(_tex_bg.get_height())
+		if tw > 0.0 and th > 0.0:
+			var src_h := minf(tw * vp.y / vp.x, th)
+			_control.draw_texture_rect_region(
+				_tex_bg, Rect2(Vector2.ZERO, vp),
+				Rect2(0.0, 0.0, tw, src_h))
+	else:
+		_control.draw_rect(Rect2(Vector2.ZERO, vp), Color(0.06, 0.06, 0.10))
+
+	# 半透明オーバーレイ（テキスト視認性確保）
+	_control.draw_rect(Rect2(Vector2.ZERO, vp), Color(0.0, 0.0, 0.0, 0.55))
 
 	match _state:
-		_State.MAIN:           _draw_main(vp)
-		_State.SLOT_SELECT_NEW:  _draw_slot_select(vp, false)
-		_State.SLOT_SELECT_CONT: _draw_slot_select(vp, true)
+		_State.MAIN:              _draw_main(vp)
+		_State.SLOT_SELECT_NEW:   _draw_slot_select(vp, false)
+		_State.SLOT_SELECT_CONT:  _draw_slot_select(vp, true)
 		_State.OVERWRITE_CONFIRM: _draw_overwrite_confirm(vp)
-		_State.NAME_INPUT:     _draw_name_input(vp)
-		_State.OPTIONS:        _draw_options(vp)
-
-
-func _draw_title_bar(vp: Vector2) -> void:
-	_control.draw_string(_font,
-		Vector2(0.0, vp.y * 0.14),
-		"Rally the Parties",
-		HORIZONTAL_ALIGNMENT_CENTER, vp.x, 36,
-		Color(1.0, 0.88, 0.55, 0.80))
+		_State.NAME_INPUT:        _draw_name_input(vp)
+		_State.OPTIONS:           _draw_options(vp)
 
 
 func _draw_main(vp: Vector2) -> void:
-	_draw_title_bar(vp)
 	var item_h := 52.0
 	var total  := _main_items.size() * item_h
 	var start_y := vp.y * 0.5 - total * 0.5
@@ -437,7 +448,6 @@ func _draw_main(vp: Vector2) -> void:
 
 
 func _draw_slot_select(vp: Vector2, is_cont: bool) -> void:
-	_draw_title_bar(vp)
 	var label := "スロット選択（続きから）" if is_cont else "スロット選択（新しく）"
 	_control.draw_string(_font,
 		Vector2(0.0, vp.y * 0.28), label,
@@ -480,7 +490,6 @@ func _draw_slot_select(vp: Vector2, is_cont: bool) -> void:
 
 
 func _draw_overwrite_confirm(vp: Vector2) -> void:
-	_draw_title_bar(vp)
 	_control.draw_string(_font,
 		Vector2(0.0, vp.y * 0.40),
 		"スロット %d を上書きしますか？" % _sel_slot,
@@ -493,33 +502,50 @@ func _draw_overwrite_confirm(vp: Vector2) -> void:
 
 
 func _draw_name_input(vp: Vector2) -> void:
-	_draw_title_bar(vp)
+	# 固定ピクセルオフセットで配置（画面サイズに依存しないレイアウト）
+	var cy  := vp.y * 0.5   # 画面中央Y
+	var cx  := vp.x * 0.5
+	var fw  := 320.0         # フィールド幅
+
+	# タイトル
 	_control.draw_string(_font,
-		Vector2(0.0, vp.y * 0.32),
+		Vector2(0.0, cy - 130.0),
 		"主人公の名前を入力してください",
 		HORIZONTAL_ALIGNMENT_CENTER, vp.x, 22, Color(0.80, 0.80, 0.90))
+
+	# ── 男性名 ──────────────────────────────────────────
 	_control.draw_string(_font,
-		Vector2(vp.x * 0.5 - 160.0, vp.y * 0.42),
+		Vector2(cx - fw * 0.5, cy - 70.0),
 		"男性名", HORIZONTAL_ALIGNMENT_LEFT, -1, 18,
 		Color(0.70, 0.80, 1.00) if _name_focus == 0 else Color(0.60, 0.60, 0.70))
+	# フォーカス枠
+	if _name_focus == 0:
+		_control.draw_rect(Rect2(cx - fw * 0.5 - 2, cy - 50.0 - 2, fw + 4, 44.0),
+			Color(0.70, 0.80, 1.00, 0.60), false, 2.0)
+
+	# ── 女性名 ──────────────────────────────────────────
 	_control.draw_string(_font,
-		Vector2(vp.x * 0.5 - 160.0, vp.y * 0.50),
+		Vector2(cx - fw * 0.5, cy + 20.0),
 		"女性名", HORIZONTAL_ALIGNMENT_LEFT, -1, 18,
 		Color(1.00, 0.75, 0.85) if _name_focus == 1 else Color(0.60, 0.60, 0.70))
-	# 決定ボタン
-	var btn_col := Color(0.30, 0.65, 0.30) if _name_focus == 2 else Color(0.20, 0.40, 0.20)
-	_control.draw_rect(Rect2(vp.x * 0.5 - 80.0, vp.y * 0.62, 160.0, 40.0), btn_col)
+	if _name_focus == 1:
+		_control.draw_rect(Rect2(cx - fw * 0.5 - 2, cy + 40.0 - 2, fw + 4, 44.0),
+			Color(1.00, 0.75, 0.85, 0.60), false, 2.0)
+
+	# ── 決定ボタン ─────────────────────────────────────
+	var btn_col := Color(0.30, 0.65, 0.30) if _name_focus == 2 else Color(0.18, 0.38, 0.18)
+	_control.draw_rect(Rect2(cx - 80.0, cy + 110.0, 160.0, 40.0), btn_col)
 	_control.draw_string(_font,
-		Vector2(0.0, vp.y * 0.62 + 28.0), "決定",
+		Vector2(0.0, cy + 110.0 + 28.0), "決定",
 		HORIZONTAL_ALIGNMENT_CENTER, vp.x, 20, Color.WHITE)
+
 	_control.draw_string(_font,
-		Vector2(0.0, vp.y * 0.74),
+		Vector2(0.0, cy + 170.0),
 		"↑↓ で移動　Enter/Z で確定　Esc/X で戻る",
 		HORIZONTAL_ALIGNMENT_CENTER, vp.x, 16, Color(0.55, 0.55, 0.65))
 
 
 func _draw_options(vp: Vector2) -> void:
-	_draw_title_bar(vp)
 	_control.draw_string(_font,
 		Vector2(0.0, vp.y * 0.24), "オプション",
 		HORIZONTAL_ALIGNMENT_CENTER, vp.x, 26, Color(0.80, 0.80, 0.90))
