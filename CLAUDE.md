@@ -1015,7 +1015,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
       - `_find_non_stair_adjacent()` / `_is_stair_tile()` ヘルパー追加
     - **未加入 NPC のフロア遷移：意図しない方向への遷移を防止**
       - `game_map._check_npc_member_stairs()` で NpcManager の `get_explore_move_policy()` を確認し、`"stairs_down"` / `"stairs_up"` の意図がない場合は遷移をスキップ
-- [ ] Phase 12-8: OrderWindowバグ修正・NPC会話専用ウィンドウ・階段複数設置
+- [x] Phase 12-8: OrderWindowバグ修正・NPC会話専用ウィンドウ・階段複数設置
   - [x] **OrderWindow 名前列フォーカス時の右キー動作修正**
     - 修正前：名前列（_col_cursor=0）で右キーを押すとサブメニューが開いていた
     - 修正後：右キーは常に列移動のみ（col 0→1→…→6→0 の循環）。サブメニューを開くのは Z/A のみ
@@ -1025,7 +1025,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
     - 表示中はゲームを一時停止（`get_tree().paused = true`）、閉じたら再開
     - **レイアウト**
       - 画面中央に半透明の暗幕＋パネル
-      - 上部：NPC メンバーの `face.png`（なければ `front.png`、なければグレーブロック）を横並び表示。その下に名前・クラス名（日本語）
+      - 上部：NPC メンバーの `face.png`（なければ `front.png`、なければグレーブロック）を横並び表示。その下に名前・クラス名（日本語）＋ランク `[S]/[A]/[B]/[C]`（S/A=赤・他=オレンジで色分け）
       - 下部：選択肢（MAIN 状態）または確認ダイアログ（CONFIRM 状態）
     - **操作フロー**
       - MAIN 状態：「仲間にする」（デフォルト）/ 「断る」を↑↓で選択、Z/A で決定、X/B で閉じる
@@ -1042,12 +1042,25 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
     - `_on_dialogue_dismissed()`: MessageLog に「誘いを断った」を記録してから `_close_dialogue()` を呼ぶ
     - `_close_dialogue()`: `message_window.end_dialogue()` → `npc_dialogue_window.hide_dialogue()` に変更
     - MessageWindowの会話モードはNPC会話には使用しない（MessageLogへの記録のみ継続）
-  - [x] **`dungeon_handcrafted.json` 階段追加**（各フロアに複数設置。同じ部屋に上り・下り両方は配置しない）
-    - フロア0：下り階段3か所（r1_6: 53,29・r1_3: 45,10・r1_5: 28,25）
-    - フロア1：上り2か所（r2_1: 8,7 / 5,9）・下り2か所（r2_3: 51,7 / 48,10）
-    - フロア2：上り2か所（r3_1: 8,7 / 5,10）・下り2か所（r3_2: 42,18 / 26,18）
-    - フロア3：上り2か所（r4_1: 8,7 / 5,9）・下り2か所（r4_3: 53,11 / 46,11）
-    - フロア4：上り2か所（r5_1: 22,6 / 32,22）
+    - LB/RB キャラ切替後に `order_window.set_controlled()` を呼んで指示ウィンドウに反映
+  - [x] **`dungeon_handcrafted.json` 階段配置**（1部屋1階段・上下階で同一座標）
+    - フロア0：下り2か所（r1_2: 27,8・r1_3: 47,7）
+    - フロア1：上り2か所（r2_2: 27,8・r2_3: 47,7）・下り1か所（r2_1: 8,7）
+    - フロア2：上り1か所（r3_1: 8,7）・下り1か所（r3_2: 28,8）
+    - フロア3：上り1か所（r4_2: 28,8）・下り1か所（r4_1: 10,7）
+    - フロア4：上り1か所（r5_1: 10,7）
+    - 入口部屋（r1_1）には階段を置かない。各フロアで1部屋に1つのみ配置
+  - [x] Phase 12-8 バグ修正
+    - **別フロアのキャラクターが移動をブロックする問題**
+      - 原因：`_rebuild_blocking_characters()` が全フロアの敵・NPC を無差別に追加していた（`current_floor` フィルターなし）。無効参照（freed キャラ）も 18 件混入
+      - 修正：`_rebuild_blocking_characters()` で敵・NPC を1体ずつ `current_floor` フィルタリング＋ `is_instance_valid` チェック。`_can_move_to()` / `_try_move()` / `_get_valid_targets()` にも同フロアフィルターを追加（二重防衛）
+      - デバッグログ出力先：`%APPDATA%\Godot\app_userdata\trpg\debug_floor_info.txt`（F2 キー）
+    - **敵がプレイヤー（英雄）以外を攻撃しない問題**
+      - 原因①：全敵リーダー AI（goblin/wolf/hobgoblin/default）の `_select_target_for()` が `return _player` 固定だった
+      - 原因②：`set_friendly_list()` を呼ぶ時点で `_leader_ai == null`（`activate()` 前）なのでリストが破棄されていた
+      - 修正①：`PartyLeaderAI` に `_friendly_list` と `_find_nearest_friendly()` / `_has_alive_friendly()` を追加。各敵リーダー AI の `_evaluate_party_strategy()` / `_select_target_for()` をこれらを使うよう変更
+      - 修正②：`PartyManager` に `_friendly_list` フィールドを追加して保存し、`_start_ai()` 内で `_leader_ai` 生成直後に `set_friendly_list()` を渡す
+      - `game_map._link_all_character_lists()` でパーティーメンバー＋未加入 NPC を `all_friendlies` としてまとめ、全敵マネージャーに配布
 - [ ] Phase 13: Steam配布準備
 
 ## アイテムシステム
