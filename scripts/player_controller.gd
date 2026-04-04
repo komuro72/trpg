@@ -546,6 +546,8 @@ func _get_valid_targets() -> Array[Character]:
 	for c: Character in blocking_characters:
 		if not is_instance_valid(c):
 			continue
+		if c.current_floor != character.current_floor:
+			continue
 		if action == "heal" or action == "buff_defense":
 			# 射程内の is_friendly な味方（自分を除く）が対象
 			if not c.is_friendly or c == character:
@@ -895,6 +897,8 @@ func _try_move(dir: Vector2i) -> void:
 		for blocker: Character in blocking_characters:
 			if not is_instance_valid(blocker):
 				continue
+			if blocker.current_floor != character.current_floor:
+				continue
 			if blocker.is_flying != character.is_flying:
 				continue
 			if new_pos in blocker.get_occupied_tiles() and blocker.is_friendly:
@@ -913,6 +917,8 @@ func _can_move_to(pos: Vector2i) -> bool:
 			return false
 	for blocker: Character in blocking_characters:
 		if not is_instance_valid(blocker):
+			continue
+		if blocker.current_floor != character.current_floor:
 			continue
 		if blocker.is_flying != character.is_flying:
 			continue

@@ -903,11 +903,17 @@ func _rebuild_blocking_characters() -> void:
 	var active_char := player_controller.character
 	player_controller.blocking_characters.clear()
 	for em: EnemyManager in enemy_managers:
-		if is_instance_valid(em):
-			player_controller.blocking_characters.append_array(em.get_enemies())
+		if not is_instance_valid(em):
+			continue
+		for enemy: Character in em.get_enemies():
+			if is_instance_valid(enemy) and enemy.current_floor == _current_floor_index:
+				player_controller.blocking_characters.append(enemy)
 	for nm: NpcManager in npc_managers:
-		if is_instance_valid(nm):
-			player_controller.blocking_characters.append_array(nm.get_members())
+		if not is_instance_valid(nm):
+			continue
+		for member: Character in nm.get_members():
+			if is_instance_valid(member) and member.current_floor == _current_floor_index:
+				player_controller.blocking_characters.append(member)
 	for member_var: Variant in party.members:
 		var ch := member_var as Character
 		if is_instance_valid(ch) and ch != active_char \
