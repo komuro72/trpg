@@ -170,7 +170,7 @@ func _process(delta: float) -> void:
 
 
 func _process_normal(_delta: float) -> void:
-	# 消耗品スロット循環（LT/RT）
+	# 消耗品スロット循環（LB/RB）。ターゲット選択モード中は使わない（_input()でLB/RBをターゲット循環に使う）
 	if Input.is_action_just_pressed("slot_prev"):
 		_cycle_consumable(-1)
 	elif Input.is_action_just_pressed("slot_next"):
