@@ -816,9 +816,8 @@
         ],
         "stairs": [
           { "type": "stairs_up",   "x": 8,  "y": 7  },
-          { "type": "stairs_up",   "x": 5,  "y": 9  },
-          { "type": "stairs_down", "x": 51, "y": 7  },
-          { "type": "stairs_down", "x": 48, "y": 10 }
+          { "type": "stairs_up",   "x": 27, "y": 8  },
+          { "type": "stairs_down", "x": 51, "y": 7  }
         ]
       },
       {
@@ -914,9 +913,7 @@
         ],
         "stairs": [
           { "type": "stairs_up",   "x": 8,  "y": 7  },
-          { "type": "stairs_up",   "x": 5,  "y": 10 },
-          { "type": "stairs_down", "x": 42, "y": 18 },
-          { "type": "stairs_down", "x": 26, "y": 18 }
+          { "type": "stairs_down", "x": 42, "y": 18 }
         ]
       },
       {
@@ -1054,9 +1051,8 @@
         ],
         "stairs": [
           { "type": "stairs_up",   "x": 8,  "y": 7  },
-          { "type": "stairs_up",   "x": 5,  "y": 9  },
-          { "type": "stairs_down", "x": 53, "y": 11 },
-          { "type": "stairs_down", "x": 46, "y": 11 }
+          { "type": "stairs_up",   "x": 25, "y": 8  },
+          { "type": "stairs_down", "x": 53, "y": 11 }
         ]
       },
       {
@@ -1133,8 +1129,7 @@
         ],
         "corridors": [],
         "stairs": [
-          { "type": "stairs_up", "x": 22, "y": 6  },
-          { "type": "stairs_up", "x": 32, "y": 22 }
+          { "type": "stairs_up", "x": 22, "y": 6  }
         ]
       }
     ]
