@@ -690,11 +690,9 @@
           }
         ],
         "stairs": [
-          {
-            "type": "stairs_down",
-            "x": 53,
-            "y": 29
-          }
+          { "type": "stairs_down", "x": 53, "y": 29 },
+          { "type": "stairs_down", "x": 45, "y": 10 },
+          { "type": "stairs_down", "x": 28, "y": 25 }
         ]
       },
       {
@@ -817,8 +815,10 @@
           { "from": "r2_2", "to": "r2_3", "name": "闇へと続く通路" }
         ],
         "stairs": [
-          { "type": "stairs_up",   "x": 8,  "y": 7 },
-          { "type": "stairs_down", "x": 51, "y": 7 }
+          { "type": "stairs_up",   "x": 8,  "y": 7  },
+          { "type": "stairs_up",   "x": 5,  "y": 9  },
+          { "type": "stairs_down", "x": 51, "y": 7  },
+          { "type": "stairs_down", "x": 48, "y": 10 }
         ]
       },
       {
@@ -914,7 +914,9 @@
         ],
         "stairs": [
           { "type": "stairs_up",   "x": 8,  "y": 7  },
-          { "type": "stairs_down", "x": 42, "y": 18 }
+          { "type": "stairs_up",   "x": 5,  "y": 10 },
+          { "type": "stairs_down", "x": 42, "y": 18 },
+          { "type": "stairs_down", "x": 26, "y": 18 }
         ]
       },
       {
@@ -1052,7 +1054,9 @@
         ],
         "stairs": [
           { "type": "stairs_up",   "x": 8,  "y": 7  },
-          { "type": "stairs_down", "x": 53, "y": 11 }
+          { "type": "stairs_up",   "x": 5,  "y": 9  },
+          { "type": "stairs_down", "x": 53, "y": 11 },
+          { "type": "stairs_down", "x": 46, "y": 11 }
         ]
       },
       {
@@ -1129,7 +1133,8 @@
         ],
         "corridors": [],
         "stairs": [
-          { "type": "stairs_up", "x": 22, "y": 6 }
+          { "type": "stairs_up", "x": 22, "y": 6  },
+          { "type": "stairs_up", "x": 32, "y": 22 }
         ]
       }
     ]

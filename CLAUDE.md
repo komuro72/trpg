@@ -683,7 +683,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
       - menu_back 新規追加（X + Joypad Button 1/B）
       - player_controller.gd：AttackSlot.X・_slot_x・DEFAULT_SLOT_X 削除、1ボタン統合
       - メニュー内ナビゲーション：右キー/Z=決定、左キー/X/Esc=戻る（order_window・dialogue_window 共通）
-      - 名前列：右キー/Z=サブメニュー開く、左キー=ウィンドウ閉じる
+      - 名前列：Z=サブメニュー開く、右キー=隣の列へ移動、左キー=ウィンドウ閉じる
       - ログ行：右キー/Z=ログ開始、左キー/X/Esc=ウィンドウ閉じる
     - [x] MessageWindow拡張・AIデバッグパネル廃止（Phase 10-2 準備）
       - RightPanel からAIデバッグ表示（下半分）を削除。敵情報表示のみ残す
@@ -1015,6 +1015,39 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
       - `_find_non_stair_adjacent()` / `_is_stair_tile()` ヘルパー追加
     - **未加入 NPC のフロア遷移：意図しない方向への遷移を防止**
       - `game_map._check_npc_member_stairs()` で NpcManager の `get_explore_move_policy()` を確認し、`"stairs_down"` / `"stairs_up"` の意図がない場合は遷移をスキップ
+- [ ] Phase 12-8: OrderWindowバグ修正・NPC会話専用ウィンドウ・階段複数設置
+  - [x] **OrderWindow 名前列フォーカス時の右キー動作修正**
+    - 修正前：名前列（_col_cursor=0）で右キーを押すとサブメニューが開いていた
+    - 修正後：右キーは常に列移動のみ（col 0→1→…→6→0 の循環）。サブメニューを開くのは Z/A のみ
+    - `order_window.gd` の `ui_right` ハンドラを簡略化（分岐削除）
+  - [x] **NPC会話専用ウィンドウ（`scripts/npc_dialogue_window.gd`）新設**
+    - CanvasLayer（layer=20）・`process_mode = PROCESS_MODE_ALWAYS`
+    - 表示中はゲームを一時停止（`get_tree().paused = true`）、閉じたら再開
+    - **レイアウト**
+      - 画面中央に半透明の暗幕＋パネル
+      - 上部：NPC メンバーの `face.png`（なければ `front.png`、なければグレーブロック）を横並び表示。その下に名前・クラス名（日本語）
+      - 下部：選択肢（MAIN 状態）または確認ダイアログ（CONFIRM 状態）
+    - **操作フロー**
+      - MAIN 状態：「仲間にする」（デフォルト）/ 「断る」を↑↓で選択、Z/A で決定、X/B で閉じる
+      - 「仲間にする」→ CONFIRM 状態へ遷移：「本当に仲間にしますか？」＋「はい」「いいえ」（デフォルト：いいえ）
+      - 「はい」→ `choice_confirmed("join_us")` シグナル発火
+      - 「いいえ」・X/B → MAIN 状態に戻る
+      - 「断る」・X/B → `dismissed()` シグナル発火
+    - シグナル：`choice_confirmed(choice_id: String)` / `dismissed()`
+  - [x] **game_map.gd 変更**
+    - `var npc_dialogue_window: NpcDialogueWindow` フィールド追加
+    - `_setup_dialogue_system()`: MessageWindow の dialogue シグナル接続を NpcDialogueWindow に変更
+    - `_on_dialogue_requested()`: MessageWindow.start_dialogue() → NpcDialogueWindow.show_dialogue() に置き換え。MessageLog に会話開始メッセージのみ記録
+    - `_on_dialogue_choice()`: CHOICE_JOIN_THEM（連れて行って）を廃止し join_us のみ対応。結果を MessageLog に記録
+    - `_on_dialogue_dismissed()`: MessageLog に「誘いを断った」を記録してから `_close_dialogue()` を呼ぶ
+    - `_close_dialogue()`: `message_window.end_dialogue()` → `npc_dialogue_window.hide_dialogue()` に変更
+    - MessageWindowの会話モードはNPC会話には使用しない（MessageLogへの記録のみ継続）
+  - [x] **`dungeon_handcrafted.json` 階段追加**（各フロアに複数設置。同じ部屋に上り・下り両方は配置しない）
+    - フロア0：下り階段3か所（r1_6: 53,29・r1_3: 45,10・r1_5: 28,25）
+    - フロア1：上り2か所（r2_1: 8,7 / 5,9）・下り2か所（r2_3: 51,7 / 48,10）
+    - フロア2：上り2か所（r3_1: 8,7 / 5,10）・下り2か所（r3_2: 42,18 / 26,18）
+    - フロア3：上り2か所（r4_1: 8,7 / 5,9）・下り2か所（r4_3: 53,11 / 46,11）
+    - フロア4：上り2か所（r5_1: 22,6 / 32,22）
 - [ ] Phase 13: Steam配布準備
 
 ## アイテムシステム

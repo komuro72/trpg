@@ -229,12 +229,8 @@ func _handle_input() -> void:
 					else:
 						_col_cursor = (_col_cursor - 1 + TOTAL_COLS) % TOTAL_COLS
 				elif Input.is_action_just_pressed("ui_right"):
-					if _col_cursor == 0:
-						# 名前列右キー：サブメニューを開く
-						_submenu_cursor = 0
-						_submenu_open   = true
-					else:
-						_col_cursor = (_col_cursor + 1) % TOTAL_COLS
+					# 右キーは常に列移動（サブメニューを開くのは Z のみ）
+					_col_cursor = (_col_cursor + 1) % TOTAL_COLS
 				elif Input.is_action_just_pressed("attack") \
 						or Input.is_action_just_pressed("ui_accept"):
 					if _col_cursor == 0:

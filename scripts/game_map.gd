@@ -77,6 +77,7 @@ var _floor_items: Dictionary = {}
 var _item_tex_cache: Dictionary = {}  # image_path -> Texture2D or null
 var _dialogue_npc_manager: NpcManager  ## 現在会話中の NpcManager
 var _dialogue_npc_initiates: bool = false
+var npc_dialogue_window: NpcDialogueWindow  ## NPC会話専用ウィンドウ
 
 
 func _ready() -> void:
@@ -534,10 +535,12 @@ func _setup_dialogue_system() -> void:
 		player_controller.switch_char_requested.connect(_on_switch_character_requested)
 		player_controller._party_sorted_members.assign(party.sorted_members())
 
-	# MessageWindow の会話シグナルを接続
-	if message_window != null:
-		message_window.choice_confirmed.connect(_on_dialogue_choice)
-		message_window.dialogue_dismissed.connect(_on_dialogue_dismissed)
+	# NPC会話専用ウィンドウを生成してシグナルを接続
+	npc_dialogue_window = NpcDialogueWindow.new()
+	npc_dialogue_window.name = "NpcDialogueWindow"
+	add_child(npc_dialogue_window)
+	npc_dialogue_window.choice_confirmed.connect(_on_dialogue_choice)
+	npc_dialogue_window.dismissed.connect(_on_dialogue_dismissed)
 
 
 # --------------------------------------------------------------------------
@@ -632,46 +635,20 @@ func _on_dialogue_requested(nm: NpcManager, npc_initiates: bool) -> void:
 	# 会話中は対象 NPC の AI を一時停止（メンバーが動き回らないようにする）
 	nm.set_process_mode(Node.PROCESS_MODE_DISABLED)
 
-	# NPC パーティー情報をメッセージとして表示
+	# MessageLog に会話開始を記録
 	var npc_name := _get_npc_party_leader_name(nm)
 	if npc_initiates:
-		message_window.show_message("%s のパーティーが話しかけてきた" % npc_name)
+		MessageLog.add_system("%s のパーティーが話しかけてきた" % npc_name)
 	else:
-		message_window.show_message("%s のパーティーに話しかけた" % npc_name)
-	# メンバー情報を表示
-	for member: Character in nm.get_members():
-		if not is_instance_valid(member):
-			continue
-		var cd: CharacterData = member.character_data
-		if cd == null:
-			continue
-		var ratio := float(member.hp) / float(member.max_hp) if member.max_hp > 0 else 0.0
-		var cond := "元気" if ratio > 0.6 else ("負傷" if ratio > 0.3 else "重傷")
-		message_window.show_message("  %s [%s] %s (%s)" % [cd.character_name, cd.rank, cd.class_id, cond])
+		MessageLog.add_system("%s のパーティーに話しかけた" % npc_name)
 
-	# 選択肢を構築して MessageWindow で表示
-	var choices: Array[Dictionary] = []
-	if npc_initiates:
-		message_window.show_message("「一緒に連れて行ってもらえないか...」")
-		choices.assign([
-			{"id": DialogueWindow.CHOICE_JOIN_US, "label": "（承諾する）"},
-			{"id": DialogueWindow.CHOICE_CANCEL,  "label": "（断る）"},
-		])
-	else:
-		choices.assign([
-			{"id": DialogueWindow.CHOICE_JOIN_US,   "label": "「仲間になってほしい」"},
-			{"id": DialogueWindow.CHOICE_JOIN_THEM, "label": "「一緒に連れて行ってほしい」"},
-			{"id": DialogueWindow.CHOICE_CANCEL,    "label": "（立ち去る）"},
-		])
-	message_window.start_dialogue(choices)
+	# NPC会話専用ウィンドウを表示（ゲームを一時停止）
+	if npc_dialogue_window != null:
+		npc_dialogue_window.show_dialogue(nm, npc_initiates)
 
 
 func _on_dialogue_choice(choice_id: String) -> void:
 	if _dialogue_npc_manager == null or not is_instance_valid(_dialogue_npc_manager):
-		_close_dialogue()
-		return
-
-	if choice_id == DialogueWindow.CHOICE_CANCEL:
 		_close_dialogue()
 		return
 
@@ -684,23 +661,19 @@ func _on_dialogue_choice(choice_id: String) -> void:
 			accepted = (leader_ai as NpcLeaderAI).will_accept(choice_id, player_strength)
 
 	var npc_name := _get_npc_party_leader_name(_dialogue_npc_manager)
-	message_window.end_dialogue()
 	if not accepted:
-		message_window.show_rejected("%s は申し出を断った" % npc_name)
+		MessageLog.add_system("断られた")
+		_close_dialogue()
 		return
 
-	# 合流処理
-	if choice_id == DialogueWindow.CHOICE_JOIN_US:
-		message_window.show_message("%s のパーティーが仲間に加わった！" % npc_name)
-		_merge_npc_into_player_party(_dialogue_npc_manager)
-	elif choice_id == DialogueWindow.CHOICE_JOIN_THEM:
-		message_window.show_message("%s のパーティーに合流した！" % npc_name)
-		_merge_player_into_npc_party(_dialogue_npc_manager)
-
+	# 合流処理（join_us のみ）
+	MessageLog.add_system("%s のパーティーが仲間に加わった！" % npc_name)
+	_merge_npc_into_player_party(_dialogue_npc_manager)
 	_close_dialogue()
 
 
 func _on_dialogue_dismissed() -> void:
+	MessageLog.add_system("誘いを断った")
 	_close_dialogue()
 
 
@@ -713,8 +686,9 @@ func _close_dialogue() -> void:
 		player_controller.is_blocked = false
 	if dialogue_trigger != null:
 		dialogue_trigger.set_dialogue_active(false)
-	if message_window != null:
-		message_window.end_dialogue()
+	# NPC会話ウィンドウを閉じてゲームを再開する
+	if npc_dialogue_window != null:
+		npc_dialogue_window.hide_dialogue()
 
 
 ## NPC 全員をプレイヤーパーティーに加入させる（プレイヤーがリーダー維持）
