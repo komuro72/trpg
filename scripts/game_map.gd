@@ -530,7 +530,9 @@ func _setup_panels() -> void:
 	if player_controller != null:
 		player_controller.consumable_bar = consumable_bar
 
-	# 起動時の初期エリア名を表示
+	# 起動時の初期フロア・エリア名を表示
+	if area_name_display != null:
+		area_name_display.set_floor(_current_floor_index)
 	if vision_system != null:
 		_on_area_changed(vision_system.get_current_area())
 
@@ -1298,6 +1300,10 @@ func _transition_floor(direction: int) -> void:
 	# ダイアログ強制クローズ
 	if message_window != null and message_window.is_dialogue_active():
 		_close_dialogue()
+
+	# 階層表示を更新
+	if area_name_display != null:
+		area_name_display.set_floor(new_floor)
 
 	var dir_str := "下" if direction > 0 else "上"
 	if message_window != null:
