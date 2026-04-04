@@ -2,6 +2,7 @@
 ## ポーズメニュー：オプション・タイトルへ戻る・ゲームに戻る
 ## Phase 13: タイトル・セーブ・メニューシステム
 
+class_name PauseMenu
 extends Node
 
 const _SPEED_OPTS := [0.5, 1.0, 1.5, 2.0]
