@@ -166,7 +166,7 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 	var tx := fx + float(pad + icon_size + pad)
 	var tw := fw - tx - float(pad)
 
-	# キャラクター名 + クラス名 + ランク
+	# キャラクター名 + クラス名 + ランク（白）＋ 状態（色付き）を同一行に描画
 	var name_str: String = c.character_data.character_name \
 		if (c.character_data != null and not c.character_data.character_name.is_empty()) \
 		else String(c.name)
@@ -180,9 +180,16 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 		header += " " + class_jp
 	if not rank_str.is_empty():
 		header += " " + rank_str
-	_control.draw_string(_font,
-		Vector2(tx, fy + float(pad) + 13.0),
+	var header_y := fy + float(pad) + 13.0
+	_control.draw_string(_font, Vector2(tx, header_y),
 		header, HORIZONTAL_ALIGNMENT_LEFT, tw, 13, Color.WHITE)
+	# 状態テキストをヘッダーの右に配置
+	var cond     := _condition(c)
+	var cond_col := Color(0.4, 0.9, 0.4) if cond == "healthy" \
+		else (Color(1.0, 0.8, 0.2) if cond == "wounded" else Color(1.0, 0.35, 0.35))
+	var header_w := _font.get_string_size(header, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 4.0
+	_control.draw_string(_font, Vector2(tx + header_w, header_y),
+		cond, HORIZONTAL_ALIGNMENT_LEFT, tw - header_w, 10, cond_col)
 
 	# HPバー・MPバー（絶対値表示）
 	# ゲージ幅は HP_REF / MP_REF を基準とした絶対値。
@@ -210,15 +217,6 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 			var sp_max_r := minf(float(c.max_sp)/ SP_REF, 1.0)
 			_draw_bar(tx, content_y, tw, bar_h, sp_cur_r, Color(0.4, 0.8, 1.0), sp_max_r)
 			content_y += bar_h + 4.0
-
-	# 状態テキスト
-	var cond     := _condition(c)
-	var cond_col := Color(0.4, 0.9, 0.4) if cond == "healthy" \
-		else (Color(1.0, 0.8, 0.2) if cond == "wounded" else Color(1.0, 0.35, 0.35))
-	_control.draw_string(_font,
-		Vector2(tx, content_y + 10.0),
-		cond, HORIZONTAL_ALIGNMENT_LEFT, tw, 10, cond_col)
-	content_y += 13.0
 
 	# 指示状態（OrderWindow の COL_LABELS と完全一致する表記）
 	var ord: Dictionary = c.current_order
@@ -264,7 +262,7 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 			for iname: String in order:
 				var n: int = int(counts[iname])
 				parts.append("%s×%d" % [iname, n] if n > 1 else iname as String)
-			var item_text: String = "消: " + "  ".join(parts)
+			var item_text: String = "  ".join(parts)
 			_control.draw_string(_font,
 				Vector2(tx, content_y + 33.0),
 				item_text, HORIZONTAL_ALIGNMENT_LEFT, tw, 9, Color(0.9, 0.85, 0.5))
