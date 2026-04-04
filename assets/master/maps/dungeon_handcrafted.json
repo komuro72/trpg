@@ -690,9 +690,8 @@
           }
         ],
         "stairs": [
-          { "type": "stairs_down", "x": 53, "y": 29 },
-          { "type": "stairs_down", "x": 45, "y": 10 },
-          { "type": "stairs_down", "x": 28, "y": 25 }
+          { "type": "stairs_down", "x": 27, "y": 8  },
+          { "type": "stairs_down", "x": 47, "y": 7  }
         ]
       },
       {
@@ -815,9 +814,9 @@
           { "from": "r2_2", "to": "r2_3", "name": "闇へと続く通路" }
         ],
         "stairs": [
-          { "type": "stairs_up",   "x": 8,  "y": 7  },
           { "type": "stairs_up",   "x": 27, "y": 8  },
-          { "type": "stairs_down", "x": 51, "y": 7  }
+          { "type": "stairs_up",   "x": 47, "y": 7  },
+          { "type": "stairs_down", "x": 8,  "y": 7  }
         ]
       },
       {
@@ -913,7 +912,7 @@
         ],
         "stairs": [
           { "type": "stairs_up",   "x": 8,  "y": 7  },
-          { "type": "stairs_down", "x": 42, "y": 18 }
+          { "type": "stairs_down", "x": 28, "y": 8  }
         ]
       },
       {
@@ -1050,9 +1049,8 @@
           { "from": "r4_2", "to": "r4_3", "name": "闇に染まった通路" }
         ],
         "stairs": [
-          { "type": "stairs_up",   "x": 8,  "y": 7  },
-          { "type": "stairs_up",   "x": 25, "y": 8  },
-          { "type": "stairs_down", "x": 53, "y": 11 }
+          { "type": "stairs_up",   "x": 28, "y": 8  },
+          { "type": "stairs_down", "x": 10, "y": 7  }
         ]
       },
       {
@@ -1129,7 +1127,7 @@
         ],
         "corridors": [],
         "stairs": [
-          { "type": "stairs_up", "x": 22, "y": 6  }
+          { "type": "stairs_up", "x": 10, "y": 7  }
         ]
       }
     ]
