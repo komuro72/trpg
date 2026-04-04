@@ -614,6 +614,10 @@ func _on_switch_character_requested(new_char: Character) -> void:
 	if consumable_bar != null:
 		consumable_bar.update_character(new_char)
 
+	# 指示ウィンドウの操作中キャラを更新
+	if order_window != null:
+		order_window.set_controlled(new_char)
+
 	party.set_active(new_char)
 
 	# LB/RBキャラ切り替え用リストを更新
