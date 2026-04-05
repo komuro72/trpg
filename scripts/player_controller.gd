@@ -37,6 +37,7 @@ signal switch_char_requested(new_char: Character)
 ## 【旧方式との違い】タイマーによる移動間隔制御を廃止し、アニメーション完了を
 ## 次移動の gate として使う先行入力バッファ方式に変更（Phase 9-1）
 const MOVE_INTERVAL: float = 0.30
+const TURN_DELAY:     float = 0.15   ## 向き変更ディレイ（秒）
 const CLASS_JSON_DIR := "res://assets/master/classes/"
 
 ## 前方コーン判定しきい値（cos 45° ≈ 0.707）
@@ -67,6 +68,10 @@ var _move_buffer: Vector2i = Vector2i.ZERO
 ## 攻撃先行入力バッファ（移動中・post_delay 中に攻撃ボタンが押されたら true に記録）
 ## 完了の瞬間に移動バッファより優先して攻撃モードに入る
 var _attack_buffer: bool = false
+
+## 向き変更ディレイ
+var _is_turning: bool  = false
+var _turn_timer: float = 0.0
 
 ## 直前に攻撃した敵（ターゲット選択のデフォルトフォーカス優先候補）
 var _last_attacked_target: Character = null
@@ -318,6 +323,15 @@ func _process_guard_and_move(_delta: float) -> void:
 	var want_guard := Input.is_action_pressed("menu_back")
 	if character.is_guarding != want_guard:
 		character.is_guarding = want_guard
+
+	# 向き変更ディレイ中は移動入力をブロック（攻撃は _process_normal で処理済み）
+	if _is_turning:
+		_turn_timer -= _delta
+		if _turn_timer <= 0.0:
+			_is_turning = false
+			if is_instance_valid(character):
+				character.complete_turn()
+		return
 
 	var dir := _get_input_direction()
 
@@ -690,6 +704,10 @@ func _update_world_time() -> void:
 	# アイテム UI 中は時間停止
 	if _item_ui_phase != _ItemUIPhase.NONE:
 		GlobalConstants.world_time_running = false
+		return
+	# 向き変更ディレイ中は時間進行
+	if _is_turning:
+		GlobalConstants.world_time_running = true
 		return
 	if _mode == Mode.PRE_DELAY or _mode == Mode.POST_DELAY:
 		GlobalConstants.world_time_running = true
@@ -1085,6 +1103,14 @@ func _get_input_direction() -> Vector2i:
 	return Vector2i.ZERO
 
 
+## 方向ベクトル→ Direction（face_toward と同じロジック）
+func _compute_facing_for(dir: Vector2i) -> Character.Direction:
+	if abs(dir.x) >= abs(dir.y):
+		return Character.Direction.RIGHT if dir.x > 0 else Character.Direction.LEFT
+	else:
+		return Character.Direction.DOWN if dir.y > 0 else Character.Direction.UP
+
+
 func _try_move(dir: Vector2i) -> void:
 	var new_pos := character.grid_pos + dir
 	if _can_move_to(new_pos):
@@ -1096,7 +1122,11 @@ func _try_move(dir: Vector2i) -> void:
 	else:
 		# 移動できなくてもその方向を向く（ガード中は向き固定）
 		if not character.is_guarding:
-			character.face_toward(new_pos)
+			var target_facing := _compute_facing_for(new_pos - character.grid_pos)
+			if target_facing != character.facing:
+				_is_turning = true
+				_turn_timer = TURN_DELAY / GlobalConstants.game_speed
+				character.start_turn_animation(target_facing, _turn_timer, new_pos - character.grid_pos)
 		# 移動先に友好的キャラクターがいれば npc_bumped を発火する
 		for blocker: Character in blocking_characters:
 			if not is_instance_valid(blocker):
