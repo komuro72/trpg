@@ -1145,10 +1145,15 @@ func _enter_item_select() -> void:
 	_item_ui_inv = inv.duplicate()  # 生スナップショット
 
 	# 表示用リストを構築：同種の消耗品はグループ化、装備品は1個ずつ
+	# 装備スロットに入っているアイテムは除外（未装備品のみ表示）
+	var cd := character.character_data
 	_item_ui_display.clear()
 	var seen_consumable: Dictionary = {}  # item_type -> display_index
 	for i: int in range(_item_ui_inv.size()):
 		var item  := _item_ui_inv[i] as Dictionary
+		if is_same(item, cd.equipped_weapon) or is_same(item, cd.equipped_armor) \
+				or is_same(item, cd.equipped_shield):
+			continue
 		var cat   := item.get("category", "") as String
 		var itype := item.get("item_type", "unknown") as String
 		if cat == "consumable" and seen_consumable.has(itype):
