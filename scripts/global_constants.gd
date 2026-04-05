@@ -18,6 +18,12 @@ var GRID_SIZE: int = 64
 ## 移動間隔は各定数 ÷ game_speed で決まる（2.0 = 2倍速、0.5 = 半速）
 var game_speed: float = 0.5
 
+## 時間進行フラグ（PlayerController が制御）
+## true の間: キャラクターのタイマー（MP/SP回復・スタン・バフ）・AI の _process が進行する
+## false の間: 上記が停止する（プレイヤーがターゲット選択中など）
+## 影響しないもの: テキスト表示・ヒット/バフエフェクト・Projectile
+var world_time_running: bool = false
+
 ## スプライト素材のソース解像度（差し替え時もここを変えるだけでスケールが追従する）
 const SPRITE_SOURCE_WIDTH: int = 512
 const SPRITE_SOURCE_HEIGHT: int = 1024

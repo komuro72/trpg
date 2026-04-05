@@ -149,6 +149,9 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_update_modulate()
 	_update_visual_move(delta)
+	# 時間停止中（プレイヤーのターゲット選択中など）はタイマー類を進めない
+	if not GlobalConstants.world_time_running:
+		return
 	_recover_mp_sp(delta)
 	# スタンタイマーを消化する
 	if stun_timer > 0.0:

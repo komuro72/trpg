@@ -48,7 +48,10 @@ const DEFAULT_SLOT_Z: Dictionary = {
 	"range": 1, "damage_mult": 1.0, "pre_delay": 0.0
 }
 
-enum Mode { NORMAL, TARGETING, FIRING }
+## PRE_DELAY: Z 押下後 pre_delay を消化中（時間進行・ターゲット候補を表示）
+## TARGETING: ターゲット選択中（時間停止・d-pad で循環・Z で確定・X/B でキャンセル）
+## POST_DELAY: 攻撃後硬直（時間進行・is_attacking=true）
+enum Mode { NORMAL, PRE_DELAY, TARGETING, POST_DELAY }
 
 var _mode: Mode = Mode.NORMAL
 var _valid_targets: Array[Character] = []
@@ -70,16 +73,15 @@ var stair_just_transitioned: bool = false
 ## クールダウン中は遷移が起きないため、階段上でも移動をブロックしない
 var stair_cooldown_active: bool = false
 
-## ホールド開始時からのpre_delayカウントダウン（0以下で発動可能）
+## Z 押下後の pre_delay カウントダウン（PRE_DELAY モード）
 var _pre_delay_remaining: float = 0.0
+
+## 攻撃後硬直カウントダウン（POST_DELAY モード）
+var _post_delay_remaining: float = 0.0
 
 ## _input() で検出したターゲット循環方向（+1=次・-1=前・0=なし）
 ## is_action_just_pressed をポーリングするより確実にボタン1回を捕捉できる
 var _cycle_direction: int = 0
-
-## FIRING ステート用：発動待ちの情報
-var _pending_target:    Character  = null
-var _pending_slot_data: Dictionary = {}
 
 ## クラスJSONから読み込んだスロットデータ
 var _slot_z: Dictionary = {}
@@ -125,6 +127,10 @@ func _input(event: InputEvent) -> void:
 			_cycle_direction = 1
 		elif event.is_action_pressed("cycle_target_prev", false):
 			_cycle_direction = -1
+		return
+
+	# PRE_DELAY / POST_DELAY 中はキャラ切り替えを抑制
+	if _mode == Mode.PRE_DELAY or _mode == Mode.POST_DELAY:
 		return
 
 	# 消耗品選択モード中：LB/RBで消耗品循環
@@ -188,6 +194,10 @@ func _process(delta: float) -> void:
 
 	if character == null:
 		return
+
+	# world_time_running を現在の状態に応じて更新する（is_blocked チェックより前）
+	_update_world_time()
+
 	if is_blocked:
 		# ブロック中（メニュー等）はガードを解除する
 		if character.is_guarding:
@@ -200,15 +210,17 @@ func _process(delta: float) -> void:
 	match _mode:
 		Mode.NORMAL:
 			_process_normal(delta)
+		Mode.PRE_DELAY:
+			_process_pre_delay(delta)
 		Mode.TARGETING:
 			_process_targeting(delta)
-		Mode.FIRING:
-			_process_firing(delta)
+		Mode.POST_DELAY:
+			_process_post_delay(delta)
 
 
 func _process_normal(_delta: float) -> void:
 	# C/X ホールド：消耗品選択モード
-	# 攻撃ホールド中は無効（_mode が TARGETING/FIRING に移行するため、ここには来ない）
+	# 攻撃押下中は無効（_mode が PRE_DELAY/TARGETING/POST_DELAY に移行するため、ここには来ない）
 	var c_held := Input.is_action_pressed("use_item")
 	if c_held and not _consumable_select_mode:
 		_enter_consumable_select()
@@ -222,7 +234,7 @@ func _process_normal(_delta: float) -> void:
 
 	# 特殊スキル（V/Y）
 	# インスタント系（sliding/whirlwind/rush/flame_circle）は just_pressed で即時発動
-	# ターゲット系（headshot/water_stun/buff_defense）は hold でターゲット選択モードへ
+	# ターゲット系（headshot/water_stun/buff_defense）は just_pressed で PRE_DELAY へ
 	if not _slot_v.is_empty():
 		var v_action: String = _slot_v.get("action", "") as String
 		var instant_actions: Array = ["sliding", "whirlwind", "rush", "flame_circle"]
@@ -231,20 +243,20 @@ func _process_normal(_delta: float) -> void:
 				if _v_slot_cooldown <= 0.0 and _has_v_slot_resources():
 					_execute_v_instant(v_action)
 		else:
-			if Input.is_action_pressed("special_skill"):
+			if Input.is_action_just_pressed("special_skill"):
 				if _v_slot_cooldown <= 0.0 and _has_v_slot_resources():
 					_using_v_slot = true
 					_move_buffer  = Vector2i.ZERO
-					_enter_targeting()
+					_enter_pre_delay()
 					return
 
-	# 攻撃キーホールドでターゲット選択モードへ（ガード中は先に解除）
-	if Input.is_action_pressed("attack"):
+	# 攻撃キー押下で PRE_DELAY へ（ガード中は先に解除）
+	if Input.is_action_just_pressed("attack"):
 		_using_v_slot = false
 		if character.is_guarding:
 			character.is_guarding = false
 		_move_buffer = Vector2i.ZERO
-		_enter_targeting()
+		_enter_pre_delay()
 		return
 
 	_process_guard_and_move(_delta)
@@ -290,20 +302,36 @@ func _process_guard_and_move(_delta: float) -> void:
 	_try_move(effective_dir)
 
 
-func _process_targeting(delta: float) -> void:
-	# ホールド中も pre_delay をカウントダウン
+func _process_pre_delay(delta: float) -> void:
+	# pre_delay を消化しながらターゲット候補を表示
 	_pre_delay_remaining -= delta
+	_refresh_targets()
+	_update_cursor()
+	if _pre_delay_remaining <= 0.0:
+		_start_targeting()
 
-	# キーリリース検出 → 発動 or キャンセル
-	if not _is_slot_held():
-		if _target_index < _valid_targets.size():
-			_commit_attack()
-		else:
-			_exit_targeting()
+
+func _process_targeting(_delta: float) -> void:
+	# 時間停止中でも死亡による対象消失を検出するためリフレッシュ
+	_refresh_targets()
+
+	# X/B でキャンセル（ノーコスト）
+	if Input.is_action_just_pressed("menu_back"):
+		_exit_targeting()
 		return
 
-	# ターゲットリストをリアルタイム更新（敵の移動・死亡に対応）
-	_refresh_targets()
+	# Z/A（または V 使用中は special_skill）で確定
+	var confirm_pressed := false
+	if _using_v_slot:
+		confirm_pressed = Input.is_action_just_pressed("special_skill")
+	else:
+		confirm_pressed = Input.is_action_just_pressed("attack")
+	if confirm_pressed:
+		if _target_index < _valid_targets.size():
+			_confirm_target()
+		else:
+			_exit_targeting()  # キャンセル枠で確定 = キャンセル
+		return
 
 	# 循環選択
 	# ゲームパッド LB/RB: _input() で捕捉した _cycle_direction を使用（取りこぼし防止）
@@ -317,20 +345,23 @@ func _process_targeting(delta: float) -> void:
 		_cycle_target(-1)
 
 
-func _process_firing(delta: float) -> void:
-	# 残り pre_delay を消化してから発動
-	_pre_delay_remaining -= delta
-	if _pre_delay_remaining <= 0.0:
-		_execute_pending()
+func _process_post_delay(delta: float) -> void:
+	_post_delay_remaining -= delta
+	if _post_delay_remaining <= 0.0:
+		_post_delay_remaining = 0.0
+		_mode = Mode.NORMAL
+		if is_instance_valid(character):
+			character.is_attacking = false
 
 
 # --------------------------------------------------------------------------
 # ターゲット選択
 # --------------------------------------------------------------------------
 
-func _enter_targeting() -> void:
+## Z 押下後に PRE_DELAY モードに入る（pre_delay 消化後に TARGETING へ）
+func _enter_pre_delay() -> void:
 	var sd := _get_slot()
-	# MP/SP不足ならターゲット選択モードに入れない
+	# MP/SP不足なら入れない
 	var mp_cost := int(sd.get("mp_cost", 0))
 	if mp_cost > 0 and character.mp < mp_cost:
 		return
@@ -338,21 +369,25 @@ func _enter_targeting() -> void:
 	if sp_cost > 0 and character.sp < sp_cost:
 		return
 
-	_mode         = Mode.TARGETING
-	_move_buffer  = Vector2i.ZERO
-
-	# ホールド開始時点から pre_delay カウント開始
+	_mode                = Mode.PRE_DELAY
+	_move_buffer         = Vector2i.ZERO
 	_pre_delay_remaining = float(sd.get("pre_delay", 0.0))
-
-	_valid_targets = _get_sorted_targets()
-	_target_index  = 0  # 先頭の敵を自動選択（敵なしならキャンセル選択）
 	character.is_targeting_mode = true
 
+	# カーソルをあらかじめ生成してターゲット候補を表示
+	_valid_targets = _get_sorted_targets()
+	_target_index  = 0
 	if map_node != null:
 		_cursor = TargetCursor.new()
 		_cursor.z_index = 3
 		map_node.add_child(_cursor)
+	_update_cursor()
 
+
+## PRE_DELAY 消化後に TARGETING モードへ移行する
+func _start_targeting() -> void:
+	_mode = Mode.TARGETING
+	_refresh_targets()
 	_update_cursor()
 
 
@@ -372,12 +407,17 @@ func _exit_targeting() -> void:
 		_cursor = null
 
 
-## キーリリース時にターゲットが確定していたら発動（残 pre_delay があれば FIRING へ）
-func _commit_attack() -> void:
-	_pending_target    = _valid_targets[_target_index]
-	_pending_slot_data = _get_slot()
+## TARGETING モードでターゲット確定 → 射程チェック → 攻撃実行 → POST_DELAY へ
+func _confirm_target() -> void:
+	var target := _valid_targets[_target_index]
+	var sd     := _get_slot()
 
-	# カーソル片付け（is_targeting_mode は FIRING 中も維持）
+	# 射程チェック（pre_delay 中に敵が逃げた可能性）
+	if not _is_target_in_range(target, sd):
+		_exit_targeting()  # ノーコストキャンセル
+		return
+
+	# カーソル・ターゲットモード解除
 	for t: Character in _valid_targets:
 		if is_instance_valid(t):
 			t.is_targeted = false
@@ -386,47 +426,60 @@ func _commit_attack() -> void:
 	if _cursor != null:
 		_cursor.queue_free()
 		_cursor = null
-
-	if _pre_delay_remaining <= 0.0:
-		_execute_pending()
-	else:
-		_mode = Mode.FIRING
-
-
-func _execute_pending() -> void:
-	_mode = Mode.NORMAL
 	character.is_targeting_mode = false
-	_pre_delay_remaining = 0.0
 
-	if not is_instance_valid(_pending_target):
-		_using_v_slot      = false
-		_pending_target    = null
-		_pending_slot_data = {}
-		return
-
-	var sd:       Dictionary = _pending_slot_data
-	var action:   String     = str(sd.get("action", "melee"))
-	var was_v:    bool       = _using_v_slot
+	var action: String = str(sd.get("action", "melee"))
+	var was_v := _using_v_slot
+	_using_v_slot = false
 
 	if action == "melee":
-		_execute_melee(_pending_target, sd)
+		_execute_melee(target, sd)
 	elif action == "ranged" or action == "ranged_area":
-		_execute_ranged(_pending_target, sd)
+		_execute_ranged(target, sd)
 	elif action == "water_stun":
-		_execute_water_stun(_pending_target, sd)
+		_execute_water_stun(target, sd)
 	elif action == "heal":
-		_execute_heal(_pending_target, sd)
+		_execute_heal(target, sd)
 	elif action == "buff_defense":
-		_execute_buff(_pending_target, sd)
+		_execute_buff(target, sd)
 	elif action == "headshot":
-		_execute_headshot(_pending_target, sd)
+		_execute_headshot(target, sd)
 
 	if was_v:
 		_start_v_cooldown()
 
-	_using_v_slot      = false
-	_pending_target    = null
-	_pending_slot_data = {}
+	# post_delay 開始
+	var post_dur := 0.0
+	if character != null and character.character_data != null:
+		post_dur = character.character_data.post_delay
+	_enter_post_delay(post_dur)
+
+
+## 射程内かどうかを判定する（TARGETING 確定時の再チェック用）
+func _is_target_in_range(target: Character, sd: Dictionary) -> bool:
+	if not is_instance_valid(target) or target.hp <= 0:
+		return false
+	var action: String = str(sd.get("action", "melee"))
+	var range_bonus: int = character.character_data.get_weapon_range_bonus() \
+		if character != null and character.character_data != null else 0
+	var range_val: int = int(sd.get("range", 1)) + range_bonus
+	if action == "melee":
+		var dx := abs(target.grid_pos.x - character.grid_pos.x)
+		var dy := abs(target.grid_pos.y - character.grid_pos.y)
+		return dx + dy <= range_val
+	else:
+		var dist := Vector2(character.grid_pos).distance_to(Vector2(target.grid_pos))
+		return dist <= float(range_val)
+
+
+func _enter_post_delay(dur: float) -> void:
+	if dur <= 0.0:
+		_mode = Mode.NORMAL
+		return
+	_mode = Mode.POST_DELAY
+	_post_delay_remaining = dur
+	if is_instance_valid(character):
+		character.is_attacking = true
 
 
 ## ターゲットリストをリフレッシュ（ホールド中の毎フレーム更新）
@@ -535,11 +588,23 @@ func _dist_to(target: Character) -> float:
 	return Vector2(character.grid_pos).distance_to(Vector2(target.grid_pos))
 
 
-## アクティブスロットのキーが現在ホールド中かを返す
-func _is_slot_held() -> bool:
-	if _using_v_slot:
-		return Input.is_action_pressed("special_skill")
-	return Input.is_action_pressed("attack")
+## world_time_running を現在のモード・キャラ状態に応じて更新する
+## 移動中・ガード中・pre_delay 中・post_delay 中・インスタントV実行中 → true
+## ターゲット選択中（TARGETING）・無入力待機 → false
+func _update_world_time() -> void:
+	if _mode == Mode.PRE_DELAY or _mode == Mode.POST_DELAY:
+		GlobalConstants.world_time_running = true
+		return
+	if _mode == Mode.TARGETING:
+		GlobalConstants.world_time_running = false
+		return
+	# NORMAL モード：キャラの状態で判定
+	if character != null:
+		if character.is_moving() or character.is_guarding \
+				or character.is_attacking or character.is_sliding:
+			GlobalConstants.world_time_running = true
+			return
+	GlobalConstants.world_time_running = false
 
 
 ## 有効なターゲット一覧を返す（ソートなし）

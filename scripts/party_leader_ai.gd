@@ -118,6 +118,9 @@ func set_map_data(new_map_data: MapData) -> void:
 
 
 func _process(delta: float) -> void:
+	# 時間停止中（プレイヤーのターゲット選択中など）は再評価を止める
+	if not GlobalConstants.world_time_running:
+		return
 	_reeval_timer -= delta
 	if _reeval_timer <= 0.0:
 		_reeval_timer = REEVAL_INTERVAL

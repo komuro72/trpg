@@ -129,7 +129,11 @@ func receive_order(order: Dictionary) -> void:
 	var effective_strategy := _resolve_strategy(ordered_strategy)
 	var effective_target   := ordered_target
 
-	if effective_strategy == _strategy and effective_target == _target \
+	# 階段タイルに乗っているときはキューを強制再生成する（階段回避コードを確実に走らせる）
+	var on_stair := _member != null and is_instance_valid(_member) \
+			and _is_stair_tile(_member.grid_pos) \
+			and _move_policy != "stairs_down" and _move_policy != "stairs_up"
+	if not on_stair and effective_strategy == _strategy and effective_target == _target \
 			and _queue.size() >= QUEUE_MIN_LEN:
 		return
 
@@ -175,6 +179,9 @@ func _process(delta: float) -> void:
 		return
 	# プレイヤーが直接操作中のキャラクターは AI 処理をスキップする
 	if _member.is_player_controlled:
+		return
+	# 時間停止中（プレイヤーのターゲット選択中など）は AI 処理を停止する
+	if not GlobalConstants.world_time_running:
 		return
 
 	# スタン中は行動をスキップしてキューをクリア
@@ -749,12 +756,28 @@ func _find_adjacent_goal(target: Character) -> Vector2i:
 	return best
 
 
-## 現在地に隣接する非階段タイル（通行可能）を返す。なければ現在地を返す
+## 現在地から最近傍の非階段タイルを BFS で探す（距離5まで・味方はすり抜け可能）
+## 密集時に隣接4タイルが全て塞がれていても脱出経路を見つけられる
 func _find_non_stair_adjacent(pos: Vector2i) -> Vector2i:
-	for offset: Vector2i in [Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0)]:
-		var candidate := pos + offset
-		if _is_passable(candidate) and not _is_stair_tile(candidate):
-			return candidate
+	if _map_data == null:
+		return pos
+	var visited: Dictionary = {pos: true}
+	var queue: Array[Vector2i] = [pos]
+	var dirs: Array[Vector2i] = [Vector2i(0,1), Vector2i(0,-1), Vector2i(1,0), Vector2i(-1,0)]
+	while not queue.is_empty():
+		var cur := queue.pop_front() as Vector2i
+		if cur != pos and not _is_stair_tile(cur):
+			return cur
+		if abs(cur.x - pos.x) + abs(cur.y - pos.y) >= 5:
+			continue
+		for d: Vector2i in dirs:
+			var nb := cur + d
+			if visited.has(nb):
+				continue
+			visited[nb] = true
+			# 壁・障害物は無条件にスキップ。友好キャラが占有していても通過可能扱い
+			if _map_data.is_walkable_for(nb, _member.is_flying):
+				queue.append(nb)
 	return pos
 
 
