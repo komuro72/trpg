@@ -327,10 +327,8 @@ func _process_targeting(_delta: float) -> void:
 	else:
 		confirm_pressed = Input.is_action_just_pressed("attack")
 	if confirm_pressed:
-		if _target_index < _valid_targets.size():
+		if not _valid_targets.is_empty():
 			_confirm_target()
-		else:
-			_exit_targeting()  # キャンセル枠で確定 = キャンセル
 		return
 
 	# 循環選択
@@ -484,23 +482,14 @@ func _enter_post_delay(dur: float) -> void:
 
 ## ターゲットリストをリフレッシュ（ホールド中の毎フレーム更新）
 func _refresh_targets() -> void:
-	# キャンセル状態かどうかを先に記録する
-	# （_target_index == size のとき prev_target が null になり、リセットされていたバグの修正）
-	var was_cancel := _target_index >= _valid_targets.size()
 	var prev_target: Character = null
-	if not was_cancel:
+	if _target_index < _valid_targets.size():
 		prev_target = _valid_targets[_target_index]
 
 	_valid_targets = _get_sorted_targets()
 
 	if _valid_targets.is_empty():
-		_target_index = 0  # キャンセル選択状態（size=0 なので 0 >= size は true）
-		_update_cursor()
-		return
-
-	# キャンセル状態だった場合はキャンセルを維持（0 にリセットしない）
-	if was_cancel:
-		_target_index = _valid_targets.size()
+		_target_index = 0
 		_update_cursor()
 		return
 
@@ -518,8 +507,9 @@ func _refresh_targets() -> void:
 
 
 func _cycle_target(dir: int) -> void:
-	var total := _valid_targets.size() + 1  # 末尾がキャンセルスロット
-	_target_index = (_target_index + dir + total) % total
+	if _valid_targets.is_empty():
+		return
+	_target_index = (_target_index + dir + _valid_targets.size()) % _valid_targets.size()
 	_update_cursor()
 
 
@@ -529,8 +519,8 @@ func _update_cursor() -> void:
 			t.is_targeted = false
 	if _cursor == null:
 		return
-	if _target_index >= _valid_targets.size():
-		_cursor.visible = false  # キャンセル選択中は非表示
+	if _valid_targets.is_empty():
+		_cursor.visible = false
 	else:
 		_cursor.visible = true
 		var tgt := _valid_targets[_target_index]
