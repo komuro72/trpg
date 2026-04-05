@@ -26,11 +26,25 @@ var _tex_cache: Dictionary = {}  # image_path -> Texture2D or null
 ## V スロットのクールダウン残り秒数（player_controller が毎フレーム更新）
 var v_slot_cooldown: float = 0.0
 
-## 消耗品選択モード中かどうか（player_controller が設定）
-var is_selecting: bool = false
+## 表示モード（player_controller が設定。Phase 12-12〜）
+enum DisplayMode { NORMAL, ITEM_SELECT, ACTION_SELECT, TRANSFER_SELECT }
+var display_mode: DisplayMode = DisplayMode.NORMAL
 
-## 選択モード中の選択インデックス（-1=なし枠）
-var select_index: int = -1
+## ITEM_SELECT モード用（_item_ui_display の辞書配列）
+var item_list:  Array = []
+var item_index: int   = 0
+
+## ACTION_SELECT モード用（アクション文字列配列）
+var action_list:  Array = []
+var action_index: int   = 0
+
+## TRANSFER_SELECT モード用（キャラ名文字列配列）
+var transfer_list:  Array = []
+var transfer_index: int   = 0
+
+## 後方互換フィールド（旧コードとの整合用。display_mode に統一予定）
+var is_selecting: bool = false
+var select_index: int  = -1
 
 
 ## 操作キャラクターを設定して表示を更新する
@@ -69,6 +83,15 @@ func _load_texture(image_path: String) -> Texture2D:
 
 
 func _on_draw() -> void:
+	# モード別描画
+	match display_mode:
+		DisplayMode.ACTION_SELECT:
+			_draw_list_menu(action_list, action_index, Color(0.9, 0.8, 0.3))
+			return
+		DisplayMode.TRANSFER_SELECT:
+			_draw_list_menu(transfer_list, transfer_index, Color(0.4, 0.9, 0.6))
+			return
+
 	# V スロットクールダウン表示（消耗品がなくても表示する）
 	if v_slot_cooldown > 0.0 and _font != null:
 		var gs    := GlobalConstants.GRID_SIZE
@@ -84,6 +107,11 @@ func _on_draw() -> void:
 		_control.draw_string(_font, Vector2(bx, by + box_h * 0.72),
 				cd_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 16,
 				Color(1.0, 0.65, 0.2, 0.95))
+
+	# ITEM_SELECT モード：item_list（player_controller が設定した表示用リスト）を使用
+	if display_mode == DisplayMode.ITEM_SELECT:
+		_draw_item_list()
+		return
 
 	if _character == null or not is_instance_valid(_character) \
 			or _character.character_data == null:
@@ -203,3 +231,99 @@ func _on_draw() -> void:
 				Color(1.0, 0.92, 0.65, 1.0))
 
 		x += float(item_w + ITEM_GAP)
+
+
+## ITEM_SELECT モード：item_list（装備品＋消耗品の混合表示リスト）を描画する
+func _draw_item_list() -> void:
+	if item_list.is_empty():
+		return
+	var gs      := GlobalConstants.GRID_SIZE
+	var pw      := GlobalConstants.PANEL_TILES * gs
+	var icon_sz := int(float(gs) * ICON_SIZE_RATIO)
+	var item_w  := icon_sz + COUNT_TEXT_W
+	var n       := item_list.size()
+	var total_w := float(n * item_w + (n - 1) * ITEM_GAP + H_PAD * 2)
+	var box_h   := float(gs) * 0.65
+	var by      := float(gs) * 0.35
+	var vw      := _control.size.x
+	var field_w := float(vw - 2 * pw)
+	var bx      := float(pw) + field_w * 0.25 - total_w * 0.5
+
+	_control.draw_rect(Rect2(bx, by, total_w, box_h), Color(0.04, 0.04, 0.08, 0.88))
+	_control.draw_rect(Rect2(bx, by, total_w, box_h), Color(0.65, 0.55, 0.30, 0.80), false, 1)
+
+	var x := bx + float(H_PAD)
+	for i: int in range(n):
+		var entry   := item_list[i] as Dictionary
+		var itype   := entry.get("item_type", "unknown") as String
+		var count   := int(entry.get("count", 1))
+		var cat     := entry.get("category", "") as String
+		var img_path := entry.get("image", "") as String
+		var iy      := by + (box_h - float(icon_sz)) * 0.5
+		var icon_r  := Rect2(x, iy, float(icon_sz), float(icon_sz))
+
+		var tex := _load_texture(img_path)
+		if tex != null:
+			_control.draw_texture_rect(tex, icon_r, false)
+		else:
+			var col := ITEM_COLORS.get(itype, DEFAULT_COLOR) as Color
+			if cat == "weapon":
+				col = Color(0.7, 0.7, 0.9)
+			elif cat == "armor" or cat == "shield":
+				col = Color(0.5, 0.7, 0.5)
+			_control.draw_rect(icon_r, col)
+
+		# 選択中ハイライト
+		if i == item_index:
+			_control.draw_rect(icon_r, Color(1.0, 1.0, 1.0, 0.95), false, 2)
+
+		if _font != null and count > 1:
+			_control.draw_string(_font,
+				Vector2(x + float(icon_sz) + 2.0, by + box_h * 0.68),
+				"\u00d7%d" % count,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.92, 0.65, 1.0))
+
+		x += float(item_w + ITEM_GAP)
+
+
+## ACTION_SELECT / TRANSFER_SELECT モード：テキストリストを横並びで描画する
+func _draw_list_menu(entries: Array, sel: int, sel_color: Color) -> void:
+	if entries.is_empty() or _font == null:
+		return
+	var gs    := GlobalConstants.GRID_SIZE
+	var pw    := GlobalConstants.PANEL_TILES * gs
+	var box_h := float(gs) * 0.65
+	var by    := float(gs) * 0.35
+	const ENTRY_PAD_X := 10
+	const ENTRY_H     := 22
+
+	# 各エントリの幅を計算
+	var entry_widths: Array[float] = []
+	for e_v: Variant in entries:
+		var w := _font.get_string_size(e_v as String, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+		entry_widths.append(w + float(ENTRY_PAD_X * 2))
+
+	var total_w: float = 0.0
+	for w_v: Variant in entry_widths:
+		total_w += w_v as float
+	total_w += float(ITEM_GAP * (entries.size() - 1)) + float(H_PAD * 2)
+
+	var vw  := _control.size.x
+	var bx  := float(pw) + (float(vw - 2 * pw)) * 0.25 - total_w * 0.5
+
+	_control.draw_rect(Rect2(bx, by, total_w, box_h), Color(0.04, 0.04, 0.08, 0.88))
+	_control.draw_rect(Rect2(bx, by, total_w, box_h), Color(0.65, 0.55, 0.30, 0.80), false, 1)
+
+	var x := bx + float(H_PAD)
+	for i: int in range(entries.size()):
+		var label := entries[i] as String
+		var ew    := entry_widths[i] as float
+		var text_col := sel_color if i == sel else Color(0.85, 0.85, 0.85, 0.9)
+		if i == sel:
+			_control.draw_rect(Rect2(x, by + 2.0, ew, box_h - 4.0),
+				Color(sel_color.r, sel_color.g, sel_color.b, 0.20))
+			_control.draw_rect(Rect2(x, by + 2.0, ew, box_h - 4.0),
+				sel_color, false, 1)
+		_control.draw_string(_font, Vector2(x + float(ENTRY_PAD_X), by + box_h * 0.68),
+			label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, text_col)
+		x += ew + float(ITEM_GAP)
