@@ -551,7 +551,7 @@ func move_to(new_grid_pos: Vector2i, duration: float = 0.4) -> void:
 			facing = Direction.DOWN
 		elif d.y < 0:
 			facing = Direction.UP
-		_apply_direction_rotation()
+		start_turn_animation(facing, duration, d)
 
 	# grid_pos は半マス到達で更新する（_update_visual_move で処理）
 	_pending_grid_pos   = new_grid_pos
