@@ -148,8 +148,10 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_update_modulate()
-	_update_visual_move(delta)
-	# 時間停止中（プレイヤーのターゲット選択中など）はタイマー類を進めない
+	# 時間停止中は敵・NPC の移動補間を停止する（プレイヤー操作キャラは常に動かす）
+	if GlobalConstants.world_time_running or is_player_controlled:
+		_update_visual_move(delta)
+	# タイマー類も停止
 	if not GlobalConstants.world_time_running:
 		return
 	_recover_mp_sp(delta)
