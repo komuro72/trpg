@@ -20,7 +20,7 @@ const PRESETS: Array[String] = ["攻撃", "防衛", "待機", "追従", "撤退"
 
 ## プリセット → [combat, battle_formation, move, target, on_low_hp, item_pickup]
 const PRESET_TABLE: Array = [
-	["aggressive", "surround", "same_room", "nearest",        "keep_fighting", "aggressive"],
+	["aggressive", "surround", "cluster",   "nearest",        "keep_fighting", "aggressive"],
 	["support",    "surround", "cluster",   "same_as_leader", "retreat",       "passive"],
 	["standby",    "surround", "cluster",   "nearest",        "retreat",       "avoid"],
 	["support",    "surround", "cluster",   "same_as_leader", "retreat",       "passive"],

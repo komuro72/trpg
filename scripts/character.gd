@@ -77,11 +77,11 @@ var is_friendly: bool = false
 ## target:           nearest=最近傍 / weakest=最弱 / same_as_leader=リーダーと同じ
 ## on_low_hp:        keep_fighting=戦い続ける / retreat=後退 / flee=逃走
 var current_order: Dictionary = {
-	"move":             "same_room",
+	"move":             "cluster",        # 攻撃プリセット初期値
 	"battle_formation": "surround",
 	"combat":           "aggressive",
 	"target":           "nearest",
-	"on_low_hp":        "retreat",
+	"on_low_hp":        "keep_fighting",  # 攻撃プリセット初期値
 	"item_pickup":      "aggressive",
 }
 
@@ -538,7 +538,7 @@ func use_sp(cost: int) -> bool:
 ## HP を回復する（最大HP を超えない）
 func heal(amount: int) -> void:
 	hp = mini(hp + amount, max_hp)
-	SoundManager.play(SoundManager.HEAL)
+	SoundManager.play_from(SoundManager.HEAL, self)
 
 
 ## 消耗品を使用する（Phase 10-3〜）
@@ -552,10 +552,10 @@ func use_consumable(item: Dictionary) -> void:
 		heal(heal_hp)  # heal() 内で効果音を再生
 	if restore_mp > 0:
 		mp = mini(mp + restore_mp, max_mp)
-		SoundManager.play(SoundManager.HEAL)
+		SoundManager.play_from(SoundManager.HEAL, self)
 	if restore_sp > 0:
 		sp = mini(sp + restore_sp, max_sp)
-		SoundManager.play(SoundManager.HEAL)
+		SoundManager.play_from(SoundManager.HEAL, self)
 
 
 ## 防御バフを付与する（重複時はタイマーをリセット・エフェクトも再生成）
@@ -637,7 +637,7 @@ func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character =
 
 	hp = max(0, hp - actual)
 	_spawn_hit_effect(actual)
-	SoundManager.play(SoundManager.TAKE_DAMAGE)
+	SoundManager.play_from(SoundManager.TAKE_DAMAGE, self)
 	if hp <= 0:
 		die()
 
@@ -821,6 +821,6 @@ static func dir_to_vec(dir: Direction) -> Vector2i:
 
 ## 死亡処理：シグナルを発火してフィールドから除去する
 func die() -> void:
-	SoundManager.play(SoundManager.DEATH)
+	SoundManager.play_from(SoundManager.DEATH, self)
 	died.emit(self)
 	queue_free()

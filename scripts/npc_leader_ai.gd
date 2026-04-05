@@ -19,11 +19,21 @@ func _create_unit_ai(_member: Character) -> UnitAI:
 
 
 ## パーティー全体の戦略を評価する
-## 生存している敵がいれば ATTACK、いなければ EXPLORE（探索行動）
+## 同じフロアに生存している敵がいれば ATTACK、いなければ EXPLORE（探索行動）
 func _evaluate_party_strategy() -> Strategy:
+	# 自パーティーのフロアを取得
+	var my_floor := -1
+	for m: Character in _party_members:
+		if is_instance_valid(m):
+			my_floor = m.current_floor
+			break
 	for enemy: Character in _enemy_list:
-		if is_instance_valid(enemy) and enemy.hp > 0:
-			return Strategy.ATTACK
+		if not is_instance_valid(enemy) or enemy.hp <= 0:
+			continue
+		# 同フロアの敵のみ ATTACK トリガーにする（他フロアの敵は無視）
+		if my_floor >= 0 and enemy.current_floor != my_floor:
+			continue
+		return Strategy.ATTACK
 	return Strategy.EXPLORE
 
 

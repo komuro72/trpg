@@ -39,7 +39,8 @@ const MAX_PARTY_MEMBERS: int = 12
 ## フロア難易度ランク（フロアインデックス → 強さスコア基準値）
 ## NPC が同フロアに留まるか上下するかの判断に使用
 ## member_score = attack_power + physical_resistance + magic_resistance + defense_accuracy
-const FLOOR_RANK: Dictionary = {0: 10, 1: 25, 2: 40, 3: 60, 4: 100}
+## ランクC・細身・女性・若い の最弱ケースでも archer≈14, mage≈17 程度を想定して調整済み
+const FLOOR_RANK: Dictionary = {0: 5, 1: 12, 2: 20, 3: 30, 4: 45}
 
 ## 階段タイル種別定数（MapData.TileType と対応）
 const TILE_STAIRS_DOWN: int = 4

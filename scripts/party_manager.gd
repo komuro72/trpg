@@ -155,11 +155,17 @@ func get_enemies() -> Array[Character]:
 ## VisionSystem から呼ばれる：訪問済みエリアに基づいてメンバーの表示を更新する
 ## visited_areas: { area_id: String -> true } プレイヤーパーティーの訪問済みエリア集合
 ## friendly_areas: フレンドリーキャラ（プレイヤー+NPC）が占有するエリアIDの辞書
+## current_floor: 現在のフロアインデックス（-1 = フィルタなし）
 ## 敵マネージャーの場合、friendly_areas のいずれかにメンバーがいればアクティブ化する
 func update_visibility(player_area: String, map_data: MapData,
-		visited_areas: Dictionary, friendly_areas: Dictionary = {}) -> void:
+		visited_areas: Dictionary, friendly_areas: Dictionary = {},
+		current_floor: int = -1) -> void:
 	for member: Character in _members:
 		if not is_instance_valid(member):
+			continue
+		# 別フロアのキャラクターは非表示（フロアをまたいだ誤表示を防ぐ）
+		if current_floor >= 0 and member.current_floor != current_floor:
+			member.visible = false
 			continue
 		var member_area := map_data.get_area(member.grid_pos)
 		# エリア情報がない場合（静的マップ等）は常に表示
@@ -236,11 +242,12 @@ func is_active() -> bool:
 	return _activated
 
 
-## プレイヤーパーティー合流フラグを設定し、LeaderAI に伝播する
+## プレイヤーパーティー合流フラグを設定し、LeaderAI・UnitAI に伝播する
 func set_joined_to_player(value: bool) -> void:
 	joined_to_player = value
 	if _leader_ai != null:
-		_leader_ai.joined_to_player = value
+		# set_follow_hero_floors() が joined_to_player の更新と UnitAI への伝播を行う
+		_leader_ai.set_follow_hero_floors(value)
 
 
 ## AI を明示的に起動する（VisionSystem 経由ではなく直接起動が必要な場合に使用）

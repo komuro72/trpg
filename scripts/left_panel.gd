@@ -7,6 +7,7 @@ extends CanvasLayer
 
 var _party: Party
 var _active_character: Character
+var _player_controller: PlayerController
 var _control: Control
 var _font: Font
 
@@ -20,6 +21,10 @@ func setup(party: Party) -> void:
 
 func set_active_character(c: Character) -> void:
 	_active_character = c
+
+
+func set_player_controller(pc: PlayerController) -> void:
+	_player_controller = pc
 
 
 func _ready() -> void:
@@ -102,6 +107,8 @@ func _update_icon_nodes() -> void:
 			if tex != null:
 				tr.texture = tex
 				tr.visible = true
+				# HP状態色をフィールドスプライトと同じルールで適用
+				tr.modulate = _hp_modulate(member)
 				continue
 		# テクスチャなし → 非表示（カスタムドローでプレースホルダー色を描画）
 		tr.visible = false
@@ -141,6 +148,16 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 			Color(0.3, 0.5, 0.9, 0.45))
 		_control.draw_rect(Rect2(fx, fy, fw, fh),
 			Color(0.4, 0.6, 1.0, 0.8), false, 2)
+
+	# 回復・バフターゲット選択中の味方は緑枠でハイライト
+	# 将来: ヒーラーのターゲット選択時に右パネルへフォーカス移動し NPC・アンデッドを対象にする仕様を追加予定
+	if _player_controller != null:
+		var cur_target := _player_controller.get_current_target()
+		if cur_target != null and cur_target == c:
+			_control.draw_rect(Rect2(fx + 1, fy + 1, fw - 2, fh - 2),
+				Color(0.2, 0.7, 0.2, 0.20))
+			_control.draw_rect(Rect2(fx, fy, fw, fh),
+				Color(0.3, 0.9, 0.3, 0.85), false, 2)
 
 	# フェイスアイコン領域（TextureRect が非表示の場合はプレースホルダー色を描画）
 	var icon_size := mini(mini(int(fh) - pad * 2, int(fw * 0.42)), 88)
@@ -303,10 +320,37 @@ func _draw_bar(x: float, y: float, w: float, h: float, fill_ratio: float,
 		_control.draw_rect(Rect2(x, y, w * clampf(fill_ratio, 0.0, 1.0), h), fill)
 
 
+## フィールド上のキャラクタースプライトと同じ HP状態→色 マッピング
+func _hp_modulate(c: Character) -> Color:
+	if not is_instance_valid(c) or c.max_hp <= 0:
+		return Color.WHITE
+	var t := Time.get_ticks_msec() / 1000.0
+	var ratio := float(c.hp) / float(c.max_hp)
+	if ratio > 0.6:
+		return Color.WHITE
+	elif ratio > 0.3:
+		return Color(1.0, 1.0, 0.65)
+	elif ratio > 0.1:
+		return Color(1.0, 0.65, 0.25)
+	else:
+		var pulse := (sin(t * TAU * 3.0) + 1.0) * 0.5
+		return Color.WHITE.lerp(Color(1.0, 0.15, 0.15), pulse)
+
+
 func _condition(c: Character) -> String:
 	var ratio := float(c.hp) / float(c.max_hp) if c.max_hp > 0 else 0.0
-	if ratio > 0.6:
+	if ratio > 0.5:
 		return "healthy"
-	elif ratio > 0.3:
+	elif ratio > 0.25:
 		return "wounded"
 	return "critical"
+
+
+func _condition_color(c: Character) -> Color:
+	var ratio := float(c.hp) / float(c.max_hp) if c.max_hp > 0 else 0.0
+	if ratio > 0.5:
+		return Color.WHITE
+	elif ratio > 0.25:
+		return Color(1.0, 0.85, 0.20)   # 黄（負傷）
+	else:
+		return Color(1.0, 0.35, 0.35)   # 赤（瀕死）

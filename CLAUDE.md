@@ -539,7 +539,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
     - passive: 移動経路上にあれば拾う（寄り道しない）。フィルタなし
     - avoid: 全アイテムを避ける（拾わない。アイテムのあるマスを避けて移動）
   - 全体方針プリセット（6種）→ 6項目を一括設定
-    - 攻撃: same_room / surround / aggressive / nearest / keep_fighting / passive
+    - 攻撃: cluster / surround / aggressive / nearest / keep_fighting / aggressive
     - 防衛: cluster / surround / support / same_as_leader / retreat / passive
     - 待機: cluster / surround / standby / nearest / retreat / avoid
     - 追従: cluster / surround / support / same_as_leader / retreat / passive
@@ -1098,7 +1098,24 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
       - r1_4 fighter-sword → `fighter-sword_female_young_slim_00002`、r1_4 healer → `healer_male_young_slim_00009`、r1_4 magician-water → `magician-water_female_young_slim_00014`
       - r1_5 scout → `scout_female_young_slim_00012`、r1_5 magician-fire → `magician-fire_male_young_slim_00007`、r1_5 archer → `archer_male_young_slim_00005`
       - r1_6 fighter-sword → `fighter-sword_female_young_slim_00002`、r1_6 healer → `healer_male_young_slim_00009`、r1_6 scout → `scout_male_young_slim_00011`
-- [ ] Phase 12-11: アンデッド・新敵種実装
+- [x] Phase 12-11: NPC 多層階探索・行動バグ修正
+  - [x] **NPC が同フロア敵全滅後に探索モードへ移行しない問題**
+    - 原因：`npc_leader_ai._evaluate_party_strategy()` が `_enemy_list`（全フロア）を無差別にチェックしていたため、他フロアに敵が生存している限り常に `ATTACK` を返していた
+    - 修正：自パーティーの `current_floor` を取得し、**同フロアの敵のみ** ATTACK トリガーにする。他フロアの敵は無視
+  - [x] **NPC がパーティー強度十分でも階段を使わず他の部屋を探索する問題**
+    - 原因：`FLOOR_RANK` のしきい値が実際のスタット値に対して高すぎた（アーチャー rank C の party_score ≈ 14.5 vs 旧 `FLOOR_RANK[1]=25`）
+    - 修正：`global_constants.gd` の `FLOOR_RANK` を `{0:5, 1:12, 2:20, 3:30, 4:45}` に変更（rank C の最弱ケースでも floor 0→1 を通過できる値に調整）
+  - [x] **NPC がフロア遷移後にプレイヤーと同フロアに降りてくるまで動かない問題**
+    - 原因：`unit_ai._generate_queue()` のフロア追従チェックが `_member.is_friendly` で判定していたため、未加入 NPC が hero と別フロアにいると「hero を追って戻れ」という指示になり階段付近で停止していた。hero が降りてきた瞬間に動き出すという現象
+    - 修正：`unit_ai.gd` に `_follow_hero_floors: bool = false` フラグを追加。フロア追従は `_follow_hero_floors == true` のときのみ発動
+    - `party_leader_ai.setup()` で `joined_to_player` の値を各 UnitAI に初期値として渡す
+    - `party_leader_ai.set_follow_hero_floors()` を追加（全 UnitAI に一括伝播）
+    - `party_manager.set_joined_to_player()` が `set_follow_hero_floors()` 経由で UnitAI まで伝播するよう変更
+    - 結果：合流済みパーティーメンバーのみフロア追従、未加入 NPC は各フロアで自律行動を継続
+  - [x] **NPC がフロア遷移後にすり抜けられる問題**
+    - 原因：`_transition_npc_floor()` で NPC が現フロアに到着した際、`npc_managers` には追加されているが `_rebuild_blocking_characters()` が呼ばれておらず `player_controller.blocking_characters` が未更新だった
+    - 修正：`_transition_npc_floor()` の `new_floor == _current_floor_index` ブロックに `_rebuild_blocking_characters()` 呼び出しを追加
+- [ ] Phase 12-12: アンデッド・新敵種実装
   - CharacterData に `is_undead: bool = false` フィールド追加
   - skeleton / skeleton-archer / lich / demon / dark-lord の JSON マスターデータ作成・enemies_list.json に追加
   - **アンデッド特効（ヒーラー）**

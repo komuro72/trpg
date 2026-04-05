@@ -157,6 +157,7 @@ func _finish_setup() -> void:
 	_merge_pre_joined_allies()
 	_setup_order_window()
 	_setup_pause_menu()
+	SoundManager.set_listener(hero, map_data)
 	queue_redraw()
 
 
@@ -478,21 +479,12 @@ func _setup_vision_system() -> void:
 		MessageLog.setup_area_filter(map_data, func() -> String:
 				return vision_system.get_current_area() if vision_system != null else "")
 
-	# NPC パーティーをアクティブ化する。
+	# NPC パーティーをすべて即時アクティブ化する。
 	# VisionSystem 配布後に呼ぶこと（explore 行動で VisionSystem を参照するため）
-	# 訪問済みエリアのNPCのみ即時アクティブ化。未訪問エリアのNPCはVisionSystemが
-	# update_visibility() 経由で自動アクティブ化する（プレイヤーが部屋に入ったとき）。
+	# 表示制御は VisionSystem が引き続き行う（未訪問エリアのNPCは非表示のまま自律行動）。
 	for nm: NpcManager in npc_managers:
 		if nm not in _pre_joined_npc_managers:
-			var any_in_visited := false
-			for member: Character in nm.get_members():
-				if is_instance_valid(member):
-					var a := map_data.get_area(member.grid_pos)
-					if vision_system.is_area_visited(a):
-						any_in_visited = true
-						break
-			if any_in_visited:
-				nm.activate()
+			nm.activate()
 
 
 func _setup_panels() -> void:
@@ -502,6 +494,7 @@ func _setup_panels() -> void:
 	add_child(left_panel)
 	left_panel.setup(party)
 	left_panel.set_active_character(hero)
+	left_panel.set_player_controller(player_controller)
 
 	# 右パネル（現在エリアの敵情報）
 	right_panel = RightPanel.new()
@@ -511,6 +504,8 @@ func _setup_panels() -> void:
 	for em: EnemyManager in enemy_managers:
 		managers.append(em)
 	right_panel.setup(managers, vision_system, map_data)
+	right_panel.set_npc_managers(npc_managers)
+	right_panel.set_player_controller(player_controller)
 
 	# メッセージウィンドウ
 	message_window = MessageWindow.new()
@@ -655,6 +650,13 @@ func _on_switch_character_requested(new_char: Character) -> void:
 
 	# LB/RBキャラ切り替え用リストを更新
 	player_controller._party_sorted_members.assign(party.sorted_members())
+
+	# SoundManager の操作キャラを更新（部屋単位の音フィルタ用）
+	SoundManager.set_listener(new_char, map_data)
+
+	# 操作キャラが別フロアにいる場合はフロア表示を切り替える
+	if new_char.current_floor != _current_floor_index:
+		_switch_floor_view(new_char.current_floor)
 
 
 func _on_npc_bumped(npc_member: Character) -> void:
@@ -875,11 +877,18 @@ func _on_enemy_party_wiped(items: Array, room_id: String, floor_idx: int) -> voi
 		floor_dict[candidates[placed]] = item_v as Dictionary
 		placed += 1
 	if placed > 0:
-		SoundManager.play(SoundManager.ITEM_GET)
-		if message_window != null:
-			message_window.show_message("アイテムが部屋に散らばった！（%d個）" % placed)
 		queue_redraw()
 		print("[GameMap] アイテム %d 個をフロア%d 部屋 %s に散布" % [placed, floor_idx, room_id])
+		# 操作キャラがいる部屋のイベントのみ音とメッセージを出す
+		var is_local := false
+		if floor_idx == _current_floor_index and player_controller != null \
+				and player_controller.character != null and map_data != null:
+			var ctrl_area := map_data.get_area(player_controller.character.grid_pos)
+			is_local = (ctrl_area == room_id)
+		if is_local:
+			SoundManager.play(SoundManager.ITEM_GET)
+			if message_window != null:
+				message_window.show_message("アイテムが部屋に散らばった！（%d個）" % placed)
 
 
 ## ゲームクリア処理
@@ -932,12 +941,13 @@ func _check_item_pickup() -> void:
 		if ch.is_player_controlled and consumable_bar != null \
 				and (item.get("category", "") as String) == "consumable":
 			consumable_bar.refresh()
-		SoundManager.play(SoundManager.ITEM_GET)
 		var cname := ch.character_data.character_name \
 			if not ch.character_data.character_name.is_empty() else String(ch.name)
 		var iname: String = item.get("item_name", "アイテム") as String
-		if message_window != null:
-			message_window.show_message("%s は %s を拾った" % [cname, iname])
+		if ch_floor == _current_floor_index:
+			SoundManager.play(SoundManager.ITEM_GET)
+			if message_window != null:
+				message_window.show_message("%s は %s を拾った" % [cname, iname])
 		queue_redraw()
 
 
@@ -966,32 +976,33 @@ func _rebuild_blocking_characters() -> void:
 			player_controller.blocking_characters.append(ch)
 
 
-## パーティーメンバーが階段にいるかチェックし、操作キャラと別フロアならば遷移させる
+## パーティーメンバーが階段にいるかチェックし、hero と別フロアならば遷移させる
 func _check_party_member_stairs() -> void:
-	if _member_stair_cooldown > 0.0:
+	if party == null or hero == null:
 		return
-	if party == null:
-		return
+	# _current_floor_index ではなく hero.current_floor を基準にする。
+	# 操作キャラ切替で _switch_floor_view() が呼ばれると _current_floor_index が
+	# 操作キャラのフロアに変わるため、hero と異なるフロアを比較しないと機能しない。
+	var hero_floor := hero.current_floor
 	var active_char := player_controller.character if player_controller != null else hero
 	for member_var: Variant in party.members:
 		var ch := member_var as Character
 		if not is_instance_valid(ch) or ch == active_char:
 			continue
-		if ch.current_floor == _current_floor_index:
-			continue  # 操作キャラと同フロア・遷移不要
+		if ch.current_floor == hero_floor:
+			continue  # hero と同フロア・遷移不要
 		if ch.is_moving():
 			continue
-		# hero に向かう方向の階段タイルかチェック
 		if ch.current_floor < 0 or ch.current_floor >= _all_map_data.size():
 			continue
-		var direction: int = sign(_current_floor_index - ch.current_floor)
+		var direction: int = sign(hero_floor - ch.current_floor)
 		var member_map := _all_map_data[ch.current_floor] as MapData
 		var tile := member_map.get_tile(ch.grid_pos)
 		var expected_type := MapData.TileType.STAIRS_DOWN if direction > 0 \
 			else MapData.TileType.STAIRS_UP
 		if tile == expected_type:
 			_transition_member_floor(ch, direction)
-			return  # 1フレームに1人まで
+			# return しない：同フレームに複数メンバーを一括遷移させる
 
 
 ## パーティーメンバーを direction 方向のフロアに遷移させる（hero と同じ処理を流用）
@@ -1011,7 +1022,7 @@ func _transition_member_floor(ch: Character, direction: int) -> void:
 	var spawn_pos := stair_center
 	for m_var: Variant in party.members:
 		var m := m_var as Character
-		if is_instance_valid(m) and m.grid_pos == stair_center:
+		if is_instance_valid(m) and m.current_floor == new_floor and m.grid_pos == stair_center:
 			spawn_pos = _find_free_adjacent_to(stair_center, new_map, ch.is_flying)
 			if spawn_pos == Vector2i(-1, -1):
 				spawn_pos = stair_center
@@ -1028,7 +1039,6 @@ func _transition_member_floor(ch: Character, direction: int) -> void:
 	_rebuild_blocking_characters()
 	# キャラクター表示を更新
 	_update_character_visibility()
-	_member_stair_cooldown = 1.0
 	var dir_str := "下" if direction > 0 else "上"
 	if message_window != null:
 		var cname: String = ch.character_data.character_name if ch.character_data != null else ch.name
@@ -1040,8 +1050,10 @@ func _transition_member_floor(ch: Character, direction: int) -> void:
 func _check_npc_member_stairs() -> void:
 	if _member_stair_cooldown > 0.0:
 		return
+	# イテレーション中に _per_floor_npcs が変更されないよう先に収集する
+	var to_transition: Array = []  # [nm, direction] のペア
 	for fi: int in range(_per_floor_npcs.size()):
-		for nm_v: Variant in (_per_floor_npcs[fi] as Array):
+		for nm_v: Variant in (_per_floor_npcs[fi] as Array).duplicate():
 			var nm := nm_v as NpcManager
 			if not is_instance_valid(nm):
 				continue
@@ -1060,7 +1072,6 @@ func _check_npc_member_stairs() -> void:
 				else:
 					continue
 				# 意図チェック：NPC が実際にこの方向の階段を目指しているときのみ遷移する
-				# （探索中に偶然階段を踏んだだけの場合は遷移しない）
 				var policy := nm.get_explore_move_policy()
 				var intended_dir := 0
 				if policy == "stairs_down":
@@ -1072,8 +1083,14 @@ func _check_npc_member_stairs() -> void:
 				var new_floor_idx := ch.current_floor + direction
 				if new_floor_idx < 0 or new_floor_idx >= _all_map_data.size():
 					continue
-				_transition_npc_floor(nm, direction)
-				return  # 1フレームに1パーティーまで
+				to_transition.append([nm, direction])
+				break  # 同パーティーを重複登録しない
+	if to_transition.is_empty():
+		return
+	for pair: Variant in to_transition:
+		var pair_arr := pair as Array
+		_transition_npc_floor(pair_arr[0] as NpcManager, pair_arr[1] as int)
+	_member_stair_cooldown = 0.3  # NPC 一括遷移後の短いクールダウン
 
 
 ## 未加入 NPC パーティーを direction 方向のフロアに遷移させる
@@ -1138,31 +1155,53 @@ func _transition_npc_floor(nm: NpcManager, direction: int) -> void:
 		# 新フロア現フロアへ到着：dialogue_trigger を更新
 		if dialogue_trigger != null:
 			dialogue_trigger.setup(hero, npc_managers, enemy_managers, vision_system, map_data)
+		# NPC が現フロアに到着したので blocking_characters を再構築（すり抜け防止）
+		_rebuild_blocking_characters()
 	_update_character_visibility()
-	_member_stair_cooldown = 1.0
 	queue_redraw()
 
 
-## center の隣接タイルの中で通行可能かつ未占有のタイルを返す
-## 空きがなければ Vector2i(-1, -1) を返す
+## center からBFSで最近傍の空きタイルを探す（最大マンハッタン距離 5）
+## 階段タイルへの着地は避ける。空きがなければ Vector2i(-1, -1) を返す
 func _find_free_adjacent_to(center: Vector2i, map_ref: MapData,
 		is_flying: bool = false) -> Vector2i:
-	var offsets: Array[Vector2i] = [
-		Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
-		Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1),
-	]
-	for offset: Vector2i in offsets:
-		var pos := center + offset
-		if not map_ref.is_walkable_for(pos, is_flying):
-			continue
-		var occupied := false
+	# 現フロア上の全キャラ位置を収集（party + enemy + npc）
+	var occupied: Dictionary = {}
+	if party != null:
 		for m_var: Variant in party.members:
 			var m := m_var as Character
-			if is_instance_valid(m) and m.grid_pos == pos:
-				occupied = true
-				break
-		if not occupied:
-			return pos
+			if is_instance_valid(m):
+				occupied[m.grid_pos] = true
+	for em: EnemyManager in enemy_managers:
+		if is_instance_valid(em):
+			for ch: Character in em.get_enemies():
+				if is_instance_valid(ch):
+					occupied[ch.grid_pos] = true
+	for nm: NpcManager in npc_managers:
+		if is_instance_valid(nm):
+			for ch: Character in nm.get_members():
+				if is_instance_valid(ch):
+					occupied[ch.grid_pos] = true
+
+	var visited: Dictionary = {center: true}
+	var queue: Array[Vector2i] = [center]
+	var dirs: Array[Vector2i] = [
+		Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)
+	]
+	while not queue.is_empty():
+		var cur := queue.pop_front() as Vector2i
+		if cur != center:
+			var t := map_ref.get_tile(cur)
+			var is_stair := (t == MapData.TileType.STAIRS_DOWN or t == MapData.TileType.STAIRS_UP)
+			if map_ref.is_walkable_for(cur, is_flying) and not occupied.has(cur) and not is_stair:
+				return cur
+		if abs(cur.x - center.x) + abs(cur.y - center.y) >= 5:
+			continue
+		for d: Vector2i in dirs:
+			var nxt := cur + d
+			if not visited.has(nxt):
+				visited[nxt] = true
+				queue.append(nxt)
 	return Vector2i(-1, -1)
 
 
@@ -1258,23 +1297,15 @@ func _transition_floor(direction: int) -> void:
 		if is_instance_valid(nm):
 			vision_system.add_npc_manager(nm)
 			nm.set_vision_system(vision_system)
-			# 訪問済みエリアのNPCのみ即時アクティブ化。未訪問エリアのNPCはVisionSystemが自動アクティブ化する
 
 	# VisionSystem をフロア切替（switch_floor で開始エリアが訪問済みになる）
 	vision_system.switch_floor(new_floor, new_map, hero)
 
-	# switch_floor 後に訪問済みエリアが確定したのでNPCをアクティブ化する
+	# 新フロアの NPC をすべて即時アクティブ化する
+	# 表示制御は VisionSystem が引き続き行う（未訪問エリアのNPCは非表示のまま自律行動）
 	for nm: NpcManager in npc_managers:
 		if is_instance_valid(nm):
-			var any_in_visited := false
-			for member: Character in nm.get_members():
-				if is_instance_valid(member):
-					var a := new_map.get_area(member.grid_pos)
-					if vision_system.is_area_visited(a):
-						any_in_visited = true
-						break
-			if any_in_visited:
-				nm.activate()
+			nm.activate()
 
 	# PlayerController の参照を更新
 	if player_controller != null:
@@ -1283,6 +1314,8 @@ func _transition_floor(direction: int) -> void:
 		player_controller.stair_just_transitioned = true
 		# blocking_characters を新フロアの敵・NPC で再構築（フロア間すり抜け防止）
 		_rebuild_blocking_characters()
+	# SoundManager の map_data を更新（部屋単位の音フィルタ用）
+	SoundManager.set_listener(player_controller.character if player_controller != null else null, new_map)
 
 	# カメラのリミットを更新
 	if camera_controller != null and is_instance_valid(camera_controller):
@@ -1296,6 +1329,7 @@ func _transition_floor(direction: int) -> void:
 	# 右パネルを新フロアの enemy_managers / map_data で更新
 	if right_panel != null:
 		right_panel.setup(enemy_managers, vision_system, map_data)
+		right_panel.set_npc_managers(npc_managers)
 
 	# ダイアログ強制クローズ
 	if message_window != null and message_window.is_dialogue_active():
@@ -1308,6 +1342,83 @@ func _transition_floor(direction: int) -> void:
 	var dir_str := "下" if direction > 0 else "上"
 	if message_window != null:
 		message_window.show_message("階段を%sに進んだ（%dF）" % [dir_str, new_floor + 1])
+
+	queue_redraw()
+
+
+## フロア表示だけを切り替える（キャラクター移動なし）
+## 操作キャラが別フロアにいるときの操作切り替えで使用する
+func _switch_floor_view(new_floor: int) -> void:
+	if new_floor < 0 or new_floor >= _all_map_data.size():
+		return
+	if new_floor == _current_floor_index:
+		return
+	var new_map := _all_map_data[new_floor] as MapData
+
+	# 旧フロアのマネージャーを VisionSystem から除外
+	for em: EnemyManager in enemy_managers:
+		if is_instance_valid(em):
+			vision_system.remove_enemy_manager(em)
+	for nm: NpcManager in npc_managers:
+		if is_instance_valid(nm):
+			vision_system.remove_npc_manager(nm)
+
+	_current_floor_index = new_floor
+	map_data = new_map
+	_tile_set_id = (_all_floor_data[new_floor] as Dictionary).get("tile_set", DEFAULT_TILE_SET) as String
+	_load_tile_textures()
+
+	# 未セットアップのフロアなら初期化
+	if (_per_floor_enemies[new_floor] as Array).is_empty() \
+			and not new_map.enemy_parties.is_empty():
+		_setup_floor_enemies(new_floor)
+	if (_per_floor_npcs[new_floor] as Array).is_empty() \
+			and not new_map.npc_parties.is_empty():
+		_setup_floor_npcs(new_floor)
+
+	enemy_managers.clear()
+	enemy_managers.assign(_per_floor_enemies[new_floor] as Array)
+	npc_managers.clear()
+	npc_managers.assign(_per_floor_npcs[new_floor] as Array)
+
+	for em: EnemyManager in enemy_managers:
+		if is_instance_valid(em):
+			vision_system.add_enemy_manager(em)
+			em.set_vision_system(vision_system)
+	for nm: NpcManager in npc_managers:
+		if is_instance_valid(nm):
+			vision_system.add_npc_manager(nm)
+			nm.set_vision_system(vision_system)
+
+	var active_char := player_controller.character if player_controller != null else hero
+	vision_system.switch_floor(new_floor, new_map, active_char)
+
+	for nm: NpcManager in npc_managers:
+		if is_instance_valid(nm):
+			nm.activate()
+
+	if player_controller != null:
+		player_controller.map_data = new_map
+		_rebuild_blocking_characters()
+
+	SoundManager.set_listener(active_char, new_map)
+
+	if camera_controller != null and is_instance_valid(camera_controller):
+		var cam := camera_controller.camera
+		if cam != null and is_instance_valid(cam):
+			_update_camera_limits(cam)
+
+	_update_character_visibility()
+
+	if right_panel != null:
+		right_panel.setup(enemy_managers, vision_system, map_data)
+		right_panel.set_npc_managers(npc_managers)
+
+	if message_window != null and message_window.is_dialogue_active():
+		_close_dialogue()
+
+	if area_name_display != null:
+		area_name_display.set_floor(new_floor)
 
 	queue_redraw()
 

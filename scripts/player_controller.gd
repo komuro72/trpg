@@ -102,6 +102,15 @@ const V_SLOT_COOLDOWN: float = 2.0
 var _v_slot_cooldown: float = 0.0
 
 
+## ターゲット選択中（TARGETING/FIRING）の現在ターゲットを返す。非選択中は null
+func get_current_target() -> Character:
+	if _mode != Mode.TARGETING and _mode != Mode.FIRING:
+		return null
+	if _valid_targets.is_empty() or _target_index >= _valid_targets.size():
+		return null
+	return _valid_targets[_target_index]
+
+
 func _ready() -> void:
 	_load_class_slots()
 

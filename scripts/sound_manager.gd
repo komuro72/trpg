@@ -44,6 +44,17 @@ const MAX_POLYPHONY := 8
 var _players: Array[AudioStreamPlayer] = []
 var _streams: Dictionary = {}  ## sound_id → AudioStream（起動時キャッシュ）
 
+## 空間フィルタ用：現在の操作キャラクターと MapData
+## set_listener() で設定する。null なら全音を再生（フィルタなし）
+var _listener: Character = null
+var _listener_map_data: MapData = null
+
+
+## 操作キャラクターと MapData を設定する（game_map から呼ぶ）
+func set_listener(ch: Character, md: MapData) -> void:
+	_listener       = ch
+	_listener_map_data = md
+
 
 func _ready() -> void:
 	# AudioStreamPlayer をプール生成
@@ -96,6 +107,39 @@ func play_attack(attacker: Character) -> void:
 ## 攻撃側のタイプに応じた命中音を再生する
 func play_hit(attacker: Character) -> void:
 	play(get_hit_sound_id(attacker))
+
+
+## source キャラクターの位置が操作キャラと同じ部屋なら play() を呼ぶ
+func play_from(sound_id: int, source: Character) -> void:
+	if _is_audible(source):
+		play(sound_id)
+
+
+## source の攻撃音を空間フィルタ付きで再生する
+func play_attack_from(attacker: Character) -> void:
+	if _is_audible(attacker):
+		play_attack(attacker)
+
+
+## source の命中音を空間フィルタ付きで再生する
+func play_hit_from(attacker: Character) -> void:
+	if _is_audible(attacker):
+		play_hit(attacker)
+
+
+## source が操作キャラと同じ部屋にいるか判定する
+## listener 未設定・エリア情報なし・通路は常に true（再生する）
+func _is_audible(source: Character) -> bool:
+	if _listener == null or _listener_map_data == null:
+		return true
+	if not is_instance_valid(source) or not is_instance_valid(_listener):
+		return true
+	var src_area := _listener_map_data.get_area(source.grid_pos)
+	var lst_area := _listener_map_data.get_area(_listener.grid_pos)
+	# エリア情報がない（通路など）場合は再生する
+	if src_area.is_empty() or lst_area.is_empty():
+		return true
+	return src_area == lst_area
 
 
 ## キャラクターから攻撃音 ID を決定する

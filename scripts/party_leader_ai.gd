@@ -43,6 +43,7 @@ func setup(members: Array[Character], player: Character, map_data: MapData,
 		add_child(unit_ai)
 		unit_ai.setup(member, player, map_data, all_members)
 		unit_ai.set_party_peers(members)  ## heal/buff は自パーティーメンバー限定
+		unit_ai.set_follow_hero_floors(joined_to_player)  ## 合流済みメンバーのみ hero をフロア追従
 		_unit_ais[member.name] = unit_ai
 
 	# 初回オーダー発行
@@ -79,6 +80,16 @@ func _find_nearest_friendly(member: Character) -> Character:
 			and _player.current_floor == member.current_floor:
 		return _player
 	return closest
+
+
+## joined_to_player を各 UnitAI の _follow_hero_floors に伝播する
+## PartyManager.set_joined_to_player() 経由で呼ばれる
+func set_follow_hero_floors(value: bool) -> void:
+	joined_to_player = value
+	for unit_ai_var: Variant in _unit_ais.values():
+		var unit_ai := unit_ai_var as UnitAI
+		if unit_ai != null:
+			unit_ai.set_follow_hero_floors(value)
 
 
 ## 全パーティー合算メンバーリストを各 UnitAI に反映する

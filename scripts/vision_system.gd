@@ -185,11 +185,11 @@ func _process(_delta: float) -> void:
 	for em_var: Variant in _enemy_managers:
 		var em := em_var as EnemyManager
 		if is_instance_valid(em):
-			em.update_visibility(_current_area, _map_data, visited, friendly_areas)
+			em.update_visibility(_current_area, _map_data, visited, friendly_areas, _current_floor_index)
 	for nm_var: Variant in _npc_managers:
 		var nm := nm_var as NpcManager
 		if is_instance_valid(nm):
-			nm.update_visibility(_current_area, _map_data, visited)
+			nm.update_visibility(_current_area, _map_data, visited, {}, _current_floor_index)
 
 
 ## プレイヤーパーティーメンバーの隣接タイルが未訪問エリアに属していれば先行可視化する
