@@ -596,7 +596,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
     - 敵パーティー：goblin・goblin-archer・wolf・zombie・hobgoblin・goblin-mage・dark-knight・dark-mage・dark-priest・salamander
     - NPCパーティー：ゾンビの霊廟に fighter-sword + healer の2人
   - game_map.gd：handcrafted ダンジョン読み込みロジックを復元
-- [ ] Phase 9: 操作感・表現強化
+- [x] Phase 9: 操作感・表現強化
   - [x] Phase 9-1: 歩行アニメーション・滑らか移動
     - move_to(pos, duration) に持続時間パラメータを追加。視覚位置を _visual_from→_visual_to へ duration 秒かけて線形補間
     - 衝突判定・grid_pos は半マス到達（進捗50%）で更新。移動中は旧位置+移動先の両方を占有タイルとして返す
@@ -649,6 +649,21 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
       - room_enter：vision_system で新エリア入室時に再生
       - item_get / stairs：将来実装時に SoundManager.play(SoundManager.ITEM_GET/STAIRS) で呼ぶ
     - BGMは当面なし
+  - [x] Phase 9-5: 衝突判定改善・移動回転アニメーション
+    - **衝突判定の改善**
+      - `_can_move_to()` を `grid_pos` のみで判定（pending 位置は不使用）。半マス到達で grid_pos が更新されるため、物理的な進入を基準とする先着優先方式
+      - `static var _all_chars: Array` レジストリを character.gd に追加。移動進捗50%（コミット時）に他キャラの grid_pos と比較し、競合があれば `abort_move()` で移動をキャンセル（押し戻し効果）
+      - unit_ai: MOVING ステートで移動先の競合チェックを追加（AI 側の abort 対応）
+      - `is_pending()` / `get_pending_grid_pos()` / `abort_move()` メソッドを character.gd に追加
+    - **向き変更ディレイ（移動ブロック時）**
+      - `player_controller.gd`：`TURN_DELAY = 0.15s` / `game_speed` で除算。移動ブロック時に向きが変わる場合のみ発動
+      - ディレイ中は `GlobalConstants.world_time_running = true`（世界時間を進行させる）
+      - ディレイ完了時に `character.complete_turn()` を呼んで向きを確定
+    - **スプライト回転アニメーション**
+      - `character.gd`：`start_turn_animation(target, duration, last_dir)` / `complete_turn()` / `_calc_turn_delta_rad()` 追加
+      - Tween で最短経路の回転アニメーション。180°は `last_dir.x` で時計回り/反時計回りを決定
+      - `_turn_target_facing: Direction` / `_turn_tween: Tween` フィールド追加
+      - **通常移動時も適用**：`move_to()` が `_apply_direction_rotation()` の代わりに `start_turn_animation()` を呼ぶ。移動時間と同じ duration で回転アニメーション
 - [ ] Phase 10: アイテム・装備システム
   - [x] Phase 10-1: アイテムデータ基盤
     - **ステータス統合（フィールドリネーム）**
@@ -748,6 +763,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
       - 操作キャラ切替・アイテム取得・C/X操作・使用後に自動更新
       - 消耗品が0個かつ選択モード外の場合は非表示（描画なし）
     - 左パネルへの消耗品表示（[C] アイテム名）は将来検討
+    - バグ修正：アイテム選択UI（C/Xホールド）から装備中の武器・防具・盾を除外（`is_same()` で判定）
   - [x] Phase 10-4: 指示／ステータスウィンドウ統合
     - 既存の OrderWindow を拡張（order_window.gd）
     - 上部：キャラ一覧テーブル（全体方針プリセット＋5指示項目）
