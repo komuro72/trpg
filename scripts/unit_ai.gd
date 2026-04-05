@@ -210,6 +210,13 @@ func _process(delta: float) -> void:
 					_fallback_evaluate()
 
 		_State.MOVING:
+			# 移動先が他キャラに取られた場合はアボートして再評価
+			if _member.is_pending() and _is_dest_occupied_by_other(_member.get_pending_grid_pos()):
+				_member.abort_move()
+				_queue.clear()
+				notify_situation_changed()
+				_state = _State.IDLE
+				return
 			_timer -= delta
 			if _timer <= 0.0:
 				var still_moving := _step_toward_goal()
@@ -331,15 +338,24 @@ func _start_action(action: Dictionary) -> void:
 			if _manhattan(_member.grid_pos, tgt.grid_pos) > range_val:
 				_complete_action()
 				return
-			# 回復実行
 			var cost := _member.character_data.heal_mp_cost if _member.character_data else 0
-			if _member.use_mp(cost):
-				var power := _member.character_data.magic_power if _member.character_data else 0
-				var hp_before := tgt.hp
-				tgt.heal(power)  # heal() 内で HEAL SE 再生
-				tgt.log_heal(_member, power, hp_before)
-				_member.spawn_heal_effect("cast")
-				tgt.spawn_heal_effect("hit")
+			# アンデッド特効：回復量をダメージとして適用
+			if tgt.character_data != null and tgt.character_data.is_undead \
+					and tgt.is_friendly != _member.is_friendly:
+				if _member.use_mp(cost):
+					var power := _member.character_data.magic_power if _member.character_data else 0
+					tgt.take_damage(power, 1.0, _member, true)
+					_member.spawn_heal_effect("cast")
+					tgt.spawn_heal_effect("hit")
+			else:
+				# 通常回復
+				if _member.use_mp(cost):
+					var power := _member.character_data.magic_power if _member.character_data else 0
+					var hp_before := tgt.hp
+					tgt.heal(power)  # heal() 内で HEAL SE 再生
+					tgt.log_heal(_member, power, hp_before)
+					_member.spawn_heal_effect("cast")
+					tgt.spawn_heal_effect("hit")
 			_state = _State.WAITING
 			_timer = _member.character_data.post_delay if _member.character_data else 0.5
 
@@ -974,6 +990,25 @@ func _formation_move_goal() -> Vector2i:
 # 通行可能チェック
 # --------------------------------------------------------------------------
 
+## 移動先の座標が他キャラの確定位置（grid_pos）に被っているか調べる
+func _is_dest_occupied_by_other(pos: Vector2i) -> bool:
+	for other: Character in _all_members:
+		if not is_instance_valid(other) or other == _member:
+			continue
+		if other.current_floor != _member.current_floor:
+			continue
+		if other.is_flying != _member.is_flying:
+			continue
+		if other.grid_pos == pos:
+			return true
+	if _player != null and is_instance_valid(_player) and _player != _member:
+		if _player.current_floor == _member.current_floor \
+				and _player.is_flying == _member.is_flying \
+				and _player.grid_pos == pos:
+			return true
+	return false
+
+
 func _is_passable(pos: Vector2i) -> bool:
 	if _map_data != null and not _map_data.is_walkable_for(pos, _member.is_flying):
 		return false
@@ -1052,12 +1087,17 @@ func _generate_heal_queue() -> Array:
 	var cost := _member.character_data.heal_mp_cost
 	if _member.mp < cost:
 		return []
-	# パーティーメンバーで HP50% 以下のキャラを探す
+	# 味方の回復を優先
 	var heal_target := _find_heal_target()
-	if heal_target == null:
-		return []
-	return [{"action": "move_to_heal", "target": heal_target},
-			{"action": "heal", "target": heal_target}]
+	if heal_target != null:
+		return [{"action": "move_to_heal", "target": heal_target},
+				{"action": "heal", "target": heal_target}]
+	# 次にアンデッド敵への特効攻撃（ヒーラーの回復魔法がアンデッドにダメージ）
+	var undead_target := _find_undead_target()
+	if undead_target != null:
+		return [{"action": "move_to_heal", "target": undead_target},
+				{"action": "heal", "target": undead_target}]
+	return []
 
 
 ## バフ行動キューを返す。バフを付与すべき状況でなければ空配列
@@ -1097,6 +1137,26 @@ func _find_heal_target() -> Character:
 			best_ratio = ratio
 			best = ch
 	return best
+
+
+## アンデッド攻撃対象（射程内・同フロア・敵陣営のアンデッドキャラ）を返す
+## ヒーラーが回復魔法でアンデッドに特効ダメージを与えるために使用
+func _find_undead_target() -> Character:
+	if _member == null or _member.character_data == null:
+		return null
+	var range_val := _member.character_data.attack_range
+	for ch: Character in _all_members:
+		if not is_instance_valid(ch) or ch.hp <= 0:
+			continue
+		if ch.is_friendly == _member.is_friendly:
+			continue  # 同じ陣営はスキップ
+		if ch.character_data == null or not ch.character_data.is_undead:
+			continue
+		if ch.current_floor != _member.current_floor:
+			continue
+		if _manhattan(_member.grid_pos, ch.grid_pos) <= range_val:
+			return ch
+	return null
 
 
 ## バフ対象（同一パーティー内でバフが切れているキャラ）を返す

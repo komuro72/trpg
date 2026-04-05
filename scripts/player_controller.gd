@@ -63,6 +63,38 @@ var _target_index:  int = 0  # valid_targets.size() = キャンセル選択
 ##   問題1（斜め移動）: 補間途中から別方向への補間開始を防ぐ
 ##   問題2（長押し停止）: OS キーリピートの位相ズレや瞬間的なZERO入力の影響を受けない
 var _move_buffer: Vector2i = Vector2i.ZERO
+
+## 攻撃先行入力バッファ（移動中・post_delay 中に攻撃ボタンが押されたら true に記録）
+## 完了の瞬間に移動バッファより優先して攻撃モードに入る
+var _attack_buffer: bool = false
+
+## 直前に攻撃した敵（ターゲット選択のデフォルトフォーカス優先候補）
+var _last_attacked_target: Character = null
+
+## X ボタン短押しによるアイテム選択 UI のフェーズ
+## 0=NONE, 1=ITEM_SELECT, 2=ACTION_SELECT, 3=TRANSFER_SELECT
+enum _ItemUIPhase { NONE = 0, ITEM_SELECT = 1, ACTION_SELECT = 2, TRANSFER_SELECT = 3 }
+var _item_ui_phase: int = _ItemUIPhase.NONE
+
+## アイテム選択 UI の状態データ
+var _last_item_index:    int = 0          # X 連打時に前回位置を維持
+var _item_action_cursor: int = 0
+var _item_action_list:   Array[String] = []
+var _transfer_cursor:    int = 0
+var _item_ui_inv:        Array = []       # inventory スナップショット（生データ）
+var _item_ui_display:    Array = []       # 表示用リスト（消耗品をグループ化した辞書配列）
+## 表示エントリ構造: { item, count, inv_index, image, item_name, item_type, category }
+
+## クラスID → 装備可能アイテムタイプ一覧（OrderWindow.CLASS_EQUIP_TYPES と同一）
+const CLASS_EQUIP_TYPES: Dictionary = {
+	"fighter-sword":  ["sword",  "armor_plate", "shield"],
+	"fighter-axe":    ["axe",    "armor_plate", "shield"],
+	"archer":         ["bow",    "armor_cloth"],
+	"scout":          ["dagger", "armor_cloth"],
+	"magician-fire":  ["staff",  "armor_robe"],
+	"magician-water": ["staff",  "armor_robe"],
+	"healer":         ["staff",  "armor_robe"],
+}
 var _cursor: TargetCursor = null
 
 ## フロア遷移直後に true にセット（game_map が設定）。
@@ -96,12 +128,31 @@ var consumable_bar: ConsumableBar = null
 ## パーティーメンバーリスト（game_map から設定。LB/RBキャラ切り替えに使用）
 var _party_sorted_members: Array[Character] = []
 
-## 消耗品選択モード（C/Xホールド中）
-var _consumable_select_mode: bool = false
-
 ## V スロットクールダウン（秒）
 const V_SLOT_COOLDOWN: float = 2.0
 var _v_slot_cooldown: float = 0.0
+
+
+## 現在スロットの action と有効射程を返す（game_map の射程タイル描画に使用）
+## { "action": String, "range": int }
+func get_current_slot_range_info() -> Dictionary:
+	var sd := _get_slot()
+	var action: String = str(sd.get("action", "melee"))
+	var range_bonus: int = 0
+	if character != null and character.character_data != null:
+		range_bonus = character.character_data.get_weapon_range_bonus()
+	var range_val: int = int(sd.get("range", 1)) + range_bonus
+	return { "action": action, "range": range_val }
+
+
+## ターゲット選択モード中かどうかを返す（FieldOverlay が参照）
+func is_targeting() -> bool:
+	return _mode == Mode.TARGETING
+
+
+## ターゲット選択中の有効ターゲットリストを返す（FieldOverlay が参照）
+func get_valid_targets() -> Array[Character]:
+	return _valid_targets
 
 
 ## ターゲット選択中（PRE_DELAY/TARGETING）の現在ターゲットを返す。非選択中は null
@@ -133,12 +184,14 @@ func _input(event: InputEvent) -> void:
 	if _mode == Mode.PRE_DELAY or _mode == Mode.POST_DELAY:
 		return
 
-	# 消耗品選択モード中：LB/RBで消耗品循環
-	if _consumable_select_mode:
-		if event.is_action_pressed("switch_char_next", false):
-			_cycle_consumable_select(1)
-		elif event.is_action_pressed("switch_char_prev", false):
-			_cycle_consumable_select(-1)
+	# アイテム UI 中：LB/RBでカーソル循環
+	if _item_ui_phase != _ItemUIPhase.NONE:
+		if event.is_action_pressed("switch_char_next", false) \
+				or event.is_action_pressed("cycle_target_next", false):
+			_cycle_direction = 1
+		elif event.is_action_pressed("switch_char_prev", false) \
+				or event.is_action_pressed("cycle_target_prev", false):
+			_cycle_direction = -1
 		return
 
 	# 通常モード：LB/RBでキャラクター切り替え
@@ -202,9 +255,14 @@ func _process(delta: float) -> void:
 		# ブロック中（メニュー等）はガードを解除する
 		if character.is_guarding:
 			character.is_guarding = false
-		# 消耗品選択モードも解除する
-		if _consumable_select_mode:
-			_exit_consumable_select(false)
+		# アイテム UI も閉じる
+		if _item_ui_phase != _ItemUIPhase.NONE:
+			_exit_item_ui()
+		return
+
+	# アイテム選択 UI が開いている間は通常処理を差し替える
+	if _item_ui_phase != _ItemUIPhase.NONE:
+		_process_item_ui()
 		return
 
 	match _mode:
@@ -219,17 +277,9 @@ func _process(delta: float) -> void:
 
 
 func _process_normal(_delta: float) -> void:
-	# C/X ホールド：消耗品選択モード
-	# 攻撃押下中は無効（_mode が PRE_DELAY/TARGETING/POST_DELAY に移行するため、ここには来ない）
-	var c_held := Input.is_action_pressed("use_item")
-	if c_held and not _consumable_select_mode:
-		_enter_consumable_select()
-	elif not c_held and _consumable_select_mode:
-		_exit_consumable_select(true)  # リリース時に使用を試みる
-
-	# 消耗品選択モード中はその他のアクションを抑制（V/Y・移動はブロックしない）
-	if _consumable_select_mode:
-		_process_guard_and_move(_delta)
+	# X 短押し：アイテム選択 UI を開く
+	if Input.is_action_just_pressed("use_item"):
+		_enter_item_select()
 		return
 
 	# 特殊スキル（V/Y）
@@ -262,9 +312,9 @@ func _process_normal(_delta: float) -> void:
 	_process_guard_and_move(_delta)
 
 
-## ガード入力・移動入力を処理する（通常モード・消耗品選択モード共通）
+## ガード入力・移動入力を処理する（通常モード）
 func _process_guard_and_move(_delta: float) -> void:
-	# ガード（X/B ホールド）。消耗品選択モード中は C/X を use_item が使うため競合しない
+	# ガード（X/B ホールド）
 	var want_guard := Input.is_action_pressed("menu_back")
 	if character.is_guarding != want_guard:
 		character.is_guarding = want_guard
@@ -275,6 +325,11 @@ func _process_guard_and_move(_delta: float) -> void:
 	# キーが押されていればバッファに上書き記録、離されたらバッファをクリア
 	if character.is_moving():
 		_move_buffer = dir  # ZERO でも上書き（離したらキャンセル）
+		# 移動中の攻撃ボタン押下をバッファに記録
+		if Input.is_action_just_pressed("attack"):
+			_attack_buffer = true
+		elif Input.is_action_just_released("attack"):
+			_attack_buffer = false
 		return
 
 	# 階段タイルに静止中は移動をブロック（game_map が遷移を処理する）
@@ -293,7 +348,17 @@ func _process_guard_and_move(_delta: float) -> void:
 		else:
 			stair_just_transitioned = false  # 階段タイルから出たらリセット
 
-	# アニメーション完了後：バッファ入力を優先し、次いで現在の入力を使用
+	# アニメーション完了後：攻撃バッファを移動バッファより優先
+	if _attack_buffer:
+		_attack_buffer = false
+		_move_buffer   = Vector2i.ZERO
+		_using_v_slot  = false
+		if character.is_guarding:
+			character.is_guarding = false
+		_enter_pre_delay()
+		return
+
+	# 次いで移動バッファ → 現在の入力
 	var effective_dir := _move_buffer if _move_buffer != Vector2i.ZERO else dir
 	_move_buffer = Vector2i.ZERO
 	if effective_dir == Vector2i.ZERO:
@@ -312,25 +377,24 @@ func _process_pre_delay(delta: float) -> void:
 
 
 func _process_targeting(_delta: float) -> void:
-	# 死亡等による対象消失を検出してリフレッシュ、候補なしなら自動キャンセル
+	# 死亡等による対象消失を検出してリフレッシュ
 	_refresh_targets()
-	if _valid_targets.is_empty():
-		_exit_targeting()
-		return
 
 	# X/B でキャンセル（ノーコスト）
 	if Input.is_action_just_pressed("menu_back"):
 		_exit_targeting()
 		return
 
-	# Z/A（または V 使用中は special_skill）で確定
+	# Z/A（または V 使用中は special_skill）で確定。候補なしならキャンセル扱い
 	var confirm_pressed := false
 	if _using_v_slot:
 		confirm_pressed = Input.is_action_just_pressed("special_skill")
 	else:
 		confirm_pressed = Input.is_action_just_pressed("attack")
 	if confirm_pressed:
-		if not _valid_targets.is_empty():
+		if _valid_targets.is_empty():
+			_exit_targeting()
+		else:
 			_confirm_target()
 		return
 
@@ -347,12 +411,23 @@ func _process_targeting(_delta: float) -> void:
 
 
 func _process_post_delay(delta: float) -> void:
+	# 硬直中の攻撃ボタン押下をバッファに記録
+	if Input.is_action_just_pressed("attack"):
+		_attack_buffer = true
+	elif Input.is_action_just_released("attack"):
+		_attack_buffer = false
 	_post_delay_remaining -= delta
 	if _post_delay_remaining <= 0.0:
 		_post_delay_remaining = 0.0
 		_mode = Mode.NORMAL
 		if is_instance_valid(character):
 			character.is_attacking = false
+		# 攻撃バッファがあれば即座に PRE_DELAY へ
+		if _attack_buffer:
+			_attack_buffer = false
+			_using_v_slot = false
+			_enter_pre_delay()
+			return
 
 
 # --------------------------------------------------------------------------
@@ -370,17 +445,13 @@ func _enter_pre_delay() -> void:
 	if sp_cost > 0 and character.sp < sp_cost:
 		return
 
+	_attack_buffer       = false
 	_mode                = Mode.PRE_DELAY
 	_move_buffer         = Vector2i.ZERO
 	_pre_delay_remaining = float(sd.get("pre_delay", 0.0))
 	character.is_targeting_mode = true
 
-	# 候補が1体もいなければ即キャンセル
 	_valid_targets = _get_sorted_targets()
-	if _valid_targets.is_empty():
-		_using_v_slot = false
-		return
-
 	_target_index  = 0
 	if map_node != null:
 		_cursor = TargetCursor.new()
@@ -389,13 +460,14 @@ func _enter_pre_delay() -> void:
 	_update_cursor()
 
 
-## PRE_DELAY 消化後に TARGETING モードへ移行する（候補なしなら自動キャンセル）
+## PRE_DELAY 消化後に TARGETING モードへ移行する
 func _start_targeting() -> void:
 	_refresh_targets()
-	if _valid_targets.is_empty():
-		_exit_targeting()
-		return
 	_mode = Mode.TARGETING
+	# 射程内の全対象をグレー細アウトラインで下地表示
+	for t: Character in _valid_targets:
+		if is_instance_valid(t):
+			t.set_outline(Color(0.65, 0.65, 0.65), 1.0)
 	_update_cursor()
 
 
@@ -405,6 +477,7 @@ func _exit_targeting() -> void:
 	for t: Character in _valid_targets:
 		if is_instance_valid(t):
 			t.is_targeted = false
+			t.clear_outline()
 	_valid_targets.clear()
 	_target_index        = 0
 	_pre_delay_remaining = 0.0
@@ -413,6 +486,9 @@ func _exit_targeting() -> void:
 	if _cursor != null:
 		_cursor.queue_free()
 		_cursor = null
+	# 操作キャラの常時アウトラインを復元
+	if is_instance_valid(character):
+		character.set_outline(Color.WHITE, 1.0)
 
 
 ## TARGETING モードでターゲット確定 → 射程チェック → 攻撃実行 → POST_DELAY へ
@@ -429,6 +505,7 @@ func _confirm_target() -> void:
 	for t: Character in _valid_targets:
 		if is_instance_valid(t):
 			t.is_targeted = false
+			t.clear_outline()
 	_valid_targets.clear()
 	_target_index = 0
 	if _cursor != null:
@@ -439,6 +516,10 @@ func _confirm_target() -> void:
 	var action: String = str(sd.get("action", "melee"))
 	var was_v := _using_v_slot
 	_using_v_slot = false
+
+	# 直前の攻撃対象を記録（heal/buff は除く）
+	if action != "heal" and action != "buff_defense":
+		_last_attacked_target = target
 
 	if action == "melee":
 		_execute_melee(target, sd)
@@ -496,7 +577,13 @@ func _refresh_targets() -> void:
 	if _target_index < _valid_targets.size():
 		prev_target = _valid_targets[_target_index]
 
-	_valid_targets = _get_sorted_targets()
+	var new_targets := _get_sorted_targets()
+	# 新リストから外れた旧ターゲットのアウトラインをクリア
+	for t: Character in _valid_targets:
+		if is_instance_valid(t) and not new_targets.has(t):
+			t.is_targeted = false
+			t.clear_outline()
+	_valid_targets = new_targets
 
 	if _valid_targets.is_empty():
 		_target_index = 0
@@ -527,6 +614,7 @@ func _update_cursor() -> void:
 	for t: Character in _valid_targets:
 		if is_instance_valid(t):
 			t.is_targeted = false
+			t.set_outline(Color(0.65, 0.65, 0.65), 1.0)  # 非フォーカス：グレー細
 	if _cursor == null:
 		return
 	if _valid_targets.is_empty():
@@ -536,6 +624,7 @@ func _update_cursor() -> void:
 		var tgt := _valid_targets[_target_index]
 		_cursor.position = tgt.position
 		tgt.is_targeted  = true
+		tgt.set_outline(Color.WHITE, 2.5)  # フォーカス中：白太
 
 
 ## 有効なターゲットを返す（heal/buff_defense は距離→HP昇順、それ以外は前方コーン優先）
@@ -557,6 +646,7 @@ func _get_sorted_targets() -> Array[Character]:
 
 
 ## 前方±45°の敵を距離順 → その他の敵を距離順の順でソート
+## 直前に攻撃した敵が有効なら先頭に移動（デフォルトフォーカス優先）
 func _sort_targets(targets: Array[Character]) -> Array[Character]:
 	var forward: Array[Character] = []
 	var others:  Array[Character] = []
@@ -572,6 +662,11 @@ func _sort_targets(targets: Array[Character]) -> Array[Character]:
 	var result: Array[Character] = []
 	result.append_array(forward)
 	result.append_array(others)
+	# 直前に攻撃した敵が生存・射程内・方向範囲内なら先頭に移動
+	if _last_attacked_target != null and is_instance_valid(_last_attacked_target) \
+			and _last_attacked_target.hp > 0 and result.has(_last_attacked_target):
+		result.erase(_last_attacked_target)
+		result.push_front(_last_attacked_target)
 	return result
 
 
@@ -592,6 +687,10 @@ func _dist_to(target: Character) -> float:
 ## 移動中・ガード中・pre_delay 中・post_delay 中・インスタントV実行中 → true
 ## ターゲット選択中（TARGETING）・無入力待機 → false
 func _update_world_time() -> void:
+	# アイテム UI 中は時間停止
+	if _item_ui_phase != _ItemUIPhase.NONE:
+		GlobalConstants.world_time_running = false
+		return
 	if _mode == Mode.PRE_DELAY or _mode == Mode.POST_DELAY:
 		GlobalConstants.world_time_running = true
 		return
@@ -599,9 +698,11 @@ func _update_world_time() -> void:
 		GlobalConstants.world_time_running = false
 		return
 	# NORMAL モード：キャラの状態で判定
+	# _move_buffer に入力が残っている間は「連続移動中」と判断して暗転させない
 	if character != null:
 		if character.is_moving() or character.is_guarding \
-				or character.is_attacking or character.is_sliding:
+				or character.is_attacking or character.is_sliding \
+				or _move_buffer != Vector2i.ZERO:
 			GlobalConstants.world_time_running = true
 			return
 	GlobalConstants.world_time_running = false
@@ -623,12 +724,21 @@ func _get_valid_targets() -> Array[Character]:
 		if c.current_floor != character.current_floor:
 			continue
 		if action == "heal" or action == "buff_defense":
+			var dist: float = Vector2(character.grid_pos).distance_to(Vector2(c.grid_pos))
+			if dist > float(range_val):
+				continue
+			# 正面±45°コーン外は対象にしない（ranged と同じ方向制限）
+			if not _is_in_forward_cone(c):
+				continue
+			# "heal" のみ：アンデッド敵（is_undead=true）も特効ターゲットとして含める
+			if action == "heal" and not c.is_friendly \
+					and c.character_data != null and c.character_data.is_undead:
+				result.append(c)
+				continue
 			# 射程内の is_friendly な味方（自分を除く）が対象
 			if not c.is_friendly or c == character:
 				continue
-			var dist: float = Vector2(character.grid_pos).distance_to(Vector2(c.grid_pos))
-			if dist <= float(range_val):
-				result.append(c)
+			result.append(c)
 			continue
 		# 攻撃系: 味方キャラクターは対象にしない
 		if c.is_friendly:
@@ -639,13 +749,23 @@ func _get_valid_targets() -> Array[Character]:
 				continue
 			var dx: int = abs(c.grid_pos.x - character.grid_pos.x)
 			var dy: int = abs(c.grid_pos.y - character.grid_pos.y)
-			if dx + dy <= range_val:
-				result.append(c)
+			if dx + dy > range_val:
+				continue
+			# 前方5マス（左後・真後・右後を除く）：dot >= 0.0
+			var fwd := Vector2(Character.dir_to_vec(character.facing))
+			var diff := Vector2(c.grid_pos - character.grid_pos)
+			if diff != Vector2.ZERO and fwd.dot(diff.normalized()) < 0.0:
+				continue
+			result.append(c)
 		elif action == "ranged" or action == "ranged_area" or action == "water_stun" \
 				or action == "headshot":
 			var dist: float = Vector2(character.grid_pos).distance_to(Vector2(c.grid_pos))
-			if dist <= float(range_val):
-				result.append(c)
+			if dist > float(range_val):
+				continue
+			# 正面±45度（前方90度コーン）のみ有効
+			if not _is_in_forward_cone(c):
+				continue
+			result.append(c)
 	return result
 
 
@@ -728,11 +848,18 @@ func _execute_heal(target: Character, slot_data: Dictionary) -> void:
 	character.face_toward(target.grid_pos)
 	# キャスト側エフェクト（外広がり・白金）
 	_spawn_heal_effect(character.position, "cast")
-	# 回復実行（heal() 内で HEAL SE 再生）
+	var skill_name := str(slot_data.get("name", "回復"))
+	# アンデッド特効：回復量をダメージとして適用
+	if not target.is_friendly and target.character_data != null and target.character_data.is_undead:
+		target.take_damage(heal_amount, 1.0, character, true)
+		_spawn_heal_effect(target.position, "hit")
+		MessageLog.add_combat("[%s] %s → %s %d DMG（アンデッド特効）" % \
+			[skill_name, _char_name(character), _char_name(target), heal_amount])
+		return
+	# 通常回復（heal() 内で HEAL SE 再生）
 	target.heal(heal_amount)
 	# ターゲット側エフェクト（内縮み・緑）
 	_spawn_heal_effect(target.position, "hit")
-	var skill_name := str(slot_data.get("name", "回復"))
 	MessageLog.add_combat("[%s] %s → %s +%d HP" % \
 		[skill_name, _char_name(character), _char_name(target), heal_amount])
 
@@ -967,6 +1094,9 @@ func _try_move(dir: Vector2i) -> void:
 			duration *= 2.0
 		character.move_to(new_pos, duration)
 	else:
+		# 移動できなくてもその方向を向く（ガード中は向き固定）
+		if not character.is_guarding:
+			character.face_toward(new_pos)
 		# 移動先に友好的キャラクターがいれば npc_bumped を発火する
 		for blocker: Character in blocking_characters:
 			if not is_instance_valid(blocker):
@@ -996,13 +1126,398 @@ func _can_move_to(pos: Vector2i) -> bool:
 			continue
 		if blocker.is_flying != character.is_flying:
 			continue
-		if pos in blocker.get_occupied_tiles():
+		if pos == blocker.grid_pos:
 			return false
 	return true
 
 
 # --------------------------------------------------------------------------
-# 消耗品
+# アイテム選択 UI（X ボタン短押し）
+# --------------------------------------------------------------------------
+
+## ITEM_SELECT フェーズへ移行する（インベントリが空なら何もしない）
+func _enter_item_select() -> void:
+	if character == null or character.character_data == null:
+		return
+	var inv := character.character_data.inventory
+	if inv.is_empty():
+		return
+	_item_ui_inv = inv.duplicate()  # 生スナップショット
+
+	# 表示用リストを構築：同種の消耗品はグループ化、装備品は1個ずつ
+	_item_ui_display.clear()
+	var seen_consumable: Dictionary = {}  # item_type -> display_index
+	for i: int in range(_item_ui_inv.size()):
+		var item  := _item_ui_inv[i] as Dictionary
+		var cat   := item.get("category", "") as String
+		var itype := item.get("item_type", "unknown") as String
+		if cat == "consumable" and seen_consumable.has(itype):
+			# 既存グループのカウントを増やすだけ
+			var di := seen_consumable[itype] as int
+			(_item_ui_display[di] as Dictionary)["count"] = \
+				int((_item_ui_display[di] as Dictionary)["count"]) + 1
+		else:
+			# 画像パス解決（item["image"] → assets/images/items/{type}.png へフォールバック）
+			var img := item.get("image", "") as String
+			if img.is_empty():
+				img = "assets/images/items/" + itype + ".png"
+			var entry := {
+				"item":      item,
+				"count":     1,
+				"inv_index": i,
+				"image":     img,
+				"item_name": item.get("item_name", itype) as String,
+				"item_type": itype,
+				"category":  cat,
+			}
+			_item_ui_display.append(entry)
+			if cat == "consumable":
+				seen_consumable[itype] = _item_ui_display.size() - 1
+
+	if _item_ui_display.is_empty():
+		return
+	_last_item_index = clampi(_last_item_index, 0, _item_ui_display.size() - 1)
+	_item_ui_phase = _ItemUIPhase.ITEM_SELECT
+	_cycle_direction = 0
+	if consumable_bar != null:
+		consumable_bar.item_list  = _item_ui_display
+		consumable_bar.item_index = _last_item_index
+		consumable_bar.display_mode = ConsumableBar.DisplayMode.ITEM_SELECT
+		consumable_bar.refresh()
+
+
+## アイテム UI の各フェーズを毎フレーム処理する
+func _process_item_ui() -> void:
+	match _item_ui_phase:
+		_ItemUIPhase.ITEM_SELECT:
+			_process_item_select()
+		_ItemUIPhase.ACTION_SELECT:
+			_process_action_select()
+		_ItemUIPhase.TRANSFER_SELECT:
+			_process_transfer_select()
+
+
+## ITEM_SELECT フェーズの入力処理
+func _process_item_select() -> void:
+	if _item_ui_display.is_empty():
+		_exit_item_ui()
+		return
+	var n := _item_ui_display.size()
+
+	# LB/RB（_input で捕捉）または矢印キーでアイテム循環
+	if _cycle_direction != 0:
+		_last_item_index = (_last_item_index + _cycle_direction + n) % n
+		_cycle_direction = 0
+		_sync_item_select_bar()
+	elif Input.is_action_just_pressed("ui_right") or Input.is_action_just_pressed("ui_down"):
+		_last_item_index = (_last_item_index + 1) % n
+		_sync_item_select_bar()
+	elif Input.is_action_just_pressed("ui_left") or Input.is_action_just_pressed("ui_up"):
+		_last_item_index = (_last_item_index - 1 + n) % n
+		_sync_item_select_bar()
+
+	# Z/A または X（use_item）で決定 → ACTION_SELECT へ
+	if Input.is_action_just_pressed("attack") or Input.is_action_just_pressed("use_item"):
+		_enter_action_select()
+		return
+
+	# B（menu_back）でキャンセル
+	if Input.is_action_just_pressed("menu_back"):
+		_exit_item_ui()
+
+
+## ConsumableBar の ITEM_SELECT 表示を現在の _last_item_index で更新
+func _sync_item_select_bar() -> void:
+	if consumable_bar == null:
+		return
+	consumable_bar.item_index = _last_item_index
+	consumable_bar.refresh()
+
+
+## 選択中アイテムに対して実行できるアクションリストを構築して ACTION_SELECT へ移行
+func _enter_action_select() -> void:
+	if _last_item_index >= _item_ui_display.size():
+		_exit_item_ui()
+		return
+	var entry := _item_ui_display[_last_item_index] as Dictionary
+	var item  := entry["item"] as Dictionary
+	_item_action_list.clear()
+	_item_action_cursor = 0
+
+	var cat := item.get("category", "") as String
+	# 使用する（消耗品で効果がある場合）
+	if cat == "consumable" and _is_consumable_usable_by_char(item):
+		_item_action_list.append("使用する")
+	# 装備する
+	if _can_equip_item(item):
+		_item_action_list.append("装備する")
+	# 渡す（リーダーのみ・未装備アイテム）
+	if character != null and character.is_leader \
+			and not _is_item_equipped(item) \
+			and _party_sorted_members.size() > 1:
+		_item_action_list.append("渡す")
+	_item_action_list.append("キャンセル")
+
+	_item_ui_phase = _ItemUIPhase.ACTION_SELECT
+	if consumable_bar != null:
+		consumable_bar.action_list  = _item_action_list
+		consumable_bar.action_index = 0
+		consumable_bar.display_mode = ConsumableBar.DisplayMode.ACTION_SELECT
+		consumable_bar.refresh()
+
+
+## ACTION_SELECT フェーズの入力処理
+func _process_action_select() -> void:
+	# 上下でアクション選択
+	if _cycle_direction != 0:
+		_item_action_cursor = (_item_action_cursor + _cycle_direction \
+			+ _item_action_list.size()) % _item_action_list.size()
+		_cycle_direction = 0
+		if consumable_bar != null:
+			consumable_bar.action_index = _item_action_cursor
+			consumable_bar.refresh()
+	elif Input.is_action_just_pressed("ui_down"):
+		_item_action_cursor = (_item_action_cursor + 1) % _item_action_list.size()
+		if consumable_bar != null:
+			consumable_bar.action_index = _item_action_cursor
+			consumable_bar.refresh()
+	elif Input.is_action_just_pressed("ui_up"):
+		_item_action_cursor = (_item_action_cursor - 1 + _item_action_list.size()) \
+			% _item_action_list.size()
+		if consumable_bar != null:
+			consumable_bar.action_index = _item_action_cursor
+			consumable_bar.refresh()
+
+	# Z/A または X で決定
+	if Input.is_action_just_pressed("attack") or Input.is_action_just_pressed("use_item"):
+		var action := _item_action_list[_item_action_cursor]
+		if action == "キャンセル":
+			# ITEM_SELECT に戻る
+			_item_ui_phase = _ItemUIPhase.ITEM_SELECT
+			if consumable_bar != null:
+				consumable_bar.display_mode = ConsumableBar.DisplayMode.ITEM_SELECT
+				consumable_bar.item_index   = _last_item_index
+				consumable_bar.refresh()
+		elif action == "渡す":
+			_enter_transfer_select()
+		else:
+			_execute_item_action(action)
+		return
+
+	# B でアイテム選択に戻る
+	if Input.is_action_just_pressed("menu_back"):
+		_item_ui_phase = _ItemUIPhase.ITEM_SELECT
+		if consumable_bar != null:
+			consumable_bar.display_mode = ConsumableBar.DisplayMode.ITEM_SELECT
+			consumable_bar.item_index   = _last_item_index
+			consumable_bar.refresh()
+
+
+## TRANSFER_SELECT フェーズへ移行する（リーダーが他メンバーにアイテムを渡す）
+func _enter_transfer_select() -> void:
+	var targets: Array[String] = []
+	for ch: Character in _party_sorted_members:
+		if is_instance_valid(ch) and ch != character:
+			var nm := ch.character_data.character_name if ch.character_data != null else ""
+			if nm.is_empty():
+				nm = str(ch.name)
+			targets.append(nm)
+	if targets.is_empty():
+		_exit_item_ui()
+		return
+	_transfer_cursor = 0
+	_item_ui_phase = _ItemUIPhase.TRANSFER_SELECT
+	if consumable_bar != null:
+		consumable_bar.transfer_list  = targets
+		consumable_bar.transfer_index = 0
+		consumable_bar.display_mode   = ConsumableBar.DisplayMode.TRANSFER_SELECT
+		consumable_bar.refresh()
+
+
+## TRANSFER_SELECT フェーズの入力処理
+func _process_transfer_select() -> void:
+	var count := consumable_bar.transfer_list.size() if consumable_bar != null else 0
+	if count == 0:
+		_exit_item_ui()
+		return
+
+	if _cycle_direction != 0:
+		_transfer_cursor = (_transfer_cursor + _cycle_direction + count) % count
+		_cycle_direction = 0
+		if consumable_bar != null:
+			consumable_bar.transfer_index = _transfer_cursor
+			consumable_bar.refresh()
+	elif Input.is_action_just_pressed("ui_down"):
+		_transfer_cursor = (_transfer_cursor + 1) % count
+		if consumable_bar != null:
+			consumable_bar.transfer_index = _transfer_cursor
+			consumable_bar.refresh()
+	elif Input.is_action_just_pressed("ui_up"):
+		_transfer_cursor = (_transfer_cursor - 1 + count) % count
+		if consumable_bar != null:
+			consumable_bar.transfer_index = _transfer_cursor
+			consumable_bar.refresh()
+
+	# Z/A または X で渡す確定
+	if Input.is_action_just_pressed("attack") or Input.is_action_just_pressed("use_item"):
+		_execute_transfer(_transfer_cursor)
+		return
+
+	# B でアクション選択に戻る
+	if Input.is_action_just_pressed("menu_back"):
+		_item_ui_phase = _ItemUIPhase.ACTION_SELECT
+		if consumable_bar != null:
+			consumable_bar.display_mode = ConsumableBar.DisplayMode.ACTION_SELECT
+			consumable_bar.refresh()
+
+
+## アイテムアクションを実行する（使用・装備）
+func _execute_item_action(action: String) -> void:
+	if _last_item_index >= _item_ui_display.size():
+		_exit_item_ui()
+		return
+	var item := (_item_ui_display[_last_item_index] as Dictionary)["item"] as Dictionary
+
+	if action == "使用する":
+		_use_item_from_ui(item)
+	elif action == "装備する":
+		_equip_item_from_ui(item)
+
+	_exit_item_ui()
+
+
+## アイテムを使用する（消耗品）
+func _use_item_from_ui(item: Dictionary) -> void:
+	if character == null or character.character_data == null:
+		return
+	var cd     := character.character_data
+	var effect := item.get("effect", {}) as Dictionary
+	var heal_hp    := int(effect.get("heal_hp",    0))
+	var restore_mp := int(effect.get("restore_mp", 0))
+	var restore_sp := int(effect.get("restore_sp", 0))
+	if heal_hp == 0 and restore_mp == 0 and restore_sp == 0:
+		return
+
+	var used_type := item.get("item_type", "") as String
+	character.use_consumable(item)
+
+	# inventory から該当アイテムを1個削除
+	var inv := cd.inventory
+	for i: int in range(inv.size()):
+		var entry := inv[i] as Dictionary
+		if entry.get("item_type", "") == used_type \
+				and entry.get("category", "") == "consumable":
+			inv.remove_at(i)
+			break
+
+	var item_name := item.get("item_name", "アイテム") as String
+	var char_name := cd.character_name if not cd.character_name.is_empty() else String(character.name)
+	MessageLog.add_system("%s は %s を使った！" % [char_name, item_name])
+	if consumable_bar != null:
+		consumable_bar.refresh()
+
+
+## アイテムを装備する
+func _equip_item_from_ui(item: Dictionary) -> void:
+	if character == null or character.character_data == null:
+		return
+	var cd    := character.character_data
+	var itype := item.get("item_type", "") as String
+	if itype in ["sword", "axe", "bow", "dagger", "staff"]:
+		cd.equipped_weapon = item
+	elif itype in ["armor_plate", "armor_cloth", "armor_robe"]:
+		cd.equipped_armor = item
+	elif itype == "shield":
+		cd.equipped_shield = item
+	else:
+		return
+	character.refresh_stats_from_equipment()
+	var item_name := item.get("item_name", "アイテム") as String
+	var char_name := cd.character_name if not cd.character_name.is_empty() else String(character.name)
+	MessageLog.add_system("%s は %s を装備した！" % [char_name, item_name])
+
+
+## アイテムを別キャラに渡す（transfer_idx: transfer_list のインデックス）
+func _execute_transfer(transfer_idx: int) -> void:
+	if character == null or character.character_data == null:
+		return
+	if _last_item_index >= _item_ui_display.size():
+		_exit_item_ui()
+		return
+	var item := (_item_ui_display[_last_item_index] as Dictionary)["item"] as Dictionary
+
+	# transfer_list のインデックス → _party_sorted_members の対応キャラを特定
+	var others: Array[Character] = []
+	for ch: Character in _party_sorted_members:
+		if is_instance_valid(ch) and ch != character:
+			others.append(ch)
+	if transfer_idx >= others.size():
+		_exit_item_ui()
+		return
+	var target_ch := others[transfer_idx]
+	if not is_instance_valid(target_ch) or target_ch.character_data == null:
+		_exit_item_ui()
+		return
+
+	# 渡す元の inventory からアイテムを1個削除
+	var src_inv := character.character_data.inventory
+	for i: int in range(src_inv.size()):
+		if src_inv[i] == item:
+			src_inv.remove_at(i)
+			break
+
+	# 渡す先に追加
+	target_ch.character_data.inventory.append(item)
+
+	var item_name   := item.get("item_name", "アイテム") as String
+	var src_name    := character.character_data.character_name
+	var target_name := target_ch.character_data.character_name
+	MessageLog.add_system("%s は %s を %s に渡した" % [src_name, item_name, target_name])
+
+	_exit_item_ui()
+
+
+## アイテム選択 UI を閉じて NORMAL に戻す
+func _exit_item_ui() -> void:
+	_item_ui_phase = _ItemUIPhase.NONE
+	_item_action_list.clear()
+	_item_ui_inv.clear()
+	_item_ui_display.clear()
+	_cycle_direction = 0
+	if consumable_bar != null:
+		consumable_bar.display_mode = ConsumableBar.DisplayMode.NORMAL
+		consumable_bar.item_list    = []
+		consumable_bar.action_list.clear()
+		consumable_bar.transfer_list.clear()
+		consumable_bar.refresh()
+
+
+## アイテムがこのキャラのクラスで装備可能かチェック
+func _can_equip_item(item: Dictionary) -> bool:
+	if character == null or character.character_data == null:
+		return false
+	var class_id := character.character_data.class_id
+	var allowed: Array = CLASS_EQUIP_TYPES.get(class_id, []) as Array
+	var itype    := item.get("item_type", "") as String
+	return allowed.has(itype)
+
+
+## アイテムが現在装備中かどうか（value comparison）
+func _is_item_equipped(item: Dictionary) -> bool:
+	if character == null or character.character_data == null:
+		return false
+	var cd := character.character_data
+	if not cd.equipped_weapon.is_empty() and cd.equipped_weapon == item:
+		return true
+	if not cd.equipped_armor.is_empty() and cd.equipped_armor == item:
+		return true
+	if not cd.equipped_shield.is_empty() and cd.equipped_shield == item:
+		return true
+	return false
+
+
+# --------------------------------------------------------------------------
+# キャラクター切り替え
 # --------------------------------------------------------------------------
 
 ## キャラクター切り替え（LB/RB 通常時）
@@ -1022,36 +1537,6 @@ func _switch_character(dir: int) -> void:
 		switch_char_requested.emit(next_char)
 
 
-## 消耗品選択モード開始（C/X ホールド時）
-## 現在の選択位置を維持したまま選択モードに入る（フォーカスは変わらない）
-func _enter_consumable_select() -> void:
-	_consumable_select_mode = true
-	if character == null or character.character_data == null:
-		return
-	var cd := character.character_data
-	# ConsumableBar を選択モード表示に切り替え（select_index は現在値を渡す）
-	if consumable_bar != null:
-		consumable_bar.is_selecting = true
-		consumable_bar.select_index = cd.selected_consumable_index
-		consumable_bar.refresh()
-
-
-## 消耗品選択モード終了（C/X リリース時）
-## do_use=true なら「なし」以外が選択中の場合に使用を試みる
-func _exit_consumable_select(do_use: bool) -> void:
-	_consumable_select_mode = false
-	if do_use and character != null and character.character_data != null:
-		var cd := character.character_data
-		# selected_consumable_index >= 0 なら使用（-1=「なし」は不使用）
-		if cd.selected_consumable_index >= 0:
-			_use_selected_consumable()
-	# ConsumableBar を通常表示に戻す
-	if consumable_bar != null:
-		consumable_bar.is_selecting = false
-		consumable_bar.select_index = -1
-		consumable_bar.refresh()
-
-
 ## このキャラクターがアイテムを使用できるか判定する
 ## max_mp==0のキャラにMPポーションは不要・max_sp==0のキャラにSPポーションは不要
 func _is_consumable_usable_by_char(item: Dictionary) -> bool:
@@ -1066,140 +1551,6 @@ func _is_consumable_usable_by_char(item: Dictionary) -> bool:
 		return false
 	return true
 
-
-## 消耗品選択モード中の LB/RB によるグループ循環
-## -1（なし）→ 使用可能グループ0 → … → 最後 → -1（なし） の順で循環
-## 使用できない消耗品種別（MPポーション/SPポーション）はスキップする
-func _cycle_consumable_select(dir: int) -> void:
-	if character == null or character.character_data == null:
-		return
-	var cd   := character.character_data
-	var list := cd.get_consumables()
-	if list.is_empty():
-		return
-	# 使用可能なグループキーリストを構築（使えない種別は除外）
-	var group_keys: Array[String] = []
-	var seen: Dictionary = {}
-	for item_v: Variant in list:
-		var item  := item_v as Dictionary
-		var itype := item.get("item_type", "") as String
-		if not seen.has(itype) and _is_consumable_usable_by_char(item):
-			seen[itype] = true
-			group_keys.append(itype)
-	if group_keys.is_empty():
-		return
-	var group_count := group_keys.size()
-	# 現在のグループインデックス（-1=なし枠）
-	var cur_type := ""
-	if cd.selected_consumable_index >= 0 and cd.selected_consumable_index < list.size():
-		cur_type = (list[cd.selected_consumable_index] as Dictionary).get("item_type", "") as String
-	var cur_grp := group_keys.find(cur_type)  # 使用可能グループに見つからなければ -1（なし枠扱い）
-	# 循環計算（-1=なし枠 を含めて group_count+1 の循環）
-	var total    := group_count + 1
-	var grp_idx  := (cur_grp + 1 + dir + total) % total - 1  # -1=なし枠
-	if grp_idx < 0:
-		# なし枠を選択
-		cd.selected_consumable_index = -1
-	else:
-		var next_type := group_keys[grp_idx]
-		for i: int in range(list.size()):
-			if (list[i] as Dictionary).get("item_type", "") == next_type:
-				cd.selected_consumable_index = i
-				break
-	if consumable_bar != null:
-		consumable_bar.select_index = cd.selected_consumable_index
-		consumable_bar.refresh()
-
-
-## 消耗品スロットをグループ（item_type）単位で循環する（dir: +1=次 / -1=前）
-func _cycle_consumable(dir: int) -> void:
-	if character == null or character.character_data == null:
-		return
-	var cd   := character.character_data
-	var list := cd.get_consumables()
-	if list.is_empty():
-		return
-
-	# グループキーリスト（出現順・重複なし）を構築
-	var group_keys: Array[String] = []
-	var seen: Dictionary = {}
-	for item_v: Variant in list:
-		var itype := (item_v as Dictionary).get("item_type", "") as String
-		if not seen.has(itype):
-			seen[itype] = true
-			group_keys.append(itype)
-
-	# 現在の選択グループを特定
-	var cur_type := ""
-	if cd.selected_consumable_index < list.size():
-		cur_type = (list[cd.selected_consumable_index] as Dictionary)\
-			.get("item_type", "") as String
-	var cur_grp := group_keys.find(cur_type)
-	if cur_grp < 0:
-		cur_grp = 0
-
-	# 次グループへ循環
-	var next_grp := (cur_grp + dir + group_keys.size()) % group_keys.size()
-	var next_type := group_keys[next_grp]
-
-	# next_type の最初のアイテムのインデックスへセット
-	for i: int in range(list.size()):
-		if (list[i] as Dictionary).get("item_type", "") == next_type:
-			cd.selected_consumable_index = i
-			break
-
-	if consumable_bar != null:
-		consumable_bar.refresh()
-
-
-## 選択中の消耗品を使用する
-func _use_selected_consumable() -> void:
-	if character == null or character.character_data == null:
-		return
-	var cd   := character.character_data
-	var item := cd.get_selected_consumable()
-	if item.is_empty():
-		return
-	var effect: Dictionary = item.get("effect", {}) as Dictionary
-	var heal_hp:    int = int(effect.get("heal_hp",    0))
-	var restore_mp: int = int(effect.get("restore_mp", 0))
-	var restore_sp: int = int(effect.get("restore_sp", 0))
-	# 効果のないアイテムは使用しない
-	if heal_hp == 0 and restore_mp == 0 and restore_sp == 0:
-		return
-
-	var used_type := item.get("item_type", "") as String
-
-	# 使用実行（heal / MP回復・効果音は use_consumable 内）
-	character.use_consumable(item)
-
-	# inventory から同グループの先頭1個を削除（remove_at で確実に1個だけ消す）
-	var inv := cd.inventory
-	for i: int in range(inv.size()):
-		var entry := inv[i] as Dictionary
-		if entry.get("item_type", "") == used_type \
-				and entry.get("category", "") == "consumable":
-			inv.remove_at(i)
-			break
-
-	# 使用後インデックス: 同グループに残りがあれば維持、なければクランプ
-	var remaining := cd.get_consumables()
-	var found_same := false
-	for i: int in range(remaining.size()):
-		if (remaining[i] as Dictionary).get("item_type", "") == used_type:
-			cd.selected_consumable_index = i
-			found_same = true
-			break
-	if not found_same:
-		cd.selected_consumable_index = \
-			clampi(cd.selected_consumable_index, 0, maxi(0, remaining.size() - 1))
-
-	var item_name: String = item.get("item_name", "アイテム") as String
-	var char_name: String = cd.character_name if not cd.character_name.is_empty() \
-		else String(character.name)
-	MessageLog.add_system("%s は %s を使った！" % [char_name, item_name])
-	if consumable_bar != null:
-		consumable_bar.refresh()
 
 
 # --------------------------------------------------------------------------
