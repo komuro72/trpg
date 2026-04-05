@@ -312,8 +312,11 @@ func _process_pre_delay(delta: float) -> void:
 
 
 func _process_targeting(_delta: float) -> void:
-	# 時間停止中でも死亡による対象消失を検出するためリフレッシュ
+	# 死亡等による対象消失を検出してリフレッシュ、候補なしなら自動キャンセル
 	_refresh_targets()
+	if _valid_targets.is_empty():
+		_exit_targeting()
+		return
 
 	# X/B でキャンセル（ノーコスト）
 	if Input.is_action_just_pressed("menu_back"):
@@ -372,8 +375,12 @@ func _enter_pre_delay() -> void:
 	_pre_delay_remaining = float(sd.get("pre_delay", 0.0))
 	character.is_targeting_mode = true
 
-	# カーソルをあらかじめ生成してターゲット候補を表示
+	# 候補が1体もいなければ即キャンセル
 	_valid_targets = _get_sorted_targets()
+	if _valid_targets.is_empty():
+		_using_v_slot = false
+		return
+
 	_target_index  = 0
 	if map_node != null:
 		_cursor = TargetCursor.new()
@@ -382,10 +389,13 @@ func _enter_pre_delay() -> void:
 	_update_cursor()
 
 
-## PRE_DELAY 消化後に TARGETING モードへ移行する
+## PRE_DELAY 消化後に TARGETING モードへ移行する（候補なしなら自動キャンセル）
 func _start_targeting() -> void:
-	_mode = Mode.TARGETING
 	_refresh_targets()
+	if _valid_targets.is_empty():
+		_exit_targeting()
+		return
+	_mode = Mode.TARGETING
 	_update_cursor()
 
 
