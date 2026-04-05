@@ -464,8 +464,8 @@ func _is_target_in_range(target: Character, sd: Dictionary) -> bool:
 		if character != null and character.character_data != null else 0
 	var range_val: int = int(sd.get("range", 1)) + range_bonus
 	if action == "melee":
-		var dx := abs(target.grid_pos.x - character.grid_pos.x)
-		var dy := abs(target.grid_pos.y - character.grid_pos.y)
+		var dx: int = abs(target.grid_pos.x - character.grid_pos.x)
+		var dy: int = abs(target.grid_pos.y - character.grid_pos.y)
 		return dx + dy <= range_val
 	else:
 		var dist := Vector2(character.grid_pos).distance_to(Vector2(target.grid_pos))
