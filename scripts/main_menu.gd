@@ -38,7 +38,7 @@ var _pending_save: SaveData = null
 ## オプション
 var _opt_cursor:    int   = 0
 var _opt_volume:    float = 0.5
-var _opt_speed_idx: int   = 0   ## 0 = 0.5x
+var _opt_speed_idx: int   = 1   ## 1 = 1.0x
 
 # --------------------------------------------------------------------------
 # UI
