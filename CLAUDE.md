@@ -1131,7 +1131,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
   - [x] **NPC がフロア遷移後にすり抜けられる問題**
     - 原因：`_transition_npc_floor()` で NPC が現フロアに到着した際、`npc_managers` には追加されているが `_rebuild_blocking_characters()` が呼ばれておらず `player_controller.blocking_characters` が未更新だった
     - 修正：`_transition_npc_floor()` の `new_floor == _current_floor_index` ブロックに `_rebuild_blocking_characters()` 呼び出しを追加
-- [ ] Phase 12-12: アンデッド・新敵種実装
+- [x] Phase 12-12: アンデッド・新敵種実装
   - CharacterData に `is_undead: bool = false` フィールド追加
   - skeleton / skeleton-archer / lich / demon / dark-lord の JSON マスターデータ作成・enemies_list.json に追加
   - **アンデッド特効（ヒーラー）**

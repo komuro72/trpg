@@ -10,6 +10,11 @@
     "res://assets/master/enemies/salamander.json",
     "res://assets/master/enemies/dark_knight.json",
     "res://assets/master/enemies/dark_mage.json",
-    "res://assets/master/enemies/dark_priest.json"
+    "res://assets/master/enemies/dark_priest.json",
+    "res://assets/master/enemies/skeleton.json",
+    "res://assets/master/enemies/skeleton_archer.json",
+    "res://assets/master/enemies/lich.json",
+    "res://assets/master/enemies/demon.json",
+    "res://assets/master/enemies/dark_lord.json"
   ]
 }

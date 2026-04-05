@@ -686,8 +686,12 @@ func _execute_attack() -> void:
 				proj.z_index = 2
 				map_node.add_child(proj)
 				var is_magic := (atype == "magic")
+				var is_water := _get_is_water_shot()
+				var ptype := _member.character_data.projectile_type \
+						if _member.character_data != null else ""
 				proj.setup(_member.position, _attack_target.position,
-						true, _attack_target, dmg_power, 1.0, _member, is_magic)
+						true, _attack_target, dmg_power, 1.0, _member, is_magic,
+						0.0, is_water, ptype)
 		"dive":
 			# 降下攻撃：方向倍率なし（飛行中の奇襲）、降下エフェクト表示
 			SoundManager.play_attack_from(_member)
@@ -1210,3 +1214,9 @@ func _get_move_interval() -> float:
 ## 攻撃実行後に呼ばれるフック。MP消費などはここで行う（サブクラスでオーバーライド）
 func _on_after_attack() -> void:
 	pass
+
+
+## 遠距離魔法攻撃時に水弾を使うかどうかを返す（サブクラスでオーバーライド）
+## LichUnitAI が火/水を交互に切り替えるために使用
+func _get_is_water_shot() -> bool:
+	return false

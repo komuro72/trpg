@@ -851,7 +851,9 @@
                 { "enemy_id": "dark-mage",   "x": 48, "y": 6 },
                 { "enemy_id": "dark-priest", "x": 53, "y": 8 },
                 { "enemy_id": "zombie",      "x": 46, "y": 10 },
-                { "enemy_id": "zombie",      "x": 52, "y": 11 }
+                { "enemy_id": "zombie",      "x": 52, "y": 11 },
+                { "enemy_id": "skeleton",    "x": 50, "y": 5  },
+                { "enemy_id": "skeleton",    "x": 55, "y": 12 }
               ],
               "items": [
                 {
@@ -921,12 +923,13 @@
             "is_entrance": false,
             "enemy_party": {
               "members": [
-                { "enemy_id": "dark-knight", "x": 30, "y": 8  },
-                { "enemy_id": "dark-knight", "x": 38, "y": 10 },
-                { "enemy_id": "dark-mage",   "x": 34, "y": 6  },
-                { "enemy_id": "dark-priest", "x": 41, "y": 7  },
-                { "enemy_id": "salamander",  "x": 27, "y": 16 },
-                { "enemy_id": "harpy",       "x": 43, "y": 14 }
+                { "enemy_id": "dark-knight",      "x": 30, "y": 8  },
+                { "enemy_id": "dark-knight",      "x": 38, "y": 10 },
+                { "enemy_id": "dark-mage",        "x": 34, "y": 6  },
+                { "enemy_id": "dark-priest",      "x": 41, "y": 7  },
+                { "enemy_id": "salamander",       "x": 27, "y": 16 },
+                { "enemy_id": "harpy",            "x": 43, "y": 14 },
+                { "enemy_id": "skeleton-archer",  "x": 44, "y": 18 }
               ],
               "items": [
                 {
@@ -1069,8 +1072,9 @@
               "members": [
                 { "enemy_id": "dark-knight", "x": 46, "y": 6  },
                 { "enemy_id": "dark-mage",   "x": 52, "y": 5  },
-                { "enemy_id": "dark-mage",   "x": 55, "y": 10 },
-                { "enemy_id": "salamander",  "x": 49, "y": 12 }
+                { "enemy_id": "lich",        "x": 55, "y": 10 },
+                { "enemy_id": "salamander",  "x": 49, "y": 12 },
+                { "enemy_id": "demon",       "x": 57, "y": 7  }
               ],
               "items": [
                 {
@@ -1083,15 +1087,15 @@
                 {
                   "item_type": "staff",
                   "category": "weapon",
-                  "item_name": "暗黒の魔術杖",
-                  "stats": { "magic_power": 16, "accuracy": 0.16 },
+                  "item_name": "リッチの魔術杖",
+                  "stats": { "magic_power": 19, "accuracy": 0.17 },
                   "quantity": 1
                 },
                 {
                   "item_type": "armor_robe",
                   "category": "armor",
-                  "item_name": "暗黒の魔術師衣",
-                  "stats": { "magic_resistance": 14, "physical_resistance": 5 },
+                  "item_name": "死霊術師の衣",
+                  "stats": { "magic_resistance": 16, "physical_resistance": 6 },
                   "quantity": 1
                 },
                 {
@@ -1109,7 +1113,7 @@
                   "item_name": "上位魔力回復薬",
                   "stats": {},
                   "effect": { "restore_mp": 40 },
-                  "quantity": 1,
+                  "quantity": 2,
                   "image": "assets/images/items/potion_mp.png"
                 }
               ]
@@ -1141,10 +1145,12 @@
             "is_entrance": false,
             "enemy_party": {
               "members": [
+                { "enemy_id": "dark-lord",   "x": 23, "y": 15 },
                 { "enemy_id": "dark-knight", "x": 18, "y": 10 },
                 { "enemy_id": "dark-knight", "x": 28, "y": 10 },
                 { "enemy_id": "dark-mage",   "x": 23, "y": 8  },
-                { "enemy_id": "dark-priest", "x": 33, "y": 12 }
+                { "enemy_id": "dark-priest", "x": 33, "y": 12 },
+                { "enemy_id": "demon",       "x": 30, "y": 18 }
               ],
               "items": [
                 {
@@ -1173,6 +1179,20 @@
                   "category": "weapon",
                   "item_name": "深淵の大魔杖",
                   "stats": { "magic_power": 22, "accuracy": 0.20 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "axe",
+                  "category": "weapon",
+                  "item_name": "ダークロードの魔斧",
+                  "stats": { "attack_power": 28, "accuracy": 0.16, "defense_strength": 8 },
+                  "quantity": 1
+                },
+                {
+                  "item_type": "armor_plate",
+                  "category": "armor",
+                  "item_name": "深淵の覇王鎧",
+                  "stats": { "physical_resistance": 26, "magic_resistance": 14 },
                   "quantity": 1
                 },
                 {

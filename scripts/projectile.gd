@@ -7,9 +7,10 @@ extends Node2D
 
 const SPEED := 2000.0  # px/秒（移動での回避不可）
 
-const _ARROW_PATH        := "res://assets/images/projectiles/arrow.png"
-const _FIRE_BULLET_PATH  := "res://assets/images/projectiles/fire_bullet.png"
-const _WATER_BULLET_PATH := "res://assets/images/projectiles/water_bullet.png"
+const _ARROW_PATH          := "res://assets/images/projectiles/arrow.png"
+const _FIRE_BULLET_PATH    := "res://assets/images/projectiles/fire_bullet.png"
+const _WATER_BULLET_PATH   := "res://assets/images/projectiles/water_bullet.png"
+const _THUNDER_BULLET_PATH := "res://assets/images/projectiles/thunder_bullet.png"
 
 var _dest:           Vector2
 var _will_hit:       bool
@@ -18,9 +19,10 @@ var _damage:         int
 var _multiplier:     float
 var _attacker:       Character
 var _is_magic:       bool
-var _is_water:       bool  = false  ## 水系魔法フラグ（水弾・無力化水魔法）
-var _stun_duration:  float = 0.0   ## スタン持続秒数（0=スタンなし）
-var _done:           bool  = false
+var _is_water:       bool   = false  ## 水系魔法フラグ（水弾・無力化水魔法）
+var _proj_type:      String = ""     ## キャラ固有の弾種 ("thunder_bullet" 等。Phase 12-12〜）
+var _stun_duration:  float  = 0.0   ## スタン持続秒数（0=スタンなし）
+var _done:           bool   = false
 
 var _sprite:     Sprite2D = null
 var _direction:  Vector2  = Vector2.RIGHT
@@ -31,7 +33,8 @@ var _direction:  Vector2  = Vector2.RIGHT
 func setup(from: Vector2, to: Vector2, will_hit: bool,
 		target: Character, damage: int, multiplier: float,
 		attacker: Character = null, is_magic: bool = false,
-		stun_duration: float = 0.0, is_water: bool = false) -> void:
+		stun_duration: float = 0.0, is_water: bool = false,
+		proj_type: String = "") -> void:
 	position        = from
 	_dest           = to
 	_will_hit       = will_hit
@@ -42,6 +45,7 @@ func setup(from: Vector2, to: Vector2, will_hit: bool,
 	_is_magic       = is_magic
 	_stun_duration  = stun_duration
 	_is_water       = is_water
+	_proj_type      = proj_type
 	_direction      = (to - from).normalized()
 
 	_setup_sprite()
@@ -50,7 +54,9 @@ func setup(from: Vector2, to: Vector2, will_hit: bool,
 func _setup_sprite() -> void:
 	# 攻撃種別に応じた画像パスを選択
 	var img_path: String
-	if _is_water:
+	if _proj_type == "thunder_bullet":
+		img_path = _THUNDER_BULLET_PATH
+	elif _is_water:
 		img_path = _WATER_BULLET_PATH
 	elif _is_magic:
 		img_path = _FIRE_BULLET_PATH
@@ -107,8 +113,10 @@ func _draw() -> void:
 	if _sprite != null:
 		return  # 画像スプライトがあればフォールバック描画しない
 	# 弾種別のフォールバック色
-	var col: Color	
-	if _is_water:
+	var col: Color
+	if _proj_type == "thunder_bullet":
+		col = Color(0.8, 0.4, 1.0)  # 紫（雷）
+	elif _is_water:
 		col = Color(0.3, 0.7, 1.0)  # 水色
 	elif _is_magic:
 		col = Color(1.0, 0.4, 0.0)  # オレンジ（火）

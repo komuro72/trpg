@@ -22,6 +22,10 @@ func _create_unit_ai(member: Character) -> UnitAI:
 		"dark-knight":   return DarkKnightUnitAI.new()
 		"dark-mage":     return DarkMageUnitAI.new()
 		"dark_priest", "dark-priest": return DarkPriestUnitAI.new()
+		"lich":          return LichUnitAI.new()
+		"demon":         return DarkMageUnitAI.new()  ## デーモン: 魔法遠距離（雷）はDarkMageAIと同等
+		"dark-lord":     return DarkLordUnitAI.new()
+		"skeleton-archer": return GoblinArcherUnitAI.new()  ## スケルトンアーチャー: 後退維持
 	return UnitAI.new()
 
 
