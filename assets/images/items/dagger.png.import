@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c8ry6tixa3s7w"
-path="res://.godot/imported/daggar.png-a1e608e6b7a1f1bd860b4df7e455f8f7.ctex"
+uid="uid://c00y5jgjrvau8"
+path="res://.godot/imported/dagger.png-e73bd84eb3190e177ccefc00223f9544.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/images/items/daggar.png"
-dest_files=["res://.godot/imported/daggar.png-a1e608e6b7a1f1bd860b4df7e455f8f7.ctex"]
+source_file="res://assets/images/items/dagger.png"
+dest_files=["res://.godot/imported/dagger.png-e73bd84eb3190e177ccefc00223f9544.ctex"]
 
 [params]
 
