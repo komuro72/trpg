@@ -7,25 +7,19 @@ uniform float outline_width : hint_range(0.0, 16.0) = 2.0;
 void fragment() {
 	vec4 col = texture(TEXTURE, UV);
 
-	if (outline_enabled && col.a < 0.5) {
-		vec2 tex_size = vec2(textureSize(TEXTURE, 0));
-		vec2 px = outline_width / tex_size;
+	vec2 tex_size = vec2(textureSize(TEXTURE, 0));
+	vec2 px = outline_width / tex_size;
 
-		float neighbor_alpha = 0.0;
-		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2( px.x,      0.0)).a);
-		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(-px.x,      0.0)).a);
-		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(     0.0,  px.y)).a);
-		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(     0.0, -px.y)).a);
-		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2( px.x,  px.y)).a);
-		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(-px.x,  px.y)).a);
-		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2( px.x, -px.y)).a);
-		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(-px.x, -px.y)).a);
+	float neighbor_alpha = 0.0;
+	neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2( px.x,      0.0)).a);
+	neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(-px.x,      0.0)).a);
+	neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(     0.0,  px.y)).a);
+	neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(     0.0, -px.y)).a);
+	neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2( px.x,  px.y)).a);
+	neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(-px.x,  px.y)).a);
+	neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2( px.x, -px.y)).a);
+	neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(-px.x, -px.y)).a);
 
-		if (neighbor_alpha > 0.5) {
-			COLOR = outline_color;
-			return;
-		}
-	}
-
-	COLOR = col;
+	bool show_outline = outline_enabled && col.a < 0.5 && neighbor_alpha > 0.5;
+	COLOR = show_outline ? outline_color : col;
 }
