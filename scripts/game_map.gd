@@ -167,8 +167,10 @@ func _finish_setup() -> void:
 			var em := em_v as EnemyManager
 			if em != null:
 				total_enemies += em.get_enemies().size()
-		print("[DEBUG] フロア%d: %d 敵パーティー, 合計 %d 体スポーン" % [
-			fi, (_per_floor_enemies[fi] as Array).size(), total_enemies])
+		var msg := "[DEBUG] フロア%d: %d 敵パーティー, 合計 %d 体スポーン" % [
+			fi, (_per_floor_enemies[fi] as Array).size(), total_enemies]
+		print(msg)
+		push_warning(msg)
 
 
 func _process(delta: float) -> void:
