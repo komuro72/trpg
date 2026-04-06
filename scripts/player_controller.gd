@@ -130,6 +130,10 @@ var _using_v_slot: bool = false
 ## 消耗品バー UI（game_map から設定）
 var consumable_bar: ConsumableBar = null
 
+## パーティーリーダー（game_map から設定。LB/RBキャラ切り替えの可否判定に使用）
+## ゲーム開始時は hero。NPC パーティーに合流してリーダーが変わった場合は更新される
+var party_leader: Character = null
+
 ## パーティーメンバーリスト（game_map から設定。LB/RBキャラ切り替えに使用）
 var _party_sorted_members: Array[Character] = []
 
@@ -1560,7 +1564,8 @@ func _is_item_equipped(item: Dictionary) -> bool:
 func _switch_character(dir: int) -> void:
 	if _party_sorted_members.is_empty() or character == null:
 		return
-	if not character.is_leader:
+	# パーティーリーダーが操作権を持つプレイヤーキャラ（hero）でない場合は切り替え不可
+	if party_leader == null or not party_leader.is_leader:
 		return
 	var idx := _party_sorted_members.find(character)
 	if idx < 0:

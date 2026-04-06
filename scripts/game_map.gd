@@ -423,6 +423,9 @@ func _link_all_character_lists() -> void:
 func _setup_controller() -> void:
 	player_controller = PlayerController.new()
 	player_controller.character = hero
+	# パーティーリーダーを取得して設定（sorted_members の先頭 = リーダー）
+	var sorted := party.sorted_members()
+	player_controller.party_leader = sorted[0] as Character if not sorted.is_empty() else hero
 	player_controller.map_data = map_data
 	player_controller.map_node = self
 	# 敵・NPC を結合して blocking_characters に設定（プレイヤーが重ならないようにする）
