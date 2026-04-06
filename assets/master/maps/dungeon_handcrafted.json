@@ -510,30 +510,39 @@
                   ]
                 },
                 {
-                  "character_id": "npc_archer_2",
-                  "class_id": "archer",
-                  "image_set": "archer_male_young_slim_00005",
+                  "character_id": "npc_magician_water_2",
+                  "class_id": "magician-water",
+                  "image_set": "magician-water_male_young_slim_00013",
                   "x": 23,
                   "y": 17,
                   "items": [
                     {
-                      "item_type": "bow",
+                      "item_type": "staff",
                       "category": "weapon",
-                      "item_name": "使い込んだ弓",
+                      "item_name": "水晶の杖",
                       "stats": {
                         "power": 3,
-                        "skill": 4
+                        "skill": 5
                       },
                       "equipped": true
                     },
                     {
-                      "item_type": "armor_cloth",
+                      "item_type": "armor_robe",
                       "category": "armor",
-                      "item_name": "革製コート",
+                      "item_name": "薄い魔道衣",
                       "stats": {
-                        "physical_resistance": 2
+                        "magic_resistance": 3
                       },
                       "equipped": true
+                    },
+                    {
+                      "item_type": "potion_mp",
+                      "category": "consumable",
+                      "item_name": "MPポーション",
+                      "effect": {
+                        "restore_mp": 20
+                      },
+                      "quantity": 2
                     }
                   ]
                 }
@@ -552,16 +561,16 @@
               "party_id": 4,
               "members": [
                 {
-                  "character_id": "npc_fighter_sword_2",
-                  "class_id": "fighter-sword",
-                  "image_set": "fighter-sword_female_young_slim_00002",
+                  "character_id": "npc_fighter_axe_2",
+                  "class_id": "fighter-axe",
+                  "image_set": "fighter-axe_male_young_slim_00003",
                   "x": 33,
                   "y": 17,
                   "items": [
                     {
-                      "item_type": "sword",
+                      "item_type": "axe",
                       "category": "weapon",
-                      "item_name": "錆びた剣",
+                      "item_name": "鉄の斧",
                       "stats": {
                         "power": 3,
                         "skill": 3,
@@ -600,26 +609,26 @@
                   ]
                 },
                 {
-                  "character_id": "npc_healer_2",
-                  "class_id": "healer",
-                  "image_set": "healer_male_young_slim_00009",
+                  "character_id": "npc_magician_fire_2",
+                  "class_id": "magician-fire",
+                  "image_set": "magician-fire_female_young_slim_00008",
                   "x": 35,
                   "y": 17,
                   "items": [
                     {
                       "item_type": "staff",
                       "category": "weapon",
-                      "item_name": "癒しの杖",
+                      "item_name": "炎の杖",
                       "stats": {
-                        "power": 3,
-                        "skill": 5
+                        "power": 4,
+                        "skill": 4
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "armor_robe",
                       "category": "armor",
-                      "item_name": "薄い修道衣",
+                      "item_name": "薄い魔道衣",
                       "stats": {
                         "magic_resistance": 3
                       },
@@ -632,7 +641,7 @@
                       "effect": {
                         "restore_mp": 20
                       },
-                      "quantity": 1
+                      "quantity": 2
                     }
                   ]
                 },
