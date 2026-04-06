@@ -1674,7 +1674,9 @@ func _draw() -> void:
 		var info := player_controller.get_current_slot_range_info()
 		var action: String = str(info.get("action", "melee"))
 		var range_val: int = int(info.get("range", 1))
-		var origin: Vector2i = player_controller.character.grid_pos if player_controller.character != null else Vector2i.ZERO
+		var ch: Character = player_controller.character
+		var origin: Vector2i = ch.grid_pos if ch != null else Vector2i.ZERO
+		var fwd := Vector2(Character.dir_to_vec(ch.facing)) if ch != null else Vector2.RIGHT
 		var range_color := Color(1.0, 0.15, 0.15, 0.22)
 		var border_color := Color(1.0, 0.3, 0.3, 0.55)
 		for ty in range(origin.y - range_val, origin.y + range_val + 1):
@@ -1686,12 +1688,19 @@ func _draw() -> void:
 					continue
 				if map_data.get_tile(tp) == MapData.TileType.WALL:
 					continue
-				var dist: int
+				var diff := Vector2(tx - origin.x, ty - origin.y)
+				var dot := fwd.dot(diff.normalized()) if diff != Vector2.ZERO else 0.0
+				# 方向フィルタ: melee=前方±90°(dot>=0)、ranged/heal系=前方±45°(dot>=0.707)
 				if action == "melee":
-					dist = abs(tx - origin.x) + abs(ty - origin.y)
+					if dot < 0.0:
+						continue
+					if abs(tx - origin.x) + abs(ty - origin.y) > range_val:
+						continue
 				else:
-					dist = int(Vector2(tx - origin.x, ty - origin.y).length())
-				if dist <= range_val:
-					var r := Rect2(tx * gs, ty * gs, gs, gs)
-					draw_rect(r, range_color)
-					draw_rect(r, border_color, false, 1.0)
+					if dot < 0.707:
+						continue
+					if diff.length() > float(range_val):
+						continue
+				var r := Rect2(tx * gs, ty * gs, gs, gs)
+				draw_rect(r, range_color)
+				draw_rect(r, border_color, false, 1.0)
