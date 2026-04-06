@@ -72,6 +72,7 @@ var order_window: OrderWindow
 
 var _tile_set_id: String = DEFAULT_TILE_SET  ## 現在のフロアのタイルセットID
 var _tile_textures: Dictionary = {}  # TileType(int) -> Texture2D
+var _was_targeting: bool = false  ## 射程オーバーレイの再描画トリガー用
 ## 床に散らばったアイテム（Vector2i → Dictionary）。1マスに1個
 var _floor_items: Dictionary = {}
 var _item_tex_cache: Dictionary = {}  # image_path -> Texture2D or null
@@ -162,6 +163,12 @@ func _finish_setup() -> void:
 
 
 func _process(delta: float) -> void:
+	# 射程オーバーレイの再描画（ターゲット選択モード切り替わり時）
+	var now_targeting := player_controller != null and player_controller.is_targeting()
+	if now_targeting != _was_targeting:
+		_was_targeting = now_targeting
+		queue_redraw()
+
 	# 階段クールダウン
 	if _stair_cooldown > 0.0:
 		_stair_cooldown -= delta
@@ -1661,3 +1668,30 @@ func _draw() -> void:
 		else:
 			draw_rect(irect, Color(1.0, 0.85, 0.15, 0.90))
 			draw_rect(irect, Color(1.0, 1.0, 0.5, 0.70), false, 1)
+
+	# ターゲット選択中：攻撃射程を赤オーバーレイで表示
+	if player_controller != null and player_controller.is_targeting():
+		var info := player_controller.get_current_slot_range_info()
+		var action: String = str(info.get("action", "melee"))
+		var range_val: int = int(info.get("range", 1))
+		var origin: Vector2i = player_controller.character.grid_pos if player_controller.character != null else Vector2i.ZERO
+		var range_color := Color(1.0, 0.15, 0.15, 0.22)
+		var border_color := Color(1.0, 0.3, 0.3, 0.55)
+		for ty in range(origin.y - range_val, origin.y + range_val + 1):
+			for tx in range(origin.x - range_val, origin.x + range_val + 1):
+				var tp := Vector2i(tx, ty)
+				if tp == origin:
+					continue
+				if use_vision and not visible_tiles.has(tp):
+					continue
+				if map_data.get_tile(tp) == MapData.TileType.WALL:
+					continue
+				var dist: int
+				if action == "melee":
+					dist = abs(tx - origin.x) + abs(ty - origin.y)
+				else:
+					dist = int(Vector2(tx - origin.x, ty - origin.y).length())
+				if dist <= range_val:
+					var r := Rect2(tx * gs, ty * gs, gs, gs)
+					draw_rect(r, range_color)
+					draw_rect(r, border_color, false, 1.0)
