@@ -266,22 +266,27 @@ func _setup_sprite() -> void:
 	_load_top_sprite()
 	_load_walk_sprites()
 	_apply_direction_rotation()
+	_setup_outline_material()
+
+
+## アウトライン用 ShaderMaterial を起動時に確定する（遅延生成だと反映されないため）
+func _setup_outline_material() -> void:
+	var shader: Shader = load("res://assets/shaders/outline.gdshader")
+	if shader == null:
+		return
+	_outline_material = ShaderMaterial.new()
+	_outline_material.shader = shader
+	_outline_material.set_shader_parameter("outline_enabled", 0.0)
+	_sprite.material = _outline_material
 
 
 ## アウトラインを表示する。screen_px はスクリーンピクセル単位の太さ
 func set_outline(color: Color, screen_px: float) -> void:
-	if _sprite == null:
-		return
 	if _outline_material == null:
-		var shader: Shader = load("res://assets/shaders/outline.gdshader")
-		if shader == null:
-			return
-		_outline_material = ShaderMaterial.new()
-		_outline_material.shader = shader
-		_sprite.material = _outline_material
+		return
 	# テクスチャピクセル単位に変換（テクスチャ幅 / GRID_SIZE × screen_px）
 	var tex_px: float = screen_px
-	if _sprite.texture != null:
+	if _sprite != null and _sprite.texture != null:
 		var tex_w: float = _sprite.texture.get_size().x
 		if tex_w > 0.0:
 			tex_px = screen_px * tex_w / float(GlobalConstants.GRID_SIZE)
