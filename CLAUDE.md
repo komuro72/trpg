@@ -761,7 +761,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
     - 使用条件：HPポーション→HP満タンでない、MPポーション→MP満タンでない
     - 使用後：inventoryから削除。MessageLogにシステムメッセージ
     - **ConsumableBar UI**（ConsumableBar.gd）：画面上部・部屋名ラベルの左側に常時表示
-      - `DisplayMode` enum: NORMAL / ITEM_SELECT / ACTION_SELECT / TRANSFER_SELECT
+      - `GlobalConstants.ConsumableDisplayMode` enum: NORMAL / ITEM_SELECT / ACTION_SELECT / TRANSFER_SELECT（パースエラー回避のため GlobalConstants に定義）
       - NORMAL 時：消耗品を種類ごとにアイコン＋「×個数」で横並び表示。消耗品ゼロなら非表示
       - ITEM_SELECT 時：アイテム一覧をアイコン付きで表示。V スロットのクールダウン残秒も表示
       - 操作キャラ切替・アイテム取得・C/X操作・使用後に自動更新
@@ -987,7 +987,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
       - バフタイマー消化時（`defense_buff_timer <= 0`）に `_remove_buff_effect()` を呼ぶ
     - **LB/RB（通常時）**：パーティーメンバーを表示順で循環切り替え。`switch_char_requested` シグナルで `game_map._on_switch_character_requested()` を呼び出し
     - **C/X短押し**：アイテム選択UIを開く（ITEM_SELECT→ACTION_SELECT→TRANSFER_SELECT）。UI中は時間停止・LB/RBでカーソル循環
-    - **ConsumableBar**：`DisplayMode` enum で UI フェーズを管理。`is_selecting` / `select_index` は後方互換用（旧C/Xホールド方式の残留フィールド）
+    - **ConsumableBar**：`GlobalConstants.ConsumableDisplayMode` enum で UI フェーズを管理。`is_selecting` / `select_index` は後方互換用（旧C/Xホールド方式の残留フィールド）
     - **project.godot**：`switch_char_prev`（LB/Button9）・`switch_char_next`（RB/Button10）を追加。旧 `slot_prev`/`slot_next` を空に（未使用）
     - **game_map.gd**：`player_controller.switch_char_requested` シグナルを接続。`_party_sorted_members` を初期設定時およびキャラ切り替え後に更新
   - [x] Phase 12-7: パーティーメンバー・未加入 NPC のフロア遷移
@@ -1150,6 +1150,28 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
   - **リッチの交互魔法弾**
     - LichUnitAI が攻撃ごとに fire_bullet / water_bullet を交互に切り替えて発射
   - dungeon_handcrafted.json のフロア4ボス構成に dark-lord を追加
+- [x] Phase 12-13: バグ修正・ダンジョン再構成
+  - **dungeon_handcrafted.json を全面再生成（12部屋×4フロア＋ボス1部屋）**
+    - フロア0〜3：12部屋（3列×4行・部屋サイズ10×8タイル）・階段3か所
+    - フロア0：入口1・NPC4部屋（11名）・敵7部屋（ゴブリン中心・22体）
+    - フロア1：ゴブリン＋アンデッド（zombie/skeleton/lich）混成・36体
+    - フロア2：アンデッド＋狼＋ハーピー＋暗黒系・38体
+    - フロア3：暗黒騎士団・デーモン・リッチ・サラマンダー・45体
+    - フロア4：ボス1部屋（深淵の玉座）・dark-lord等6体（変更なし）
+    - アイテム補正値はフロア深度に応じてスケール（フロア0: atk 2-5、フロア4: atk 15-22）
+  - **アウトラインシェーダー復活**（`assets/shaders/outline.gdshader`）
+    - ターゲット選択中の敵にシェーダーで白いアウトラインを描画
+    - 8方向隣接サンプリングによるキャンバスアイテムシェーダー
+  - **ターゲット選択時の射程オーバーレイ復活・方向フィルタ追加**（`game_map._draw()`）
+    - ターゲット選択中に射程範囲を赤でオーバーレイ表示
+    - melee: 前方±90°（dot ≥ 0.0）のマスのみ表示
+    - ranged/heal/buff 系: 前方±45°（dot ≥ 0.707）のマスのみ表示
+    - `_was_targeting: bool` フラグで選択モード切替時に `queue_redraw()` を発火
+  - **ConsumableBar.DisplayMode パースエラー修正**
+    - Godot 4 のパース順問題で `ConsumableBar.DisplayMode` が外部から参照できないエラー
+    - `GlobalConstants` に `enum ConsumableDisplayMode { NORMAL, ITEM_SELECT, ACTION_SELECT, TRANSFER_SELECT }` を移動
+    - `consumable_bar.gd` / `player_controller.gd` を `GlobalConstants.ConsumableDisplayMode.X` 参照に統一
+  - **gitignore 修正**：`dungeon_generated.json` をgit追跡対象に変更（gitignoreから除外）
 - [x] Phase 13: タイトル・セーブ・メニューシステム
   - [x] **セーブシステム基盤**
     - `scripts/save_data.gd`（class_name SaveData）：slot_index / exists / hero_name_male / hero_name_female / current_floor / clear_count / playtime / to_dict() / from_dict() / format_playtime()
