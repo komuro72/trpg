@@ -276,7 +276,7 @@ func _setup_outline_material() -> void:
 		return
 	_outline_material = ShaderMaterial.new()
 	_outline_material.shader = shader
-	_outline_material.set_shader_parameter("outline_enabled", 0.0)
+	_outline_material.set_shader_parameter("outline_enabled", false)
 	_sprite.material = _outline_material
 
 
@@ -290,7 +290,7 @@ func set_outline(color: Color, screen_px: float) -> void:
 		var tex_w: float = _sprite.texture.get_size().x
 		if tex_w > 0.0:
 			tex_px = screen_px * tex_w / float(GlobalConstants.GRID_SIZE)
-	_outline_material.set_shader_parameter("outline_enabled", 1.0)
+	_outline_material.set_shader_parameter("outline_enabled", true)
 	_outline_material.set_shader_parameter("outline_color", color)
 	_outline_material.set_shader_parameter("outline_width", tex_px)
 
@@ -298,7 +298,7 @@ func set_outline(color: Color, screen_px: float) -> void:
 ## アウトラインを非表示にする
 func clear_outline() -> void:
 	if _outline_material != null:
-		_outline_material.set_shader_parameter("outline_enabled", 0.0)
+		_outline_material.set_shader_parameter("outline_enabled", false)
 
 
 ## フィールド表示用画像（トップビュー）を読み込む。テクスチャサイズに合わせてスケールを自動計算する
