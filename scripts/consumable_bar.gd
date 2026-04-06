@@ -211,6 +211,8 @@ func _on_draw() -> void:
 		var iy        := by + (box_h - float(icon_sz)) * 0.5
 		var icon_rect := Rect2(x, iy, float(icon_sz), float(icon_sz))
 		var img_path  := info["image"] as String
+		if img_path.is_empty():
+			img_path = "assets/images/items/" + itype + ".png"
 		var tex       := _load_texture(img_path)
 		if tex != null:
 			_control.draw_texture_rect(tex, icon_rect, false)
@@ -258,6 +260,8 @@ func _draw_item_list() -> void:
 		var count   := int(entry.get("count", 1))
 		var cat     := entry.get("category", "") as String
 		var img_path := entry.get("image", "") as String
+		if img_path.is_empty():
+			img_path = "assets/images/items/" + itype + ".png"
 		var iy      := by + (box_h - float(icon_sz)) * 0.5
 		var icon_r  := Rect2(x, iy, float(icon_sz), float(icon_sz))
 
