@@ -33,11 +33,10 @@ var sprite_face:      String = ""  # 顔アイコン（LeftPanel 表示用）
 var max_hp:       int   = 1
 var max_mp:       int   = 0     ## 0 = MP なし（物理攻撃のみのキャラはデフォルト0）
 var max_sp:       int   = 0     ## 0 = SP なし（魔法クラスはデフォルト0）
-var attack_power: int   = 1     ## 物理攻撃力（melee/ranged 共用。Phase 10-2 で分離予定）
-var magic_power:  int   = 0     ## 魔法攻撃力・回復力の統合値（Phase 10-2 で分離予定）
+var power:        int   = 1     ## 物理威力 or 魔法威力（クラスに応じてUI表示名を切り替え）
+var skill:        int   = 0     ## 物理技量 or 魔法技量（命中・クリティカル率の基礎値）
 var defense:      int   = 0
-var accuracy:           float = 0.0   ## 命中精度（Phase 10-2 で有効化。現時点は 0.0 固定）
-var defense_accuracy:   float = 0.5   ## 防御判定の成功率（0.0〜1.0）。装備による変化なし
+var defense_accuracy: int = 50  ## 防御技量（0〜100。防御判定の成功率%。装備による変化なし）
 
 ## 攻撃タイプ（melee=近接 / ranged=遠距離（物理） / dive=降下攻撃 / magic=魔法攻撃）
 ## カウンター有効: melee・dive  カウンター無効: ranged・magic（将来実装）
@@ -46,7 +45,7 @@ var attack_type: String = "melee"
 ## 遠距離・魔法・回復の射程（タイル数。melee は 1 固定）
 var attack_range: int = 1
 
-## 回復スキルのMP消費（magic_power を回復量として使用）
+## 回復スキルのMP消費（power を回復量として使用）
 var heal_mp_cost: int = 0
 
 ## バフスキルのMP消費（防御力アップなど）
@@ -116,10 +115,25 @@ static func load_from_json(path: String) -> CharacterData:
 	data.max_hp               = int(d.get("hp", 1))
 	data.max_mp               = int(d.get("mp", 0))
 	data.max_sp               = int(d.get("max_sp", 0))
-	data.attack_power         = int(d.get("attack_power", d.get("attack", 1)))
-	data.magic_power          = int(d.get("magic_power",  0))
+	# power: 新 "power" キーを優先。旧キー "attack_power"/"magic_power" にフォールバック
+	var raw_power: int = int(d.get("power", -1))
+	if raw_power < 0:
+		var ap: int = int(d.get("attack_power", d.get("attack", -1)))
+		var mp: int = int(d.get("magic_power", -1))
+		raw_power = maxi(ap, mp) if ap >= 0 or mp >= 0 else 1
+		if raw_power < 0:
+			raw_power = 1
+	data.power                = raw_power
+	data.skill                = int(d.get("skill", d.get("accuracy", 0)))
 	data.defense              = int(d.get("defense", 0))
-	data.accuracy             = float(d.get("accuracy", 0.0))
+	# defense_accuracy: 旧形式 float（0.0〜1.0）は ×100 で変換。新形式 int（0〜100）はそのまま
+	var da_raw: Variant = d.get("defense_accuracy", null)
+	if da_raw == null:
+		data.defense_accuracy = 50
+	elif float(da_raw) <= 1.0:
+		data.defense_accuracy = int(float(da_raw) * 100.0)
+	else:
+		data.defense_accuracy = int(float(da_raw))
 	data.attack_type          = d.get("attack_type",  "melee")
 	data.attack_range         = int(d.get("attack_range", 1))
 	data.heal_mp_cost         = int(d.get("heal_mp_cost", 0))
@@ -137,7 +151,6 @@ static func load_from_json(path: String) -> CharacterData:
 	data.obedience               = float(d.get("obedience", 0.5))
 	data.physical_resistance     = int(d.get("physical_resistance", 0))
 	data.magic_resistance        = int(d.get("magic_resistance",    0))
-	data.defense_accuracy        = float(d.get("defense_accuracy",    0.5))
 
 	# クラス情報（Phase 6-0〜）
 	data.class_id = d.get("class_id", "")
@@ -208,19 +221,27 @@ func get_weapon_range_bonus() -> int:
 	return int((equipped_weapon.get("stats", {}) as Dictionary).get("range_bonus", 0))
 
 
-## 装備中の武器から攻撃力補正を返す
-func get_weapon_attack_bonus() -> int:
-	return int((equipped_weapon.get("stats", {}) as Dictionary).get("attack_power", 0))
+## 装備中の武器から威力補正を返す（物理・魔法共用）
+func get_weapon_power_bonus() -> int:
+	var stats := equipped_weapon.get("stats", {}) as Dictionary
+	var v: int = int(stats.get("power", -1))
+	if v < 0:
+		# 旧キー互換（attack_power / magic_power の大きい方）
+		var ap: int = int(stats.get("attack_power", 0))
+		var mp: int = int(stats.get("magic_power",  0))
+		v = maxi(ap, mp)
+	return v
 
 
-## 装備中の武器から魔法威力補正を返す
-func get_weapon_magic_bonus() -> int:
-	return int((equipped_weapon.get("stats", {}) as Dictionary).get("magic_power", 0))
-
-
-## 装備中の武器から命中精度補正を返す
-func get_weapon_accuracy_bonus() -> float:
-	return float((equipped_weapon.get("stats", {}) as Dictionary).get("accuracy", 0.0))
+## 装備中の武器から技量補正を返す
+func get_weapon_skill_bonus() -> int:
+	var stats := equipped_weapon.get("stats", {}) as Dictionary
+	var v: int = int(stats.get("skill", -1))
+	if v < 0:
+		# 旧キー互換（accuracy は float だったので ×10 に変換）
+		var acc: float = float(stats.get("accuracy", 0.0))
+		v = int(acc * 10.0)
+	return v
 
 
 ## 装備中の武器から防御強度を返す

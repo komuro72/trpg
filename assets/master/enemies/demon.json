@@ -2,8 +2,9 @@
   "id": "demon",
   "name": "デーモン",
   "hp": 48,
+  "power": 17,
+  "skill": 20,
   "mp": 40,
-  "magic_power": 17,
   "physical_resistance": 8,
   "magic_resistance": 8,
   "defense": 4,
@@ -18,7 +19,7 @@
   "post_delay": 0.8,
   "behavior_description": "悪魔族の強者。雷魔法を放つ。物理・魔法両方の耐性を持ち、絶対に逃げない。MPが尽きると待機する。",
   "sprites": {
-    "top":   "res://assets/images/enemies/demon_top.png",
+    "top": "res://assets/images/enemies/demon_top.png",
     "front": "res://assets/images/enemies/demon_front.png"
   }
 }

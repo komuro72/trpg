@@ -1,12 +1,14 @@
 {
 	"item_type": "dagger",
 	"category": "weapon",
-	"allowed_classes": ["scout"],
+	"allowed_classes": [
+		"scout"
+	],
 	"base_stats": {
-		"attack_power_min": 2,
-		"attack_power_max": 6,
-		"accuracy_min": 0.10,
-		"accuracy_max": 0.25,
+		"power_min": 2,
+		"power_max": 6,
+		"skill_min": 10,
+		"skill_max": 25,
 		"defense_strength_min": 0,
 		"defense_strength_max": 2
 	},

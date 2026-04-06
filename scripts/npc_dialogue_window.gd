@@ -3,27 +3,32 @@ extends CanvasLayer
 
 ## NPC会話専用ウィンドウ（画面中央表示・ゲーム一時停止）
 ## NPC メンバーの顔画像・名前・クラスを上部に表示し、下部に選択肢を表示する。
-## MAIN 状態：「仲間にする」「断る」の2択（デフォルト：仲間にする）
+## MAIN 状態（プレイヤー起点）：「仲間にする」「一緒に行く」「キャンセル」の3択
+## MAIN 状態（NPC 自発）：「承諾する」「断る」の2択
 ## CONFIRM 状態：「本当に仲間にしますか？」の確認ダイアログ（デフォルト：いいえ）
 ## 操作: ↑↓:選択  Z/A:決定  X/B:キャンセル/戻る
 
-## 「仲間にする」を確定したとき発火する（choice_id = "join_us"）
+## 選択が確定したとき発火する（choice_id = "join_us" / "join_them"）
 signal choice_confirmed(choice_id: String)
-## ウィンドウが閉じられたとき発火する（断る / Xキャンセル）
+## ウィンドウが閉じられたとき発火する（断る / キャンセル / Xキャンセル）
 signal dismissed()
 ## パーティー満員ウィンドウが閉じられたとき発火する
 signal party_full_closed()
 
-const CHOICE_JOIN_US := "join_us"
-const CHOICE_CANCEL  := "cancel"
+const CHOICE_JOIN_US   := "join_us"
+const CHOICE_JOIN_THEM := "join_them"
 
 enum _State { HIDDEN, MAIN, CONFIRM, PARTY_FULL }
 
-var _state:          _State     = _State.HIDDEN
-var _npc_manager:    NpcManager = null
-var _npc_initiates:  bool       = false
-var _main_cursor:    int        = 0   ## 0=仲間にする, 1=断る
-var _confirm_cursor: int        = 1   ## 0=はい, 1=いいえ（デフォルト: いいえ）
+## _confirm_pending: CONFIRM 状態で確定したときに発火する choice_id
+var _confirm_pending: String = CHOICE_JOIN_US
+
+var _state:             _State     = _State.HIDDEN
+var _npc_manager:       NpcManager = null
+var _npc_initiates:     bool       = false
+var _main_cursor:       int        = 0
+var _confirm_cursor:    int        = 1   ## 0=はい, 1=いいえ（デフォルト: いいえ）
+var _skip_input_frames: int        = 0   ## 開いた直後のボタン入力を無視するフレーム数
 
 var _control:    Control
 var _font:       Font
@@ -55,13 +60,14 @@ func show_party_full(nm: NpcManager) -> void:
 
 ## NPC との会話ウィンドウを表示してゲームを一時停止する
 func show_dialogue(nm: NpcManager, npc_initiates: bool) -> void:
-	_npc_manager    = nm
-	_npc_initiates  = npc_initiates
-	_main_cursor    = 0
-	_confirm_cursor = 1  # デフォルト: いいえ
-	_state          = _State.MAIN
-	visible         = true
-	get_tree().paused = true
+	_npc_manager        = nm
+	_npc_initiates      = npc_initiates
+	_main_cursor        = 0
+	_confirm_cursor     = 1  # デフォルト: いいえ
+	_skip_input_frames  = 2  # 会話を開いたボタンを拾わないよう2フレームスキップ
+	_state              = _State.MAIN
+	visible             = true
+	get_tree().paused   = true
 	_control.queue_redraw()
 
 
@@ -75,6 +81,10 @@ func hide_dialogue() -> void:
 func _process(_delta: float) -> void:
 	if _state == _State.HIDDEN:
 		return
+	if _skip_input_frames > 0:
+		_skip_input_frames -= 1
+		_control.queue_redraw()
+		return
 	_handle_input()
 	_control.queue_redraw()
 
@@ -82,19 +92,32 @@ func _process(_delta: float) -> void:
 func _handle_input() -> void:
 	match _state:
 		_State.MAIN:
+			var _choice_count := 2 if _npc_initiates else 3
 			if Input.is_action_just_pressed("ui_up"):
-				_main_cursor = (_main_cursor - 1 + 2) % 2
+				_main_cursor = (_main_cursor - 1 + _choice_count) % _choice_count
 			elif Input.is_action_just_pressed("ui_down"):
-				_main_cursor = (_main_cursor + 1) % 2
+				_main_cursor = (_main_cursor + 1) % _choice_count
 			elif Input.is_action_just_pressed("attack") \
 					or Input.is_action_just_pressed("ui_accept"):
-				if _main_cursor == 0:
-					# 「仲間にする」→ 確認ダイアログへ
-					_confirm_cursor = 1  # いいえ をデフォルト
-					_state = _State.CONFIRM
+				if _npc_initiates:
+					# NPC 自発：「承諾する」「断る」
+					if _main_cursor == 0:
+						_confirm_pending = CHOICE_JOIN_US
+						_confirm_cursor  = 1
+						_state = _State.CONFIRM
+					else:
+						dismissed.emit()
 				else:
-					# 「断る」→ 即閉じる
-					dismissed.emit()
+					# プレイヤー起点：「仲間にする」「一緒に行く」「キャンセル」
+					match _main_cursor:
+						0:
+							_confirm_pending = CHOICE_JOIN_US
+							_confirm_cursor  = 1
+							_state = _State.CONFIRM
+						1:
+							choice_confirmed.emit(CHOICE_JOIN_THEM)
+						2:
+							dismissed.emit()
 			elif Input.is_action_just_pressed("menu_back"):
 				dismissed.emit()
 
@@ -106,8 +129,8 @@ func _handle_input() -> void:
 			elif Input.is_action_just_pressed("attack") \
 					or Input.is_action_just_pressed("ui_accept"):
 				if _confirm_cursor == 0:
-					# 「はい」→ 加入確定
-					choice_confirmed.emit(CHOICE_JOIN_US)
+					# 「はい」→ 加入確定（pending の choice を発火）
+					choice_confirmed.emit(_confirm_pending)
 				else:
 					# 「いいえ」→ メイン選択肢に戻る
 					_state = _State.MAIN
@@ -163,7 +186,8 @@ func _draw_panel(vp: Vector2, gs: float) -> void:
 	panel_h += 12.0 + 1.0 + 12.0                    # セパレーター
 
 	if _state == _State.MAIN:
-		panel_h += row_cho * 2.0 + 4.0 + 8.0        # 選択肢 2 行
+		var _rows := 2 if _npc_initiates else 3
+		panel_h += row_cho * float(_rows) + 4.0 + 8.0  # 選択肢
 	elif _state == _State.CONFIRM:
 		panel_h += float(fs_body) + 12.0            # 確認テキスト
 		panel_h += row_cho * 2.0 + 4.0 + 8.0        # はい/いいえ 2 行
@@ -278,7 +302,11 @@ func _draw_panel(vp: Vector2, gs: float) -> void:
 
 	# ── 選択肢（MAIN 状態） ───────────────────────────────────────────────
 	if _state == _State.MAIN:
-		var choices: Array[String] = ["仲間にする", "断る"]
+		var choices: Array[String]
+		if _npc_initiates:
+			choices = ["承諾する", "断る"]
+		else:
+			choices = ["仲間にする", "一緒に行く", "キャンセル"]
 		for i: int in range(choices.size()):
 			var is_sel := (i == _main_cursor)
 			if is_sel:

@@ -2,7 +2,8 @@
   "id": "salamander",
   "name": "サラマンダー",
   "hp": 28,
-  "magic_power": 10,
+  "power": 10,
+  "skill": 10,
   "physical_resistance": 5,
   "magic_resistance": 6,
   "defense": 2,
@@ -14,7 +15,7 @@
   "post_delay": 0.7,
   "behavior_description": "炎を吐く大型トカゲ。遠距離から火炎を放つ。接近されると後退して射程を確保する。絶対に逃げない。",
   "sprites": {
-    "top":   "res://assets/images/enemies/salamander_top.png",
+    "top": "res://assets/images/enemies/salamander_top.png",
     "front": "res://assets/images/enemies/salamander_front.png"
   }
 }

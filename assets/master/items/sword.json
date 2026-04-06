@@ -1,12 +1,14 @@
 {
 	"item_type": "sword",
 	"category": "weapon",
-	"allowed_classes": ["fighter-sword"],
+	"allowed_classes": [
+		"fighter-sword"
+	],
 	"base_stats": {
-		"attack_power_min": 3,
-		"attack_power_max": 8,
-		"accuracy_min": 0.05,
-		"accuracy_max": 0.15,
+		"power_min": 3,
+		"power_max": 8,
+		"skill_min": 5,
+		"skill_max": 15,
 		"defense_strength_min": 1,
 		"defense_strength_max": 4
 	},

@@ -2,8 +2,9 @@
   "id": "dark-mage",
   "name": "ダークメイジ",
   "hp": 22,
+  "power": 12,
+  "skill": 15,
   "mp": 30,
-  "magic_power": 12,
   "physical_resistance": 2,
   "magic_resistance": 10,
   "defense": 1,
@@ -16,7 +17,7 @@
   "post_delay": 0.7,
   "behavior_description": "闇魔法を操る人型の魔法使い。後方に留まり遠距離から強力な魔法を放つ。MPが尽きると待機する。絶対に逃げない。",
   "sprites": {
-    "top":   "res://assets/images/enemies/dark-mage_top.png",
+    "top": "res://assets/images/enemies/dark-mage_top.png",
     "front": "res://assets/images/enemies/dark-mage_front.png"
   }
 }

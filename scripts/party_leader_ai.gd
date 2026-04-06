@@ -199,7 +199,7 @@ func _assign_orders() -> void:
 		elif _party_strategy == Strategy.EXPLORE:
 			# 探索戦略：UnitAI には ATTACK を渡し、move を explore に設定
 			var cd := member.character_data
-			if cd != null and (cd.magic_power > 0 or cd.buff_mp_cost > 0):
+			if cd != null and (cd.power > 0 or cd.buff_mp_cost > 0):
 				effective_strat = int(Strategy.WAIT)
 			else:
 				effective_strat = int(Strategy.ATTACK)
@@ -208,7 +208,7 @@ func _assign_orders() -> void:
 		else:
 			# 回復・バフ専用キャラ（heal_mp_cost > 0 または buff_mp_cost > 0）は常に WAIT を渡す
 			# UnitAI._generate_queue() の先頭で heal/buff キューが自動生成される
-			# ※ magic_power > 0 は魔法攻撃型の敵も含むため使わない
+			# ※ power フィールドは攻撃・魔法共通のため heal/buff 専用チェックで判定
 			var cd := member.character_data
 			if cd != null and (cd.heal_mp_cost > 0 or cd.buff_mp_cost > 0):
 				effective_strat = int(Strategy.WAIT)

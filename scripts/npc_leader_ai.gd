@@ -6,6 +6,7 @@ extends PartyLeaderAI
 ## 生存敵がいれば ATTACK、いなければ EXPLORE（探索行動）。
 
 var _enemy_list: Array[Character] = []
+var _was_refused: bool = false  ## 一度断られたら二度と自発申し出をしない
 
 
 ## 攻撃対象とする敵リストを設定する（NpcManager が初期化後に呼ぶ）
@@ -38,7 +39,7 @@ func _evaluate_party_strategy() -> Strategy:
 
 
 ## 探索時の移動方針（フロアランクに基づいて階段移動を決定）
-## party_score = average(attack_power + physical_resistance + magic_resistance + defense_accuracy)
+## party_score = average(power + physical_resistance + magic_resistance + defense_accuracy)
 ## FLOOR_RANK との比較で上下フロア移動を決定する
 func _get_explore_move_policy() -> String:
 	if _party_members.is_empty():
@@ -49,7 +50,7 @@ func _get_explore_move_policy() -> String:
 	for m: Character in _party_members:
 		if is_instance_valid(m) and m.character_data != null:
 			var cd := m.character_data
-			total_score += float(cd.attack_power + cd.physical_resistance \
+			total_score += float(cd.power + cd.physical_resistance \
 				+ cd.magic_resistance + cd.defense_accuracy)
 			count += 1
 	if count == 0:
@@ -104,9 +105,16 @@ func _select_target_for(member: Character) -> Character:
 # 会話・合流ロジック
 # --------------------------------------------------------------------------
 
+## 一度断られた場合に自発申し出を永続的に停止する
+func mark_refused() -> void:
+	_was_refused = true
+
+
 ## NPC が自発的に会話を開始したいか判断する
-## 重傷者（HP50%未満）が過半数を超えた場合に申し出る
+## 重傷者（HP50%未満）が過半数を超えた場合に申し出る。一度断られたら申し出ない。
 func wants_to_initiate() -> bool:
+	if _was_refused:
+		return false
 	if _party_members.is_empty():
 		return false
 	var wounded := 0

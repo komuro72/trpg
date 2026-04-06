@@ -343,14 +343,14 @@ func _start_action(action: Dictionary) -> void:
 			if tgt.character_data != null and tgt.character_data.is_undead \
 					and tgt.is_friendly != _member.is_friendly:
 				if _member.use_mp(cost):
-					var power := _member.character_data.magic_power if _member.character_data else 0
+					var power := _member.character_data.power if _member.character_data else 0
 					tgt.take_damage(power, 1.0, _member, true)
 					_member.spawn_heal_effect("cast")
 					tgt.spawn_heal_effect("hit")
 			else:
 				# 通常回復
 				if _member.use_mp(cost):
-					var power := _member.character_data.magic_power if _member.character_data else 0
+					var power := _member.character_data.power if _member.character_data else 0
 					var hp_before := tgt.hp
 					tgt.heal(power)  # heal() 内で HEAL SE 再生
 					tgt.log_heal(_member, power, hp_before)
@@ -673,8 +673,8 @@ func _execute_attack() -> void:
 	if _attack_target == null or not is_instance_valid(_attack_target):
 		return
 	var atype := _get_attack_type()
-	# magic attack_type は magic_power を使用。それ以外は attack_power
-	var dmg_power := _member.magic_power if atype == "magic" else _member.attack_power
+	# magic attack_type も attack_type != magic も power フィールドを共通使用
+	var dmg_power := _member.power if atype == "magic" else _member.power
 	match atype:
 		"ranged", "magic":
 			# 遠距離攻撃（物理弓/魔法）：飛翔体を生成して命中確定ダメージ
@@ -1086,7 +1086,7 @@ func _can_attack_target(target: Character, atype: String) -> bool:
 func _generate_heal_queue() -> Array:
 	if _member == null or _member.character_data == null:
 		return []
-	if _member.character_data.magic_power <= 0:
+	if _member.character_data.power <= 0:
 		return []
 	var cost := _member.character_data.heal_mp_cost
 	if _member.mp < cost:

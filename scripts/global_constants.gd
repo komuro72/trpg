@@ -54,12 +54,15 @@ const TILE_STAIRS_UP:   int = 5
 
 ## アイテム補正キーの日本語名
 const STAT_NAME_JP: Dictionary = {
-	"attack_power":        "攻撃力",
-	"magic_power":         "魔力",
-	"accuracy":            "命中",
+	"power":               "威力",
+	"skill":               "技量",
 	"physical_resistance": "物理耐性",
 	"magic_resistance":    "魔法耐性",
 	"defense_strength":    "防御強度",
+	## 旧キー互換（セーブデータ等の後方互換用）
+	"attack_power":        "威力",
+	"magic_power":         "威力",
+	"accuracy":            "技量",
 }
 
 

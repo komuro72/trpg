@@ -37,8 +37,8 @@ var mp:           int  = 0
 var max_mp:       int  = 0
 var sp:           int  = 0   ## スタミナポイント（非魔法クラス専用。魔法クラスは0のまま）
 var max_sp:       int  = 0
-var attack_power: int  = 1
-var magic_power:  int  = 0
+var power:        int  = 1   ## 物理威力 or 魔法威力（クラスに応じて使い分け）
+var skill:        int  = 0   ## 物理技量 or 魔法技量（命中・クリティカル率の基礎値）
 var defense:      int  = 0
 var attack_range: int  = 1   ## 装備補正込みの射程（refresh_stats_from_equipment() で更新）
 var is_flying:    bool = false
@@ -59,7 +59,7 @@ const MP_SP_RECOVERY_RATE: float = 3.0
 var is_stunned:   bool  = false
 var stun_timer:   float = 0.0
 
-## スライディング中フラグ（斥候の特殊スキル中は take_damage() を無視する）
+## スライディング中フラグ（斥候の特殊攻撃中は take_damage() を無視する）
 var is_sliding:   bool  = false
 
 ## バフ状態（一時的な防御力アップ。0=なし、>0=残り秒数）
@@ -242,8 +242,8 @@ func _init_stats() -> void:
 	mp           = max_mp
 	max_sp       = character_data.max_sp
 	sp           = max_sp
-	attack_power = character_data.attack_power
-	magic_power  = character_data.magic_power
+	power        = character_data.power
+	skill        = character_data.skill
 	defense      = character_data.defense
 	is_flying    = character_data.is_flying
 	refresh_stats_from_equipment()
@@ -254,8 +254,8 @@ func _init_stats() -> void:
 func refresh_stats_from_equipment() -> void:
 	if character_data == null:
 		return
-	attack_power = character_data.attack_power + character_data.get_weapon_attack_bonus()
-	magic_power  = character_data.magic_power  + character_data.get_weapon_magic_bonus()
+	power        = character_data.power + character_data.get_weapon_power_bonus()
+	skill        = character_data.skill + character_data.get_weapon_skill_bonus()
 	attack_range = character_data.attack_range + character_data.get_weapon_range_bonus()
 
 
@@ -724,9 +724,9 @@ func get_effective_defense() -> int:
 	return defense
 
 
-## ダメージを受ける（Phase 10-2 装備補正対応版）
+## ダメージを受ける（Phase 12-14: クリティカル・新防御ロジック対応版）
 ## attack_is_magic: true なら魔法耐性を、false なら物理耐性を適用
-## attacker:        ダメージ源（方向判定・ドロップ帰属追跡用。null 可）
+## attacker:        ダメージ源（方向判定・クリティカル判定・ドロップ帰属追跡用。null 可）
 func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character = null,
 		attack_is_magic: bool = false) -> void:
 	if is_sliding:
@@ -734,28 +734,36 @@ func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character =
 	if attacker != null:
 		last_attacker = attacker
 
-	# 1. 防御判定（背面攻撃はスキップ）
+	# 0. クリティカル判定（攻撃側の skill から算出）
+	var is_critical := false
+	if attacker != null:
+		var atk_skill: int = attacker.skill
+		var crit_chance: float = float(atk_skill) / 300.0  # skill ÷ 3 %
+		if randf() < crit_chance:
+			is_critical = true
+			multiplier *= 2.0  # クリティカル: ダメージ2倍
+
+	# 1. 防御判定（クラス別ロジック・背面は常にスキップ）
 	var blocked := 0
 	var dir_result := ""
 	var defense_succeeded := false
 	if attacker != null and character_data != null:
 		dir_result = _calc_attack_direction(attacker)
 		if dir_result != "back":
-			# ガード中＋正面攻撃：自動成功＋ブロック量3倍
+			# ガード中＋正面攻撃：ブロック成功率100%・防御強度分カット
+			# 側面・背面は通常の防御判定と同じ（防御技量で成功率が決まる）
 			if is_guarding and dir_result == "front":
 				defense_succeeded = true
-				blocked = _calc_block_power(dir_result) * 3
+				blocked = _calc_block_power_front_guard()
 			else:
-				var acc := character_data.defense_accuracy if "defense_accuracy" in character_data else 0.0
-				var roll := randf()
-				if roll < acc:
+				blocked = _calc_block_per_class(dir_result)
+				if blocked > 0:
 					defense_succeeded = true
-					blocked = _calc_block_power(dir_result)
 
 	# 2. 防御強度を差し引き
 	var after_block: int = maxi(0, int(float(raw_amount) * multiplier) - get_effective_defense() - blocked)
 
-	# 3. 耐性適用（線形軽減）
+	# 3. 耐性適用（逓減軽減）
 	var resistance := 0.0
 	if character_data != null:
 		if attack_is_magic:
@@ -770,6 +778,9 @@ func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character =
 
 	hp = max(0, hp - actual)
 	_spawn_hit_effect(actual)
+	# クリティカル時は追加エフェクト（HitEffect の輝き増加）
+	if is_critical:
+		_spawn_hit_effect(0)  # 二重エフェクトでクリティカル表現
 	SoundManager.play_from(SoundManager.TAKE_DAMAGE, self)
 	if hp <= 0:
 		die()
@@ -813,24 +824,58 @@ func _calc_attack_direction(attacker: Character) -> String:
 		return "left"
 
 
-## 方向に応じた防御強度（ブロック量）を返す
-## 戦士クラス（盾あり）：正面=盾+武器、左=盾、右=武器、背面=0
-## 盾なしクラス：正面・左右=武器のみ
-func _calc_block_power(direction: String) -> int:
+## ガード中正面攻撃のブロック量（成功率100%・防御強度分カット）を返す
+func _calc_block_power_front_guard() -> int:
 	if character_data == null:
 		return 0
 	var weapon_block := character_data.get_weapon_block_power()
 	var shield_block := character_data.get_shield_block_power()
 	var has_shield   := not character_data.equipped_shield.is_empty()
-	match direction:
-		"front":
-			return weapon_block + (shield_block if has_shield else 0)
-		"left":
-			return shield_block if has_shield else weapon_block
-		"right":
-			return weapon_block
-		_:
+	return weapon_block + (shield_block if has_shield else 0)
+
+
+## クラス別防御ロジックによるブロック量を返す（各防具を独立してロール）
+## 近接クラス（melee/dive）：武器・盾を方向別に独立判定
+## 遠距離クラス（ranged/heal/magic）：正面のみ武器判定
+func _calc_block_per_class(direction: String) -> int:
+	if character_data == null:
+		return 0
+	var cd := character_data
+	var acc: float = float(cd.defense_accuracy) / 100.0
+	var weapon_block := cd.get_weapon_block_power()
+	var shield_block := cd.get_shield_block_power()
+	var has_shield   := not cd.equipped_shield.is_empty()
+	var is_melee_cls: bool = cd.attack_type in ["melee", "dive"]
+	var total := 0
+
+	if is_melee_cls:
+		# 近接クラス: 武器・盾を独立判定
+		var weapon_dir: bool  # この方向で武器判定をするか
+		var shield_dir: bool  # この方向で盾判定をするか
+		match direction:
+			"front":
+				weapon_dir = true
+				shield_dir = has_shield
+			"left":
+				weapon_dir = not has_shield  # 盾なし時のみ武器で受ける
+				shield_dir = has_shield
+			"right":
+				weapon_dir = true
+				shield_dir = false
+			_:
+				return 0
+		if weapon_dir and weapon_block > 0 and randf() < acc:
+			total += weapon_block
+		if shield_dir and shield_block > 0 and randf() < acc:
+			total += shield_block
+	else:
+		# 遠距離クラス: 正面のみ武器判定
+		if direction != "front":
 			return 0
+		if weapon_block > 0 and randf() < acc:
+			total += weapon_block
+
+	return total
 
 
 ## 戦闘計算ログを出力する
@@ -841,13 +886,13 @@ func _log_damage(attacker: Character, raw: int, mult: float, is_magic: bool,
 	var atk_name := _char_display_name(attacker)
 	var tgt_name := _char_display_name(self)
 
-	# 攻撃力部分
+	# 威力部分
 	var power_label: String
 	var base_power := int(float(raw) * mult)
 	if is_magic:
-		power_label = "魔力%d" % base_power
+		power_label = "魔法威力%d" % base_power
 	else:
-		power_label = "攻撃力%d" % base_power
+		power_label = "物理威力%d" % base_power
 
 	# 方向・防御部分
 	var dir_str: String

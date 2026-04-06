@@ -2,7 +2,8 @@
   "id": "harpy",
   "name": "ハーピー",
   "hp": 25,
-  "attack_power": 8,
+  "power": 8,
+  "skill": 14,
   "physical_resistance": 3,
   "magic_resistance": 3,
   "defense": 1,
@@ -14,7 +15,7 @@
   "post_delay": 0.6,
   "behavior_description": "飛行して障害物を無視して移動する。地上の敵に降下攻撃を仕掛ける。飛行中は地上からの近接攻撃を受けない。",
   "sprites": {
-    "top":   "res://assets/images/enemies/harpy_top.png",
+    "top": "res://assets/images/enemies/harpy_top.png",
     "front": "res://assets/images/enemies/harpy_front.png"
   }
 }

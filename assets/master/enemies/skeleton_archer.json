@@ -2,7 +2,8 @@
   "id": "skeleton-archer",
   "name": "スケルトンアーチャー",
   "hp": 20,
-  "attack_power": 10,
+  "power": 10,
+  "skill": 14,
   "physical_resistance": 3,
   "magic_resistance": 2,
   "defense": 1,
@@ -15,7 +16,7 @@
   "post_delay": 0.5,
   "behavior_description": "骸骨の弓使い。遠距離から矢を放ち、後方に留まりながら攻撃し続ける。回復魔法が逆ダメージになる。絶対に逃げない。",
   "sprites": {
-    "top":   "res://assets/images/enemies/skeleton-archer_top.png",
+    "top": "res://assets/images/enemies/skeleton-archer_top.png",
     "front": "res://assets/images/enemies/skeleton-archer_front.png"
   }
 }

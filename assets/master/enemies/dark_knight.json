@@ -2,7 +2,8 @@
   "id": "dark-knight",
   "name": "ダークナイト",
   "hp": 55,
-  "attack_power": 14,
+  "power": 14,
+  "skill": 18,
   "physical_resistance": 12,
   "magic_resistance": 4,
   "defense": 6,
@@ -15,7 +16,7 @@
   "post_delay": 0.7,
   "behavior_description": "漆黒の鎧を纏った人型の強敵。高い防御力を持ち絶対に逃げない。正面から堂々と突進して強力な一撃を放つ。",
   "sprites": {
-    "top":   "res://assets/images/enemies/dark-knight_top.png",
+    "top": "res://assets/images/enemies/dark-knight_top.png",
     "front": "res://assets/images/enemies/dark-knight_front.png"
   }
 }

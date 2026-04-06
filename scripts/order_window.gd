@@ -551,18 +551,18 @@ func _get_stat_rows(ch: Character) -> Array:
 		rows.append({"label": "MP",       "type": "hp_mp",  "current": ch.mp,   "max": ch.max_mp})
 	else:
 		rows.append({"label": "SP",       "type": "hp_mp",  "current": ch.sp,   "max": ch.max_sp})
-	rows.append({"label": "攻撃力",        "type": "num",    "base": ch.attack_power,
-		"bonus": cd.get_weapon_attack_bonus()})
-	if ch.magic_power > 0 or cd.magic_power > 0:
-		rows.append({"label": "魔法力/回復力", "type": "num", "base": ch.magic_power,
-			"bonus": cd.get_weapon_magic_bonus()})
-	# 命中精度（ヒーラー=回復必中のため非表示）
+	var _is_magic_cls := cd.class_id in _magic_classes
+	var power_label := "魔法威力" if _is_magic_cls else "物理威力"
+	rows.append({"label": power_label,    "type": "num",    "base": ch.power,
+		"bonus": cd.get_weapon_power_bonus()})
+	# 技量（ヒーラーは回復必中のため非表示）
 	if cd.attack_type != "heal":
-		rows.append({"label": "命中精度",      "type": "pct",
-			"base": cd.accuracy, "bonus": cd.get_weapon_accuracy_bonus()})
+		var skill_label := "魔法技量" if _is_magic_cls else "物理技量"
+		rows.append({"label": skill_label, "type": "num",
+			"base": ch.skill, "bonus": cd.get_weapon_skill_bonus()})
 	rows.append({"label": "防御力",        "type": "num",    "base": ch.defense, "bonus": 0})
-	rows.append({"label": "防御精度",      "type": "pct",
-		"base": cd.defense_accuracy, "bonus": 0.0})
+	rows.append({"label": "防御技量",      "type": "num",
+		"base": cd.defense_accuracy, "bonus": 0})
 	var phys_equip := cd.get_total_physical_resistance_score() - cd.physical_resistance
 	rows.append({"label": "物理耐性",      "type": "num",
 		"base": cd.physical_resistance, "bonus": phys_equip})
@@ -1063,16 +1063,13 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 			var ename: String = equip.get("item_name", "？") as String
 			var estats: Dictionary = equip.get("stats", {}) as Dictionary
 			var eparts: Array = []
-			for k: String in ["attack_power", "magic_power", "accuracy",
+			for k: String in ["power", "skill",
 					"defense_strength", "physical_resistance", "magic_resistance"]:
 				if estats.has(k):
-					var v: float = float(estats[k])
-					if v != 0.0:
+					var v: int = int(estats[k])
+					if v != 0:
 						var jp: String = GlobalConstants.STAT_NAME_JP.get(k, k) as String
-						if k == "accuracy" or k == "physical_resistance" or k == "magic_resistance":
-							eparts.append("%s+%d%%" % [jp, int(v * 100.0)])
-						else:
-							eparts.append("%s+%d" % [jp, int(v)])
+						eparts.append("%s+%d" % [jp, v])
 			var estat_str := "" if eparts.is_empty() else " [%s]" % ", ".join(eparts)
 			_control.draw_string(_font, Vector2(base_x + eq_icon_sz + 3.0, y + stat_h * 0.75),
 				ename + estat_str,
@@ -1119,12 +1116,13 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 				_control.draw_rect(inv_icon_rect, Color(0.35, 0.35, 0.50, 0.60))
 			var iname: String = item_d.get("item_name", "???") as String
 			var stats_d: Dictionary = item_d.get("stats", {}) as Dictionary
-			# 主要補正値の要約（attack_power/magic_power/physical_resistance 等）
+			# 主要補正値の要約（power/skill/physical_resistance 等）
 			var stat_strs: Array = []
-			for k: String in ["attack_power", "magic_power", "defense_strength",
+			for k: String in ["power", "skill", "defense_strength",
 					"physical_resistance", "magic_resistance"]:
 				if stats_d.has(k) and int(stats_d[k]) != 0:
-					stat_strs.append("%s+%d" % [k.split("_")[0], int(stats_d[k])])
+					var jp: String = GlobalConstants.STAT_NAME_JP.get(k, k) as String
+					stat_strs.append("%s+%d" % [jp, int(stats_d[k])])
 			# 消耗品は effect を表示
 			var effect_d: Dictionary = item_d.get("effect", {}) as Dictionary
 			for ek: String in effect_d:
@@ -1237,16 +1235,13 @@ func _draw_item_list_overlay(ox: float, main_py: float, ow: float,
 			# 主要補正値サマリ（日本語表記）
 			var stats_d: Dictionary = item.get("stats", {}) as Dictionary
 			var parts: Array = []
-			for k: String in ["attack_power", "magic_power", "accuracy",
+			for k: String in ["power", "skill",
 					"physical_resistance", "magic_resistance", "defense_strength"]:
 				if stats_d.has(k):
-					var v: float = float(stats_d[k])
-					if v != 0.0:
+					var v: int = int(stats_d[k])
+					if v != 0:
 						var jp: String = GlobalConstants.STAT_NAME_JP.get(k, k) as String
-						if k == "accuracy" or k == "physical_resistance" or k == "magic_resistance":
-							parts.append("%s+%d%%" % [jp, int(v * 100.0)])
-						else:
-							parts.append("%s+%d" % [jp, int(v)])
+						parts.append("%s+%d" % [jp, v])
 			var effect_d: Dictionary = item.get("effect", {}) as Dictionary
 			for ek: String in effect_d:
 				parts.append("%s:%d" % [ek, int(effect_d[ek])])

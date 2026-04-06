@@ -2,6 +2,8 @@
   "id": "dark-priest",
   "name": "ダークプリースト",
   "hp": 20,
+  "power": 10,
+  "skill": 12,
   "mp": 30,
   "physical_resistance": 3,
   "magic_resistance": 10,
@@ -9,7 +11,6 @@
   "is_flying": false,
   "attack_type": "magic",
   "attack_range": 4,
-  "magic_power": 10,
   "heal_mp_cost": 5,
   "buff_mp_cost": 8,
   "rank": "B",
@@ -18,7 +19,7 @@
   "post_delay": 0.7,
   "behavior_description": "後方で仲間のHPを回復し、防御力バフを付与する。HP50%以下の仲間を優先して回復する。MP切れの場合は回復・バフ不可。",
   "sprites": {
-    "top":   "res://assets/images/enemies/dark_priest_top.png",
+    "top": "res://assets/images/enemies/dark_priest_top.png",
     "front": "res://assets/images/enemies/dark_priest_front.png"
   }
 }

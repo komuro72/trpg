@@ -1,12 +1,14 @@
 {
 	"item_type": "axe",
 	"category": "weapon",
-	"allowed_classes": ["fighter-axe"],
+	"allowed_classes": [
+		"fighter-axe"
+	],
 	"base_stats": {
-		"attack_power_min": 5,
-		"attack_power_max": 12,
-		"accuracy_min": 0.0,
-		"accuracy_max": 0.08,
+		"power_min": 5,
+		"power_max": 12,
+		"skill_min": 0,
+		"skill_max": 8,
 		"defense_strength_min": 2,
 		"defense_strength_max": 5
 	},

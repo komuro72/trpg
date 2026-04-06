@@ -252,7 +252,7 @@ func _execute_attack(enemy: Character) -> void:
 	if target == null or not is_instance_valid(target):
 		return
 	var multiplier := Character.get_direction_multiplier(enemy, target)
-	target.take_damage(enemy.attack_power, multiplier, enemy)
+	target.take_damage(enemy.power, multiplier, enemy)
 	print("[EnemyAI] %s → %s  %.1fx  HP:%d/%d" % \
 		[id, target.name, multiplier, target.hp, target.max_hp])
 

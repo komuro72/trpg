@@ -2,7 +2,8 @@
   "id": "hobgoblin",
   "name": "ホブゴブリン",
   "hp": 45,
-  "attack_power": 12,
+  "power": 12,
+  "skill": 14,
   "physical_resistance": 8,
   "magic_resistance": 3,
   "defense": 4,
@@ -15,7 +16,7 @@
   "post_delay": 0.6,
   "behavior_description": "配下のゴブリンを指揮する大型の亜人。好戦的で絶対に逃げない。正面から突進して強力な一撃を叩き込む。",
   "sprites": {
-    "top":   "res://assets/images/enemies/hobgoblin_top.png",
+    "top": "res://assets/images/enemies/hobgoblin_top.png",
     "front": "res://assets/images/enemies/hobgoblin_front.png"
   }
 }

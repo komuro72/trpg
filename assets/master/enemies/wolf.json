@@ -2,7 +2,8 @@
   "id": "wolf",
   "name": "ウルフ",
   "hp": 22,
-  "attack_power": 9,
+  "power": 9,
+  "skill": 12,
   "physical_resistance": 4,
   "magic_resistance": 2,
   "defense": 2,
@@ -14,7 +15,7 @@
   "post_delay": 0.4,
   "behavior_description": "群れで行動する獰猛な狼。高速移動して側面から奇襲する。仲間の半数が倒れると逃走する。",
   "sprites": {
-    "top":   "res://assets/images/enemies/wolf_top.png",
+    "top": "res://assets/images/enemies/wolf_top.png",
     "front": "res://assets/images/enemies/wolf_front.png"
   }
 }

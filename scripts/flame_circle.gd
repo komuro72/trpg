@@ -1,7 +1,7 @@
 class_name FlameCircle
 extends Node2D
 
-## 炎陣エフェクト・ダメージゾーン（Phase 12-4: 魔法使い(火)のVスロット特殊スキル）
+## 炎陣エフェクト・ダメージゾーン（Phase 12-4: 魔法使い(火)のVスロット特殊攻撃）
 ## 設置座標を中心に radius タイルの範囲で tick_interval 秒ごとにダメージを与え続ける。
 ## duration 秒後に自動削除。_draw() でアニメーションリングを描画。
 

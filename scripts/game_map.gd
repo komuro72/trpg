@@ -721,14 +721,26 @@ func _on_dialogue_choice(choice_id: String) -> void:
 		_close_dialogue()
 		return
 
-	# 合流処理（join_us のみ）
-	MessageLog.add_system("%s のパーティーが仲間に加わった！" % npc_name)
-	_merge_npc_into_player_party(_dialogue_npc_manager)
+	# 合流処理
+	if choice_id == NpcDialogueWindow.CHOICE_JOIN_US:
+		# プレイヤーがリーダー維持で NPC が加入
+		MessageLog.add_system("%s のパーティーが仲間に加わった！" % npc_name)
+		_merge_npc_into_player_party(_dialogue_npc_manager)
+	elif choice_id == NpcDialogueWindow.CHOICE_JOIN_THEM:
+		# プレイヤーが NPC パーティーに加入（NPC がリーダー）
+		MessageLog.add_system("%s のパーティーに合流した！" % npc_name)
+		_merge_player_into_npc_party(_dialogue_npc_manager)
 	_close_dialogue()
 
 
 func _on_dialogue_dismissed() -> void:
 	MessageLog.add_system("誘いを断った")
+	# NPC 側からの申し出を断った場合は再申し出しないようマーク
+	if _dialogue_npc_initiates and _dialogue_npc_manager != null \
+			and is_instance_valid(_dialogue_npc_manager):
+		var leader_ai := _dialogue_npc_manager.enemy_ai
+		if leader_ai != null and is_instance_valid(leader_ai) and leader_ai is NpcLeaderAI:
+			(leader_ai as NpcLeaderAI).mark_refused()
 	_close_dialogue()
 
 

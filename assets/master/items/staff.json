@@ -1,12 +1,15 @@
 {
 	"item_type": "staff",
 	"category": "weapon",
-	"allowed_classes": ["magician-fire", "healer"],
+	"allowed_classes": [
+		"magician-fire",
+		"healer"
+	],
 	"base_stats": {
-		"magic_power_min": 4,
-		"magic_power_max": 10,
-		"accuracy_min": 0.05,
-		"accuracy_max": 0.18,
+		"power_min": 4,
+		"power_max": 10,
+		"skill_min": 5,
+		"skill_max": 18,
 		"defense_strength_min": 0,
 		"defense_strength_max": 2,
 		"range_bonus_min": 0,

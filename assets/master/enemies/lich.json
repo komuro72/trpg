@@ -2,8 +2,9 @@
   "id": "lich",
   "name": "リッチ",
   "hp": 35,
+  "power": 15,
+  "skill": 18,
   "mp": 60,
-  "magic_power": 15,
   "physical_resistance": 3,
   "magic_resistance": 20,
   "defense": 1,
@@ -17,7 +18,7 @@
   "post_delay": 0.8,
   "behavior_description": "不死の大魔法使い。火と水の魔法弾を交互に放つ。魔法耐性が非常に高く、絶対に逃げない。MPが尽きると待機する。",
   "sprites": {
-    "top":   "res://assets/images/enemies/lich_top.png",
+    "top": "res://assets/images/enemies/lich_top.png",
     "front": "res://assets/images/enemies/lich_front.png"
   }
 }

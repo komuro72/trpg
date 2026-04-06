@@ -2,7 +2,8 @@
   "id": "zombie",
   "name": "ゾンビ",
   "hp": 35,
-  "attack_power": 6,
+  "power": 6,
+  "skill": 5,
   "physical_resistance": 10,
   "magic_resistance": 2,
   "defense": 2,
@@ -14,7 +15,7 @@
   "post_delay": 0.8,
   "behavior_description": "死者が蘇った不死の怪物。低速だが止まらない。近くの人間に向かって直進する。絶対に逃げない。",
   "sprites": {
-    "top":   "res://assets/images/enemies/zombie_top.png",
+    "top": "res://assets/images/enemies/zombie_top.png",
     "front": "res://assets/images/enemies/zombie_front.png"
   }
 }
