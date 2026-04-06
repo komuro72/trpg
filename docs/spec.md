@@ -1237,6 +1237,22 @@ scripts/hit_effect.gd       ヒットエフェクト（AnimatedSprite2D / フォ
 | 性別（male/female） | ±20% | male=近接攻撃力・HP高め、female=速度・回避・魔法系高め |
 | 年齢（young/adult/elder） | ±20% | young=速度・回避高め、adult=バランス、elder=魔法・耐性高め |
 
+### 各クラスのステータス最大値（検証済み・2026-04-06）
+
+`max = base + rank×3 + max(sex) + max(age) + max(build) + (rand-1)`
+
+| クラス | power | skill | phys_res | magic_res | def_acc |
+|--------|-------|-------|----------|-----------|---------|
+| fighter-sword | 85 | 62 | 62 | 21 | 74 |
+| fighter-axe | 90 | 56 | 64 | 20 | 72 |
+| archer | 71 | 79 | 27 | 22 | 72 |
+| scout | 68 | 79 | 27 | 23 | 81 |
+| magician-fire | 82 | 62 | 14 | 49 | 61 |
+| magician-water | 77 | 64 | 14 | 49 | 63 |
+| healer | 85 | 55 | 15 | 52 | 61 |
+
+全クラス全ステータス、最大値が100以内に収まっていることを確認済み。`CLASS_STAT_BASES` の修正は不要。
+
 ### グラフィックセット（CharacterData の画像パス）
 ```
 assets/images/characters/{class}_{sex}_{age}_{build}_{id}/

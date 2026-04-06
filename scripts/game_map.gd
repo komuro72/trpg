@@ -159,6 +159,10 @@ func _finish_setup() -> void:
 	_setup_order_window()
 	_setup_pause_menu()
 	SoundManager.set_listener(hero, map_data)
+	# ゲーム開始メッセージ
+	if hero.character_data != null:
+		var class_jp := GlobalConstants.CLASS_NAME_JP.get(hero.character_data.class_id, hero.character_data.class_id) as String
+		MessageLog.add_system("あなたは%sです。" % class_jp)
 	queue_redraw()
 
 
