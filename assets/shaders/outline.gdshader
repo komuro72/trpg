@@ -8,18 +8,18 @@ void fragment() {
 	vec4 col = texture(TEXTURE, UV);
 
 	if (outline_enabled && col.a < 0.5) {
-		vec2 tex_size = vec2(textureSize(TEXTURE, 0));
-		vec2 step = outline_width / tex_size;
+		// TEXTURE_PIXEL_SIZE はテクスチャ1ピクセル分のUV幅（canvas_item シェーダーの組み込み変数）
+		vec2 px = TEXTURE_PIXEL_SIZE * outline_width;
 
 		float neighbor_alpha = 0.0;
-		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2( step.x,       0.0)).a);
-		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(-step.x,       0.0)).a);
-		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(      0.0,  step.y)).a);
-		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(      0.0, -step.y)).a);
-		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2( step.x,  step.y)).a);
-		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(-step.x,  step.y)).a);
-		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2( step.x, -step.y)).a);
-		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(-step.x, -step.y)).a);
+		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2( px.x,      0.0)).a);
+		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(-px.x,      0.0)).a);
+		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(     0.0,  px.y)).a);
+		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(     0.0, -px.y)).a);
+		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2( px.x,  px.y)).a);
+		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(-px.x,  px.y)).a);
+		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2( px.x, -px.y)).a);
+		neighbor_alpha = max(neighbor_alpha, texture(TEXTURE, UV + vec2(-px.x, -px.y)).a);
 
 		if (neighbor_alpha > 0.5) {
 			COLOR = outline_color;
