@@ -1578,8 +1578,9 @@ func _is_item_equipped(item: Dictionary) -> bool:
 func _switch_character(dir: int) -> void:
 	if _party_sorted_members.is_empty() or character == null:
 		return
-	# パーティーリーダーが操作権を持つプレイヤーキャラ（hero）でない場合は切り替え不可
-	if party_leader == null or not party_leader.is_leader:
+	# 操作中のキャラクターがパーティーリーダーのときのみ切り替え可
+	# （NPC パーティーに合流してリーダーを譲った場合は無効）
+	if not character.is_leader:
 		return
 	var idx := _party_sorted_members.find(character)
 	if idx < 0:

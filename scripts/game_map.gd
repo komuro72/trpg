@@ -804,10 +804,21 @@ func _merge_player_into_npc_party(nm: NpcManager) -> void:
 		if is_instance_valid(member) and member.hp > 0:
 			party.add_member(member)
 			member.visible = true
-	# NPC リーダーをパーティーのアクティブキャラとして設定（左パネルでハイライト）
-	if not npc_members.is_empty() and is_instance_valid(npc_members[0] as Character):
-		if left_panel != null:
-			left_panel.set_active_character(npc_members[0] as Character)
+	# NPC リーダーを特定して party_leader を更新する
+	var npc_leader: Character = null
+	for m: Character in npc_members:
+		if is_instance_valid(m) and m.is_leader:
+			npc_leader = m
+			break
+	if npc_leader == null and not npc_members.is_empty():
+		npc_leader = npc_members[0] as Character
+	if player_controller != null and npc_leader != null:
+		player_controller.party_leader = npc_leader
+	# 合流済みフラグを立てる（NPC メンバーが hero を隊形基準として追従するようになる）
+	nm.set_joined_to_player(true)
+	# 左パネルのハイライトは操作キャラ（hero）のまま維持する
+	if left_panel != null and player_controller != null:
+		left_panel.set_active_character(player_controller.character)
 	if vision_system != null:
 		vision_system.remove_npc_manager(nm)
 	npc_managers.erase(nm)
