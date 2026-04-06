@@ -1471,6 +1471,10 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 ## 作業ルール
 - セッション終了時（「今日はここまで」など）にコミットを依頼された場合は、`git commit` に加えて `git push` まで行う
   - 理由：毎日新しいセッションで作業しており、別PCで作業再開することもあるため
+- Claude Code が新規ファイル・新規ディレクトリを作成した場合は、必ずコミット時に `git add` でステージングする
+  - 対象：スクリプト（.gd）・シェーダー（.gdshader）・JSON・画像・シーン（.tscn）など Claude Code が作成した全ファイル
+  - Godot が自動生成する `.import` / `.uid` ファイルはコミット不要（`.gitignore` 対象外だが追跡しない）
+  - 新規ディレクトリ配下のファイルは `git status` で untracked になるため見落としやすい。意識的に確認する
 
 ## GDScript 警告の運用方針
 - `warnings/inference_on_variant=1`（project.godot に設定済み）により、Variant 推論警告はエラー扱いせず警告として表示する
