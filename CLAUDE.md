@@ -488,9 +488,9 @@ rank_value: C=0, B=1, A=2, S=3
     - [x] game_map._setup_initial_allies()：初期パーティーの追加メンバーを NpcManager 経由でスポーン → activate() で即時 AI 起動 → 合流処理
   - [x] Phase 6-2: 仲間の加入の仕組み
     - [x] DialogueTrigger.gd：隣接チェック・エリア敵全滅チェック・NPC自発申し出検出
-    - [x] DialogueTrigger.gd：NPC 自発（wants_to_initiate=true）のみ自動トリガーに変更。プレイヤー起点は矢印キーバンプ経由
-    - [x] DialogueTrigger.try_trigger_for_member()：矢印キーバンプ用の直接トリガーメソッド
-    - [x] PlayerController.gd：npc_bumped シグナル追加（矢印キーで NPC 方向に入力すると発火）
+    - [x] DialogueTrigger.gd：NPC 自発（wants_to_initiate=true）のみ自動トリガーに変更。プレイヤー起点は A ボタン隣接検出経由（Phase 12-14 でバンプ方式から変更）
+    - [x] DialogueTrigger.try_trigger_for_member()：プレイヤー起点会話用の直接トリガーメソッド
+    - [x] PlayerController.gd：npc_bumped シグナル追加（A ボタン押下時に隣接 NPC を検索して発火）
     - [x] game_map._on_npc_bumped()：npc_bumped を受け取り DialogueTrigger.try_trigger_for_member() を呼ぶ
     - [x] ~~DialogueWindow.gd~~：会話UIはMessageWindowに統合済み（Phase 10-2準備で移行）
     - [x] NpcLeaderAI：wants_to_initiate() / will_accept() / get_party_strength() 追加
@@ -504,24 +504,21 @@ rank_value: C=0, B=1, A=2, S=3
       - 部屋内の敵が全滅していること
       - プレイヤーと NPC メンバーが隣接（マンハッタン距離1）
       - 通路（エリアIDなし）では会話しない
-      - プレイヤー起点：矢印キーで NPC 方向に入力（バンプ検出）
-      - NPC 自発：wants_to_initiate=true のとき毎フレーム自動チェック
-    - 会話UI（MessageWindow統合）
-      - NPCパーティーの情報をメッセージとして表示（名前・ランク・クラス・状態）
-      - 選択肢をMessageWindow下部にインライン表示（↑↓選択、Z/右で決定、X/左で閉じる）
-      - プレイヤーから話しかけた場合の選択肢
-        - 「仲間になってほしい」：NPC がプレイヤー傘下に加入、プレイヤーがリーダー維持
-        - 「一緒に連れて行ってほしい」：プレイヤーが NPC 傘下に加入、NPC リーダーがリーダー
-        - （立ち去る）
-      - NPC 側からの申し出（wants_to_initiate=true）：承諾/断る の2択
+      - プレイヤー起点：A ボタン押下時に隣接 NPC を検索して発火（Phase 12-14 で矢印キーバンプ方式から変更）
+      - NPC 自発：wants_to_initiate=true のとき毎フレーム自動チェック。一度断られたら再申し出しない（mark_refused）
+    - 会話UI（NpcDialogueWindow）
+      - 画面中央に半透明パネル。NPC メンバーの顔画像・名前・クラス名＋ランクを表示
+      - ���レイヤー起点の選択肢：「仲間にする」（→確認ダイアログ）・「一緒に行く」・「キャンセル」の3択
+      - NPC 自発の選択肢：「承諾する」（→確認ダイアログ）・「断る」の2択
+      - 「仲間にする」/「承諾する」→ CONFIRM 状態で「本当に仲間にしますか？（はい/いいえ）」
+      - 承諾時は NpcLeaderAI.will_accept() で強さチェック（NPC が 1.5 倍超強ければ拒否）
       - NPCの申し出ロジック：重傷者が過半数（HP<50%）なら申し出
-      - NPCリーダーAIの承諾/拒否：プレイヤー総合力 × 1.5 < NPC 総合力なら拒否
-      - 結果（合流・拒否・中断）もメッセージとして表示
+      - 結果（合流・拒否・中断）は MessageLog に記録
     - 合流処理
       - 合流メンバーを party に追加・常時表示
       - VisionSystem・npc_managers から除外（再会話防止）
-      - 「連れて行ってほしい」はNPCリーダーをアクティブキャラとして左パネルでハイライト
-      - プレイヤーの操作キャラ（hero）は変わらない
+      - 「仲間にする」: hero がリーダー維持。`_merge_npc_into_player_party()` で NPC 全員を追加
+      - 「一緒に行く」: NPC リーダーが party リーダー。`_merge_player_into_npc_party()` で既存メンバーの is_leader を false に。hero は引き続き操作キャラ（ハイライト変わらず）。nm.set_joined_to_player(true) で NPC メンバーが hero を追従
     - 会話中断：敵が部屋に入ってきたら game_map._process() が検出して即中断
   - [x] Phase 6-3: 操作キャラの切替
     - 指示ウィンドウ内の「操作」列でパーティーメンバーへの操作切替
@@ -1178,33 +1175,37 @@ rank_value: C=0, B=1, A=2, S=3
     - `GlobalConstants` に `enum ConsumableDisplayMode { NORMAL, ITEM_SELECT, ACTION_SELECT, TRANSFER_SELECT }` を移動
     - `consumable_bar.gd` / `player_controller.gd` を `GlobalConstants.ConsumableDisplayMode.X` 参照に統一
   - **gitignore 修正**：`dungeon_generated.json` をgit追跡対象に変更（gitignoreから除外）
-- [ ] Phase 12-14: ステータス大改修（power/skill 統一・クリティカル・防御改修・0-100レンジ）
+- [x] Phase 12-14: ステータス統合・ガード改修・NPC会話UI刷新
   - **フィールド名統一**
     - `attack_power` / `magic_power` → `power`（物理クラスは物理威力・魔法クラスは魔法威力として共用）
     - `accuracy` → `skill`（物理技量/魔法技量として共用）
-    - `character_data.gd`・`character.gd`・`character_generator.gd` のフィールド名変更
-    - クラス JSON: `base_attack_power`/`base_magic_power` → `base_power`、`base_accuracy` → `base_skill`
-    - 敵 JSON: `attack_power` → `power`、`accuracy` → `skill`（全ファイル）
-    - アイテム JSON: `attack_power_min/max` → `power_min/max`、`accuracy_min/max` → `skill_min/max`
+    - 敵 JSON 全16ファイル・クラス JSON・アイテム JSON・ダンジョン JSON の全 items.stats を一括変換
     - 参照箇所一括更新（player_controller / unit_ai / party_leader_ai / order_window / left_panel 等）
-  - **UI表示ラベル変更**（`order_window.gd` の ROW_LABELS）
-    - `power` フィールド: 物理クラス=「物理威力」、魔法クラス=「魔法威力」
-    - `skill` フィールド: 物理クラス=「物理技量」、魔法クラス=「魔法技量」
-    - `defense_accuracy` フィールド: 「防御技量」
-    - block_power を「武器防御強度」「盾防御強度」として別行表示
-  - **"特殊スキル" → "特殊攻撃" 全置換**（コード・UI・MessageLog メッセージ等）
-  - **防御判定ロジック変更**（`character.take_damage()` / `_calc_block_power()`）
-    - 近接クラス（剣士・斧戦士・斥候）: 武器・盾を独立したロールで判定（方向により盾/武器のみ）
-    - 遠距離クラス（弓使い・魔法使い・ヒーラー）: 正面のみ武器判定。それ以外はスキップ
-  - **クリティカルヒット実装**
-    - `character.take_damage()` でクリティカル判定を追加
-    - クリティカル率 = skill ÷ 3 %
-    - クリティカル時: ダメージ = power × 2.0 倍
-    - エフェクト・SE は既存アセット流用（HitEffect + hit_physical/hit_magic SE）
-  - **ステータス生成式を加算方式（0-100 レンジ）に変更**
-    - `character_generator.gd` の `_calc_stats()` を全面書き換え
-    - `CLASS_STAT_BASES` 定数追加（クラスごとに base_value・rank_amount・sex/age/build/random 補正量を定義）
-    - 対象ステータス: power・skill・physical_resistance・magic_resistance・defense_accuracy・max_hp
+    - 旧キー（`attack_power`/`magic_power`）は `character_data.gd` でフォールバック互換を維持
+  - **OrderWindow UI ラベル変更**
+    - `power`: 物理クラス=「物理威力」、魔法クラス=「魔法威力」
+    - `skill`: 物理クラス=「物理技量」、魔法クラス=「魔法技量」（heal クラスは非表示）
+    - `defense_accuracy`: 「防御技量」
+  - **「特殊スキル」→「特殊攻撃」全置換**（コード・UI・MessageLog）
+  - **ガード防御改修**（`character.take_damage()` / `_calc_block_power_front_guard()`）
+    - 正面攻撃（±45°）: 防御判定100%成功・防御強度分カット（旧 ×3 乗算廃止）
+    - 側面・背面: 通常防御判定（変更なし）
+  - **NPC会話トリガー変更**（`player_controller.gd`）
+    - バンプ検出方式を廃止。移動方向ではなく A ボタンで隣接 NPC に話しかける方式に変更
+    - `_find_adjacent_npc()` 追加・攻撃入力時に隣接 NPC チェックを挿入
+    - 断られた NPC は `mark_refused()` で再申し出を永続停止（`NpcLeaderAI._was_refused` フラグ）
+  - **NPC会話選択肢の刷新**（`npc_dialogue_window.gd`）
+    - プレイヤー起点: 「仲間にする」「一緒に行く」「キャンセル」の3択
+    - NPC 自発: 「承諾する」「断る」の2択
+    - 「仲間にする」/「承諾する」→ CONFIRM 状態（「本当に仲間にしますか？」）経由で確定
+    - 「一緒に行く」→ 直接 `choice_confirmed("join_them")` を発火
+    - 会話UI開き直後2フレームの入力スキップ（ボタンリーク修正）
+  - **「一緒に行く」合流処理修正**（`game_map._merge_player_into_npc_party()`）
+    - 操作キャラ（hero）のハイライトを維持（NPC リーダーへの誤切り替えを防止）
+    - `nm.set_joined_to_player(true)` 追加（NPC メンバーが hero を追従するように）
+    - `player_controller.party_leader` を NPC リーダーに更新
+    - `_switch_character()` の判定を `character.is_leader` ベースに変更（シンプル化）
+  - **未実装（次フェーズへ）**: クリティカルヒット・ステータス生成式の0-100レンジ化
 - [x] Phase 13: タイトル・セーブ・メニューシステム
   - [x] **セーブシステム基盤**
     - `scripts/save_data.gd`（class_name SaveData）：slot_index / exists / hero_name_male / hero_name_female / current_floor / clear_count / playtime / to_dict() / from_dict() / format_playtime()
