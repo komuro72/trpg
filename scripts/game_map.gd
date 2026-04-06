@@ -160,6 +160,15 @@ func _finish_setup() -> void:
 	_setup_pause_menu()
 	SoundManager.set_listener(hero, map_data)
 	queue_redraw()
+	# デバッグ：各フロアのスポーン数をコンソール出力（F2でファイル出力も可能）
+	for fi: int in range(_per_floor_enemies.size()):
+		var total_enemies := 0
+		for em_v: Variant in _per_floor_enemies[fi] as Array:
+			var em := em_v as EnemyManager
+			if em != null:
+				total_enemies += em.get_enemies().size()
+		print("[DEBUG] フロア%d: %d 敵パーティー, 合計 %d 体スポーン" % [
+			fi, (_per_floor_enemies[fi] as Array).size(), total_enemies])
 
 
 func _process(delta: float) -> void:
