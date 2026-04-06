@@ -1165,6 +1165,9 @@ rank_value: C=0, B=1, A=2, S=3
   - **アウトラインシェーダー復活**（`assets/shaders/outline.gdshader`）
     - ターゲット選択中の敵にシェーダーで白いアウトラインを描画
     - 8方向隣接サンプリングによるキャンバスアイテムシェーダー
+    - `uniform bool outline_enabled`・`textureSize(TEXTURE, 0)` を使用
+    - **注意**：canvas_item の `fragment()` 内では `return` 使用不可（Godot 4 制限）→ bool フラグ + 三項演算子（`?:`）で代替
+    - `ShaderMaterial` は `_setup_sprite()` 時点で即生成（eager）。GDScript 側は `true`/`false` で渡す
   - **ターゲット選択時の射程オーバーレイ復活・方向フィルタ追加**（`game_map._draw()`）
     - ターゲット選択中に射程範囲を赤でオーバーレイ表示
     - melee: 前方±90°（dot ≥ 0.0）のマスのみ表示
@@ -1175,6 +1178,11 @@ rank_value: C=0, B=1, A=2, S=3
     - `GlobalConstants` に `enum ConsumableDisplayMode { NORMAL, ITEM_SELECT, ACTION_SELECT, TRANSFER_SELECT }` を移動
     - `consumable_bar.gd` / `player_controller.gd` を `GlobalConstants.ConsumableDisplayMode.X` 参照に統一
   - **gitignore 修正**：`dungeon_generated.json` をgit追跡対象に変更（gitignoreから除外）
+  - **ConsumableBar アイテム画像表示修正**
+    - ダンジョン JSON のアイテム定義には `image` フィールドがないため、NORMAL モード・ITEM_SELECT モードの両方で `img_path` が空になっていた
+    - `consumable_bar.gd` の両描画関数に `img_path` が空のとき `"assets/images/items/" + itype + ".png"` を導出するフォールバックを追加
+    - `order_window.gd` の `_load_item_tex()` には既にフォールバックあり（変更不要）
+  - **`assets/images/items/daggar.png` → `dagger.png` にリネーム**（typo修正）
 - [x] Phase 12-14: ステータス統合・ガード改修・NPC会話UI刷新
   - **フィールド名統一**
     - `attack_power` / `magic_power` → `power`（物理クラスは物理威力・魔法クラスは魔法威力として共用）
