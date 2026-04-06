@@ -163,7 +163,7 @@ assets/images/tiles/
 | ガード（ホールド） | X | B | ホールド中ガード姿勢。正面攻撃のブロック量3倍・移動速度50%・向き固定 |
 | アイテム選択UI（短押し） | C | X | 所持アイテム一覧を開く（使用/装備/渡す）。UI中は時間停止 |
 | 特殊スキル | V | Y | Vスロット特殊スキル（Phase 12-4で全クラス実装済み） |
-| キャラクター切り替え | 未定 | LB / RB | パーティーメンバーを表示順で循環切り替え（通常時のみ） |
+| キャラクター切り替え | 未定 | LB / RB | パーティーメンバーを表示順で循環切り替え（通常時・リーダー操作中のみ） |
 | アイテムUI中のカーソル移動 | 矢印キー | LB / RB | アイテムUI中のみ有効（LBで前、RBで次） |
 | ターゲット循環（TARGETING中） | 矢印キー | LB / RB | ターゲット選択中のみ有効 |
 | 指示／ステータスウィンドウ | Tab | Select / Back | |
@@ -985,7 +985,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
       - `apply_defense_buff()`: エフェクトを生成して `add_child()`。重複付与時は再生成でリセット
       - `_remove_buff_effect()` ヘルパー追加
       - バフタイマー消化時（`defense_buff_timer <= 0`）に `_remove_buff_effect()` を呼ぶ
-    - **LB/RB（通常時）**：パーティーメンバーを表示順で循環切り替え。`switch_char_requested` シグナルで `game_map._on_switch_character_requested()` を呼び出し
+    - **LB/RB（通常時・リーダー操作中のみ）**：パーティーメンバーを表示順で循環切り替え。`switch_char_requested` シグナルで `game_map._on_switch_character_requested()` を呼び出し。非リーダー操作中は無効
     - **C/X短押し**：アイテム選択UIを開く（ITEM_SELECT→ACTION_SELECT→TRANSFER_SELECT）。UI中は時間停止・LB/RBでカーソル循環
     - **ConsumableBar**：`GlobalConstants.ConsumableDisplayMode` enum で UI フェーズを管理。`is_selecting` / `select_index` は後方互換用（旧C/Xホールド方式の残留フィールド）
     - **project.godot**：`switch_char_prev`（LB/Button9）・`switch_char_next`（RB/Button10）を追加。旧 `slot_prev`/`slot_next` を空に（未使用）

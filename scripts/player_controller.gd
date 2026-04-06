@@ -1560,6 +1560,8 @@ func _is_item_equipped(item: Dictionary) -> bool:
 func _switch_character(dir: int) -> void:
 	if _party_sorted_members.is_empty() or character == null:
 		return
+	if not character.is_leader:
+		return
 	var idx := _party_sorted_members.find(character)
 	if idx < 0:
 		idx = 0
