@@ -63,6 +63,12 @@ const STAT_NAME_JP: Dictionary = {
 }
 
 
+## ConsumableBar の表示モード（player_controller / consumable_bar の両方から参照）
+## ConsumableBar クラス内の enum は外部からアクセス時にパースエラーが出ることがあるため
+## Autoload の GlobalConstants に定義して回避する
+enum ConsumableDisplayMode { NORMAL, ITEM_SELECT, ACTION_SELECT, TRANSFER_SELECT }
+
+
 ## 画面サイズからGRID_SIZEを計算する
 ## 縦方向タイル数を固定してGRID_SIZEを決定（最小32px）
 func initialize(viewport_size: Vector2) -> void:

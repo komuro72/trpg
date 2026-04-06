@@ -26,9 +26,8 @@ var _tex_cache: Dictionary = {}  # image_path -> Texture2D or null
 ## V スロットのクールダウン残り秒数（player_controller が毎フレーム更新）
 var v_slot_cooldown: float = 0.0
 
-## 表示モード（player_controller が設定。Phase 12-12〜）
-enum DisplayMode { NORMAL, ITEM_SELECT, ACTION_SELECT, TRANSFER_SELECT }
-var display_mode: DisplayMode = DisplayMode.NORMAL
+## 表示モード（GlobalConstants.ConsumableDisplayMode を使用）
+var display_mode: GlobalConstants.ConsumableDisplayMode = GlobalConstants.ConsumableDisplayMode.NORMAL
 
 ## ITEM_SELECT モード用（_item_ui_display の辞書配列）
 var item_list:  Array = []
@@ -85,10 +84,10 @@ func _load_texture(image_path: String) -> Texture2D:
 func _on_draw() -> void:
 	# モード別描画
 	match display_mode:
-		DisplayMode.ACTION_SELECT:
+		GlobalConstants.ConsumableDisplayMode.ACTION_SELECT:
 			_draw_list_menu(action_list, action_index, Color(0.9, 0.8, 0.3))
 			return
-		DisplayMode.TRANSFER_SELECT:
+		GlobalConstants.ConsumableDisplayMode.TRANSFER_SELECT:
 			_draw_list_menu(transfer_list, transfer_index, Color(0.4, 0.9, 0.6))
 			return
 
@@ -109,7 +108,7 @@ func _on_draw() -> void:
 				Color(1.0, 0.65, 0.2, 0.95))
 
 	# ITEM_SELECT モード：item_list（player_controller が設定した表示用リスト）を使用
-	if display_mode == DisplayMode.ITEM_SELECT:
+	if display_mode == GlobalConstants.ConsumableDisplayMode.ITEM_SELECT:
 		_draw_item_list()
 		return
 

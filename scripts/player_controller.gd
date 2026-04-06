@@ -1217,7 +1217,7 @@ func _enter_item_select() -> void:
 	if consumable_bar != null:
 		consumable_bar.item_list  = _item_ui_display
 		consumable_bar.item_index = _last_item_index
-		consumable_bar.display_mode = ConsumableBar.DisplayMode.ITEM_SELECT
+		consumable_bar.display_mode = GlobalConstants.ConsumableDisplayMode.ITEM_SELECT
 		consumable_bar.refresh()
 
 
@@ -1297,7 +1297,7 @@ func _enter_action_select() -> void:
 	if consumable_bar != null:
 		consumable_bar.action_list  = _item_action_list
 		consumable_bar.action_index = 0
-		consumable_bar.display_mode = ConsumableBar.DisplayMode.ACTION_SELECT
+		consumable_bar.display_mode = GlobalConstants.ConsumableDisplayMode.ACTION_SELECT
 		consumable_bar.refresh()
 
 
@@ -1330,7 +1330,7 @@ func _process_action_select() -> void:
 			# ITEM_SELECT に戻る
 			_item_ui_phase = _ItemUIPhase.ITEM_SELECT
 			if consumable_bar != null:
-				consumable_bar.display_mode = ConsumableBar.DisplayMode.ITEM_SELECT
+				consumable_bar.display_mode = GlobalConstants.ConsumableDisplayMode.ITEM_SELECT
 				consumable_bar.item_index   = _last_item_index
 				consumable_bar.refresh()
 		elif action == "渡す":
@@ -1343,7 +1343,7 @@ func _process_action_select() -> void:
 	if Input.is_action_just_pressed("menu_back"):
 		_item_ui_phase = _ItemUIPhase.ITEM_SELECT
 		if consumable_bar != null:
-			consumable_bar.display_mode = ConsumableBar.DisplayMode.ITEM_SELECT
+			consumable_bar.display_mode = GlobalConstants.ConsumableDisplayMode.ITEM_SELECT
 			consumable_bar.item_index   = _last_item_index
 			consumable_bar.refresh()
 
@@ -1365,7 +1365,7 @@ func _enter_transfer_select() -> void:
 	if consumable_bar != null:
 		consumable_bar.transfer_list  = targets
 		consumable_bar.transfer_index = 0
-		consumable_bar.display_mode   = ConsumableBar.DisplayMode.TRANSFER_SELECT
+		consumable_bar.display_mode   = GlobalConstants.ConsumableDisplayMode.TRANSFER_SELECT
 		consumable_bar.refresh()
 
 
@@ -1402,7 +1402,7 @@ func _process_transfer_select() -> void:
 	if Input.is_action_just_pressed("menu_back"):
 		_item_ui_phase = _ItemUIPhase.ACTION_SELECT
 		if consumable_bar != null:
-			consumable_bar.display_mode = ConsumableBar.DisplayMode.ACTION_SELECT
+			consumable_bar.display_mode = GlobalConstants.ConsumableDisplayMode.ACTION_SELECT
 			consumable_bar.refresh()
 
 
@@ -1520,7 +1520,7 @@ func _exit_item_ui() -> void:
 	_item_ui_display.clear()
 	_cycle_direction = 0
 	if consumable_bar != null:
-		consumable_bar.display_mode = ConsumableBar.DisplayMode.NORMAL
+		consumable_bar.display_mode = GlobalConstants.ConsumableDisplayMode.NORMAL
 		consumable_bar.item_list    = []
 		consumable_bar.action_list.clear()
 		consumable_bar.transfer_list.clear()
