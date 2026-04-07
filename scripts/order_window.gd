@@ -1042,17 +1042,14 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 	]
 	for sd: Variant in slot_defs:
 		var sd_arr   := sd as Array
-		var slot_lbl : String     = sd_arr[0] as String
 		var equip    : Dictionary = sd_arr[1] as Dictionary
-		_control.draw_string(_font, Vector2(lbl_x, y + stat_h * 0.75),
-			slot_lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_lbl)
 		var eq_icon_sz := stat_h - 2.0
 		if equip.is_empty():
-			_control.draw_string(_font, Vector2(base_x, y + stat_h * 0.75),
+			_control.draw_string(_font, Vector2(lbl_x, y + stat_h * 0.75),
 				"（なし）", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_dim)
 		else:
-			# 装備アイコン
-			var eq_icon_rect := Rect2(base_x, y + 1.0, eq_icon_sz, eq_icon_sz)
+			# アイコンをlbl_xから描画（「武器」「防具」「盾」ラベルは非表示）
+			var eq_icon_rect := Rect2(lbl_x, y + 1.0, eq_icon_sz, eq_icon_sz)
 			var etex := _load_item_tex(equip)
 			if etex != null:
 				_control.draw_texture_rect(etex, eq_icon_rect, false)
@@ -1069,9 +1066,9 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 						var jp: String = GlobalConstants.STAT_NAME_JP.get(k, k) as String
 						eparts.append("%s+%d" % [jp, v])
 			var estat_str := "" if eparts.is_empty() else " [%s]" % ", ".join(eparts)
-			_control.draw_string(_font, Vector2(base_x + eq_icon_sz + 3.0, y + stat_h * 0.75),
+			_control.draw_string(_font, Vector2(lbl_x + eq_icon_sz + 3.0, y + stat_h * 0.75),
 				ename + estat_str,
-				HORIZONTAL_ALIGNMENT_LEFT, stats_avail * 0.52 - eq_icon_sz - 3.0, fs_stat, c_val)
+				HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_val)
 		y += stat_h
 
 	# ── 所持アイテム ──────────────────────────────────────────────────────────
