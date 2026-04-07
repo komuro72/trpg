@@ -1517,8 +1517,8 @@ func _print_debug_floor_info() -> void:
 		if not is_instance_valid(ch):
 			continue
 		var cname := ch.character_data.character_name if ch.character_data != null else "?"
-		lines.append("  [%s] floor=%d grid_pos=%s visible=%s is_active=true (player_party)" % [
-			cname, ch.current_floor, str(ch.grid_pos), str(ch.visible)])
+		lines.append("  [%s] floor=%d grid_pos=%s HP=%d/%d visible=%s is_active=true (player_party)" % [
+			cname, ch.current_floor, str(ch.grid_pos), ch.hp, ch.max_hp, str(ch.visible)])
 	# 全フロアの敵
 	for fi: int in range(_per_floor_enemies.size()):
 		for em: EnemyManager in (_per_floor_enemies[fi] as Array):
@@ -1529,8 +1529,8 @@ func _print_debug_floor_info() -> void:
 				if not is_instance_valid(ch):
 					continue
 				var cname := ch.character_data.character_name if ch.character_data != null else "?"
-				lines.append("  [%s] floor=%d grid_pos=%s visible=%s is_active=%s" % [
-					cname, fi, str(ch.grid_pos), str(ch.visible), str(active)])
+				lines.append("  [%s] floor=%d grid_pos=%s HP=%d/%d visible=%s is_active=%s" % [
+					cname, fi, str(ch.grid_pos), ch.hp, ch.max_hp, str(ch.visible), str(active)])
 	# 全フロアのNPC
 	for fi: int in range(_per_floor_npcs.size()):
 		for pm: NpcManager in (_per_floor_npcs[fi] as Array):
@@ -1541,8 +1541,8 @@ func _print_debug_floor_info() -> void:
 				if not is_instance_valid(ch):
 					continue
 				var cname := ch.character_data.character_name if ch.character_data != null else "?"
-				lines.append("  [%s(NPC)] floor=%d grid_pos=%s visible=%s is_active=%s" % [
-					cname, fi, str(ch.grid_pos), str(ch.visible), str(active)])
+				lines.append("  [%s(NPC)] floor=%d grid_pos=%s HP=%d/%d visible=%s is_active=%s" % [
+					cname, fi, str(ch.grid_pos), ch.hp, ch.max_hp, str(ch.visible), str(active)])
 
 	lines.append("")
 	lines.append("--- Occupied Tiles (floor別) ---")
