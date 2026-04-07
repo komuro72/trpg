@@ -2658,7 +2658,17 @@ assets/master/items/
 
 ---
 
-## Phase 12: ステージ・バランス調整（未実装）
+## Phase 12: ステージ・バランス調整
+
+### Phase 12-16: クリティカルヒット（実装済み）
+
+- **判定**：`character.gd` の `take_damage()` 冒頭で処理
+  - クリティカル率 = 攻撃側 `skill ÷ 3`%（例: skill=30 → 10%）
+  - `randf() < float(atk_skill) / 300.0` で判定
+  - 成功時: `multiplier *= 2.0`（最終ダメージ2倍）
+- **エフェクト**：`_spawn_hit_effect(actual)` を2回呼んで二重表示で強調
+- **通知**：MessageLog へのメッセージ出力なし
+- **SE・グラフィック**：既存の HitEffect / take_damage SE をそのまま流用
 
 ## Phase 13: Steam配布準備（未実装）
 

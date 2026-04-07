@@ -1232,7 +1232,6 @@ rank値: C=0, B=1, A=2, S=3
     - `nm.set_joined_to_player(true)` 追加（NPC メンバーが hero を追従するように）
     - `player_controller.party_leader` を NPC リーダーに更新
     - `_switch_character()` の判定を `character.is_leader` ベースに変更（シンプル化）
-  - **未実装（次フェーズへ）**: クリティカルヒット
 - [x] Phase 12-15: ステータス生成システムの完成（設定ファイル方式・全ステータス0-100レンジ化）
   - **設定ファイル方式へ移行**（`CLASS_STAT_BASES` ハードコード定数を廃止）
     - `assets/master/stats/class_stats.json`：クラスごとの base / rank を定義
@@ -1246,6 +1245,13 @@ rank値: C=0, B=1, A=2, S=3
   - **CharacterGenerator に `MAGIC_CLASS_IDS` 定数追加**（energy の格納先判定）
   - **`move_speed` の変換**：0-100 スコア → `_convert_move_speed()` で秒/タイルに変換して格納
   - **`obedience` の変換**：0-100 整数スコア → `/ 100.0` で 0.0〜1.0 に変換して格納、表示は `× 100` で 0-100 整数に戻す
+- [x] Phase 12-16: クリティカルヒット実装
+  - **判定ロジック**（`character.gd` の `take_damage()`）
+    - クリティカル率 = 攻撃側の `skill ÷ 3`%（例: skill=30 → 10%、skill=60 → 20%）
+    - クリティカル時: `multiplier *= 2.0`（ダメージ2倍）
+    - MessageLog へのメッセージ通知なし
+  - **エフェクト**：クリティカル時は `_spawn_hit_effect(actual)` を2回呼んで二重エフェクトで強調
+  - **SE・グラフィック**：既存の HitEffect / SE をそのまま流用
 - [x] Phase 13: タイトル・セーブ・メニューシステム
   - [x] **セーブシステム基盤**
     - `scripts/save_data.gd`（class_name SaveData）：slot_index / exists / hero_name_male / hero_name_female / current_floor / clear_count / playtime / to_dict() / from_dict() / format_playtime()

@@ -783,9 +783,9 @@ func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character =
 
 	hp = max(0, hp - actual)
 	_spawn_hit_effect(actual)
-	# クリティカル時は追加エフェクト（HitEffect の輝き増加）
+	# クリティカル時は HitEffect をもう1発重ねて強調（メッセージ通知なし）
 	if is_critical:
-		_spawn_hit_effect(0)  # 二重エフェクトでクリティカル表現
+		_spawn_hit_effect(actual)
 	SoundManager.play_from(SoundManager.TAKE_DAMAGE, self)
 	if hp <= 0:
 		die()
