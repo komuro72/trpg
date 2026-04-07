@@ -467,7 +467,7 @@ rank値: C=0, B=1, A=2, S=3
       - フェイスアイコンは face.png（なければ front.png）を TextureRect ノードで表示
     - [x] 右パネル（RightPanel.gd）：可視敵の種類・数・ランク（ランク色分け）
     - [x] ~~AIデバッグパネル（RightPanel下半分）~~：Phase 10-2準備で廃止。代わりにMessageWindowのデバッグメッセージ（F1でON/OFF）に移行
-    - [x] メッセージウィンドウ（MessageWindow.gd）：フィールド画面下部に5行固定表示。MessageLog（Autoload）で共有バッファ管理。メッセージ種別（system=白/combat=黄/ai=水色）で色分け。F1でデバッグメッセージ（combat/ai）のON/OFF切替
+    - [x] メッセージウィンドウ（MessageWindow.gd）：フィールド画面下部に5行固定表示。MessageLog（Autoload）で共有バッファ管理。メッセージ種別（system=白/combat=黄/ai=水色）で色分け。F1でデバッグメッセージ（combat/ai）のON/OFF切替。**デバッグモード中（F1 ON）はエリア外（他部屋・他フロア）の戦闘ログもエリアフィルターを無視して表示**（通常時は非表示のまま）
     - [x] エリア名表示（AreaNameDisplay.gd）：エリア入室時にフィールド上部中央にエリア名を常時表示（名前なしエリアは非表示）
 - [ ] Phase 6: 仲間AI・操作切替
   - [x] Phase 6-0: 準備（クラス・ステータス・グラフィック仕様の反映＋AIリファクタリング）
