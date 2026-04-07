@@ -502,11 +502,17 @@ func _start_targeting() -> void:
 func _exit_targeting() -> void:
 	_mode = Mode.NORMAL
 	_using_v_slot = false
+	# _valid_targets のアウトラインをクリア
 	for t: Character in _valid_targets:
 		if is_instance_valid(t):
 			t.is_targeted = false
 			t.clear_outline()
 	_valid_targets.clear()
+	# blocking_characters 全体もクリア（_valid_targets から外れた敵に残ったアウトラインを除去）
+	for c: Character in blocking_characters:
+		if is_instance_valid(c):
+			c.is_targeted = false
+			c.clear_outline()
 	_target_index        = 0
 	_pre_delay_remaining = 0.0
 	_cycle_direction     = 0
@@ -535,6 +541,11 @@ func _confirm_target() -> void:
 			t.is_targeted = false
 			t.clear_outline()
 	_valid_targets.clear()
+	# blocking_characters 全体もクリア（漏れたアウトラインを除去）
+	for c: Character in blocking_characters:
+		if is_instance_valid(c):
+			c.is_targeted = false
+			c.clear_outline()
 	_target_index = 0
 	if _cursor != null:
 		_cursor.queue_free()
