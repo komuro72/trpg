@@ -134,6 +134,8 @@ func _spawn_member(char_id: String, grid_pos: Vector2i) -> Character:
 	)
 	# 敵画像フォルダが存在すればランダムに選択して適用する（なければ JSON パスを維持）
 	CharacterGenerator.apply_enemy_graphics(member.character_data)
+	# enemy_list.json に基づいてステータスを0-100スケールで生成・上書きする
+	CharacterGenerator.apply_enemy_stats(member.character_data)
 	# name（例: "EnemyManager0"）をプレフィックスにして複数マネージャー間の名前衝突を防ぐ
 	member.name = name + "_" + char_id.capitalize() + str(_members.size())
 	get_parent().add_child(member)

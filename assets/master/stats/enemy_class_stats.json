@@ -1,0 +1,52 @@
+{
+  "zombie": {
+    "vitality":            { "base": 20, "rank": 5  },
+    "energy":              { "base": 30, "rank": 10 },
+    "skill":               { "base": 20, "rank": 10 },
+    "power":               { "base": 30, "rank": 10 },
+    "defense_accuracy":    { "base": 10, "rank": 10 },
+    "physical_resistance": { "base": 20, "rank": 10 },
+    "magic_resistance":    { "base": 20, "rank": 0  },
+    "move_speed":          { "base": 10, "rank": 0  }
+  },
+  "wolf": {
+    "vitality":            { "base": 20, "rank": 5  },
+    "energy":              { "base": 30, "rank": 10 },
+    "skill":               { "base": 25, "rank": 10 },
+    "power":               { "base": 35, "rank": 10 },
+    "defense_accuracy":    { "base": 20, "rank": 10 },
+    "physical_resistance": { "base": 20, "rank": 10 },
+    "magic_resistance":    { "base": 20, "rank": 0  },
+    "move_speed":          { "base": 40, "rank": 5  }
+  },
+  "salamander": {
+    "vitality":            { "base": 30, "rank": 5  },
+    "energy":              { "base": 30, "rank": 10 },
+    "skill":               { "base": 35, "rank": 10 },
+    "power":               { "base": 20, "rank": 10 },
+    "defense_accuracy":    { "base": 15, "rank": 10 },
+    "physical_resistance": { "base": 30, "rank": 10 },
+    "magic_resistance":    { "base": 30, "rank": 0  },
+    "move_speed":          { "base": 10, "rank": 0  }
+  },
+  "harpy": {
+    "vitality":            { "base": 30, "rank": 5  },
+    "energy":              { "base": 30, "rank": 10 },
+    "skill":               { "base": 35, "rank": 10 },
+    "power":               { "base": 30, "rank": 10 },
+    "defense_accuracy":    { "base": 25, "rank": 10 },
+    "physical_resistance": { "base": 30, "rank": 10 },
+    "magic_resistance":    { "base": 30, "rank": 0  },
+    "move_speed":          { "base": 40, "rank": 0  }
+  },
+  "dark-lord": {
+    "vitality":            { "base": 50, "rank": 5  },
+    "energy":              { "base": 50, "rank": 10 },
+    "skill":               { "base": 40, "rank": 10 },
+    "power":               { "base": 40, "rank": 10 },
+    "defense_accuracy":    { "base": 40, "rank": 10 },
+    "physical_resistance": { "base": 40, "rank": 10 },
+    "magic_resistance":    { "base": 50, "rank": 10 },
+    "move_speed":          { "base": 30, "rank": 0  }
+  }
+}

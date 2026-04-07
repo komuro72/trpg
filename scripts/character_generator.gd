@@ -10,8 +10,10 @@ const GRAPHIC_SET_DIR       := "res://assets/images/characters/"
 const ENEMY_GRAPHIC_SET_DIR := "res://assets/images/enemies/"
 const NAMES_JSON_PATH := "res://assets/master/names.json"
 const CLASS_JSON_DIR  := "res://assets/master/classes/"
-const CLASS_STATS_JSON_PATH := "res://assets/master/stats/class_stats.json"
-const ATTR_STATS_JSON_PATH  := "res://assets/master/stats/attribute_stats.json"
+const CLASS_STATS_JSON_PATH       := "res://assets/master/stats/class_stats.json"
+const ATTR_STATS_JSON_PATH        := "res://assets/master/stats/attribute_stats.json"
+const ENEMY_CLASS_STATS_JSON_PATH := "res://assets/master/stats/enemy_class_stats.json"
+const ENEMY_LIST_JSON_PATH        := "res://assets/master/stats/enemy_list.json"
 
 const KNOWN_CLASSES: Array = [
 	"fighter-sword", "fighter-axe", "magician-fire", "magician-water", "archer", "healer", "scout"
@@ -31,11 +33,15 @@ const RANK_THRESHOLDS: Array = [
 	[100,"C"],
 ]
 
-## ステータス設定JSONのキャッシュ（class_stats.json / attribute_stats.json）
+## ステータス設定JSONのキャッシュ（class_stats.json / enemy_class_stats.json / attribute_stats.json）
 ## 初回の _calc_stats() 呼び出し時にロードする
 static var _class_stats_cache: Dictionary = {}
 static var _attr_stats_cache:  Dictionary = {}
 static var _stats_loaded: bool = false
+
+## 敵リストキャッシュ（enemy_list.json）
+static var _enemy_list_cache: Dictionary = {}
+static var _enemy_list_loaded: bool = false
 
 ## 使用済み名前・画像セットの追跡（重複防止）。シーン再起動でリセットされる
 static var _used_names: Dictionary = {}       ## { name: String -> true }
@@ -204,6 +210,39 @@ static func apply_enemy_graphics(data: CharacterData) -> void:
 	data.build = str(chosen_set.get("build", data.build))
 
 
+## enemy_list.json を参照して CharacterData のステータスを上書きする。
+## apply_enemy_graphics() の呼び出し後（sex/age/build が設定済み）に呼ぶこと。
+## 未登録の enemy_id の場合は何もしない。
+static func apply_enemy_stats(data: CharacterData) -> void:
+	if data == null:
+		return
+	_load_stat_configs()
+	_load_enemy_list()
+	var entry: Dictionary = _enemy_list_cache.get(data.character_id, {}) as Dictionary
+	if entry.is_empty():
+		return
+	var stat_type: String  = str(entry.get("stat_type", "fighter-axe"))
+	var rank: String       = str(entry.get("rank",      "C"))
+	var stat_bonus: Dictionary = entry.get("stat_bonus", {}) as Dictionary
+	data.rank = rank
+	var stats := _calc_stats(stat_type, rank, data.sex, data.age, data.build)
+	# stat_bonus を加算（100 でクランプ）
+	for k: String in stat_bonus.keys():
+		stats[k] = mini(100, stats.get(k, 0) + int(stat_bonus[k]))
+	# ステータスを CharacterData に格納
+	data.max_hp = stats.get("vitality", data.max_hp)
+	# 敵は MP/SP 区別なし。energy はすべて max_sp に格納
+	data.max_sp = stats.get("energy", data.max_sp)
+	data.max_mp = 0
+	data.power               = stats.get("power",               data.power)
+	data.skill               = stats.get("skill",               data.skill)
+	data.physical_resistance = stats.get("physical_resistance", data.physical_resistance)
+	data.magic_resistance    = stats.get("magic_resistance",    data.magic_resistance)
+	data.defense_accuracy    = stats.get("defense_accuracy",    data.defense_accuracy)
+	if stats.has("move_speed"):
+		data.move_speed = _convert_move_speed(stats.move_speed)
+
+
 ## assets/images/characters/ を走査して利用可能なグラフィックセット情報を返す
 ## class_id が空ならすべてのセットを返す
 static func scan_graphic_sets(class_id: String = "") -> Array[Dictionary]:
@@ -311,6 +350,8 @@ static func _random_unused_name(sex: String) -> String:
 
 
 ## ステータス設定JSONを読み込んでキャッシュする（初回呼び出し時のみ実行）
+## class_stats.json・enemy_class_stats.json を _class_stats_cache にマージして
+## _calc_stats() が人間クラス・敵専用タイプの両方を参照できるようにする。
 static func _load_stat_configs() -> void:
 	if _stats_loaded:
 		return
@@ -329,6 +370,35 @@ static func _load_stat_configs() -> void:
 			_class_stats_cache = parsed as Dictionary
 		else:
 			_attr_stats_cache = parsed as Dictionary
+	# 敵専用ステータスタイプを _class_stats_cache にマージ（_calc_stats() で参照できるように）
+	var ec_file := FileAccess.open(ENEMY_CLASS_STATS_JSON_PATH, FileAccess.READ)
+	if ec_file != null:
+		var ec_parsed: Variant = JSON.parse_string(ec_file.get_as_text())
+		ec_file.close()
+		if ec_parsed is Dictionary:
+			for k: String in (ec_parsed as Dictionary).keys():
+				_class_stats_cache[k] = (ec_parsed as Dictionary)[k]
+		else:
+			push_error("CharacterGenerator: enemy_class_stats.json のパースに失敗しました")
+	else:
+		push_error("CharacterGenerator: ステータス設定ファイルが見つかりません: " + ENEMY_CLASS_STATS_JSON_PATH)
+
+
+## enemy_list.json を読み込んでキャッシュする（初回呼び出し時のみ実行）
+static func _load_enemy_list() -> void:
+	if _enemy_list_loaded:
+		return
+	_enemy_list_loaded = true
+	var file := FileAccess.open(ENEMY_LIST_JSON_PATH, FileAccess.READ)
+	if file == null:
+		push_error("CharacterGenerator: ステータス設定ファイルが見つかりません: " + ENEMY_LIST_JSON_PATH)
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	if parsed is Dictionary:
+		_enemy_list_cache = parsed as Dictionary
+	else:
+		push_error("CharacterGenerator: enemy_list.json のパースに失敗しました")
 
 
 ## ステータス計算（設定ファイル方式 / 0-100 レンジ）

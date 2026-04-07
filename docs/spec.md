@@ -2660,6 +2660,53 @@ assets/master/items/
 
 ## Phase 12: ステージ・バランス調整
 
+### Phase 12-17: 敵ステータス生成システム（実装済み）
+
+#### 設定ファイル
+
+**`assets/master/stats/enemy_class_stats.json`**
+敵専用ステータスタイプ（zombie / wolf / salamander / harpy / dark-lord）の base / rank を定義。
+人間クラス（fighter-sword 等）は既存の `class_stats.json` を流用するため、このファイルには含まない。
+
+**`assets/master/stats/enemy_list.json`**
+全16敵種のステータス設定を一元管理。各エントリのフィールド：
+- `stat_type`：参照するステータステーブルのキー（`class_stats.json` または `enemy_class_stats.json`）
+- `rank`：生成時のデフォルトランク（C/B/A/S）
+- `stat_bonus`：`_calc_stats()` 計算後に加算する補正値辞書（100でクランプ）
+
+| 敵 | stat_type | rank | stat_bonus |
+|----|-----------|------|------------|
+| goblin | fighter-axe | C | — |
+| hobgoblin | fighter-axe | B | — |
+| goblin-archer | archer | C | — |
+| goblin-mage | magician-fire | C | — |
+| zombie | zombie | C | — |
+| skeleton | fighter-sword | B | physical_resistance: +30 |
+| skeleton-archer | archer | B | physical_resistance: +30 |
+| lich | magician-fire | B | physical_resistance: +30 |
+| wolf | wolf | B | — |
+| salamander | salamander | B | — |
+| harpy | harpy | B | — |
+| demon | magician-fire | A | — |
+| dark-knight | fighter-sword | A | — |
+| dark-mage | magician-fire | A | — |
+| dark-priest | healer | A | — |
+| dark-lord | dark-lord | S | — |
+
+#### ステータス計算フロー
+1. `_load_stat_configs()` で `class_stats.json` + `enemy_class_stats.json` を `_class_stats_cache` にマージ
+2. `enemy_list.json` から `stat_type` / `rank` / `stat_bonus` を取得
+3. `_calc_stats(stat_type, rank, sex, age, build)` でステータスを生成（sex/age/build は `apply_enemy_graphics()` が設定済み）
+4. `stat_bonus` を加算（`mini(100, base + bonus)`）
+5. `vitality` → `max_hp`、`energy` → `max_sp`（敵は MP/SP 区別なし・max_mp = 0）
+
+#### 呼び出し順（`party_manager._spawn_member()`）
+```
+CharacterData.load_from_json()       ← 非ステータスフィールド（attack_type 等）
+CharacterGenerator.apply_enemy_graphics()  ← sex/age/build を設定
+CharacterGenerator.apply_enemy_stats()     ← ステータスを上書き（上記のフローで生成）
+```
+
 ### Phase 12-16: クリティカルヒット（実装済み）
 
 - **判定**：`character.gd` の `take_damage()` 冒頭で処理

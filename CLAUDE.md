@@ -1245,6 +1245,19 @@ rank値: C=0, B=1, A=2, S=3
   - **CharacterGenerator に `MAGIC_CLASS_IDS` 定数追加**（energy の格納先判定）
   - **`move_speed` の変換**：0-100 スコア → `_convert_move_speed()` で秒/タイルに変換して格納
   - **`obedience` の変換**：0-100 整数スコア → `/ 100.0` で 0.0〜1.0 に変換して格納、表示は `× 100` で 0-100 整数に戻す
+- [x] Phase 12-17: 敵ステータス生成システム実装（設定ファイル方式・0-100スケール化）
+  - **`assets/master/stats/enemy_class_stats.json`** 新規作成：敵専用ステータスタイプ5種（zombie / wolf / salamander / harpy / dark-lord）の base / rank を定義
+  - **`assets/master/stats/enemy_list.json`** 新規作成：全16敵種の `stat_type`（参照するステータステーブル）/ `rank`（デフォルトランク）/ `stat_bonus`（加算補正・100でクランプ）を定義
+    - 人間クラスを流用する敵（goblin=fighter-axe、dark-knight=fighter-sword 等）は `class_stats.json` を参照
+    - 敵専用タイプ（zombie / wolf / salamander / harpy / dark-lord）は `enemy_class_stats.json` を参照
+    - アンデッド系（skeleton / skeleton-archer / lich）は `physical_resistance: 30` の stat_bonus で物理耐性を底上げ
+  - **`character_generator.gd`** 変更
+    - `ENEMY_CLASS_STATS_JSON_PATH` / `ENEMY_LIST_JSON_PATH` 定数追加
+    - `_enemy_list_cache` / `_enemy_list_loaded` 静的変数追加
+    - `_load_stat_configs()` に enemy_class_stats.json のロード＋`_class_stats_cache` へのマージを追加（`_calc_stats()` が人間クラス・敵専用タイプ両方を参照できるように）
+    - `_load_enemy_list()` 追加（enemy_list.json の遅延ロード）
+    - `apply_enemy_stats(data)` 追加：enemy_list.json を参照して stat_type/rank/stat_bonus を取得 → `_calc_stats()` でステータス生成 → データに格納。敵は energy → max_sp（MP/SP区別なし）
+  - **`party_manager._spawn_member()`**：`apply_enemy_graphics()` の直後に `apply_enemy_stats()` を追加
 - [x] Phase 12-16: クリティカルヒット実装
   - **判定ロジック**（`character.gd` の `take_damage()`）
     - クリティカル率 = 攻撃側の `skill ÷ 3`%（例: skill=30 → 10%、skill=60 → 20%）
