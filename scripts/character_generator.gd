@@ -17,6 +17,9 @@ const KNOWN_CLASSES: Array = [
 	"fighter-sword", "fighter-axe", "magician-fire", "magician-water", "archer", "healer", "scout"
 ]
 
+## 魔法クラス（energy → max_mp に格納）。それ以外は max_sp に格納
+const MAGIC_CLASS_IDS: Array = ["magician-fire", "magician-water", "healer"]
+
 ## ランク値（加算式: final = base + rank_amount × rank_value）
 const RANK_VALUE: Dictionary = {"C": 0, "B": 1, "A": 2, "S": 3}
 
@@ -91,7 +94,14 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	data.sex                = sex
 	data.age                = age
 	data.build              = build
-	data.max_hp                  = stats.max_hp
+	data.max_hp              = stats.vitality
+	# energy は魔法クラス→max_mp、非魔法クラス→max_sp に格納（どちらも 0-100 スケール）
+	if chosen_class in MAGIC_CLASS_IDS:
+		data.max_mp = stats.energy
+		data.max_sp = 0
+	else:
+		data.max_mp = 0
+		data.max_sp = stats.energy
 	data.power                   = stats.power
 	data.skill                   = stats.skill
 	data.defense                 = int(class_json.get("base_defense", 3))
@@ -107,8 +117,6 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	data.behavior_description = str(class_json.get("behavior_description", ""))
 	data.attack_type        = str(class_json.get("attack_type",  "melee"))
 	data.attack_range       = int(class_json.get("attack_range", 1))
-	data.max_mp             = int(class_json.get("mp",            0))
-	data.max_sp             = int(class_json.get("max_sp",        0))
 	data.heal_mp_cost       = int(class_json.get("heal_mp_cost",  0))
 	data.buff_mp_cost       = int(class_json.get("buff_mp_cost",  0))
 

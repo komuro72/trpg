@@ -1244,7 +1244,16 @@ scripts/hit_effect.gd       ヒットエフェクト（AnimatedSprite2D / フォ
 | `assets/master/stats/attribute_stats.json` | sex / age / build の補正値、および各ステータスの random_max |
 
 - 両ファイルは `CharacterGenerator._load_stat_configs()` が初回 `_calc_stats()` 呼び出し時にロードし静的キャッシュに保持する
-- 対象ステータス: max_hp / power / skill / defense_accuracy / physical_resistance / magic_resistance / move_speed / leadership / obedience
+- 対象ステータス: vitality / energy / power / skill / defense_accuracy / physical_resistance / magic_resistance / move_speed / leadership / obedience
+
+#### vitality / energy の格納先
+| ステータスキー | 格納先 | 備考 |
+|--------------|--------|------|
+| `vitality` | `character_data.max_hp` | hp はゲーム開始時に max_hp で初期化 |
+| `energy` | 魔法クラス→`max_mp` / 非魔法クラス→`max_sp` | mp / sp はゲーム開始時に上限値で初期化 |
+
+- 魔法クラス判定: `["magician-fire", "magician-water", "healer"]`（`CharacterGenerator.MAGIC_CLASS_IDS`）
+- クラスJSON（`assets/master/classes/*.json`）の `"mp"` / `"max_sp"` フィールドは廃止（energy で代替）
 
 #### move_speed の変換
 - class_stats / attribute_stats で 0〜100 スケールのスコアを生成
@@ -1267,15 +1276,15 @@ scripts/hit_effect.gd       ヒットエフェクト（AnimatedSprite2D / フォ
 ### 各クラスのステータス最大値（設定ファイル方式・理論値）
 `max = base + rank×3 + max(sex_bonus) + max(age_bonus) + max(build_bonus) + random_max`
 
-| クラス | power | skill | phys_res | magic_res | def_acc | move_speed |
-|--------|-------|-------|----------|-----------|---------|------------|
-| fighter-sword | 65 | 65 | 60 | 20 | 55 | 50 |
-| fighter-axe | 70 | 60 | 65 | 20 | 55 | 45 |
-| archer | 65 | 70 | 55 | 20 | 55 | 50 |
-| scout | 55 | 70 | 45 | 20 | 65 | 65 |
-| magician-fire | 70 | 70 | 20 | 65 | 45 | 45 |
-| magician-water | 70 | 70 | 20 | 65 | 45 | 45 |
-| healer | 65 | 65 | 25 | 70 | 45 | 45 |
+| クラス | vitality | energy | power | skill | phys_res | magic_res | def_acc |
+|--------|----------|--------|-------|-------|----------|-----------|---------|
+| fighter-sword | 75 | 80 | 75 | 75 | 90 | 30 | 70 |
+| fighter-axe | 80 | 80 | 80 | 70 | 95 | 30 | 65 |
+| archer | 70 | 80 | 75 | 80 | 85 | 35 | 65 |
+| scout | 70 | 80 | 65 | 80 | 80 | 30 | 75 |
+| magician-fire | 65 | 80 | 80 | 80 | 35 | 85 | 60 |
+| magician-water | 65 | 80 | 80 | 80 | 35 | 85 | 60 |
+| healer | 70 | 80 | 75 | 75 | 40 | 85 | 60 |
 
 全ステータス 0〜100 の範囲内に収まっていることを確認。
 

@@ -291,15 +291,19 @@ rank値: C=0, B=1, A=2, S=3
 小数を含む場合は加算後に roundi() で整数化
 ```
 
-- すべての数値ステータス（power・skill・physical_resistance・magic_resistance・defense_accuracy）は **0〜100 の範囲**に収まるよう設定
-- HP のみ例外（上限なし）
+- すべての数値ステータス（vitality・energy・power・skill・physical_resistance・magic_resistance・defense_accuracy）は **0〜100 の範囲**に収まるよう設定
 - 数値は設定ファイルで管理（`character_generator.gd` の `CLASS_STAT_BASES` 定数は廃止済み）
 
 ### ステータス設定ファイル
 - **`assets/master/stats/class_stats.json`**：クラスごとの base（ランクC時の基本値）と rank（1段階ごとの加算値）を定義
-  - 対象ステータス: max_hp / power / skill / defense_accuracy / physical_resistance / magic_resistance / move_speed / leadership / obedience
+  - 対象ステータス: vitality / energy / power / skill / defense_accuracy / physical_resistance / magic_resistance / move_speed / leadership / obedience
 - **`assets/master/stats/attribute_stats.json`**：性別・年齢・体格の補正値と各ステータスの random_max（0〜N の乱数幅）を定義
 - `CharacterGenerator._load_stat_configs()` が初回 `_calc_stats()` 呼び出し時にロードして静的キャッシュに保持
+
+### vitality / energy の格納先
+- `vitality`（0-100）→ `character_data.max_hp`（`hp` はゲーム開始時に `max_hp` で初期化）
+- `energy`（0-100）→ 魔法クラス（magician-fire / magician-water / healer）は `max_mp`、非魔法クラスは `max_sp` に格納（`mp` / `sp` はゲーム開始時に上限値で初期化）
+- クラスJSON（`assets/master/classes/*.json`）の `"mp"` / `"max_sp"` フィールドは廃止（energy で代替）
 
 ### move_speed の変換
 - 0〜100 スコアで生成し `_convert_move_speed(score)` で秒/タイルに変換して `character_data.move_speed` に格納
@@ -1228,7 +1232,20 @@ rank値: C=0, B=1, A=2, S=3
     - `nm.set_joined_to_player(true)` 追加（NPC メンバーが hero を追従するように）
     - `player_controller.party_leader` を NPC リーダーに更新
     - `_switch_character()` の判定を `character.is_leader` ベースに変更（シンプル化）
-  - **未実装（次フェーズへ）**: クリティカルヒット・ステータス生成式の0-100レンジ化
+  - **未実装（次フェーズへ）**: クリティカルヒット
+- [x] Phase 12-15: ステータス生成システムの完成（設定ファイル方式・全ステータス0-100レンジ化）
+  - **設定ファイル方式へ移行**（`CLASS_STAT_BASES` ハードコード定数を廃止）
+    - `assets/master/stats/class_stats.json`：クラスごとの base / rank を定義
+    - `assets/master/stats/attribute_stats.json`：sex / age / build 補正値・random_max を定義
+    - `CharacterGenerator._load_stat_configs()` が初回呼び出し時にロード・静的キャッシュ
+  - **ステータスキー追加**
+    - `vitality`（0-100）→ `character_data.max_hp` に格納
+    - `energy`（0-100）→ 魔法クラス（magician-fire / magician-water / healer）は `max_mp`、非魔法クラスは `max_sp` に格納
+    - class_json の `"mp"` / `"max_sp"` フィールドは廃止（energy で代替）
+  - **全ステータス 0-100 スケールに統一**（HP/MP/SP を含む全ステータスが同一スケール）
+  - **CharacterGenerator に `MAGIC_CLASS_IDS` 定数追加**（energy の格納先判定）
+  - **`move_speed` の変換**：0-100 スコア → `_convert_move_speed()` で秒/タイルに変換して格納
+  - **`obedience` の変換**：0-100 整数スコア → `/ 100.0` で 0.0〜1.0 に変換して格納、表示は `× 100` で 0-100 整数に戻す
 - [x] Phase 13: タイトル・セーブ・メニューシステム
   - [x] **セーブシステム基盤**
     - `scripts/save_data.gd`（class_name SaveData）：slot_index / exists / hero_name_male / hero_name_female / current_floor / clear_count / playtime / to_dict() / from_dict() / format_playtime()
