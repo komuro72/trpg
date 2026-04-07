@@ -560,7 +560,11 @@ func _get_stat_rows(ch: Character) -> Array:
 		var skill_label := "魔法技量" if _is_magic_cls else "物理技量"
 		rows.append({"label": skill_label, "type": "num",
 			"base": ch.skill, "bonus": cd.get_weapon_skill_bonus()})
-	rows.append({"label": "防御力",        "type": "num",    "base": ch.defense, "bonus": 0})
+	# 防御強度（素値0・装備補正のみ。武器と盾を別行）
+	rows.append({"label": "武器防御強度",  "type": "num",    "base": 0, "bonus": cd.get_weapon_block_power()})
+	var _can_shield := cd.class_id in ["fighter-sword", "fighter-axe"]
+	if _can_shield:
+		rows.append({"label": "盾防御強度", "type": "num",   "base": 0, "bonus": cd.get_shield_block_power()})
 	rows.append({"label": "防御技量",      "type": "num",
 		"base": cd.defense_accuracy, "bonus": 0})
 	var phys_equip := cd.get_total_physical_resistance_score() - cd.physical_resistance
@@ -572,11 +576,7 @@ func _get_stat_rows(ch: Character) -> Array:
 	rows.append({"label": "攻撃タイプ",    "type": "str",
 		"value": ATTACK_TYPE_LABELS.get(cd.attack_type, cd.attack_type) as String})
 	rows.append({"label": "射程(タイル)",  "type": "num",    "base": cd.attack_range, "bonus": cd.get_weapon_range_bonus()})
-	rows.append({"label": "攻撃溜め(秒)",  "type": "float",  "base": cd.pre_delay,    "bonus": 0.0})
-	rows.append({"label": "攻撃硬直(秒)",  "type": "float",  "base": cd.post_delay,   "bonus": 0.0})
 	rows.append({"label": "ランク",        "type": "str",    "value": cd.rank})
-	rows.append({"label": "飛行",          "type": "str",
-		"value": "あり" if cd.is_flying else "なし"})
 	rows.append({"label": "統率力",        "type": "num",    "base": cd.leadership, "bonus": 0})
 	rows.append({"label": "従順度",        "type": "num",    "base": roundi(cd.obedience * 100.0), "bonus": 0})
 	return rows
