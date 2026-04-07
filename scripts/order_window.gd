@@ -578,7 +578,7 @@ func _get_stat_rows(ch: Character) -> Array:
 	rows.append({"label": "飛行",          "type": "str",
 		"value": "あり" if cd.is_flying else "なし"})
 	rows.append({"label": "統率力",        "type": "num",    "base": cd.leadership, "bonus": 0})
-	rows.append({"label": "従順度",        "type": "float",  "base": cd.obedience,  "bonus": 0.0})
+	rows.append({"label": "従順度",        "type": "num",    "base": roundi(cd.obedience * 100.0), "bonus": 0})
 	return rows
 
 
