@@ -1265,6 +1265,27 @@ rank値: C=0, B=1, A=2, S=3
     - MessageLog へのメッセージ通知なし
   - **エフェクト**：クリティカル時は `_spawn_hit_effect(actual)` を2回呼んで二重エフェクトで強調
   - **SE・グラフィック**：既存の HitEffect / SE をそのまま流用
+- [x] Phase 12-18: バグ修正（フロア遷移クラッシュ・敵未起動・キャラ切替・アウトライン）
+  - **NPC フロア遷移時の freed hero クラッシュ（`game_map.gd`）**
+    - `_transition_npc_floor()` で hero が死亡済み（freed）の状態で `dialogue_trigger.setup(hero, ...)` を呼ぶとクラッシュ
+    - 修正：`is_instance_valid(hero)` チェックを追加してから setup を呼ぶ
+  - **`party.members` の freed キャラへの as キャストクラッシュ（`game_map.gd`）**
+    - 死亡したキャラクターが `party.members` に残留し、`as Character` キャストでクラッシュ
+    - 修正：ループを `for member_var: Variant` に変更し、`is_instance_valid()` チェックを先に実施（4箇所）
+  - **フロア遷移後の敵が動かない問題（`game_map.gd`）**
+    - `_link_all_character_lists()` が起動時にしか呼ばれず、新フロアの EnemyManager が `set_friendly_list()` を受け取れないため WAIT のまま
+    - 修正：`_transition_floor()` 内で `_link_all_character_lists()` を呼ぶ
+  - **`VisionSystem._process` で freed な party メンバーへの as キャストクラッシュ（`vision_system.gd`）**
+    - 死亡キャラが `_party.members` に残り、VisionSystem の3か所でクラッシュ
+    - 修正：`for m: Variant in _party.members` ＋ `is_instance_valid(m)` チェックを3箇所に追加
+  - **LB/RB キャラ切り替えが2人目操作後に効かなくなる問題（`player_controller.gd`）**
+    - `_switch_character()` が `character.is_leader`（現在操作キャラのリーダーフラグ）を判定していたため、非リーダーキャラに切り替えると以降全切り替えが不可に
+    - 修正：`player_is_leader: bool = true` フラグを追加し、NPC パーティーに合流してリーダーを譲った場合のみ `false` に設定する方式に変更
+    - `_merge_player_into_npc_party()` で `player_controller.player_is_leader = false` をセット
+  - **攻撃キャンセル後にアウトラインが操作キャラに残るバグ（`player_controller.gd`）**
+    - `_exit_targeting()` の末尾で `character.set_outline(Color.WHITE, 1.0)` を呼んでいたが、操作キャラは元々アウトラインなしのデザインのため、キャンセルのたびに白アウトラインが付与されていた
+    - あわせて `_exit_targeting()` / `_confirm_target()` のアウトラインクリアを `Character._all_chars`（全キャラ静的レジストリ）の走査に変更し、`_valid_targets` から漏れたアウトラインも確実に除去
+    - 修正：不要な `character.set_outline(Color.WHITE, 1.0)` 呼び出しを削除
 - [x] Phase 13: タイトル・セーブ・メニューシステム
   - [x] **セーブシステム基盤**
     - `scripts/save_data.gd`（class_name SaveData）：slot_index / exists / hero_name_male / hero_name_female / current_floor / clear_count / playtime / to_dict() / from_dict() / format_playtime()
