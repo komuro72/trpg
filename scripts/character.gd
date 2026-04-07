@@ -779,7 +779,7 @@ func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character =
 
 	# 戦闘計算ログ出力
 	_log_damage(attacker, raw_amount, multiplier, attack_is_magic,
-		dir_result, defense_succeeded, blocked, resistance, actual)
+		dir_result, defense_succeeded, blocked, resistance, actual, is_critical)
 
 	hp = max(0, hp - actual)
 	_spawn_hit_effect(actual)
@@ -885,7 +885,8 @@ func _calc_block_per_class(direction: String) -> int:
 
 ## 戦闘計算ログを出力する
 func _log_damage(attacker: Character, raw: int, mult: float, is_magic: bool,
-		dir: String, def_ok: bool, blocked: int, resist: float, actual: int) -> void:
+		dir: String, def_ok: bool, blocked: int, resist: float, actual: int,
+		is_critical: bool = false) -> void:
 	if MessageLog == null:
 		return
 	var atk_name := _char_display_name(attacker)
@@ -894,10 +895,11 @@ func _log_damage(attacker: Character, raw: int, mult: float, is_magic: bool,
 	# 威力部分
 	var power_label: String
 	var base_power := int(float(raw) * mult)
+	var crit_tag := " [クリティカル!]" if is_critical else ""
 	if is_magic:
-		power_label = "魔法威力%d" % base_power
+		power_label = "魔法威力%d%s" % [base_power, crit_tag]
 	else:
-		power_label = "物理威力%d" % base_power
+		power_label = "物理威力%d%s" % [base_power, crit_tag]
 
 	# 方向・防御部分
 	var dir_str: String
