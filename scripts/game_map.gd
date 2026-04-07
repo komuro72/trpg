@@ -1350,6 +1350,9 @@ func _transition_floor(direction: int) -> void:
 		if is_instance_valid(nm):
 			nm.activate()
 
+	# 新フロアの敵・NPC に友好キャラリストを配布（フロア遷移時に未設定になる問題を修正）
+	_link_all_character_lists()
+
 	# PlayerController の参照を更新
 	if player_controller != null:
 		player_controller.map_data = new_map
