@@ -519,9 +519,6 @@ func _exit_targeting() -> void:
 	if _cursor != null:
 		_cursor.queue_free()
 		_cursor = null
-	# 操作キャラの常時アウトラインを復元
-	if is_instance_valid(character):
-		character.set_outline(Color.WHITE, 1.0)
 
 
 ## TARGETING モードでターゲット確定 → 射程チェック → 攻撃実行 → POST_DELAY へ
