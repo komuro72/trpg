@@ -892,24 +892,25 @@ func _log_damage(attacker: Character, raw: int, mult: float, is_magic: bool,
 	var atk_name := _char_display_name(attacker)
 	var tgt_name := _char_display_name(self)
 
-	# 威力部分
-	var power_label: String
-	var base_power := int(float(raw) * mult)
-	var crit_tag := " [クリティカル!]" if is_critical else ""
-	if is_magic:
-		power_label = "魔法威力%d%s" % [base_power, crit_tag]
+	# ベースダメージ（クリティカル前）＋クリティカル補正後のダメージ
+	var base_dmg := raw                        # クリティカル前のベースダメージ
+	var after_crit := int(float(raw) * mult)   # クリティカル後・防御前のダメージ
+	var type_tag := "（魔法）" if is_magic else ""
+	var dmg_label: String
+	if is_critical:
+		dmg_label = "ベースダメージ%d%s [クリティカル!×2]→%d" % [base_dmg, type_tag, after_crit]
 	else:
-		power_label = "物理威力%d%s" % [base_power, crit_tag]
+		dmg_label = "ベースダメージ%d%s" % [base_dmg, type_tag]
 
-	# 方向・防御部分
+	# 方向・防御部分（after_crit を基準に計算）
 	var dir_str: String
 	var dir_jp := _dir_to_jp(dir)
 	if dir == "back" or dir.is_empty():
 		dir_str = "方向:%s→防御スキップ" % dir_jp if not dir.is_empty() else ""
 	elif def_ok:
-		dir_str = "方向:%s→防御成功(強度%d)→%d" % [dir_jp, blocked, maxi(0, base_power - get_effective_defense() - blocked)]
+		dir_str = "方向:%s→防御成功(強度%d)→%d" % [dir_jp, blocked, maxi(0, after_crit - get_effective_defense() - blocked)]
 	else:
-		dir_str = "方向:%s→防御失敗→%d" % [dir_jp, maxi(0, base_power - get_effective_defense())]
+		dir_str = "方向:%s→防御失敗→%d" % [dir_jp, maxi(0, after_crit - get_effective_defense())]
 
 	# 耐性部分
 	var resist_label: String
@@ -919,7 +920,7 @@ func _log_damage(attacker: Character, raw: int, mult: float, is_magic: bool,
 		resist_label = "耐性%d%%" % int(resist * 100.0)
 
 	var hp_after := maxi(0, hp - actual)
-	var text := "%s → %s: %s" % [atk_name, tgt_name, power_label]
+	var text := "%s → %s: %s" % [atk_name, tgt_name, dmg_label]
 	if not dir_str.is_empty():
 		text += " / %s" % dir_str
 	text += " / %s→最終%d / HP%d→%d" % [resist_label, actual, hp, hp_after]
