@@ -916,10 +916,11 @@ func _log_damage(attacker: Character, raw: int, mult: float, is_magic: bool,
 	else:
 		resist_label = "耐性%d%%" % int(resist * 100.0)
 
+	var hp_after := maxi(0, hp - actual)
 	var text := "%s → %s: %s" % [atk_name, tgt_name, power_label]
 	if not dir_str.is_empty():
 		text += " / %s" % dir_str
-	text += " / %s→最終%d" % [resist_label, actual]
+	text += " / %s→最終%d / HP%d→%d" % [resist_label, actual, hp, hp_after]
 	MessageLog.add_combat(text, grid_pos)
 
 
