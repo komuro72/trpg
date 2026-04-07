@@ -1190,7 +1190,7 @@ func _transition_npc_floor(nm: NpcManager, direction: int) -> void:
 			vision_system.add_npc_manager(nm)
 			nm.set_vision_system(vision_system)
 		# 新フロア現フロアへ到着：dialogue_trigger を更新
-		if dialogue_trigger != null:
+		if dialogue_trigger != null and is_instance_valid(hero):
 			dialogue_trigger.setup(hero, npc_managers, enemy_managers, vision_system, map_data)
 		# NPC が現フロアに到着したので blocking_characters を再構築（すり抜け防止）
 		_rebuild_blocking_characters()
