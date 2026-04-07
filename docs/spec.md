@@ -1227,31 +1227,57 @@ scripts/hit_effect.gd       ヒットエフェクト（AnimatedSprite2D / フォ
 1. 利用可能なグラフィックセット一覧から対象クラスに合うものをランダム選出
 2. `assets/master/names.json` から性別に合う名前をランダム選出
 3. ランク（S/A/B/C）をランダム決定（グラフィックとは独立）
-4. `最終ステータス = クラス基準値 × ランク補正 × 体格補正 × 性別補正 × 年齢補正` で計算
+4. `_calc_stats()` でステータスを計算（設定ファイル方式・下記参照）
 
-### ステータス決定構造
-| 要素 | 補正幅 | 方向性 |
-|------|--------|--------|
-| ランク（S〜C） | 約2倍差 | 見た目に非依存。純粋な強さ |
-| 体格（slim/medium/muscular） | 約2倍差 | サブクラス的機能。muscular=高火力低回避、slim=低火力高回避 |
-| 性別（male/female） | ±20% | male=近接攻撃力・HP高め、female=速度・回避・魔法系高め |
-| 年齢（young/adult/elder） | ±20% | young=速度・回避高め、adult=バランス、elder=魔法・耐性高め |
+### ステータス決定構造（設定ファイル方式・2026-04-07〜）
+```
+最終値 = class_base + rank × class_rank_bonus
+       + sex_bonus + age_bonus + build_bonus
+       + randi() % (random_max + 1)
+小数を含む場合は加算後に roundi() で整数化
+```
 
-### 各クラスのステータス最大値（検証済み・2026-04-06）
+#### 設定ファイル
+| ファイル | 内容 |
+|---------|------|
+| `assets/master/stats/class_stats.json` | クラスごとの base（ランクC時基本値）と rank（1段階ごとの加算値） |
+| `assets/master/stats/attribute_stats.json` | sex / age / build の補正値、および各ステータスの random_max |
 
-`max = base + rank×3 + max(sex) + max(age) + max(build) + (rand-1)`
+- 両ファイルは `CharacterGenerator._load_stat_configs()` が初回 `_calc_stats()` 呼び出し時にロードし静的キャッシュに保持する
+- 対象ステータス: max_hp / power / skill / defense_accuracy / physical_resistance / magic_resistance / move_speed / leadership / obedience
 
-| クラス | power | skill | phys_res | magic_res | def_acc |
-|--------|-------|-------|----------|-----------|---------|
-| fighter-sword | 85 | 62 | 62 | 21 | 74 |
-| fighter-axe | 90 | 56 | 64 | 20 | 72 |
-| archer | 71 | 79 | 27 | 22 | 72 |
-| scout | 68 | 79 | 27 | 23 | 81 |
-| magician-fire | 82 | 62 | 14 | 49 | 61 |
-| magician-water | 77 | 64 | 14 | 49 | 63 |
-| healer | 85 | 55 | 15 | 52 | 61 |
+#### move_speed の変換
+- class_stats / attribute_stats で 0〜100 スケールのスコアを生成
+- `_convert_move_speed(score: int) -> float` で秒/タイルに変換して `character_data.move_speed` に格納
+- 変換式: `seconds = max(0.1, 0.8 - score × 0.006)`（要調整）
+  - score=0 → 0.80s（最遅）、score=50 → 0.50s、score=100 → 0.20s（最速）
 
-全クラス全ステータス、最大値が100以内に収まっていることを確認済み。`CLASS_STAT_BASES` の修正は不要。
+#### obedience の変換
+- 0〜100 の整数スコアで生成し `/ 100.0` で 0.0〜1.0 に変換して格納
+
+#### 要素別の方向性
+| 要素 | 設定箇所 | 方向性 |
+|------|---------|--------|
+| ランク（S〜C） | class_stats.json の rank 値 | rank C=0, S=3 の倍率で加算 |
+| 性別（male/female） | attribute_stats.json の sex | male=威力・物理耐性・統率力高め、female=技量・魔法耐性・防御技量高め |
+| 年齢（young/adult/elder） | attribute_stats.json の age | young=威力・移動速度高め、adult=バランス、elder=技量・魔法耐性高め |
+| 体格（slim/medium/muscular） | attribute_stats.json の build | muscular=威力・物理耐性高め、slim=技量・防御技量高め |
+| 乱数 | attribute_stats.json の random_max | ステータスごとに幅を設定（max_hp:15、その他:10、leadership/obedience:20） |
+
+### 各クラスのステータス最大値（設定ファイル方式・理論値）
+`max = base + rank×3 + max(sex_bonus) + max(age_bonus) + max(build_bonus) + random_max`
+
+| クラス | power | skill | phys_res | magic_res | def_acc | move_speed |
+|--------|-------|-------|----------|-----------|---------|------------|
+| fighter-sword | 65 | 65 | 60 | 20 | 55 | 50 |
+| fighter-axe | 70 | 60 | 65 | 20 | 55 | 45 |
+| archer | 65 | 70 | 55 | 20 | 55 | 50 |
+| scout | 55 | 70 | 45 | 20 | 65 | 65 |
+| magician-fire | 70 | 70 | 20 | 65 | 45 | 45 |
+| magician-water | 70 | 70 | 20 | 65 | 45 | 45 |
+| healer | 65 | 65 | 25 | 70 | 45 | 45 |
+
+全ステータス 0〜100 の範囲内に収まっていることを確認。
 
 ### グラフィックセット（CharacterData の画像パス）
 ```

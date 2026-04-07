@@ -1,0 +1,79 @@
+{
+  "fighter-sword": {
+    "max_hp":              { "base": 60, "rank": 10 },
+    "power":               { "base": 30, "rank": 10 },
+    "skill":               { "base": 30, "rank": 10 },
+    "defense_accuracy":    { "base": 20, "rank": 10 },
+    "physical_resistance": { "base": 25, "rank": 10 },
+    "magic_resistance":    { "base": 10, "rank":  0 },
+    "move_speed":          { "base": 30, "rank":  0 },
+    "leadership":          { "base": 30, "rank": 10 },
+    "obedience":           { "base": 30, "rank":  0 }
+  },
+  "fighter-axe": {
+    "max_hp":              { "base": 65, "rank": 10 },
+    "power":               { "base": 35, "rank": 10 },
+    "skill":               { "base": 25, "rank": 10 },
+    "defense_accuracy":    { "base": 20, "rank": 10 },
+    "physical_resistance": { "base": 30, "rank": 10 },
+    "magic_resistance":    { "base": 10, "rank":  0 },
+    "move_speed":          { "base": 25, "rank":  0 },
+    "leadership":          { "base": 30, "rank": 10 },
+    "obedience":           { "base": 30, "rank":  0 }
+  },
+  "scout": {
+    "max_hp":              { "base": 48, "rank":  8 },
+    "power":               { "base": 20, "rank": 10 },
+    "skill":               { "base": 35, "rank": 10 },
+    "defense_accuracy":    { "base": 30, "rank": 10 },
+    "physical_resistance": { "base": 15, "rank":  5 },
+    "magic_resistance":    { "base": 10, "rank":  0 },
+    "move_speed":          { "base": 35, "rank":  5 },
+    "leadership":          { "base": 20, "rank": 10 },
+    "obedience":           { "base": 40, "rank":  0 }
+  },
+  "archer": {
+    "max_hp":              { "base": 50, "rank":  8 },
+    "power":               { "base": 30, "rank": 10 },
+    "skill":               { "base": 35, "rank": 10 },
+    "defense_accuracy":    { "base": 20, "rank": 10 },
+    "physical_resistance": { "base": 20, "rank": 10 },
+    "magic_resistance":    { "base": 10, "rank":  0 },
+    "move_speed":          { "base": 30, "rank":  0 },
+    "leadership":          { "base": 20, "rank": 10 },
+    "obedience":           { "base": 20, "rank":  0 }
+  },
+  "magician-fire": {
+    "max_hp":              { "base": 45, "rank":  7 },
+    "power":               { "base": 35, "rank": 10 },
+    "skill":               { "base": 35, "rank": 10 },
+    "defense_accuracy":    { "base": 10, "rank": 10 },
+    "physical_resistance": { "base": 10, "rank":  0 },
+    "magic_resistance":    { "base": 30, "rank": 10 },
+    "move_speed":          { "base": 25, "rank":  0 },
+    "leadership":          { "base": 30, "rank": 10 },
+    "obedience":           { "base": 20, "rank":  0 }
+  },
+  "magician-water": {
+    "max_hp":              { "base": 45, "rank":  7 },
+    "power":               { "base": 35, "rank": 10 },
+    "skill":               { "base": 35, "rank": 10 },
+    "defense_accuracy":    { "base": 10, "rank": 10 },
+    "physical_resistance": { "base": 10, "rank":  0 },
+    "magic_resistance":    { "base": 30, "rank": 10 },
+    "move_speed":          { "base": 25, "rank":  0 },
+    "leadership":          { "base": 30, "rank": 10 },
+    "obedience":           { "base": 20, "rank":  0 }
+  },
+  "healer": {
+    "max_hp":              { "base": 48, "rank":  7 },
+    "power":               { "base": 30, "rank": 10 },
+    "skill":               { "base": 30, "rank": 10 },
+    "defense_accuracy":    { "base": 10, "rank": 10 },
+    "physical_resistance": { "base": 15, "rank":  0 },
+    "magic_resistance":    { "base": 35, "rank": 10 },
+    "move_speed":          { "base": 25, "rank":  0 },
+    "leadership":          { "base": 20, "rank": 10 },
+    "obedience":           { "base": 40, "rank":  0 }
+  }
+}

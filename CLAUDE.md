@@ -286,21 +286,36 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 
 ### ステータス決定構造
 ```
-最終ステータス = base_value + rank_amount × rank_value + sex_bonus + age_bonus + build_bonus + random_bonus
-rank_value: C=0, B=1, A=2, S=3
+最終値 = class_base + rank × class_rank_bonus + sex_bonus + age_bonus + build_bonus + randi() % (random_max + 1)
+rank値: C=0, B=1, A=2, S=3
+小数を含む場合は加算後に roundi() で整数化
 ```
 
-- すべての数値ステータス（power・skill・physical_resistance・magic_resistance・defense_accuracy）は **0〜100 の範囲**に収まるよう base_value・各補正量を設定
+- すべての数値ステータス（power・skill・physical_resistance・magic_resistance・defense_accuracy）は **0〜100 の範囲**に収まるよう設定
 - HP のみ例外（上限なし）
-- 具体的な数値は `character_generator.gd` の `CLASS_STAT_BASES` テーブルに定義（Claude Code が設定）
+- 数値は設定ファイルで管理（`character_generator.gd` の `CLASS_STAT_BASES` 定数は廃止済み）
+
+### ステータス設定ファイル
+- **`assets/master/stats/class_stats.json`**：クラスごとの base（ランクC時の基本値）と rank（1段階ごとの加算値）を定義
+  - 対象ステータス: max_hp / power / skill / defense_accuracy / physical_resistance / magic_resistance / move_speed / leadership / obedience
+- **`assets/master/stats/attribute_stats.json`**：性別・年齢・体格の補正値と各ステータスの random_max（0〜N の乱数幅）を定義
+- `CharacterGenerator._load_stat_configs()` が初回 `_calc_stats()` 呼び出し時にロードして静的キャッシュに保持
+
+### move_speed の変換
+- 0〜100 スコアで生成し `_convert_move_speed(score)` で秒/タイルに変換して `character_data.move_speed` に格納
+- 変換式: `seconds = max(0.1, 0.8 - score × 0.006)`（要調整）
+  - score=0 → 0.80s/タイル（最遅）、score=50 → 0.50s/タイル、score=100 → 0.20s/タイル
+
+### obedience の変換
+- 0〜100 の整数スコアで生成し `/ 100.0` で 0.0〜1.0 に変換して格納
 
 | 要素 | 設定方法 | 方向性 |
 |------|---------|--------|
-| ランク（S〜C） | rank_amount × rank_value | C=0加算、S=最大加算（クラスごとに rank_amount を設定） |
-| 性別（sex_bonus） | クラス・ステータスごとに設定 | 男性=近接威力・HP高め、女性=速度・魔法系・技量高め |
-| 年齢（age_bonus） | クラス・ステータスごとに設定 | 若年=技量高め、壮年=バランス、老年=魔法・耐性高め |
-| 体格（build_bonus） | クラス・ステータスごとに設定 | 筋肉質=威力・HP高め、細身=技量高め |
-| ランダム（random_bonus） | 0〜5 程度の整数乱数 | ランダムな個体差 |
+| ランク（S〜C） | class_stats.json の rank × rank値（C=0, S=3） | クラスごとに rank 補正量を設定 |
+| 性別（sex_bonus） | attribute_stats.json の sex セクション | 男性=威力・物理耐性高め、女性=技量・魔法耐性・統率力高め |
+| 年齢（age_bonus） | attribute_stats.json の age セクション | 若年=威力・移動速度高め、壮年=バランス、老年=技量・魔法耐性高め |
+| 体格（build_bonus） | attribute_stats.json の build セクション | 筋肉質=威力・物理耐性高め、細身=技量高め |
+| ランダム（random_max） | attribute_stats.json の random_max セクション | ステータスごとに乱数幅を設定（0〜N） |
 
 ## NPC仕様
 

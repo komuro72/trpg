@@ -10,6 +10,8 @@ const GRAPHIC_SET_DIR       := "res://assets/images/characters/"
 const ENEMY_GRAPHIC_SET_DIR := "res://assets/images/enemies/"
 const NAMES_JSON_PATH := "res://assets/master/names.json"
 const CLASS_JSON_DIR  := "res://assets/master/classes/"
+const CLASS_STATS_JSON_PATH := "res://assets/master/stats/class_stats.json"
+const ATTR_STATS_JSON_PATH  := "res://assets/master/stats/attribute_stats.json"
 
 const KNOWN_CLASSES: Array = [
 	"fighter-sword", "fighter-axe", "magician-fire", "magician-water", "archer", "healer", "scout"
@@ -26,67 +28,11 @@ const RANK_THRESHOLDS: Array = [
 	[100,"C"],
 ]
 
-## ステータス生成ベースデータ（クラスごと・全ステータス 0-100 に収まる値に設定）
-## 各エントリ: { base, rank, sex:{m,f}, age:{y,a,e}, build:{mu,me,sl}, rand }
-## final = base + rank × RANK_VALUE[rank] + sex[sex] + age[age] + build[build] + randi()%rand
-const CLASS_STAT_BASES: Dictionary = {
-	"fighter-sword": {
-		"power":               {"base": 20, "rank": 15, "sex": {"male":  5, "female": -2}, "age": {"young": 0, "adult": 3, "elder": -3}, "build": {"muscular":  8, "medium": 0, "slim": -5}, "rand": 5},
-		"skill":               {"base": 18, "rank": 10, "sex": {"male":  0, "female":  3}, "age": {"young": 3, "adult": 0, "elder": -2}, "build": {"muscular": -3, "medium": 0, "slim":  5}, "rand": 4},
-		"physical_resistance": {"base": 20, "rank":  8, "sex": {"male":  5, "female": -2}, "age": {"young": 0, "adult": 0, "elder":  3}, "build": {"muscular":  8, "medium": 0, "slim": -5}, "rand": 3},
-		"magic_resistance":    {"base":  5, "rank":  4, "sex": {"male":  0, "female":  0}, "age": {"young": 0, "adult": 0, "elder":  3}, "build": {"muscular":  0, "medium": 0, "slim":  0}, "rand": 2},
-		"defense_accuracy":    {"base": 40, "rank":  8, "sex": {"male":  0, "female":  3}, "age": {"young": 0, "adult": 0, "elder":  0}, "build": {"muscular": -3, "medium": 0, "slim":  5}, "rand": 3},
-		"max_hp":              {"base": 60, "rank": 10, "sex": {"male":  8, "female": -5}, "age": {"young":-5, "adult": 0, "elder": -5}, "build": {"muscular": 15, "medium": 0, "slim":-10}, "rand":10},
-	},
-	"fighter-axe": {
-		"power":               {"base": 22, "rank": 15, "sex": {"male":  6, "female": -2}, "age": {"young": 0, "adult": 3, "elder": -3}, "build": {"muscular": 10, "medium": 0, "slim": -6}, "rand": 5},
-		"skill":               {"base": 15, "rank":  9, "sex": {"male":  0, "female":  3}, "age": {"young": 3, "adult": 0, "elder": -2}, "build": {"muscular": -3, "medium": 0, "slim":  5}, "rand": 4},
-		"physical_resistance": {"base": 22, "rank":  8, "sex": {"male":  5, "female": -2}, "age": {"young": 0, "adult": 0, "elder":  3}, "build": {"muscular":  8, "medium": 0, "slim": -5}, "rand": 3},
-		"magic_resistance":    {"base":  4, "rank":  4, "sex": {"male":  0, "female":  0}, "age": {"young": 0, "adult": 0, "elder":  3}, "build": {"muscular":  0, "medium": 0, "slim":  0}, "rand": 2},
-		"defense_accuracy":    {"base": 38, "rank":  8, "sex": {"male":  0, "female":  3}, "age": {"young": 0, "adult": 0, "elder":  0}, "build": {"muscular": -3, "medium": 0, "slim":  5}, "rand": 3},
-		"max_hp":              {"base": 65, "rank": 10, "sex": {"male":  8, "female": -5}, "age": {"young":-5, "adult": 0, "elder": -5}, "build": {"muscular": 15, "medium": 0, "slim":-10}, "rand":10},
-	},
-	"archer": {
-		"power":               {"base": 18, "rank": 13, "sex": {"male": -2, "female":  3}, "age": {"young": 3, "adult": 0, "elder": -2}, "build": {"muscular": -3, "medium": 0, "slim":  5}, "rand": 4},
-		"skill":               {"base": 25, "rank": 12, "sex": {"male": -2, "female":  3}, "age": {"young": 5, "adult": 0, "elder": -3}, "build": {"muscular": -5, "medium": 0, "slim":  7}, "rand": 4},
-		"physical_resistance": {"base":  8, "rank":  5, "sex": {"male":  0, "female":  0}, "age": {"young": 0, "adult": 0, "elder":  0}, "build": {"muscular":  3, "medium": 0, "slim": -2}, "rand": 2},
-		"magic_resistance":    {"base":  6, "rank":  4, "sex": {"male":  0, "female":  0}, "age": {"young": 0, "adult": 0, "elder":  3}, "build": {"muscular":  0, "medium": 0, "slim":  0}, "rand": 2},
-		"defense_accuracy":    {"base": 35, "rank":  8, "sex": {"male":  0, "female":  3}, "age": {"young": 3, "adult": 0, "elder": -2}, "build": {"muscular": -3, "medium": 0, "slim":  5}, "rand": 3},
-		"max_hp":              {"base": 50, "rank":  8, "sex": {"male":  5, "female": -3}, "age": {"young":-3, "adult": 0, "elder": -3}, "build": {"muscular": 10, "medium": 0, "slim": -7}, "rand": 8},
-	},
-	"scout": {
-		"power":               {"base": 16, "rank": 12, "sex": {"male": -2, "female":  5}, "age": {"young": 3, "adult": 0, "elder": -2}, "build": {"muscular": -3, "medium": 0, "slim":  5}, "rand": 4},
-		"skill":               {"base": 22, "rank": 12, "sex": {"male": -2, "female":  5}, "age": {"young": 5, "adult": 0, "elder": -3}, "build": {"muscular": -5, "medium": 0, "slim":  8}, "rand": 4},
-		"physical_resistance": {"base":  8, "rank":  5, "sex": {"male":  0, "female":  0}, "age": {"young": 0, "adult": 0, "elder":  0}, "build": {"muscular":  3, "medium": 0, "slim": -2}, "rand": 2},
-		"magic_resistance":    {"base":  7, "rank":  4, "sex": {"male":  0, "female":  0}, "age": {"young": 0, "adult": 0, "elder":  3}, "build": {"muscular":  0, "medium": 0, "slim":  0}, "rand": 2},
-		"defense_accuracy":    {"base": 42, "rank":  8, "sex": {"male":  0, "female":  3}, "age": {"young": 3, "adult": 0, "elder": -2}, "build": {"muscular": -3, "medium": 0, "slim":  7}, "rand": 3},
-		"max_hp":              {"base": 48, "rank":  8, "sex": {"male":  5, "female": -3}, "age": {"young":-3, "adult": 0, "elder": -3}, "build": {"muscular":  8, "medium": 0, "slim": -6}, "rand": 8},
-	},
-	"magician-fire": {
-		"power":               {"base": 22, "rank": 14, "sex": {"male": -3, "female":  5}, "age": {"young":-2, "adult": 0, "elder":  5}, "build": {"muscular": -5, "medium": 0, "slim":  5}, "rand": 4},
-		"skill":               {"base": 20, "rank": 10, "sex": {"male": -2, "female":  3}, "age": {"young": 2, "adult": 0, "elder": -2}, "build": {"muscular": -3, "medium": 0, "slim":  5}, "rand": 3},
-		"physical_resistance": {"base":  4, "rank":  3, "sex": {"male":  0, "female":  0}, "age": {"young": 0, "adult": 0, "elder":  0}, "build": {"muscular":  0, "medium": 0, "slim":  0}, "rand": 2},
-		"magic_resistance":    {"base": 15, "rank":  7, "sex": {"male":  0, "female":  3}, "age": {"young": 0, "adult": 0, "elder":  5}, "build": {"muscular":  0, "medium": 0, "slim":  3}, "rand": 3},
-		"defense_accuracy":    {"base": 30, "rank":  7, "sex": {"male":  0, "female":  3}, "age": {"young": 0, "adult": 0, "elder":  0}, "build": {"muscular": -3, "medium": 0, "slim":  5}, "rand": 3},
-		"max_hp":              {"base": 45, "rank":  7, "sex": {"male":  3, "female": -3}, "age": {"young":-3, "adult": 0, "elder": -3}, "build": {"muscular":  8, "medium": 0, "slim": -5}, "rand": 7},
-	},
-	"magician-water": {
-		"power":               {"base": 20, "rank": 13, "sex": {"male": -3, "female":  5}, "age": {"young":-2, "adult": 0, "elder":  5}, "build": {"muscular": -5, "medium": 0, "slim":  5}, "rand": 4},
-		"skill":               {"base": 22, "rank": 10, "sex": {"male": -2, "female":  3}, "age": {"young": 2, "adult": 0, "elder": -2}, "build": {"muscular": -3, "medium": 0, "slim":  5}, "rand": 3},
-		"physical_resistance": {"base":  4, "rank":  3, "sex": {"male":  0, "female":  0}, "age": {"young": 0, "adult": 0, "elder":  0}, "build": {"muscular":  0, "medium": 0, "slim":  0}, "rand": 2},
-		"magic_resistance":    {"base": 15, "rank":  7, "sex": {"male":  0, "female":  3}, "age": {"young": 0, "adult": 0, "elder":  5}, "build": {"muscular":  0, "medium": 0, "slim":  3}, "rand": 3},
-		"defense_accuracy":    {"base": 32, "rank":  7, "sex": {"male":  0, "female":  3}, "age": {"young": 0, "adult": 0, "elder":  0}, "build": {"muscular": -3, "medium": 0, "slim":  5}, "rand": 3},
-		"max_hp":              {"base": 45, "rank":  7, "sex": {"male":  3, "female": -3}, "age": {"young":-3, "adult": 0, "elder": -3}, "build": {"muscular":  8, "medium": 0, "slim": -5}, "rand": 7},
-	},
-	"healer": {
-		"power":               {"base": 25, "rank": 14, "sex": {"male": -3, "female":  5}, "age": {"young":-3, "adult": 0, "elder":  7}, "build": {"muscular": -5, "medium": 0, "slim":  3}, "rand": 4},
-		"skill":               {"base": 18, "rank":  9, "sex": {"male": -2, "female":  3}, "age": {"young": 2, "adult": 0, "elder":  0}, "build": {"muscular": -3, "medium": 0, "slim":  3}, "rand": 3},
-		"physical_resistance": {"base":  5, "rank":  3, "sex": {"male":  0, "female":  0}, "age": {"young": 0, "adult": 0, "elder":  0}, "build": {"muscular":  0, "medium": 0, "slim":  0}, "rand": 2},
-		"magic_resistance":    {"base": 18, "rank":  7, "sex": {"male":  0, "female":  3}, "age": {"young": 0, "adult": 0, "elder":  5}, "build": {"muscular":  0, "medium": 0, "slim":  3}, "rand": 3},
-		"defense_accuracy":    {"base": 30, "rank":  7, "sex": {"male":  0, "female":  3}, "age": {"young": 0, "adult": 0, "elder":  0}, "build": {"muscular": -3, "medium": 0, "slim":  5}, "rand": 3},
-		"max_hp":              {"base": 48, "rank":  7, "sex": {"male":  3, "female": -3}, "age": {"young":-3, "adult": 0, "elder": -3}, "build": {"muscular":  8, "medium": 0, "slim": -5}, "rand": 7},
-	},
-}
+## ステータス設定JSONのキャッシュ（class_stats.json / attribute_stats.json）
+## 初回の _calc_stats() 呼び出し時にロードする
+static var _class_stats_cache: Dictionary = {}
+static var _attr_stats_cache:  Dictionary = {}
+static var _stats_loaded: bool = false
 
 ## 使用済み名前・画像セットの追跡（重複防止）。シーン再起動でリセットされる
 static var _used_names: Dictionary = {}       ## { name: String -> true }
@@ -152,6 +98,9 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	data.physical_resistance     = stats.physical_resistance
 	data.magic_resistance        = stats.magic_resistance
 	data.defense_accuracy        = stats.defense_accuracy
+	data.move_speed              = _convert_move_speed(stats.move_speed)
+	data.leadership              = stats.leadership
+	data.obedience               = clampf(float(stats.obedience) / 100.0, 0.0, 1.0)
 	data.pre_delay          = float(class_json.get("pre_delay",  0.3))
 	data.post_delay         = float(class_json.get("post_delay", 0.5))
 	data.is_flying          = bool(class_json.get("is_flying",  false))
@@ -353,26 +302,59 @@ static func _random_unused_name(sex: String) -> String:
 	return str(pool[randi() % pool.size()])
 
 
-## ステータス計算（Phase 12-14 加算式 / 0-100 レンジ）
-## final = base + rank_amount × rank_value + sex_bonus + age_bonus + build_bonus + randi()%rand
+## ステータス設定JSONを読み込んでキャッシュする（初回呼び出し時のみ実行）
+static func _load_stat_configs() -> void:
+	if _stats_loaded:
+		return
+	_stats_loaded = true
+	for path: String in [CLASS_STATS_JSON_PATH, ATTR_STATS_JSON_PATH]:
+		var file := FileAccess.open(path, FileAccess.READ)
+		if file == null:
+			push_error("CharacterGenerator: ステータス設定ファイルが見つかりません: " + path)
+			continue
+		var parsed: Variant = JSON.parse_string(file.get_as_text())
+		file.close()
+		if not parsed is Dictionary:
+			push_error("CharacterGenerator: ステータス設定ファイルのパースに失敗しました: " + path)
+			continue
+		if path == CLASS_STATS_JSON_PATH:
+			_class_stats_cache = parsed as Dictionary
+		else:
+			_attr_stats_cache = parsed as Dictionary
+
+
+## ステータス計算（設定ファイル方式 / 0-100 レンジ）
+## final = class_base + rank × class_rank_bonus
+##       + sex_bonus + age_bonus + build_bonus
+##       + randi() % (random_max + 1)
+## 小数を含む場合は加算後に roundi() で整数化
 static func _calc_stats(class_id: String, rank: String, sex: String,
 		age: String, build: String) -> Dictionary:
-	var bases: Dictionary = CLASS_STAT_BASES.get(class_id, CLASS_STAT_BASES.get("fighter-sword", {})) as Dictionary
+	_load_stat_configs()
+	var fallback_class := "fighter-sword"
+	var class_table: Dictionary = (_class_stats_cache.get(class_id, _class_stats_cache.get(fallback_class, {}))) as Dictionary
+	var sex_table:   Dictionary = ((_attr_stats_cache.get("sex",   {}) as Dictionary).get(sex,   {})) as Dictionary
+	var age_table:   Dictionary = ((_attr_stats_cache.get("age",   {}) as Dictionary).get(age,   {})) as Dictionary
+	var build_table: Dictionary = ((_attr_stats_cache.get("build", {}) as Dictionary).get(build, {})) as Dictionary
+	var rand_table:  Dictionary = (_attr_stats_cache.get("random_max", {})) as Dictionary
 	var rv: int = RANK_VALUE.get(rank, 0) as int
 	var result: Dictionary = {}
-	for stat_key: String in bases.keys():
-		var s: Dictionary = bases[stat_key] as Dictionary
-		var base_v: int  = int(s.get("base", 0))
-		var rank_a: int  = int(s.get("rank", 0))
-		var rand_m: int  = int(s.get("rand", 0))
-		var sex_b: Dictionary  = s.get("sex",   {}) as Dictionary
-		var age_b: Dictionary  = s.get("age",   {}) as Dictionary
-		var build_b: Dictionary = s.get("build", {}) as Dictionary
-		var val: int = base_v \
-			+ rank_a * rv \
-			+ int(sex_b.get(sex,   0)) \
-			+ int(age_b.get(age,   0)) \
-			+ int(build_b.get(build, 0)) \
-			+ (randi() % (rand_m + 1) if rand_m > 0 else 0)
-		result[stat_key] = maxi(0, val)
+	for stat_key: String in class_table.keys():
+		var entry: Dictionary = class_table[stat_key] as Dictionary
+		var base_v: float = float(entry.get("base", 0))
+		var rank_b: float = float(entry.get("rank", 0))
+		var sex_b:  float = float(sex_table.get(stat_key,   0))
+		var age_b:  float = float(age_table.get(stat_key,   0))
+		var bld_b:  float = float(build_table.get(stat_key, 0))
+		var rand_m: int   = int(rand_table.get(stat_key, 0))
+		var raw: float = base_v + rank_b * rv + sex_b + age_b + bld_b \
+			+ float(randi() % (rand_m + 1) if rand_m > 0 else 0)
+		result[stat_key] = maxi(0, roundi(raw))
 	return result
+
+
+## move_speed スコア（0-100）を秒/タイルに変換する
+## score=0 → 0.80s（最遅）、score=100 → 0.20s（最速）
+## 変換式: seconds = 0.8 - score × 0.006（要調整）
+static func _convert_move_speed(score: int) -> float:
+	return maxf(0.1, 0.8 - float(score) * 0.006)

@@ -1,0 +1,27 @@
+{
+  "sex": {
+    "male":   { "skill": 0,   "power": 5,   "defense_accuracy": 0,   "physical_resistance": 5,   "magic_resistance": 0, "move_speed": 0, "leadership": 5,   "obedience": 0   },
+    "female": { "skill": 5,   "power": 0,   "defense_accuracy": 5,   "physical_resistance": 0,   "magic_resistance": 5, "move_speed": 0, "leadership": 0,   "obedience": 5   }
+  },
+  "age": {
+    "young":  { "skill": 0,   "power": 5,   "defense_accuracy": 0,   "physical_resistance": 5,   "magic_resistance": 0,   "move_speed": 5, "leadership": 0,   "obedience": 5   },
+    "adult":  { "skill": 2.5, "power": 2.5, "defense_accuracy": 2.5, "physical_resistance": 2.5, "magic_resistance": 2.5, "move_speed": 5, "leadership": 2.5, "obedience": 2.5 },
+    "elder":  { "skill": 5,   "power": 0,   "defense_accuracy": 5,   "physical_resistance": 0,   "magic_resistance": 5,   "move_speed": 0, "leadership": 5,   "obedience": 0   }
+  },
+  "build": {
+    "slim":     { "skill": 5,   "power": 0,   "defense_accuracy": 5,   "physical_resistance": 0,   "magic_resistance": 0, "move_speed": 0, "leadership": 0, "obedience": 0 },
+    "medium":   { "skill": 2.5, "power": 2.5, "defense_accuracy": 2.5, "physical_resistance": 2.5, "magic_resistance": 0, "move_speed": 0, "leadership": 0, "obedience": 0 },
+    "muscular": { "skill": 0,   "power": 5,   "defense_accuracy": 0,   "physical_resistance": 5,   "magic_resistance": 0, "move_speed": 0, "leadership": 0, "obedience": 0 }
+  },
+  "random_max": {
+    "max_hp": 15,
+    "skill": 10,
+    "power": 10,
+    "defense_accuracy": 10,
+    "physical_resistance": 10,
+    "magic_resistance": 10,
+    "move_speed": 10,
+    "leadership": 20,
+    "obedience": 20
+  }
+}

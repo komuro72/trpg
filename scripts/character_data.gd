@@ -84,6 +84,9 @@ var behavior_description: String = ""
 ## キャラクターランク（S/A/B/C）。右パネルでのランク色分け表示・ステータス計算に使用
 var rank: String = "C"
 
+## 移動速度（秒/タイル。低いほど速い。標準 0.4。_convert_move_speed() で 0-100 スコアから変換）
+var move_speed: float = 0.4
+
 ## 攻撃クールタイム（秒）
 var pre_delay: float = 0.3   # 攻撃前の溜め時間
 var post_delay: float = 0.5  # 攻撃後の硬直時間
