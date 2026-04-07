@@ -37,7 +37,8 @@ func add_system(text: String) -> void:
 
 ## 戦闘計算メッセージ（黄）— grid_pos でエリアフィルタ
 func add_combat(text: String, grid_pos: Vector2i = Vector2i(-1, -1)) -> void:
-	if not _is_in_player_area(grid_pos):
+	# デバッグモード中はエリア外の戦闘ログも表示する
+	if not debug_visible and not _is_in_player_area(grid_pos):
 		return
 	_add(text, MsgType.COMBAT, Color(1.0, 1.0, 0.3))
 

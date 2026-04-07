@@ -920,9 +920,7 @@ func _log_damage(attacker: Character, raw: int, mult: float, is_magic: bool,
 	if not dir_str.is_empty():
 		text += " / %s" % dir_str
 	text += " / %s→最終%d" % [resist_label, actual]
-	# NPC（friendly）の攻撃はエリアフィルターをバイパスして常時表示
-	var log_pos := Vector2i(-1, -1) if (attacker != null and attacker.is_friendly) else grid_pos
-	MessageLog.add_combat(text, log_pos)
+	MessageLog.add_combat(text, grid_pos)
 
 
 ## 回復ログを出力する
