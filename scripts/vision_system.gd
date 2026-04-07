@@ -145,8 +145,10 @@ func _process(_delta: float) -> void:
 	# パーティーメンバーの移動も探索判定に加える
 	if _party != null:
 		for m: Variant in _party.members:
+			if not is_instance_valid(m):
+				continue
 			var ch := m as Character
-			if not is_instance_valid(ch) or ch == _player:
+			if ch == null or ch == _player:
 				continue
 			var member_area := _map_data.get_area(ch.grid_pos)
 			if _has_area_data and not member_area.is_empty() and not is_area_visited(member_area):
@@ -162,8 +164,10 @@ func _process(_delta: float) -> void:
 		friendly_areas[_current_area] = true
 	if _party != null:
 		for m: Variant in _party.members:
+			if not is_instance_valid(m):
+				continue
 			var ch := m as Character
-			if is_instance_valid(ch):
+			if ch != null:
 				var a := _map_data.get_area(ch.grid_pos)
 				if not a.is_empty():
 					friendly_areas[a] = true
@@ -200,8 +204,10 @@ func _reveal_adjacent_areas() -> void:
 		positions.append(_player.grid_pos)
 	if _party != null:
 		for m: Variant in _party.members:
+			if not is_instance_valid(m):
+				continue
 			var ch := m as Character
-			if is_instance_valid(ch) and ch != _player:
+			if ch != null and ch != _player:
 				positions.append(ch.grid_pos)
 	for pos: Vector2i in positions:
 		var my_area := _map_data.get_area(pos)
