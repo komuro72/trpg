@@ -555,11 +555,9 @@ func _get_stat_rows(ch: Character) -> Array:
 	var power_label := "魔法威力" if _is_magic_cls else "物理威力"
 	rows.append({"label": power_label,    "type": "num",    "base": ch.power,
 		"bonus": cd.get_weapon_power_bonus()})
-	# 技量（ヒーラーは回復必中のため非表示）
-	if cd.attack_type != "heal":
-		var skill_label := "魔法技量" if _is_magic_cls else "物理技量"
-		rows.append({"label": skill_label, "type": "num",
-			"base": ch.skill, "bonus": cd.get_weapon_skill_bonus()})
+	var skill_label := "魔法技量" if _is_magic_cls else "物理技量"
+	rows.append({"label": skill_label, "type": "num",
+		"base": ch.skill, "bonus": cd.get_weapon_skill_bonus()})
 	# 防御強度（素値0・装備補正のみ。武器と盾を別行）
 	rows.append({"label": "武器防御強度",  "type": "num",    "base": 0, "bonus": cd.get_weapon_block_power()})
 	var _can_shield := cd.class_id in ["fighter-sword", "fighter-axe"]
