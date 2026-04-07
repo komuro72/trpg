@@ -407,8 +407,10 @@ func _link_all_character_lists() -> void:
 	# 敵 AI に渡す友好キャラ一覧（プレイヤーパーティー＋未加入 NPC）
 	var all_friendlies: Array[Character] = []
 	for member_var: Variant in party.members:
+		if not is_instance_valid(member_var):
+			continue
 		var ch := member_var as Character
-		if is_instance_valid(ch):
+		if ch != null:
 			all_friendlies.append(ch)
 	for nm: NpcManager in npc_managers:
 		if is_instance_valid(nm):
@@ -1007,8 +1009,10 @@ func _rebuild_blocking_characters() -> void:
 			if is_instance_valid(member) and member.current_floor == _current_floor_index:
 				player_controller.blocking_characters.append(member)
 	for member_var: Variant in party.members:
+		if not is_instance_valid(member_var):
+			continue
 		var ch := member_var as Character
-		if is_instance_valid(ch) and ch != active_char \
+		if ch != null and ch != active_char \
 				and ch.current_floor == _current_floor_index:
 			player_controller.blocking_characters.append(ch)
 
@@ -1023,8 +1027,10 @@ func _check_party_member_stairs() -> void:
 	var hero_floor := hero.current_floor
 	var active_char := player_controller.character if player_controller != null else hero
 	for member_var: Variant in party.members:
+		if not is_instance_valid(member_var):
+			continue
 		var ch := member_var as Character
-		if not is_instance_valid(ch) or ch == active_char:
+		if ch == null or ch == active_char:
 			continue
 		if ch.current_floor == hero_floor:
 			continue  # hero と同フロア・遷移不要
@@ -1485,8 +1491,10 @@ func _update_character_visibility() -> void:
 	# パーティーメンバー（hero 以外）：current_floor が一致するフロアのみ表示
 	if party != null:
 		for member_var: Variant in party.members:
+			if not is_instance_valid(member_var):
+				continue
 			var ch := member_var as Character
-			if is_instance_valid(ch) and ch != hero:
+			if ch != null and ch != hero:
 				ch.visible = (ch.current_floor == _current_floor_index)
 
 
