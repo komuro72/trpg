@@ -820,6 +820,7 @@ func _merge_player_into_npc_party(nm: NpcManager) -> void:
 		npc_leader = npc_members[0] as Character
 	if player_controller != null and npc_leader != null:
 		player_controller.party_leader = npc_leader
+		player_controller.player_is_leader = false  # NPC がリーダー：LB/RB 切り替えを無効化
 	# 合流済みフラグを立てる（NPC メンバーが hero を隊形基準として追従するようになる）
 	nm.set_joined_to_player(true)
 	# 左パネルのハイライトは操作キャラ（hero）のまま維持する

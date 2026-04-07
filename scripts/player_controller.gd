@@ -134,6 +134,10 @@ var consumable_bar: ConsumableBar = null
 ## ゲーム開始時は hero。NPC パーティーに合流してリーダーが変わった場合は更新される
 var party_leader: Character = null
 
+## プレイヤーが自パーティーのリーダーかどうか（NPC パーティーに合流した場合は false）
+## LB/RB キャラ切り替えはこのフラグが true のときのみ有効
+var player_is_leader: bool = true
+
 ## パーティーメンバーリスト（game_map から設定。LB/RBキャラ切り替えに使用）
 var _party_sorted_members: Array[Character] = []
 
@@ -1578,9 +1582,9 @@ func _is_item_equipped(item: Dictionary) -> bool:
 func _switch_character(dir: int) -> void:
 	if _party_sorted_members.is_empty() or character == null:
 		return
-	# 操作中のキャラクターがパーティーリーダーのときのみ切り替え可
+	# プレイヤーが自パーティーのリーダーのときのみ切り替え可
 	# （NPC パーティーに合流してリーダーを譲った場合は無効）
-	if not character.is_leader:
+	if not player_is_leader:
 		return
 	var idx := _party_sorted_members.find(character)
 	if idx < 0:
