@@ -255,7 +255,7 @@ func refresh_stats_from_equipment() -> void:
 	if character_data == null:
 		return
 	power        = character_data.power + character_data.get_weapon_power_bonus()
-	skill        = character_data.skill + character_data.get_weapon_skill_bonus()
+	skill        = character_data.skill  # skill は装備補正なし（仕様）
 	attack_range = character_data.attack_range + character_data.get_weapon_range_bonus()
 
 

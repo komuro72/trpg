@@ -36,8 +36,10 @@ func sorted_members() -> Array:
 	var leader: Character = null
 	var others: Array = []
 	for m: Variant in members:
+		if not is_instance_valid(m):
+			continue
 		var ch := m as Character
-		if not is_instance_valid(ch):
+		if ch == null:
 			continue
 		if ch.is_leader and leader == null:
 			leader = ch

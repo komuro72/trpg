@@ -266,6 +266,8 @@ func _setup_hero() -> void:
 func _setup_floor_enemies(floor_idx: int) -> void:
 	if floor_idx >= _all_map_data.size():
 		return
+	if not is_instance_valid(hero):
+		return
 	var fmap := _all_map_data[floor_idx]
 	if fmap.enemy_parties.is_empty():
 		return
@@ -314,6 +316,8 @@ func _setup_floor_enemies(floor_idx: int) -> void:
 
 func _setup_floor_npcs(floor_idx: int) -> void:
 	if floor_idx >= _all_map_data.size():
+		return
+	if not is_instance_valid(hero):
 		return
 	var fmap := _all_map_data[floor_idx]
 	if fmap.npc_parties.is_empty():

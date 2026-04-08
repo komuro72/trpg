@@ -29,18 +29,18 @@
                       "category": "weapon",
                       "item_name": "古びた片手剣",
                       "stats": {
-                        "power": 2,
-                        "skill": 3,
-                        "block_right_front": 1
+                        "power": 0,
+                        "block_right_front": 0
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "armor_plate",
                       "category": "armor",
-                      "item_name": "傷んだ革鎧",
+                      "item_name": "古い革鎧",
                       "stats": {
-                        "physical_resistance": 2
+                        "physical_resistance": 0,
+                        "magic_resistance": 0
                       },
                       "equipped": true
                     },
@@ -49,8 +49,7 @@
                       "category": "shield",
                       "item_name": "木の盾",
                       "stats": {
-                        "physical_resistance": 1,
-                        "block_left_front": 1
+                        "block_left_front": 0
                       },
                       "equipped": true
                     },
@@ -83,19 +82,20 @@
                     {
                       "item_type": "bow",
                       "category": "weapon",
-                      "item_name": "粗末な弓",
+                      "item_name": "素朴な弓",
                       "stats": {
-                        "power": 2,
-                        "skill": 5
+                        "power": 0,
+                        "block_front": 0
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "armor_cloth",
                       "category": "armor",
-                      "item_name": "薄いレザーコート",
+                      "item_name": "薄い革服",
                       "stats": {
-                        "physical_resistance": 1
+                        "physical_resistance": 0,
+                        "magic_resistance": 0
                       },
                       "equipped": true
                     },
@@ -130,17 +130,18 @@
                       "category": "weapon",
                       "item_name": "木の杖",
                       "stats": {
-                        "power": 2,
-                        "skill": 3
+                        "power": 0,
+                        "block_front": 0
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "armor_robe",
                       "category": "armor",
-                      "item_name": "粗末な修道服",
+                      "item_name": "素朴な修道服",
                       "stats": {
-                        "magic_resistance": 2
+                        "physical_resistance": 0,
+                        "magic_resistance": 0
                       },
                       "equipped": true
                     },
@@ -198,10 +199,10 @@
                 {
                   "item_type": "bow",
                   "category": "weapon",
-                  "item_name": "粗末な弓",
+                  "item_name": "狩人の弓",
                   "stats": {
                     "power": 2,
-                    "skill": 4
+                    "block_front": 1
                   }
                 },
                 {
@@ -237,19 +238,20 @@
                     {
                       "item_type": "bow",
                       "category": "weapon",
-                      "item_name": "使い込んだ弓",
+                      "item_name": "素朴な弓",
                       "stats": {
-                        "power": 3,
-                        "skill": 4
+                        "power": 0,
+                        "block_front": 0
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "armor_cloth",
                       "category": "armor",
-                      "item_name": "革製コート",
+                      "item_name": "薄い革服",
                       "stats": {
-                        "physical_resistance": 2
+                        "physical_resistance": 0,
+                        "magic_resistance": 0
                       },
                       "equipped": true
                     },
@@ -274,20 +276,20 @@
                     {
                       "item_type": "axe",
                       "category": "weapon",
-                      "item_name": "鉄の斧",
+                      "item_name": "古びた斧",
                       "stats": {
-                        "power": 3,
-                        "skill": 3,
-                        "block_right_front": 1
+                        "power": 0,
+                        "block_right_front": 0
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "armor_plate",
                       "category": "armor",
-                      "item_name": "革鎧",
+                      "item_name": "古い革鎧",
                       "stats": {
-                        "physical_resistance": 3
+                        "physical_resistance": 0,
+                        "magic_resistance": 0
                       },
                       "equipped": true
                     },
@@ -296,8 +298,7 @@
                       "category": "shield",
                       "item_name": "木の盾",
                       "stats": {
-                        "physical_resistance": 2,
-                        "block_left_front": 2
+                        "block_left_front": 0
                       },
                       "equipped": true
                     }
@@ -327,30 +328,29 @@
                     {
                       "item_type": "sword",
                       "category": "weapon",
-                      "item_name": "錆びた剣",
+                      "item_name": "古びた片手剣",
                       "stats": {
-                        "power": 3,
-                        "skill": 3,
-                        "block_right_front": 1
+                        "power": 0,
+                        "block_right_front": 0
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "armor_plate",
                       "category": "armor",
-                      "item_name": "傷んだ鎧",
+                      "item_name": "古い革鎧",
                       "stats": {
-                        "physical_resistance": 3
+                        "physical_resistance": 0,
+                        "magic_resistance": 0
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "shield",
                       "category": "shield",
-                      "item_name": "鉄の盾",
+                      "item_name": "木の盾",
                       "stats": {
-                        "physical_resistance": 2,
-                        "block_left_front": 2
+                        "block_left_front": 0
                       },
                       "equipped": true
                     }
@@ -366,19 +366,20 @@
                     {
                       "item_type": "staff",
                       "category": "weapon",
-                      "item_name": "癒しの杖",
+                      "item_name": "木の杖",
                       "stats": {
-                        "power": 3,
-                        "skill": 5
+                        "power": 0,
+                        "block_front": 0
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "armor_robe",
                       "category": "armor",
-                      "item_name": "薄い修道衣",
+                      "item_name": "素朴な修道服",
                       "stats": {
-                        "magic_resistance": 3
+                        "physical_resistance": 0,
+                        "magic_resistance": 0
                       },
                       "equipped": true
                     }
@@ -394,19 +395,20 @@
                     {
                       "item_type": "staff",
                       "category": "weapon",
-                      "item_name": "水晶の杖",
+                      "item_name": "木の杖",
                       "stats": {
-                        "power": 3,
-                        "skill": 5
+                        "power": 0,
+                        "block_front": 0
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "armor_robe",
                       "category": "armor",
-                      "item_name": "薄い魔道衣",
+                      "item_name": "素朴な修道服",
                       "stats": {
-                        "magic_resistance": 3
+                        "physical_resistance": 0,
+                        "magic_resistance": 0
                       },
                       "equipped": true
                     },
@@ -445,19 +447,20 @@
                     {
                       "item_type": "dagger",
                       "category": "weapon",
-                      "item_name": "切れ味の悪いダガー",
+                      "item_name": "古びた短剣",
                       "stats": {
-                        "power": 3,
-                        "skill": 6
+                        "power": 0,
+                        "block_right_front": 0
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "armor_cloth",
                       "category": "armor",
-                      "item_name": "布のコート",
+                      "item_name": "薄い革服",
                       "stats": {
-                        "physical_resistance": 2
+                        "physical_resistance": 0,
+                        "magic_resistance": 0
                       },
                       "equipped": true
                     },
@@ -482,19 +485,20 @@
                     {
                       "item_type": "staff",
                       "category": "weapon",
-                      "item_name": "木の魔道杖",
+                      "item_name": "木の杖",
                       "stats": {
-                        "power": 3,
-                        "skill": 5
+                        "power": 0,
+                        "block_front": 0
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "armor_robe",
                       "category": "armor",
-                      "item_name": "赤い魔道衣",
+                      "item_name": "素朴な修道服",
                       "stats": {
-                        "magic_resistance": 3
+                        "physical_resistance": 0,
+                        "magic_resistance": 0
                       },
                       "equipped": true
                     },
@@ -519,19 +523,20 @@
                     {
                       "item_type": "staff",
                       "category": "weapon",
-                      "item_name": "水晶の杖",
+                      "item_name": "木の杖",
                       "stats": {
-                        "power": 3,
-                        "skill": 5
+                        "power": 0,
+                        "block_front": 0
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "armor_robe",
                       "category": "armor",
-                      "item_name": "薄い魔道衣",
+                      "item_name": "素朴な修道服",
                       "stats": {
-                        "magic_resistance": 3
+                        "physical_resistance": 0,
+                        "magic_resistance": 0
                       },
                       "equipped": true
                     },
@@ -570,30 +575,29 @@
                     {
                       "item_type": "axe",
                       "category": "weapon",
-                      "item_name": "鉄の斧",
+                      "item_name": "古びた斧",
                       "stats": {
-                        "power": 3,
-                        "skill": 3,
-                        "block_right_front": 1
+                        "power": 0,
+                        "block_right_front": 0
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "armor_plate",
                       "category": "armor",
-                      "item_name": "傷んだ鎧",
+                      "item_name": "古い革鎧",
                       "stats": {
-                        "physical_resistance": 3
+                        "physical_resistance": 0,
+                        "magic_resistance": 0
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "shield",
                       "category": "shield",
-                      "item_name": "鉄の盾",
+                      "item_name": "木の盾",
                       "stats": {
-                        "physical_resistance": 2,
-                        "block_left_front": 2
+                        "block_left_front": 0
                       },
                       "equipped": true
                     },
@@ -618,19 +622,20 @@
                     {
                       "item_type": "staff",
                       "category": "weapon",
-                      "item_name": "炎の杖",
+                      "item_name": "木の杖",
                       "stats": {
-                        "power": 4,
-                        "skill": 4
+                        "power": 0,
+                        "block_front": 0
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "armor_robe",
                       "category": "armor",
-                      "item_name": "薄い魔道衣",
+                      "item_name": "素朴な修道服",
                       "stats": {
-                        "magic_resistance": 3
+                        "physical_resistance": 0,
+                        "magic_resistance": 0
                       },
                       "equipped": true
                     },
@@ -655,19 +660,20 @@
                     {
                       "item_type": "dagger",
                       "category": "weapon",
-                      "item_name": "切れ味の悪いダガー",
+                      "item_name": "古びた短剣",
                       "stats": {
-                        "power": 3,
-                        "skill": 6
+                        "power": 0,
+                        "block_right_front": 0
                       },
                       "equipped": true
                     },
                     {
                       "item_type": "armor_cloth",
                       "category": "armor",
-                      "item_name": "布のコート",
+                      "item_name": "薄い革服",
                       "stats": {
-                        "physical_resistance": 2
+                        "physical_resistance": 0,
+                        "magic_resistance": 0
                       },
                       "equipped": true
                     }
@@ -712,18 +718,19 @@
                 {
                   "item_type": "sword",
                   "category": "weapon",
-                  "item_name": "錆びた短剣",
+                  "item_name": "錆びた剣",
                   "stats": {
-                    "power": 3,
-                    "skill": 3
+                    "power": 4,
+                    "block_right_front": 1
                   }
                 },
                 {
                   "item_type": "armor_cloth",
                   "category": "armor",
-                  "item_name": "粗末な革服",
+                  "item_name": "古い革服",
                   "stats": {
-                    "physical_resistance": 2
+                    "physical_resistance": 1,
+                    "magic_resistance": 3
                   }
                 },
                 {
@@ -769,10 +776,10 @@
                 {
                   "item_type": "staff",
                   "category": "weapon",
-                  "item_name": "ゴブリンの魔杖",
+                  "item_name": "古びた杖",
                   "stats": {
-                    "power": 3,
-                    "skill": 4
+                    "power": 2,
+                    "block_front": 3
                   }
                 },
                 {
@@ -827,19 +834,19 @@
                 {
                   "item_type": "axe",
                   "category": "weapon",
-                  "item_name": "ホブゴブリンの斧",
+                  "item_name": "錆びた斧",
                   "stats": {
-                    "power": 5,
-                    "skill": 4,
-                    "block_right_front": 2
+                    "power": 2,
+                    "block_right_front": 1
                   }
                 },
                 {
                   "item_type": "armor_plate",
                   "category": "armor",
-                  "item_name": "粗削りの鉄鎧",
+                  "item_name": "傷んだ鎧",
                   "stats": {
-                    "physical_resistance": 4
+                    "physical_resistance": 3,
+                    "magic_resistance": 0
                   }
                 },
                 {
@@ -885,18 +892,19 @@
                 {
                   "item_type": "bow",
                   "category": "weapon",
-                  "item_name": "粗削りの弓",
+                  "item_name": "古びた弓",
                   "stats": {
-                    "power": 4,
-                    "skill": 5
+                    "power": 2,
+                    "block_front": 3
                   }
                 },
                 {
                   "item_type": "armor_cloth",
                   "category": "armor",
-                  "item_name": "硬化革コート",
+                  "item_name": "薄い革鎧",
                   "stats": {
-                    "physical_resistance": 3
+                    "physical_resistance": 3,
+                    "magic_resistance": 3
                   }
                 },
                 {
@@ -942,18 +950,19 @@
                 {
                   "item_type": "dagger",
                   "category": "weapon",
-                  "item_name": "ゴブリンの刃",
+                  "item_name": "古いナイフ",
                   "stats": {
-                    "power": 4,
-                    "skill": 6
+                    "power": 5,
+                    "block_right_front": 1
                   }
                 },
                 {
                   "item_type": "armor_cloth",
                   "category": "armor",
-                  "item_name": "厚手の革服",
+                  "item_name": "古い革服",
                   "stats": {
-                    "physical_resistance": 3
+                    "physical_resistance": 3,
+                    "magic_resistance": 2
                   }
                 },
                 {
@@ -999,19 +1008,17 @@
                 {
                   "item_type": "sword",
                   "category": "weapon",
-                  "item_name": "番人の剣",
+                  "item_name": "古い片手剣",
                   "stats": {
-                    "power": 5,
-                    "skill": 4,
-                    "block_right_front": 2
+                    "power": 3,
+                    "block_right_front": 3
                   }
                 },
                 {
                   "item_type": "shield",
                   "category": "shield",
-                  "item_name": "強化木盾",
+                  "item_name": "古い盾",
                   "stats": {
-                    "physical_resistance": 3,
                     "block_left_front": 3
                   }
                 },
@@ -1181,19 +1188,19 @@
                 {
                   "item_type": "sword",
                   "category": "weapon",
-                  "item_name": "古びた鉄剣",
+                  "item_name": "騎士の剣",
                   "stats": {
-                    "power": 5,
-                    "skill": 4,
-                    "block_right_front": 2
+                    "power": 6,
+                    "block_right_front": 3
                   }
                 },
                 {
                   "item_type": "armor_plate",
                   "category": "armor",
-                  "item_name": "傷んだ鉄鎧",
+                  "item_name": "騎士の鎧",
                   "stats": {
-                    "physical_resistance": 4
+                    "physical_resistance": 4,
+                    "magic_resistance": 1
                   }
                 },
                 {
@@ -1239,18 +1246,19 @@
                 {
                   "item_type": "dagger",
                   "category": "weapon",
-                  "item_name": "錆びたナイフ",
+                  "item_name": "盗賊の短刀",
                   "stats": {
                     "power": 5,
-                    "skill": 6
+                    "block_right_front": 4
                   }
                 },
                 {
                   "item_type": "armor_cloth",
                   "category": "armor",
-                  "item_name": "薄い鎖帷子",
+                  "item_name": "旅人の外套",
                   "stats": {
-                    "physical_resistance": 4
+                    "physical_resistance": 4,
+                    "magic_resistance": 2
                   }
                 },
                 {
@@ -1296,19 +1304,19 @@
                 {
                   "item_type": "axe",
                   "category": "weapon",
-                  "item_name": "鉄の処刑斧",
+                  "item_name": "重い斧",
                   "stats": {
-                    "power": 6,
-                    "skill": 4,
+                    "power": 8,
                     "block_right_front": 2
                   }
                 },
                 {
                   "item_type": "armor_plate",
                   "category": "armor",
-                  "item_name": "重い鉄鎧",
+                  "item_name": "重い甲冑",
                   "stats": {
-                    "physical_resistance": 5
+                    "physical_resistance": 4,
+                    "magic_resistance": 3
                   }
                 },
                 {
@@ -1354,19 +1362,17 @@
                 {
                   "item_type": "sword",
                   "category": "weapon",
-                  "item_name": "骸骨兵の剣",
+                  "item_name": "聖堂の剣",
                   "stats": {
-                    "power": 6,
-                    "skill": 4,
-                    "block_right_front": 2
+                    "power": 7,
+                    "block_right_front": 3
                   }
                 },
                 {
                   "item_type": "shield",
                   "category": "shield",
-                  "item_name": "古い盾",
+                  "item_name": "鉄の盾",
                   "stats": {
-                    "physical_resistance": 4,
                     "block_left_front": 3
                   }
                 },
@@ -1413,18 +1419,19 @@
                 {
                   "item_type": "staff",
                   "category": "weapon",
-                  "item_name": "腐食した魔杖",
+                  "item_name": "銀の杖",
                   "stats": {
                     "power": 6,
-                    "skill": 5
+                    "block_front": 4
                   }
                 },
                 {
                   "item_type": "armor_robe",
                   "category": "armor",
-                  "item_name": "ぼろぼろのローブ",
+                  "item_name": "魔法のローブ",
                   "stats": {
-                    "magic_resistance": 5
+                    "physical_resistance": 2,
+                    "magic_resistance": 4
                   }
                 },
                 {
@@ -1479,18 +1486,19 @@
                 {
                   "item_type": "bow",
                   "category": "weapon",
-                  "item_name": "骨の弓",
+                  "item_name": "森の弓",
                   "stats": {
-                    "power": 6,
-                    "skill": 6
+                    "power": 7,
+                    "block_front": 5
                   }
                 },
                 {
                   "item_type": "armor_cloth",
                   "category": "armor",
-                  "item_name": "古びた革鎧",
+                  "item_name": "盗賊のコート",
                   "stats": {
-                    "physical_resistance": 5
+                    "physical_resistance": 4,
+                    "magic_resistance": 3
                   }
                 },
                 {
@@ -1536,18 +1544,19 @@
                 {
                   "item_type": "dagger",
                   "category": "weapon",
-                  "item_name": "狩人の短刀",
+                  "item_name": "忍びの刃",
                   "stats": {
-                    "power": 6,
-                    "skill": 7
+                    "power": 7,
+                    "block_right_front": 3
                   }
                 },
                 {
                   "item_type": "armor_cloth",
                   "category": "armor",
-                  "item_name": "狼皮のコート",
+                  "item_name": "旅人の外套",
                   "stats": {
-                    "physical_resistance": 5
+                    "physical_resistance": 4,
+                    "magic_resistance": 2
                   }
                 },
                 {
@@ -1593,20 +1602,18 @@
                 {
                   "item_type": "sword",
                   "category": "weapon",
-                  "item_name": "古戦場の剣",
+                  "item_name": "鉄の剣",
                   "stats": {
-                    "power": 7,
-                    "skill": 5,
+                    "power": 6,
                     "block_right_front": 3
                   }
                 },
                 {
                   "item_type": "shield",
                   "category": "shield",
-                  "item_name": "鉄製の盾",
+                  "item_name": "騎士の盾",
                   "stats": {
-                    "physical_resistance": 5,
-                    "block_left_front": 4
+                    "block_left_front": 6
                   }
                 },
                 {
@@ -1652,18 +1659,19 @@
                 {
                   "item_type": "dagger",
                   "category": "weapon",
-                  "item_name": "鉤爪の刃",
+                  "item_name": "忍びの刃",
                   "stats": {
                     "power": 7,
-                    "skill": 7
+                    "block_right_front": 3
                   }
                 },
                 {
                   "item_type": "armor_cloth",
                   "category": "armor",
-                  "item_name": "軽量革鎧",
+                  "item_name": "軽い革鎧",
                   "stats": {
-                    "physical_resistance": 5
+                    "physical_resistance": 4,
+                    "magic_resistance": 2
                   }
                 },
                 {
@@ -1709,18 +1717,19 @@
                 {
                   "item_type": "bow",
                   "category": "weapon",
-                  "item_name": "強化骨の弓",
+                  "item_name": "遠射の弓",
                   "stats": {
-                    "power": 7,
-                    "skill": 6
+                    "power": 5,
+                    "block_front": 4
                   }
                 },
                 {
                   "item_type": "armor_cloth",
                   "category": "armor",
-                  "item_name": "骨鎧の外套",
+                  "item_name": "軽い革鎧",
                   "stats": {
-                    "physical_resistance": 6
+                    "physical_resistance": 4,
+                    "magic_resistance": 2
                   }
                 },
                 {
@@ -1766,18 +1775,19 @@
                 {
                   "item_type": "staff",
                   "category": "weapon",
-                  "item_name": "死霊の杖",
+                  "item_name": "知恵の杖",
                   "stats": {
-                    "power": 8,
-                    "skill": 6
+                    "power": 7,
+                    "block_front": 3
                   }
                 },
                 {
                   "item_type": "armor_robe",
                   "category": "armor",
-                  "item_name": "闇のローブ",
+                  "item_name": "知恵の法衣",
                   "stats": {
-                    "magic_resistance": 6
+                    "physical_resistance": 4,
+                    "magic_resistance": 7
                   }
                 },
                 {
@@ -1823,27 +1833,26 @@
                 {
                   "item_type": "axe",
                   "category": "weapon",
-                  "item_name": "重い戦斧",
+                  "item_name": "重い斧",
                   "stats": {
                     "power": 8,
-                    "skill": 4,
                     "block_right_front": 3
                   }
                 },
                 {
                   "item_type": "armor_plate",
                   "category": "armor",
-                  "item_name": "強化鉄鎧",
+                  "item_name": "重い甲冑",
                   "stats": {
-                    "physical_resistance": 7
+                    "physical_resistance": 5,
+                    "magic_resistance": 2
                   }
                 },
                 {
                   "item_type": "shield",
                   "category": "shield",
-                  "item_name": "強固な盾",
+                  "item_name": "丸盾",
                   "stats": {
-                    "physical_resistance": 5,
                     "block_left_front": 5
                   }
                 },
@@ -2022,18 +2031,19 @@
                 {
                   "item_type": "dagger",
                   "category": "weapon",
-                  "item_name": "速斬りの短刀",
+                  "item_name": "影の短剣",
                   "stats": {
-                    "power": 8,
-                    "skill": 8
+                    "power": 12,
+                    "block_right_front": 6
                   }
                 },
                 {
                   "item_type": "armor_cloth",
                   "category": "armor",
-                  "item_name": "軽量強化鎧",
+                  "item_name": "鋼糸の服",
                   "stats": {
-                    "physical_resistance": 7
+                    "physical_resistance": 7,
+                    "magic_resistance": 6
                   }
                 },
                 {
@@ -2079,27 +2089,26 @@
                 {
                   "item_type": "sword",
                   "category": "weapon",
-                  "item_name": "ダークソード",
+                  "item_name": "暗黒剣",
                   "stats": {
-                    "power": 10,
-                    "skill": 6,
-                    "block_right_front": 4
+                    "power": 9,
+                    "block_right_front": 7
                   }
                 },
                 {
                   "item_type": "armor_plate",
                   "category": "armor",
-                  "item_name": "暗黒の鎧",
+                  "item_name": "鋼の鎧",
                   "stats": {
-                    "physical_resistance": 8
+                    "physical_resistance": 7,
+                    "magic_resistance": 2
                   }
                 },
                 {
                   "item_type": "shield",
                   "category": "shield",
-                  "item_name": "暗黒の盾",
+                  "item_name": "聖銀の盾",
                   "stats": {
-                    "physical_resistance": 6,
                     "block_left_front": 5
                   }
                 },
@@ -2146,18 +2155,19 @@
                 {
                   "item_type": "dagger",
                   "category": "weapon",
-                  "item_name": "羽根の短刀",
+                  "item_name": "影の短剣",
                   "stats": {
                     "power": 9,
-                    "skill": 8
+                    "block_right_front": 6
                   }
                 },
                 {
                   "item_type": "armor_cloth",
                   "category": "armor",
-                  "item_name": "翼皮の外套",
+                  "item_name": "暗殺者の装束",
                   "stats": {
-                    "physical_resistance": 7
+                    "physical_resistance": 4,
+                    "magic_resistance": 7
                   }
                 },
                 {
@@ -2203,18 +2213,19 @@
                 {
                   "item_type": "staff",
                   "category": "weapon",
-                  "item_name": "炎の魔杖",
+                  "item_name": "呪われた杖",
                   "stats": {
-                    "power": 10,
-                    "skill": 7
+                    "power": 12,
+                    "block_front": 6
                   }
                 },
                 {
                   "item_type": "armor_robe",
                   "category": "armor",
-                  "item_name": "炎耐性のローブ",
+                  "item_name": "暗黒のローブ",
                   "stats": {
-                    "magic_resistance": 8
+                    "physical_resistance": 4,
+                    "magic_resistance": 11
                   }
                 },
                 {
@@ -2260,18 +2271,19 @@
                 {
                   "item_type": "staff",
                   "category": "weapon",
-                  "item_name": "呪われた魔杖",
+                  "item_name": "呪われた杖",
                   "stats": {
-                    "power": 11,
-                    "skill": 7
+                    "power": 13,
+                    "block_front": 3
                   }
                 },
                 {
                   "item_type": "armor_robe",
                   "category": "armor",
-                  "item_name": "暗黒のローブ",
+                  "item_name": "水晶のローブ",
                   "stats": {
-                    "magic_resistance": 9
+                    "physical_resistance": 6,
+                    "magic_resistance": 13
                   }
                 },
                 {
@@ -2326,27 +2338,27 @@
                 {
                   "item_type": "staff",
                   "category": "weapon",
-                  "item_name": "聖別の杖",
+                  "item_name": "暗黒の杖",
                   "stats": {
-                    "power": 11,
-                    "skill": 7
+                    "power": 14,
+                    "block_front": 5
                   }
                 },
                 {
                   "item_type": "armor_robe",
                   "category": "armor",
-                  "item_name": "司祭のローブ",
+                  "item_name": "暗黒のローブ",
                   "stats": {
-                    "magic_resistance": 9
+                    "physical_resistance": 4,
+                    "magic_resistance": 10
                   }
                 },
                 {
                   "item_type": "shield",
                   "category": "shield",
-                  "item_name": "闇の護符盾",
+                  "item_name": "鋼の盾",
                   "stats": {
-                    "magic_resistance": 7,
-                    "block_left_front": 5
+                    "block_left_front": 7
                   }
                 },
                 {
@@ -2397,19 +2409,19 @@
                 {
                   "item_type": "axe",
                   "category": "weapon",
-                  "item_name": "狩人の戦斧",
+                  "item_name": "双刃の斧",
                   "stats": {
-                    "power": 10,
-                    "skill": 5,
-                    "block_right_front": 3
+                    "power": 13,
+                    "block_right_front": 5
                   }
                 },
                 {
                   "item_type": "armor_plate",
                   "category": "armor",
-                  "item_name": "狩人の革鎧",
+                  "item_name": "聖銀の甲冑",
                   "stats": {
-                    "physical_resistance": 8
+                    "physical_resistance": 13,
+                    "magic_resistance": 3
                   }
                 },
                 {
@@ -2455,19 +2467,19 @@
                 {
                   "item_type": "sword",
                   "category": "weapon",
-                  "item_name": "悪魔の剣",
+                  "item_name": "聖銀の剣",
                   "stats": {
-                    "power": 12,
-                    "skill": 7,
+                    "power": 8,
                     "block_right_front": 5
                   }
                 },
                 {
                   "item_type": "armor_plate",
                   "category": "armor",
-                  "item_name": "悪魔の鎧",
+                  "item_name": "鋼の鎧",
                   "stats": {
-                    "physical_resistance": 10
+                    "physical_resistance": 11,
+                    "magic_resistance": 6
                   }
                 },
                 {
@@ -2522,18 +2534,19 @@
                 {
                   "item_type": "staff",
                   "category": "weapon",
-                  "item_name": "爆炎の杖",
+                  "item_name": "暗黒の杖",
                   "stats": {
-                    "power": 13,
-                    "skill": 7
+                    "power": 9,
+                    "block_front": 5
                   }
                 },
                 {
                   "item_type": "armor_robe",
                   "category": "armor",
-                  "item_name": "焔のローブ",
+                  "item_name": "呪われた法衣",
                   "stats": {
-                    "magic_resistance": 10
+                    "physical_resistance": 6,
+                    "magic_resistance": 13
                   }
                 },
                 {
@@ -2579,28 +2592,27 @@
                 {
                   "item_type": "sword",
                   "category": "weapon",
-                  "item_name": "騎士の長剣",
+                  "item_name": "暗黒剣",
                   "stats": {
-                    "power": 12,
-                    "skill": 6,
-                    "block_right_front": 5
+                    "power": 8,
+                    "block_right_front": 7
                   }
                 },
                 {
                   "item_type": "armor_plate",
                   "category": "armor",
-                  "item_name": "重厚な暗黒鎧",
+                  "item_name": "鋼の鎧",
                   "stats": {
-                    "physical_resistance": 11
+                    "physical_resistance": 10,
+                    "magic_resistance": 2
                   }
                 },
                 {
                   "item_type": "shield",
                   "category": "shield",
-                  "item_name": "暗黒の大盾",
+                  "item_name": "暗黒の盾",
                   "stats": {
-                    "physical_resistance": 8,
-                    "block_left_front": 7
+                    "block_left_front": 6
                   }
                 },
                 {
@@ -2646,18 +2658,19 @@
                 {
                   "item_type": "staff",
                   "category": "weapon",
-                  "item_name": "雷鳴の魔杖",
+                  "item_name": "暗黒の杖",
                   "stats": {
-                    "power": 14,
-                    "skill": 8
+                    "power": 9,
+                    "block_front": 3
                   }
                 },
                 {
                   "item_type": "armor_robe",
                   "category": "armor",
-                  "item_name": "嵐のローブ",
+                  "item_name": "暗黒のローブ",
                   "stats": {
-                    "magic_resistance": 11
+                    "physical_resistance": 6,
+                    "magic_resistance": 7
                   }
                 },
                 {
@@ -2717,28 +2730,27 @@
                 {
                   "item_type": "axe",
                   "category": "weapon",
-                  "item_name": "深淵の戦斧",
+                  "item_name": "鋼の大斧",
                   "stats": {
-                    "power": 15,
-                    "skill": 7,
+                    "power": 13,
                     "block_right_front": 6
                   }
                 },
                 {
                   "item_type": "armor_plate",
                   "category": "armor",
-                  "item_name": "深淵の騎士鎧",
+                  "item_name": "鋼の鎧",
                   "stats": {
-                    "physical_resistance": 13
+                    "physical_resistance": 13,
+                    "magic_resistance": 6
                   }
                 },
                 {
                   "item_type": "shield",
                   "category": "shield",
-                  "item_name": "深淵の騎士盾",
+                  "item_name": "聖銀の盾",
                   "stats": {
-                    "physical_resistance": 10,
-                    "block_left_front": 8
+                    "block_left_front": 5
                   }
                 },
                 {
@@ -2925,28 +2937,27 @@
                 {
                   "item_type": "sword",
                   "category": "weapon",
-                  "item_name": "守護の剣",
+                  "item_name": "魔剣",
                   "stats": {
-                    "power": 15,
-                    "skill": 8,
-                    "block_right_front": 6
+                    "power": 17,
+                    "block_right_front": 9
                   }
                 },
                 {
                   "item_type": "armor_plate",
                   "category": "armor",
-                  "item_name": "精霊鎧",
+                  "item_name": "覇者の鎧",
                   "stats": {
-                    "physical_resistance": 14
+                    "physical_resistance": 16,
+                    "magic_resistance": 8
                   }
                 },
                 {
                   "item_type": "shield",
                   "category": "shield",
-                  "item_name": "精霊の盾",
+                  "item_name": "魔盾",
                   "stats": {
-                    "physical_resistance": 11,
-                    "block_left_front": 8
+                    "block_left_front": 10
                   }
                 },
                 {
@@ -2997,18 +3008,19 @@
                 {
                   "item_type": "staff",
                   "category": "weapon",
-                  "item_name": "聖域の杖",
+                  "item_name": "冥界の杖",
                   "stats": {
-                    "power": 16,
-                    "skill": 9
+                    "power": 18,
+                    "block_front": 10
                   }
                 },
                 {
                   "item_type": "armor_robe",
                   "category": "armor",
-                  "item_name": "聖域のローブ",
+                  "item_name": "深淵のローブ",
                   "stats": {
-                    "magic_resistance": 13
+                    "physical_resistance": 5,
+                    "magic_resistance": 16
                   }
                 },
                 {
@@ -3063,19 +3075,19 @@
                 {
                   "item_type": "axe",
                   "category": "weapon",
-                  "item_name": "悪魔の大斧",
+                  "item_name": "覇者の大斧",
                   "stats": {
-                    "power": 18,
-                    "skill": 7,
-                    "block_right_front": 7
+                    "power": 19,
+                    "block_right_front": 10
                   }
                 },
                 {
                   "item_type": "armor_plate",
                   "category": "armor",
-                  "item_name": "悪魔の重鎧",
+                  "item_name": "深淵の甲冑",
                   "stats": {
-                    "physical_resistance": 15
+                    "physical_resistance": 19,
+                    "magic_resistance": 8
                   }
                 },
                 {
@@ -3121,18 +3133,19 @@
                 {
                   "item_type": "staff",
                   "category": "weapon",
-                  "item_name": "呪詛の魔杖",
+                  "item_name": "魔導の杖",
                   "stats": {
-                    "power": 17,
-                    "skill": 8
+                    "power": 14,
+                    "block_front": 6
                   }
                 },
                 {
                   "item_type": "armor_robe",
                   "category": "armor",
-                  "item_name": "呪詛のローブ",
+                  "item_name": "魔導のローブ",
                   "stats": {
-                    "magic_resistance": 14
+                    "physical_resistance": 4,
+                    "magic_resistance": 17
                   }
                 },
                 {
@@ -3183,28 +3196,27 @@
                 {
                   "item_type": "sword",
                   "category": "weapon",
-                  "item_name": "魔剣エクリプス",
+                  "item_name": "魔剣",
                   "stats": {
-                    "power": 19,
-                    "skill": 8,
-                    "block_right_front": 8
+                    "power": 18,
+                    "block_right_front": 9
                   }
                 },
                 {
                   "item_type": "armor_plate",
                   "category": "armor",
-                  "item_name": "黒鋼の鎧",
+                  "item_name": "魔鎧",
                   "stats": {
-                    "physical_resistance": 16
+                    "physical_resistance": 15,
+                    "magic_resistance": 4
                   }
                 },
                 {
                   "item_type": "shield",
                   "category": "shield",
-                  "item_name": "黒鋼の盾",
+                  "item_name": "覇者の盾",
                   "stats": {
-                    "physical_resistance": 13,
-                    "block_left_front": 10
+                    "block_left_front": 12
                   }
                 },
                 {
@@ -3255,18 +3267,19 @@
                 {
                   "item_type": "staff",
                   "category": "weapon",
-                  "item_name": "深淵の魔杖",
+                  "item_name": "魔導の杖",
                   "stats": {
-                    "power": 18,
-                    "skill": 9
+                    "power": 14,
+                    "block_front": 6
                   }
                 },
                 {
                   "item_type": "armor_robe",
                   "category": "armor",
-                  "item_name": "深淵のローブ",
+                  "item_name": "魔導のローブ",
                   "stats": {
-                    "magic_resistance": 15
+                    "physical_resistance": 4,
+                    "magic_resistance": 17
                   }
                 },
                 {
@@ -3326,18 +3339,19 @@
                 {
                   "item_type": "bow",
                   "category": "weapon",
-                  "item_name": "骸骨弓手の弓",
+                  "item_name": "深淵の弓",
                   "stats": {
-                    "power": 17,
-                    "skill": 9
+                    "power": 18,
+                    "block_front": 6
                   }
                 },
                 {
                   "item_type": "armor_cloth",
                   "category": "armor",
-                  "item_name": "骸骨鎧の外套",
+                  "item_name": "魔導の外套",
                   "stats": {
-                    "physical_resistance": 15
+                    "physical_resistance": 12,
+                    "magic_resistance": 10
                   }
                 },
                 {
@@ -3388,19 +3402,19 @@
                 {
                   "item_type": "axe",
                   "category": "weapon",
-                  "item_name": "王者の大斧",
+                  "item_name": "破壊の斧",
                   "stats": {
-                    "power": 20,
-                    "skill": 7,
-                    "block_right_front": 9
+                    "power": 18,
+                    "block_right_front": 6
                   }
                 },
                 {
                   "item_type": "armor_plate",
                   "category": "armor",
-                  "item_name": "王者の鎧",
+                  "item_name": "深淵の甲冑",
                   "stats": {
-                    "physical_resistance": 17
+                    "physical_resistance": 19,
+                    "magic_resistance": 5
                   }
                 },
                 {
@@ -3455,18 +3469,19 @@
                 {
                   "item_type": "staff",
                   "category": "weapon",
-                  "item_name": "冥界の杖",
+                  "item_name": "魔導の杖",
                   "stats": {
                     "power": 20,
-                    "skill": 9
+                    "block_front": 8
                   }
                 },
                 {
                   "item_type": "armor_robe",
                   "category": "armor",
-                  "item_name": "冥界のローブ",
+                  "item_name": "冥界の法衣",
                   "stats": {
-                    "magic_resistance": 17
+                    "physical_resistance": 4,
+                    "magic_resistance": 13
                   }
                 },
                 {
@@ -3517,20 +3532,18 @@
                 {
                   "item_type": "sword",
                   "category": "weapon",
-                  "item_name": "護衛騎士の剣",
+                  "item_name": "深淵の剣",
                   "stats": {
-                    "power": 20,
-                    "skill": 8,
-                    "block_right_front": 9
+                    "power": 17,
+                    "block_right_front": 7
                   }
                 },
                 {
                   "item_type": "shield",
                   "category": "shield",
-                  "item_name": "護衛騎士の盾",
+                  "item_name": "深淵の大盾",
                   "stats": {
-                    "physical_resistance": 15,
-                    "block_left_front": 11
+                    "block_left_front": 10
                   }
                 },
                 {
@@ -3581,18 +3594,19 @@
                 {
                   "item_type": "staff",
                   "category": "weapon",
-                  "item_name": "滅亡の魔杖",
+                  "item_name": "魔導の杖",
                   "stats": {
-                    "power": 22,
-                    "skill": 10
+                    "power": 20,
+                    "block_front": 10
                   }
                 },
                 {
                   "item_type": "armor_robe",
                   "category": "armor",
-                  "item_name": "滅亡のローブ",
+                  "item_name": "魔導のローブ",
                   "stats": {
-                    "magic_resistance": 18
+                    "physical_resistance": 9,
+                    "magic_resistance": 13
                   }
                 },
                 {
@@ -3657,28 +3671,27 @@
                 {
                   "item_type": "axe",
                   "category": "weapon",
-                  "item_name": "側近の大斧",
+                  "item_name": "覇者の大斧",
                   "stats": {
-                    "power": 22,
-                    "skill": 8,
+                    "power": 17,
                     "block_right_front": 10
                   }
                 },
                 {
                   "item_type": "armor_plate",
                   "category": "armor",
-                  "item_name": "側近の黒鎧",
+                  "item_name": "魔鎧",
                   "stats": {
-                    "physical_resistance": 19
+                    "physical_resistance": 13,
+                    "magic_resistance": 5
                   }
                 },
                 {
                   "item_type": "shield",
                   "category": "shield",
-                  "item_name": "側近の大盾",
+                  "item_name": "覇者の盾",
                   "stats": {
-                    "physical_resistance": 16,
-                    "block_left_front": 12
+                    "block_left_front": 8
                   }
                 },
                 {
@@ -3876,82 +3889,7 @@
                   "y": 18
                 }
               ],
-              "items": [
-                {
-                  "item_type": "sword",
-                  "category": "weapon",
-                  "item_name": "深淵の魔剣",
-                  "stats": {
-                    "power": 24,
-                    "skill": 18,
-                    "block_right_front": 10
-                  }
-                },
-                {
-                  "item_type": "shield",
-                  "category": "shield",
-                  "item_name": "深淵の盾",
-                  "stats": {
-                    "physical_resistance": 18,
-                    "block_left_front": 14
-                  }
-                },
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "深淵の鎧",
-                  "stats": {
-                    "physical_resistance": 22,
-                    "magic_resistance": 10
-                  }
-                },
-                {
-                  "item_type": "staff",
-                  "category": "weapon",
-                  "item_name": "深淵の大魔杖",
-                  "stats": {
-                    "power": 22,
-                    "skill": 20
-                  }
-                },
-                {
-                  "item_type": "axe",
-                  "category": "weapon",
-                  "item_name": "ダークロードの魔斧",
-                  "stats": {
-                    "power": 28,
-                    "skill": 16,
-                    "block_right_front": 8
-                  }
-                },
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "深淵の覇王鎧",
-                  "stats": {
-                    "physical_resistance": 26,
-                    "magic_resistance": 14
-                  }
-                },
-                {
-                  "item_type": "potion_hp",
-                  "category": "consumable",
-                  "item_name": "HPポーション",
-                  "effect": {
-                    "restore_hp": 30
-                  },
-                  "quantity": 3
-                },
-                {
-                  "item_type": "potion_mp",
-                  "category": "consumable",
-                  "item_name": "MPポーション",
-                  "effect": {
-                    "restore_mp": 20
-                  },
-                  "quantity": 2
-                }
-              ]
+              "items": []
             }
           }
         ],

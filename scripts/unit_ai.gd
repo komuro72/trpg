@@ -1089,6 +1089,8 @@ func _generate_heal_queue() -> Array:
 	if _member.character_data.power <= 0:
 		return []
 	var cost := _member.character_data.heal_mp_cost
+	if cost <= 0:
+		return []
 	if _member.mp < cost:
 		return []
 	# 味方の回復を優先
@@ -1131,11 +1133,12 @@ func _find_heal_target() -> Character:
 	candidates.assign(_party_peers)
 	if _player != null and is_instance_valid(_player) and not candidates.has(_player):
 		candidates.append(_player)
+	var my_friendly: bool = _member.is_friendly if _member != null else true
 	for ch: Character in candidates:
 		if not is_instance_valid(ch) or ch.hp <= 0:
 			continue
-		if not ch.is_friendly:
-			continue
+		if ch.is_friendly != my_friendly:
+			continue  # 同じ陣営のみ対象（敵ヒーラーがプレイヤーを回復しない）
 		var ratio := float(ch.hp) / float(maxi(ch.max_hp, 1))
 		if ratio < best_ratio:
 			best_ratio = ratio
@@ -1171,11 +1174,12 @@ func _find_buff_target() -> Character:
 	candidates.assign(_party_peers)
 	if _player != null and is_instance_valid(_player) and not candidates.has(_player):
 		candidates.append(_player)
+	var my_friendly: bool = _member.is_friendly if _member != null else true
 	for ch: Character in candidates:
 		if not is_instance_valid(ch) or ch.hp <= 0:
 			continue
-		if not ch.is_friendly:
-			continue
+		if ch.is_friendly != my_friendly:
+			continue  # 同じ陣営のみ対象
 		if ch.defense_buff_timer <= 0.0:
 			return ch
 	return null

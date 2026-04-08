@@ -557,7 +557,7 @@ func _get_stat_rows(ch: Character) -> Array:
 		"bonus": cd.get_weapon_power_bonus()})
 	var skill_label := "魔法技量" if _is_magic_cls else "物理技量"
 	rows.append({"label": skill_label, "type": "num",
-		"base": cd.skill, "bonus": cd.get_weapon_skill_bonus()})
+		"base": cd.skill, "bonus": 0})
 	# 防御強度（クラス固有値＋装備補正。保有または装備補正がある場合のみ表示）
 	var brf_bonus := cd.get_weapon_block_right_bonus()
 	if cd.block_right_front > 0 or brf_bonus > 0:

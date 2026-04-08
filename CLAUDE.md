@@ -760,6 +760,14 @@ rank値: C=0, B=1, A=2, S=3
       - クラスごとの素値を設定、他パラメータと同じ生成フローで決定
       - 能力値（整数）で管理し、軽減率への変換は内部で行う: 軽減率 = 能力値 / (能力値 + 100)
     - [x] 初期装備の付与（Phase 10-2 準備で実装済み。dungeon_handcrafted.json の items → 装備スロットにセット）
+    - [x] 装備補正値を新仕様に統一（dungeon_handcrafted.json 全装備を更新）
+      - 初期装備（プレイヤー・NPC）は全補正値0（補正なし）
+      - 武器の `skill` 補正を廃止（仕様通り skill は装備で変化しない）
+      - 剣・斧・短剣: `power` + `block_right_front` / 弓・杖: `power` + `block_front`
+      - 盾: `block_left_front` のみ（旧 `physical_resistance` を削除）
+      - 防具: `physical_resistance` + `magic_resistance` の両方を持つように修正
+      - 最深層（フロア4）の敵パーティーはアイテムなし（クリア直結のためドロップ不要）
+      - 敵ドロップ補正値はフロア深度に応じてスケール
     - AI自動装備は将来実装（当面は拾って持つだけ）
     - [x] UI改善・バグ修正
       - 左パネル・OrderWindow にクラス名（日本語）・ランクを表示
@@ -1289,6 +1297,30 @@ rank値: C=0, B=1, A=2, S=3
     - `_exit_targeting()` の末尾で `character.set_outline(Color.WHITE, 1.0)` を呼んでいたが、操作キャラは元々アウトラインなしのデザインのため、キャンセルのたびに白アウトラインが付与されていた
     - あわせて `_exit_targeting()` / `_confirm_target()` のアウトラインクリアを `Character._all_chars`（全キャラ静的レジストリ）の走査に変更し、`_valid_targets` から漏れたアウトラインも確実に除去
     - 修正：不要な `character.set_outline(Color.WHITE, 1.0)` 呼び出しを削除
+- [x] Phase 12-19: バグ修正（装備仕様統一・回復AI・シェーダー・freed キャスト）
+  - **装備補正値を新仕様に統一（`dungeon_handcrafted.json`）**
+    - 初期装備（プレイヤー・NPC）を全補正値0に変更
+    - 武器の `skill` 補正を廃止。`character.gd` の `refresh_stats_from_equipment()` から skill 加算を削除
+    - `order_window.gd` の skill 行の装備補正表示を 0 固定に変更
+    - 全装備を仕様準拠の stats キーに更新（block_right_front/block_front/block_left_front/physical_resistance/magic_resistance）
+    - 最深層（フロア4）の敵パーティーからアイテムを削除（クリア直結のため不要）
+  - **敵ヒーラーがプレイヤーを回復するバグ（`unit_ai.gd`）**
+    - `_find_heal_target()` / `_find_buff_target()` が `is_friendly == true` でフィルタしていたため、敵ヒーラーが hero を回復対象にしていた
+    - 修正：`ch.is_friendly != my_friendly` に変更し、同じ陣営のキャラのみを対象にする
+  - **回復スキルを持たない敵が回復行動を生成するバグ（`unit_ai.gd`）**
+    - `_generate_heal_queue()` に `heal_mp_cost <= 0` のガードがなく、ゴブリン等（heal_mp_cost=0）が回復行動を実行していた
+    - 修正：`cost <= 0` の場合は早期リターンを追加（`_generate_buff_queue()` と同じ形式）
+  - **アウトラインシェーダーが modulate（HP色変化）を無視するバグ（`outline.gdshader`）**
+    - `COLOR = texture(TEXTURE, UV)` で生テクスチャ色を書き込み、Godot が渡す modulate を上書きしていた
+    - 修正：`COLOR`（modulate 情報）を保持し、テクスチャ色に乗算するよう変更
+  - **hero 死亡後のフロア初期化クラッシュ（`game_map.gd`）**
+    - NPC/仲間のフロア遷移時に hero が freed の状態で `_setup_floor_enemies()` → `em.setup(members, hero, ...)` が呼ばれクラッシュ
+    - 修正：`_setup_floor_enemies()` / `_setup_floor_npcs()` の先頭に `is_instance_valid(hero)` ガードを追加
+  - **`party.sorted_members()` の freed キャラへの as キャストクラッシュ（`party.gd`）**
+    - 死亡キャラが `members` に残留し、`m as Character` でクラッシュ
+    - 修正：キャスト前に `is_instance_valid(m)` チェックを追加
+  - **古い敵画像フォルダ（3/30 作成・22フォルダ）を削除**
+    - コード・マスターデータから未参照の旧画像を整理。新画像（4/7 作成・16種）のみ残す
 - [x] Phase 13: タイトル・セーブ・メニューシステム
   - [x] **セーブシステム基盤**
     - `scripts/save_data.gd`（class_name SaveData）：slot_index / exists / hero_name_male / hero_name_female / current_floor / clear_count / playtime / to_dict() / from_dict() / format_playtime()

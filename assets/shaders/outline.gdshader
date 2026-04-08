@@ -5,7 +5,8 @@ uniform vec4 outline_color : source_color = vec4(1.0, 1.0, 1.0, 1.0);
 uniform float outline_width : hint_range(0.0, 16.0) = 2.0;
 
 void fragment() {
-	vec4 col = texture(TEXTURE, UV);
+	vec4 modulate_color = COLOR; // modulate（HP色変化等）を保持
+	vec4 col = texture(TEXTURE, UV) * modulate_color;
 
 	vec2 tex_size = vec2(textureSize(TEXTURE, 0));
 	vec2 px = outline_width / tex_size;
