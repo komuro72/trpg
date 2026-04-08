@@ -854,7 +854,7 @@ func _execute_water_stun(target: Character, slot_data: Dictionary) -> void:
 		character.use_mp(mp_cost)
 	var dmg_mult      := float(slot_data.get("damage_mult", 0.5))
 	var stun_duration := float(slot_data.get("stun_duration", 3.0))
-	var type_mult     := GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
+	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
 	var raw_damage    := int(float(character.power) * dmg_mult * type_mult)
 	character.face_toward(target.grid_pos)
 	SoundManager.play(SoundManager.MAGIC_SHOOT)
@@ -1000,8 +1000,8 @@ func _execute_whirlwind() -> void:
 	var sp_cost  := int(_slot_v.get("sp_cost", 15))
 	if sp_cost > 0:
 		character.use_sp(sp_cost)
-	var dmg_mult   := float(_slot_v.get("damage_mult", 1.0))
-	var type_mult  := GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
+	var dmg_mult: float  = float(_slot_v.get("damage_mult", 1.0))
+	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
 	var raw_damage := int(float(character.power) * dmg_mult * type_mult)
 	character.is_attacking = true
 	var hit_count := 0
@@ -1032,8 +1032,8 @@ func _execute_rush() -> void:
 	var sp_cost    := int(_slot_v.get("sp_cost", 15))
 	if sp_cost > 0:
 		character.use_sp(sp_cost)
-	var dmg_mult   := float(_slot_v.get("damage_mult", 1.2))
-	var type_mult  := GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
+	var dmg_mult: float  = float(_slot_v.get("damage_mult", 1.2))
+	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
 	var raw_damage := int(float(character.power) * dmg_mult * type_mult)
 	var dir        := Character.dir_to_vec(character.facing)
 	var step_dur   := 0.15 / GlobalConstants.game_speed
@@ -1075,7 +1075,7 @@ func _execute_headshot(target: Character, slot_data: Dictionary) -> void:
 	if target.character_data != null:
 		is_immune = bool(target.character_data.instant_death_immune)
 	if is_immune:
-		var type_mult  := GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
+		var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
 		var raw_damage := int(float(character.power) * 3.0 * type_mult)
 		_spawn_projectile(target, raw_damage, false)
 		MessageLog.add_combat("[ヘッドショット] %s → %s ×3ダメージ" % \
@@ -1091,8 +1091,8 @@ func _execute_flame_circle() -> void:
 	var mp_cost     := int(_slot_v.get("mp_cost", 20))
 	if mp_cost > 0:
 		character.use_mp(mp_cost)
-	var dmg_mult    := float(_slot_v.get("damage_mult", 0.8))
-	var type_mult   := GlobalConstants.ATTACK_TYPE_MULT.get("magic", 1.0)
+	var dmg_mult: float  = float(_slot_v.get("damage_mult", 0.8))
+	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("magic", 1.0)
 	var damage      := maxi(1, int(float(character.power) * dmg_mult * type_mult))
 	var radius      := int(_slot_v.get("range", 3))
 	var duration    := float(_slot_v.get("duration", 2.5))
