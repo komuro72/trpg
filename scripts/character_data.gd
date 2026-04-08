@@ -249,12 +249,12 @@ func get_weapon_skill_bonus() -> int:
 
 ## 装備中の武器から防御強度を返す
 func get_weapon_block_power() -> int:
-	return int((equipped_weapon.get("stats", {}) as Dictionary).get("defense_strength", 0))
+	return int((equipped_weapon.get("stats", {}) as Dictionary).get("block_power", 0))
 
 
 ## 装備中の盾から防御強度を返す
 func get_shield_block_power() -> int:
-	return int((equipped_shield.get("stats", {}) as Dictionary).get("defense_strength", 0))
+	return int((equipped_shield.get("stats", {}) as Dictionary).get("block_power", 0))
 
 
 ## 装備補正込みの物理耐性の能力値合計を返す（素値 + 防具 + 盾）
