@@ -5,12 +5,10 @@
 		"fighter-axe"
 	],
 	"base_stats": {
-		"power_min": 5,
-		"power_max": 12,
-		"skill_min": 0,
-		"skill_max": 8,
-		"defense_strength_min": 2,
-		"defense_strength_max": 5
+		"power_min": 0,
+		"power_max": 30,
+		"block_right_front_min": 0,
+		"block_right_front_max": 30
 	},
 	"depth_scale": 0.6
 }

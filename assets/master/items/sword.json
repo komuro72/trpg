@@ -5,12 +5,10 @@
 		"fighter-sword"
 	],
 	"base_stats": {
-		"power_min": 3,
-		"power_max": 8,
-		"skill_min": 5,
-		"skill_max": 15,
-		"defense_strength_min": 1,
-		"defense_strength_max": 4
+		"power_min": 0,
+		"power_max": 30,
+		"block_right_front_min": 0,
+		"block_right_front_max": 30
 	},
 	"depth_scale": 0.5
 }

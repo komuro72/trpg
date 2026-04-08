@@ -830,14 +830,19 @@ func _calc_attack_direction(attacker: Character) -> String:
 
 
 ## ガード中正面攻撃のブロック量（成功率100%・全防御強度フィールドの合計）を返す
+## クラス固有値＋装備補正を合算する
 func _calc_block_power_front_guard() -> int:
 	if character_data == null:
 		return 0
 	var cd := character_data
-	return cd.block_right_front + cd.block_left_front + cd.block_front
+	var brf := cd.block_right_front + cd.get_weapon_block_right_bonus()
+	var blf := cd.block_left_front  + cd.get_shield_block_left_bonus()
+	var bf  := cd.block_front       + cd.get_weapon_block_front_bonus()
+	return brf + blf + bf
 
 
 ## 防御強度3フィールドによるブロック量を返す（各フィールドを独立してロール）
+## クラス固有値＋装備補正を合算し、方向と defense_accuracy でロール判定する
 ## block_right_front: 正面・右側面で有効（剣士・斧戦士・斥候・ハーピー・ダークロード等）
 ## block_left_front:  正面・左側面で有効（剣士・斧戦士・ハーピー・ダークロード等）
 ## block_front:       正面のみ有効（弓使い・魔法使い・ヒーラー・ゾンビ・ウルフ等）
@@ -846,22 +851,26 @@ func _calc_block_per_class(direction: String) -> int:
 		return 0
 	var cd := character_data
 	var acc: float = float(cd.defense_accuracy) / 100.0
+	# クラス固有値＋装備補正の合計
+	var brf := cd.block_right_front + cd.get_weapon_block_right_bonus()
+	var blf := cd.block_left_front  + cd.get_shield_block_left_bonus()
+	var bf  := cd.block_front       + cd.get_weapon_block_front_bonus()
 	var total := 0
 
 	# block_right_front: 正面・右側面で有効
-	if cd.block_right_front > 0 and direction in ["front", "right"]:
+	if brf > 0 and direction in ["front", "right"]:
 		if randf() < acc:
-			total += cd.block_right_front
+			total += brf
 
 	# block_left_front: 正面・左側面で有効
-	if cd.block_left_front > 0 and direction in ["front", "left"]:
+	if blf > 0 and direction in ["front", "left"]:
 		if randf() < acc:
-			total += cd.block_left_front
+			total += blf
 
 	# block_front: 正面のみ有効
-	if cd.block_front > 0 and direction == "front":
+	if bf > 0 and direction == "front":
 		if randf() < acc:
-			total += cd.block_front
+			total += bf
 
 	return total
 

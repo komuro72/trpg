@@ -3,10 +3,10 @@
 	"category": "armor",
 	"allowed_classes": ["fighter-sword", "fighter-axe"],
 	"base_stats": {
-		"physical_resistance_min": 5,
-		"physical_resistance_max": 15,
+		"physical_resistance_min": 0,
+		"physical_resistance_max": 30,
 		"magic_resistance_min": 0,
-		"magic_resistance_max": 5
+		"magic_resistance_max": 15
 	},
 	"depth_scale": 0.5
 }

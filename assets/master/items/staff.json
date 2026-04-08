@@ -3,15 +3,14 @@
 	"category": "weapon",
 	"allowed_classes": [
 		"magician-fire",
+		"magician-water",
 		"healer"
 	],
 	"base_stats": {
-		"power_min": 4,
-		"power_max": 10,
-		"skill_min": 5,
-		"skill_max": 18,
-		"defense_strength_min": 0,
-		"defense_strength_max": 2,
+		"power_min": 0,
+		"power_max": 30,
+		"block_front_min": 0,
+		"block_front_max": 30,
 		"range_bonus_min": 0,
 		"range_bonus_max": 1
 	},

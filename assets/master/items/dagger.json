@@ -5,12 +5,10 @@
 		"scout"
 	],
 	"base_stats": {
-		"power_min": 2,
-		"power_max": 6,
-		"skill_min": 10,
-		"skill_max": 25,
-		"defense_strength_min": 0,
-		"defense_strength_max": 2
+		"power_min": 0,
+		"power_max": 30,
+		"block_right_front_min": 0,
+		"block_right_front_max": 30
 	},
 	"depth_scale": 0.4
 }

@@ -5,12 +5,10 @@
 		"archer"
 	],
 	"base_stats": {
-		"power_min": 4,
-		"power_max": 9,
-		"skill_min": 8,
-		"skill_max": 20,
-		"defense_strength_min": 0,
-		"defense_strength_max": 2,
+		"power_min": 0,
+		"power_max": 30,
+		"block_front_min": 0,
+		"block_front_max": 30,
 		"range_bonus_min": 0,
 		"range_bonus_max": 2
 	},

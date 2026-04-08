@@ -558,13 +558,16 @@ func _get_stat_rows(ch: Character) -> Array:
 	var skill_label := "魔法技量" if _is_magic_cls else "物理技量"
 	rows.append({"label": skill_label, "type": "num",
 		"base": cd.skill, "bonus": cd.get_weapon_skill_bonus()})
-	# 防御強度（クラス固有値。保有するフィールドのみ表示）
-	if cd.block_right_front > 0:
-		rows.append({"label": "右手防御強度", "type": "num", "base": cd.block_right_front, "bonus": 0})
-	if cd.block_left_front > 0:
-		rows.append({"label": "左手防御強度", "type": "num", "base": cd.block_left_front,  "bonus": 0})
-	if cd.block_front > 0:
-		rows.append({"label": "両手防御強度", "type": "num", "base": cd.block_front,        "bonus": 0})
+	# 防御強度（クラス固有値＋装備補正。保有または装備補正がある場合のみ表示）
+	var brf_bonus := cd.get_weapon_block_right_bonus()
+	if cd.block_right_front > 0 or brf_bonus > 0:
+		rows.append({"label": "右手防御強度", "type": "num", "base": cd.block_right_front, "bonus": brf_bonus})
+	var blf_bonus := cd.get_shield_block_left_bonus()
+	if cd.block_left_front > 0 or blf_bonus > 0:
+		rows.append({"label": "左手防御強度", "type": "num", "base": cd.block_left_front,  "bonus": blf_bonus})
+	var bf_bonus := cd.get_weapon_block_front_bonus()
+	if cd.block_front > 0 or bf_bonus > 0:
+		rows.append({"label": "両手防御強度", "type": "num", "base": cd.block_front,        "bonus": bf_bonus})
 	rows.append({"label": "防御技量",      "type": "num",
 		"base": cd.defense_accuracy, "bonus": 0})
 	var phys_equip := cd.get_total_physical_resistance_score() - cd.physical_resistance

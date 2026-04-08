@@ -31,7 +31,7 @@
                       "stats": {
                         "power": 2,
                         "skill": 3,
-                        "block_power": 1
+                        "block_right_front": 1
                       },
                       "equipped": true
                     },
@@ -50,7 +50,7 @@
                       "item_name": "木の盾",
                       "stats": {
                         "physical_resistance": 1,
-                        "block_power": 1
+                        "block_left_front": 1
                       },
                       "equipped": true
                     },
@@ -278,7 +278,7 @@
                       "stats": {
                         "power": 3,
                         "skill": 3,
-                        "block_power": 1
+                        "block_right_front": 1
                       },
                       "equipped": true
                     },
@@ -297,7 +297,7 @@
                       "item_name": "木の盾",
                       "stats": {
                         "physical_resistance": 2,
-                        "block_power": 2
+                        "block_left_front": 2
                       },
                       "equipped": true
                     }
@@ -331,7 +331,7 @@
                       "stats": {
                         "power": 3,
                         "skill": 3,
-                        "block_power": 1
+                        "block_right_front": 1
                       },
                       "equipped": true
                     },
@@ -350,7 +350,7 @@
                       "item_name": "鉄の盾",
                       "stats": {
                         "physical_resistance": 2,
-                        "block_power": 2
+                        "block_left_front": 2
                       },
                       "equipped": true
                     }
@@ -574,7 +574,7 @@
                       "stats": {
                         "power": 3,
                         "skill": 3,
-                        "block_power": 1
+                        "block_right_front": 1
                       },
                       "equipped": true
                     },
@@ -593,7 +593,7 @@
                       "item_name": "鉄の盾",
                       "stats": {
                         "physical_resistance": 2,
-                        "block_power": 2
+                        "block_left_front": 2
                       },
                       "equipped": true
                     },
@@ -831,7 +831,7 @@
                   "stats": {
                     "power": 5,
                     "skill": 4,
-                    "block_power": 2
+                    "block_right_front": 2
                   }
                 },
                 {
@@ -1003,7 +1003,7 @@
                   "stats": {
                     "power": 5,
                     "skill": 4,
-                    "block_power": 2
+                    "block_right_front": 2
                   }
                 },
                 {
@@ -1012,7 +1012,7 @@
                   "item_name": "強化木盾",
                   "stats": {
                     "physical_resistance": 3,
-                    "block_power": 3
+                    "block_left_front": 3
                   }
                 },
                 {
@@ -1185,7 +1185,7 @@
                   "stats": {
                     "power": 5,
                     "skill": 4,
-                    "block_power": 2
+                    "block_right_front": 2
                   }
                 },
                 {
@@ -1300,7 +1300,7 @@
                   "stats": {
                     "power": 6,
                     "skill": 4,
-                    "block_power": 2
+                    "block_right_front": 2
                   }
                 },
                 {
@@ -1358,7 +1358,7 @@
                   "stats": {
                     "power": 6,
                     "skill": 4,
-                    "block_power": 2
+                    "block_right_front": 2
                   }
                 },
                 {
@@ -1367,7 +1367,7 @@
                   "item_name": "古い盾",
                   "stats": {
                     "physical_resistance": 4,
-                    "block_power": 3
+                    "block_left_front": 3
                   }
                 },
                 {
@@ -1597,7 +1597,7 @@
                   "stats": {
                     "power": 7,
                     "skill": 5,
-                    "block_power": 3
+                    "block_right_front": 3
                   }
                 },
                 {
@@ -1606,7 +1606,7 @@
                   "item_name": "鉄製の盾",
                   "stats": {
                     "physical_resistance": 5,
-                    "block_power": 4
+                    "block_left_front": 4
                   }
                 },
                 {
@@ -1827,7 +1827,7 @@
                   "stats": {
                     "power": 8,
                     "skill": 4,
-                    "block_power": 3
+                    "block_right_front": 3
                   }
                 },
                 {
@@ -1844,7 +1844,7 @@
                   "item_name": "強固な盾",
                   "stats": {
                     "physical_resistance": 5,
-                    "block_power": 5
+                    "block_left_front": 5
                   }
                 },
                 {
@@ -2083,7 +2083,7 @@
                   "stats": {
                     "power": 10,
                     "skill": 6,
-                    "block_power": 4
+                    "block_right_front": 4
                   }
                 },
                 {
@@ -2100,7 +2100,7 @@
                   "item_name": "暗黒の盾",
                   "stats": {
                     "physical_resistance": 6,
-                    "block_power": 5
+                    "block_left_front": 5
                   }
                 },
                 {
@@ -2346,7 +2346,7 @@
                   "item_name": "闇の護符盾",
                   "stats": {
                     "magic_resistance": 7,
-                    "block_power": 5
+                    "block_left_front": 5
                   }
                 },
                 {
@@ -2401,7 +2401,7 @@
                   "stats": {
                     "power": 10,
                     "skill": 5,
-                    "block_power": 3
+                    "block_right_front": 3
                   }
                 },
                 {
@@ -2459,7 +2459,7 @@
                   "stats": {
                     "power": 12,
                     "skill": 7,
-                    "block_power": 5
+                    "block_right_front": 5
                   }
                 },
                 {
@@ -2583,7 +2583,7 @@
                   "stats": {
                     "power": 12,
                     "skill": 6,
-                    "block_power": 5
+                    "block_right_front": 5
                   }
                 },
                 {
@@ -2600,7 +2600,7 @@
                   "item_name": "暗黒の大盾",
                   "stats": {
                     "physical_resistance": 8,
-                    "block_power": 7
+                    "block_left_front": 7
                   }
                 },
                 {
@@ -2721,7 +2721,7 @@
                   "stats": {
                     "power": 15,
                     "skill": 7,
-                    "block_power": 6
+                    "block_right_front": 6
                   }
                 },
                 {
@@ -2738,7 +2738,7 @@
                   "item_name": "深淵の騎士盾",
                   "stats": {
                     "physical_resistance": 10,
-                    "block_power": 8
+                    "block_left_front": 8
                   }
                 },
                 {
@@ -2929,7 +2929,7 @@
                   "stats": {
                     "power": 15,
                     "skill": 8,
-                    "block_power": 6
+                    "block_right_front": 6
                   }
                 },
                 {
@@ -2946,7 +2946,7 @@
                   "item_name": "精霊の盾",
                   "stats": {
                     "physical_resistance": 11,
-                    "block_power": 8
+                    "block_left_front": 8
                   }
                 },
                 {
@@ -3067,7 +3067,7 @@
                   "stats": {
                     "power": 18,
                     "skill": 7,
-                    "block_power": 7
+                    "block_right_front": 7
                   }
                 },
                 {
@@ -3187,7 +3187,7 @@
                   "stats": {
                     "power": 19,
                     "skill": 8,
-                    "block_power": 8
+                    "block_right_front": 8
                   }
                 },
                 {
@@ -3204,7 +3204,7 @@
                   "item_name": "黒鋼の盾",
                   "stats": {
                     "physical_resistance": 13,
-                    "block_power": 10
+                    "block_left_front": 10
                   }
                 },
                 {
@@ -3392,7 +3392,7 @@
                   "stats": {
                     "power": 20,
                     "skill": 7,
-                    "block_power": 9
+                    "block_right_front": 9
                   }
                 },
                 {
@@ -3521,7 +3521,7 @@
                   "stats": {
                     "power": 20,
                     "skill": 8,
-                    "block_power": 9
+                    "block_right_front": 9
                   }
                 },
                 {
@@ -3530,7 +3530,7 @@
                   "item_name": "護衛騎士の盾",
                   "stats": {
                     "physical_resistance": 15,
-                    "block_power": 11
+                    "block_left_front": 11
                   }
                 },
                 {
@@ -3661,7 +3661,7 @@
                   "stats": {
                     "power": 22,
                     "skill": 8,
-                    "block_power": 10
+                    "block_right_front": 10
                   }
                 },
                 {
@@ -3678,7 +3678,7 @@
                   "item_name": "側近の大盾",
                   "stats": {
                     "physical_resistance": 16,
-                    "block_power": 12
+                    "block_left_front": 12
                   }
                 },
                 {
@@ -3884,7 +3884,7 @@
                   "stats": {
                     "power": 24,
                     "skill": 18,
-                    "block_power": 10
+                    "block_right_front": 10
                   }
                 },
                 {
@@ -3893,7 +3893,7 @@
                   "item_name": "深淵の盾",
                   "stats": {
                     "physical_resistance": 18,
-                    "block_power": 14
+                    "block_left_front": 14
                   }
                 },
                 {
@@ -3921,7 +3921,7 @@
                   "stats": {
                     "power": 28,
                     "skill": 16,
-                    "block_power": 8
+                    "block_right_front": 8
                   }
                 },
                 {

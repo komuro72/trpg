@@ -255,14 +255,29 @@ func get_weapon_skill_bonus() -> int:
 	return v
 
 
-## 装備中の武器から防御強度を返す
+## 装備中の武器から防御強度を返す（旧 block_power キー互換）
 func get_weapon_block_power() -> int:
 	return int((equipped_weapon.get("stats", {}) as Dictionary).get("block_power", 0))
 
 
-## 装備中の盾から防御強度を返す
+## 装備中の盾から防御強度を返す（旧 block_power キー互換）
 func get_shield_block_power() -> int:
 	return int((equipped_shield.get("stats", {}) as Dictionary).get("block_power", 0))
+
+
+## 装備中の武器から右手防御強度補正を返す（剣・斧・短剣。正面・右側面で有効）
+func get_weapon_block_right_bonus() -> int:
+	return int((equipped_weapon.get("stats", {}) as Dictionary).get("block_right_front", 0))
+
+
+## 装備中の武器から両手防御強度補正を返す（弓・杖。正面のみ有効）
+func get_weapon_block_front_bonus() -> int:
+	return int((equipped_weapon.get("stats", {}) as Dictionary).get("block_front", 0))
+
+
+## 装備中の盾から左手防御強度補正を返す（盾。正面・左側面で有効）
+func get_shield_block_left_bonus() -> int:
+	return int((equipped_shield.get("stats", {}) as Dictionary).get("block_left_front", 0))
 
 
 ## 装備補正込みの物理耐性の能力値合計を返す（素値 + 防具 + 盾）
