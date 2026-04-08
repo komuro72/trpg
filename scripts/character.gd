@@ -895,12 +895,31 @@ func _log_damage(attacker: Character, raw: int, mult: float, is_magic: bool,
 	# ベースダメージ（クリティカル前）＋クリティカル補正後のダメージ
 	var base_dmg := raw                        # クリティカル前のベースダメージ
 	var after_crit := int(float(raw) * mult)   # クリティカル後・防御前のダメージ
-	var type_tag := "（魔法）" if is_magic else ""
+
+	# ベースダメージの算出内訳（威力 × 攻撃タイプ倍率 [× スキル倍率]）
+	var calc_detail := ""
+	if attacker != null and attacker.character_data != null:
+		var atype: String = attacker.character_data.attack_type
+		var t_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get(atype, 1.0) as float
+		var type_jp: Dictionary = {
+			"melee": "近接", "ranged": "遠距離", "dive": "降下", "magic": "魔法"
+		}
+		var type_label: String = type_jp.get(atype, atype) as String
+		var type_base := int(float(attacker.power) * t_mult)
+		if type_base == raw:
+			# damage_mult が実質 1.0（スキル倍率なし）
+			calc_detail = "（威力%d × %s×%.1f）" % [attacker.power, type_label, t_mult]
+		else:
+			# damage_mult != 1.0（スキル倍率あり。int 切り捨て誤差が出ることがある）
+			var inferred_dmg_mult := float(raw) / float(type_base) if type_base > 0 else 1.0
+			calc_detail = "（威力%d × %s×%.1f × スキル×%.2f）" % \
+					[attacker.power, type_label, t_mult, inferred_dmg_mult]
+
 	var dmg_label: String
 	if is_critical:
-		dmg_label = "ベースダメージ%d%s [クリティカル!×2]→%d" % [base_dmg, type_tag, after_crit]
+		dmg_label = "ベースダメージ%d%s [クリティカル!×2]→%d" % [base_dmg, calc_detail, after_crit]
 	else:
-		dmg_label = "ベースダメージ%d%s" % [base_dmg, type_tag]
+		dmg_label = "ベースダメージ%d%s" % [base_dmg, calc_detail]
 
 	# 方向・防御部分（after_crit を基準に計算）
 	var dir_str: String
