@@ -56,6 +56,14 @@ var buff_mp_cost: int = 0
 var physical_resistance: int = 0  ## 物理耐性の能力値
 var magic_resistance:    int = 0  ## 魔法耐性の能力値
 
+## 防御強度（class_stats から生成。装備補正なし。防御判定成功時にダメージをカット）
+## block_right_front: 右手武器（正面・右側面で有効。剣士・斧戦士・斥候・ハーピー・ダークロード）
+## block_left_front:  盾・左腕（正面・左側面で有効。剣士・斧戦士・ハーピー・ダークロード）
+## block_front:       両手武器・体幹ガード（正面のみ有効。弓使い・魔法使い・ヒーラー・ゾンビ・ウルフ等）
+var block_right_front: int = 0
+var block_left_front:  int = 0
+var block_front:       int = 0
+
 ## インベントリ（アイテムインスタンスの辞書リスト。Phase 10-1〜）
 var inventory: Array = []
 

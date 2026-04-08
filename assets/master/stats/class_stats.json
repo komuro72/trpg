@@ -9,7 +9,10 @@
     "magic_resistance":    { "base": 20, "rank": 0  },
     "move_speed":          { "base": 30, "rank": 0  },
     "leadership":          { "base": 30, "rank": 10 },
-    "obedience":           { "base": 30, "rank": 0  }
+    "obedience":           { "base": 30, "rank": 0  },
+    "block_right_front":   { "base": 20, "rank": 0  },
+    "block_left_front":    { "base": 20, "rank": 0  },
+    "block_front":         { "base": 0,  "rank": 0  }
   },
   "fighter-axe": {
     "vitality":            { "base": 40, "rank": 5  },
@@ -21,7 +24,10 @@
     "magic_resistance":    { "base": 20, "rank": 0  },
     "move_speed":          { "base": 25, "rank": 0  },
     "leadership":          { "base": 30, "rank": 10 },
-    "obedience":           { "base": 30, "rank": 0  }
+    "obedience":           { "base": 30, "rank": 0  },
+    "block_right_front":   { "base": 20, "rank": 0  },
+    "block_left_front":    { "base": 20, "rank": 0  },
+    "block_front":         { "base": 0,  "rank": 0  }
   },
   "scout": {
     "vitality":            { "base": 30, "rank": 5  },
@@ -33,7 +39,10 @@
     "magic_resistance":    { "base": 20, "rank": 0  },
     "move_speed":          { "base": 35, "rank": 5  },
     "leadership":          { "base": 20, "rank": 10 },
-    "obedience":           { "base": 40, "rank": 0  }
+    "obedience":           { "base": 40, "rank": 0  },
+    "block_right_front":   { "base": 15, "rank": 0  },
+    "block_left_front":    { "base": 0,  "rank": 0  },
+    "block_front":         { "base": 0,  "rank": 0  }
   },
   "archer": {
     "vitality":            { "base": 30, "rank": 5  },
@@ -45,7 +54,10 @@
     "magic_resistance":    { "base": 25, "rank": 0  },
     "move_speed":          { "base": 30, "rank": 0  },
     "leadership":          { "base": 20, "rank": 10 },
-    "obedience":           { "base": 20, "rank": 0  }
+    "obedience":           { "base": 20, "rank": 0  },
+    "block_right_front":   { "base": 0,  "rank": 0  },
+    "block_left_front":    { "base": 0,  "rank": 0  },
+    "block_front":         { "base": 15, "rank": 0  }
   },
   "magician-fire": {
     "vitality":            { "base": 25, "rank": 5  },
@@ -57,7 +69,10 @@
     "magic_resistance":    { "base": 40, "rank": 10 },
     "move_speed":          { "base": 25, "rank": 0  },
     "leadership":          { "base": 30, "rank": 10 },
-    "obedience":           { "base": 20, "rank": 0  }
+    "obedience":           { "base": 20, "rank": 0  },
+    "block_right_front":   { "base": 0,  "rank": 0  },
+    "block_left_front":    { "base": 0,  "rank": 0  },
+    "block_front":         { "base": 20, "rank": 0  }
   },
   "magician-water": {
     "vitality":            { "base": 25, "rank": 5  },
@@ -69,7 +84,10 @@
     "magic_resistance":    { "base": 40, "rank": 10 },
     "move_speed":          { "base": 25, "rank": 0  },
     "leadership":          { "base": 30, "rank": 10 },
-    "obedience":           { "base": 20, "rank": 0  }
+    "obedience":           { "base": 20, "rank": 0  },
+    "block_right_front":   { "base": 0,  "rank": 0  },
+    "block_left_front":    { "base": 0,  "rank": 0  },
+    "block_front":         { "base": 20, "rank": 0  }
   },
   "healer": {
     "vitality":            { "base": 30, "rank": 5  },
@@ -81,6 +99,9 @@
     "magic_resistance":    { "base": 40, "rank": 10 },
     "move_speed":          { "base": 25, "rank": 0  },
     "leadership":          { "base": 20, "rank": 10 },
-    "obedience":           { "base": 40, "rank": 0  }
+    "obedience":           { "base": 40, "rank": 0  },
+    "block_right_front":   { "base": 0,  "rank": 0  },
+    "block_left_front":    { "base": 0,  "rank": 0  },
+    "block_front":         { "base": 20, "rank": 0  }
   }
 }

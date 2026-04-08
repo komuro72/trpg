@@ -1,18 +1,18 @@
 {
   "goblin":          { "stat_type": "fighter-axe",   "rank": "C", "stat_bonus": {} },
-  "hobgoblin":       { "stat_type": "fighter-axe",   "rank": "B", "stat_bonus": {} },
+  "hobgoblin":       { "stat_type": "fighter-axe",   "rank": "B", "stat_bonus": { "block_right_front": 10, "block_left_front": 10 } },
   "goblin-archer":   { "stat_type": "archer",         "rank": "C", "stat_bonus": {} },
   "goblin-mage":     { "stat_type": "magician-fire",  "rank": "C", "stat_bonus": {} },
   "zombie":          { "stat_type": "zombie",          "rank": "C", "stat_bonus": {} },
-  "skeleton":        { "stat_type": "fighter-sword",  "rank": "B", "stat_bonus": { "physical_resistance": 30 } },
-  "skeleton-archer": { "stat_type": "archer",         "rank": "B", "stat_bonus": { "physical_resistance": 30 } },
-  "lich":            { "stat_type": "magician-fire",  "rank": "B", "stat_bonus": { "physical_resistance": 30 } },
+  "skeleton":        { "stat_type": "fighter-sword",  "rank": "B", "stat_bonus": { "physical_resistance": 30, "block_right_front": 10, "block_left_front": 10 } },
+  "skeleton-archer": { "stat_type": "archer",         "rank": "B", "stat_bonus": { "physical_resistance": 30, "block_front": 10 } },
+  "lich":            { "stat_type": "magician-fire",  "rank": "B", "stat_bonus": { "physical_resistance": 30, "block_front": 10 } },
   "wolf":            { "stat_type": "wolf",            "rank": "B", "stat_bonus": {} },
   "salamander":      { "stat_type": "salamander",      "rank": "B", "stat_bonus": {} },
   "harpy":           { "stat_type": "harpy",           "rank": "B", "stat_bonus": {} },
-  "demon":           { "stat_type": "magician-fire",  "rank": "A", "stat_bonus": {} },
-  "dark-knight":     { "stat_type": "fighter-sword",  "rank": "A", "stat_bonus": {} },
-  "dark-mage":       { "stat_type": "magician-fire",  "rank": "A", "stat_bonus": {} },
-  "dark-priest":     { "stat_type": "healer",          "rank": "A", "stat_bonus": {} },
-  "dark-lord":       { "stat_type": "dark-lord",       "rank": "S", "stat_bonus": {} }
+  "demon":           { "stat_type": "magician-fire",  "rank": "A", "stat_bonus": { "block_front": 20 } },
+  "dark-knight":     { "stat_type": "fighter-sword",  "rank": "A", "stat_bonus": { "block_right_front": 20, "block_left_front": 20 } },
+  "dark-mage":       { "stat_type": "magician-fire",  "rank": "A", "stat_bonus": { "block_front": 20 } },
+  "dark-priest":     { "stat_type": "healer",          "rank": "A", "stat_bonus": { "block_front": 20 } },
+  "dark-lord":       { "stat_type": "dark-lord",       "rank": "S", "stat_bonus": { "block_right_front": 30, "block_left_front": 30 } }
 }

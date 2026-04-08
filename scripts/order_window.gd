@@ -558,11 +558,13 @@ func _get_stat_rows(ch: Character) -> Array:
 	var skill_label := "魔法技量" if _is_magic_cls else "物理技量"
 	rows.append({"label": skill_label, "type": "num",
 		"base": cd.skill, "bonus": cd.get_weapon_skill_bonus()})
-	# 防御強度（素値0・装備補正のみ。武器と盾を別行）
-	rows.append({"label": "武器防御強度",  "type": "num",    "base": 0, "bonus": cd.get_weapon_block_power()})
-	var _can_shield := cd.class_id in ["fighter-sword", "fighter-axe"]
-	if _can_shield:
-		rows.append({"label": "盾防御強度", "type": "num",   "base": 0, "bonus": cd.get_shield_block_power()})
+	# 防御強度（クラス固有値。保有するフィールドのみ表示）
+	if cd.block_right_front > 0:
+		rows.append({"label": "右手防御強度", "type": "num", "base": cd.block_right_front, "bonus": 0})
+	if cd.block_left_front > 0:
+		rows.append({"label": "左手防御強度", "type": "num", "base": cd.block_left_front,  "bonus": 0})
+	if cd.block_front > 0:
+		rows.append({"label": "正面防御強度", "type": "num", "base": cd.block_front,        "bonus": 0})
 	rows.append({"label": "防御技量",      "type": "num",
 		"base": cd.defense_accuracy, "bonus": 0})
 	var phys_equip := cd.get_total_physical_resistance_score() - cd.physical_resistance

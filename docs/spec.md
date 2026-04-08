@@ -780,31 +780,34 @@ F5キー:
 | `obedience` | float | 従順度（個体側 0.0〜1.0。クラス・種族・ランクから算出、確定後不変。当面値のみ保持） |
 | `inventory` | Array | アイテムインスタンスの辞書リスト（装備中・未装備品・消耗品すべて含む） |
 
-**装備パラメータ（アイテムインスタンス側に持つ・CharacterData には含まない）**
-| フィールド名 | 型 | 説明 |
-|-----------|-----|------|
-| `block_power` | int | 防御強度。防御成功時に無効化できるダメージ量。武器・盾が持つ |
+**CharacterData の防御強度フィールド（クラス固有値・装備補正なし）**
+| フィールド名 | 型 | 有効方向 | 保有クラス例 |
+|-----------|-----|---------|------------|
+| `block_right_front` | int | 正面・右側面 | 剣士・斧戦士・斥候・ハーピー・ダークロード |
+| `block_left_front`  | int | 正面・左側面 | 剣士・斧戦士・ハーピー・ダークロード |
+| `block_front`       | int | 正面のみ   | 弓使い・魔法使い・ヒーラー・ゾンビ・ウルフ・サラマンダー |
 
 > **注記**: `attack_power`（物理攻撃力）と `magic_power`（魔法威力）は近接/遠距離/魔法を統合した確定仕様。Phase 10-2 以降でも分離しない。
 
 ### OrderWindow での表示
 - ステータスは素値・補正値（装備合算）・最終値の3列表示（例：攻撃力 15 +3 → 18）
 - ヒーラー（attack_type="heal"）には命中精度行を表示しない（回復魔法は必中のため）
+- 防御強度は保有フィールドのみ表示（「右手防御強度」「左手防御強度」「正面防御強度」）
 
-### 命中・被ダメージ計算（詳細は「ステータス仕様更新」節を参照）
+### 命中・被ダメージ計算
 1. **着弾判定**（accuracy）：命中精度が基準値未満 → 外れ or 誤射（将来実装）
-2. **防御判定**（defense_accuracy）：背面攻撃はスキップ。成功時に武器・盾の block_power でダメージカット
+2. **防御判定**（defense_accuracy）：背面攻撃はスキップ。各フィールドを独立してロール。成功したフィールドの合計をダメージカット
 3. **耐性適用**（physical/magic resistance）：割合軽減
 4. **最終ダメージ確定**（最低1）
 
-### ダメージ計算への装備補正反映（Phase 10-2 実装予定）
+### ダメージ計算への装備補正反映
 ```
-攻撃力   = attack_power (素値) + 武器 attack_power
-命中精度 = accuracy (素値)     + 武器 accuracy
-魔法威力 = magic_power (素値)  + 杖 magic_power
+物理威力 = power (素値) + 武器 power
+魔法威力 = power (素値) + 武器 power
+物理技量 = skill (素値) + 武器 skill
 物理耐性 = 素値 + 防具 physical_resistance + 盾 physical_resistance
 魔法耐性 = 素値 + 防具 magic_resistance    + 盾 magic_resistance
-防御強度 = 素値 + 武器 block_power         + 盾 block_power
+防御強度 = block_right_front / block_left_front / block_front（クラス固有値・装備補正なし）
 ```
 
 ---
@@ -2081,9 +2084,9 @@ assets/master/items/
    - atan2 で攻撃者→防御者方向角と防御者向き角の差を計算
    - 正面 ±45°→ "front"、背面 ±45°→ "back"、右 ±45°→ "right"、左→ "left"
    - 背面攻撃は防御判定をスキップ
-2. **防御判定**（`defense_accuracy` で成功/失敗）
-   - 成功時 `_calc_block_power(direction)` でカット量を決定
-     - front: weapon_block + shield_block / left: shield_block / right: weapon_block / back: 0
+2. **防御判定**（`defense_accuracy` で各フィールドを独立してロール）
+   - `block_right_front`：正面・右側面で有効　`block_left_front`：正面・左側面で有効　`block_front`：正面のみ有効
+   - 成功したフィールドの合計値をダメージからカット / 背面: 0（スキップ）
 3. **耐性適用**（物理 or 魔法耐性で割合軽減）
    - 残ダメージ × (1 - resistance)。最低 1 ダメージ保証
 
@@ -2989,16 +2992,17 @@ var quantity: int           # 消耗品のみ使用（装備品は常に1）
 - `get_stat_total(stat_key)` メソッド: 素値 + 全装備の補正値合計を返す
 - ステータスウィンドウの3列表示はこのメソッドから取得
 
-### 防御強度の計算
+### 防御強度の計算（3フィールド方式）
 ```
-使用可能な防御強度 = 攻撃方向に応じた装備の防御強度の合計
+block_right_front: 正面・右側面で有効（剣士・斧戦士・斥候・ハーピー・ダークロード等）
+block_left_front:  正面・左側面で有効（剣士・斧戦士・ハーピー・ダークロード等）
+block_front:       正面のみ有効（弓使い・魔法使い・ヒーラー・ゾンビ・ウルフ・サラマンダー等）
 
-正面:   equipped_shield.defense_strength + equipped_weapon.defense_strength
-左側面: equipped_shield.defense_strength
-右側面: equipped_weapon.defense_strength
-背面:   0（防御判定スキップ）
+各フィールドを defense_accuracy で独立ロール → 成功した分の合計をカット
+背面: 0（全フィールドをスキップ）
 ```
-- 盾未装備の場合、盾の防御強度は 0 として計算
+- クラス固有値（class_stats.json / enemy_class_stats.json から生成）
+- 装備による補正なし
 
 ### ドロップシステム
 - `EnemyParty.drop_items: Array[ItemData]` にダンジョン生成時にアイテムを格納
@@ -3020,30 +3024,31 @@ var quantity: int           # 消耗品のみ使用（装備品は常に1）
 | 変更前 | 変更後 | 備考 |
 |--------|--------|------|
 | 回避力（evasion） | 防御精度（defense_accuracy） | キャラ素値。装備による変化なし |
-| （新規） | 防御強度（defense_strength） | 武器・盾のパラメータ |
+| defense_strength（装備側） | block_right_front / block_left_front / block_front（CharacterData側） | クラス固有値・方向別3フィールド |
 
 ### 防御精度（defense_accuracy）
 - キャラクター固有の素値（クラス基準値 × ランク/体格/性別/年齢 補正）
-- 防御判定の成功確率を決定（実装時に確率計算の詳細を定義）
+- 防御判定の成功確率を決定
 - 装備による補正なし
 
-### 防御強度（defense_strength）
-- 武器・盾それぞれが持つ数値
-- 防御判定成功時に「使用可能な防御強度の合計」をダメージから引く
-- 例: 剣（防御強度3）+ 盾（防御強度5）装備、正面から攻撃
-  → 防御判定成功時に最大8ダメージをカット
+### 防御強度（3フィールド方式）
+- CharacterData の固有値（class_stats.json / enemy_class_stats.json から生成）
+- 装備による補正なし
+- 各フィールドを defense_accuracy で独立ロール。成功したフィールドの合計をカット
+- 例: 剣士（block_right_front=20, block_left_front=20）、正面から攻撃
+  → 最大40ダメージカット（両フィールドが成功した場合）
 
 ### 被ダメージ計算の全フロー
 ```
 1. 着弾判定
    命中精度が基準値未満 → 外れ or 誤射（将来実装）
 
-2. 防御判定（背面攻撃はスキップ）
-   判定成功（防御精度に基づく確率）:
-     カット量 = 攻撃方向に応じた使用可能な防御強度の合計
-     残ダメージ = max(0, 攻撃ダメージ - カット量)
-   判定失敗:
-     残ダメージ = 攻撃ダメージ
+2. 防御判定（背面攻撃はスキップ・各フィールドを defense_accuracy で独立ロール）
+   block_right_front: 正面・右側面で有効 → ロール成功でカット量に加算
+   block_left_front:  正面・左側面で有効 → ロール成功でカット量に加算
+   block_front:       正面のみ有効       → ロール成功でカット量に加算
+   残ダメージ = max(0, 攻撃ダメージ - カット量合計)
+   ※ カット量 0 = 防御失敗扱い
 
 3. 耐性適用
    残ダメージ × (1.0 - 物理or魔法耐性%)
@@ -3053,9 +3058,9 @@ var quantity: int           # 消耗品のみ使用（装備品は常に1）
 ```
 
 ### CharacterData のフィールド変更
-- `evasion` → `defense_accuracy: float` にリネーム
-- `equipped_weapon / equipped_armor / equipped_shield: ItemData` を追加（装備スロット）
-- アイテムシステム実装前は装備スロットは null のまま（防御強度0として計算）
+- `evasion` → `defense_accuracy: int` にリネーム
+- `block_right_front` / `block_left_front` / `block_front: int` を追加（クラス固有・装備補正なし）
+- `equipped_weapon / equipped_armor / equipped_shield: Dictionary` を追加（装備スロット）
 
 ### ステータス決定構造への追加
 キャラクター生成時の 防御精度 補正（旧・回避力と同じ方向性で引き継ぐ）:

@@ -829,56 +829,39 @@ func _calc_attack_direction(attacker: Character) -> String:
 		return "left"
 
 
-## ガード中正面攻撃のブロック量（成功率100%・防御強度分カット）を返す
+## ガード中正面攻撃のブロック量（成功率100%・全防御強度フィールドの合計）を返す
 func _calc_block_power_front_guard() -> int:
 	if character_data == null:
 		return 0
-	var weapon_block := character_data.get_weapon_block_power()
-	var shield_block := character_data.get_shield_block_power()
-	var has_shield   := not character_data.equipped_shield.is_empty()
-	return weapon_block + (shield_block if has_shield else 0)
+	var cd := character_data
+	return cd.block_right_front + cd.block_left_front + cd.block_front
 
 
-## クラス別防御ロジックによるブロック量を返す（各防具を独立してロール）
-## 近接クラス（melee/dive）：武器・盾を方向別に独立判定
-## 遠距離クラス（ranged/heal/magic）：正面のみ武器判定
+## 防御強度3フィールドによるブロック量を返す（各フィールドを独立してロール）
+## block_right_front: 正面・右側面で有効（剣士・斧戦士・斥候・ハーピー・ダークロード等）
+## block_left_front:  正面・左側面で有効（剣士・斧戦士・ハーピー・ダークロード等）
+## block_front:       正面のみ有効（弓使い・魔法使い・ヒーラー・ゾンビ・ウルフ等）
 func _calc_block_per_class(direction: String) -> int:
 	if character_data == null:
 		return 0
 	var cd := character_data
 	var acc: float = float(cd.defense_accuracy) / 100.0
-	var weapon_block := cd.get_weapon_block_power()
-	var shield_block := cd.get_shield_block_power()
-	var has_shield   := not cd.equipped_shield.is_empty()
-	var is_melee_cls: bool = cd.attack_type in ["melee", "dive"]
 	var total := 0
 
-	if is_melee_cls:
-		# 近接クラス: 武器・盾を独立判定
-		var weapon_dir: bool  # この方向で武器判定をするか
-		var shield_dir: bool  # この方向で盾判定をするか
-		match direction:
-			"front":
-				weapon_dir = true
-				shield_dir = has_shield
-			"left":
-				weapon_dir = not has_shield  # 盾なし時のみ武器で受ける
-				shield_dir = has_shield
-			"right":
-				weapon_dir = true
-				shield_dir = false
-			_:
-				return 0
-		if weapon_dir and weapon_block > 0 and randf() < acc:
-			total += weapon_block
-		if shield_dir and shield_block > 0 and randf() < acc:
-			total += shield_block
-	else:
-		# 遠距離クラス: 正面のみ武器判定
-		if direction != "front":
-			return 0
-		if weapon_block > 0 and randf() < acc:
-			total += weapon_block
+	# block_right_front: 正面・右側面で有効
+	if cd.block_right_front > 0 and direction in ["front", "right"]:
+		if randf() < acc:
+			total += cd.block_right_front
+
+	# block_left_front: 正面・左側面で有効
+	if cd.block_left_front > 0 and direction in ["front", "left"]:
+		if randf() < acc:
+			total += cd.block_left_front
+
+	# block_front: 正面のみ有効
+	if cd.block_front > 0 and direction == "front":
+		if randf() < acc:
+			total += cd.block_front
 
 	return total
 

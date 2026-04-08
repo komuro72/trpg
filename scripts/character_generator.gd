@@ -114,6 +114,9 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	data.physical_resistance     = stats.physical_resistance
 	data.magic_resistance        = stats.magic_resistance
 	data.defense_accuracy        = stats.defense_accuracy
+	data.block_right_front       = stats.get("block_right_front", 0) as int
+	data.block_left_front        = stats.get("block_left_front",  0) as int
+	data.block_front             = stats.get("block_front",       0) as int
 	data.move_speed              = _convert_move_speed(stats.move_speed)
 	data.leadership              = stats.leadership
 	data.obedience               = clampf(float(stats.obedience) / 100.0, 0.0, 1.0)
@@ -239,6 +242,9 @@ static func apply_enemy_stats(data: CharacterData) -> void:
 	data.physical_resistance = stats.get("physical_resistance", data.physical_resistance)
 	data.magic_resistance    = stats.get("magic_resistance",    data.magic_resistance)
 	data.defense_accuracy    = stats.get("defense_accuracy",    data.defense_accuracy)
+	data.block_right_front   = mini(100, stats.get("block_right_front", 0) as int)
+	data.block_left_front    = mini(100, stats.get("block_left_front",  0) as int)
+	data.block_front         = mini(100, stats.get("block_front",       0) as int)
 	if stats.has("move_speed"):
 		data.move_speed = _convert_move_speed(stats.move_speed)
 
