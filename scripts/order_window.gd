@@ -564,7 +564,7 @@ func _get_stat_rows(ch: Character) -> Array:
 	if cd.block_left_front > 0:
 		rows.append({"label": "左手防御強度", "type": "num", "base": cd.block_left_front,  "bonus": 0})
 	if cd.block_front > 0:
-		rows.append({"label": "正面防御強度", "type": "num", "base": cd.block_front,        "bonus": 0})
+		rows.append({"label": "両手防御強度", "type": "num", "base": cd.block_front,        "bonus": 0})
 	rows.append({"label": "防御技量",      "type": "num",
 		"base": cd.defense_accuracy, "bonus": 0})
 	var phys_equip := cd.get_total_physical_resistance_score() - cd.physical_resistance

@@ -1367,7 +1367,7 @@ rank値: C=0, B=1, A=2, S=3
 - 物理耐性  = キャラ素値 + 防具 physical_resistance + 盾 physical_resistance
 - 魔法耐性  = キャラ素値 + 防具 magic_resistance + 盾 magic_resistance
 - 防御強度（block_right_front / block_left_front / block_front）= class_stats から生成されたキャラ固有値（装備による補正なし）
-- OrderWindow のステータス表示：保有する防御強度フィールドのみ「右手防御強度」「左手防御強度」「正面防御強度」として表示
+- OrderWindow のステータス表示：保有する防御強度フィールドのみ「右手防御強度」「左手防御強度」「両手防御強度」として表示
 
 ### アイテム生成
 - 補正値はランダム生成（フロア深度に応じた範囲内）
@@ -1428,7 +1428,7 @@ rank値: C=0, B=1, A=2, S=3
 | 物理攻撃耐性 | `physical_resistance` | 物理ダメージ軽減の能力値（整数）。軽減率 = 値/(値+100)。クラスごとに素値を設定＋装備補正 |
 | 魔法攻撃耐性 | `magic_resistance` | 魔法ダメージ軽減の能力値（整数）。軽減率 = 値/(値+100)。クラスごとに素値を設定＋装備補正 |
 | 防御技量 | `defense_accuracy` | 防御判定の成功しやすさ。キャラ固有の素値（装備による変化なし） |
-| 防御強度 | `block_right_front` / `block_left_front` / `block_front` | 防御成功時に無効化できるダメージ量。クラス固有値（装備補正なし）。方向別に3フィールド。OrderWindowで保有フィールドのみ「右手防御強度」「左手防御強度」「正面防御強度」として表示 |
+| 防御強度 | `block_right_front` / `block_left_front` / `block_front` | 防御成功時に無効化できるダメージ量。クラス固有値（装備補正なし）。方向別に3フィールド。OrderWindowで保有フィールドのみ「右手防御強度」「左手防御強度」「両手防御強度」として表示 |
 | 移動速度 | `move_speed` | 単位：秒/タイル（標準0.4） |
 | 統率力（leadership） | `leadership` | リーダー側。クラス・ランクから算出して確定後不変。当面は値のみ保持 |
 | 従順度（obedience） | `obedience` | 個体側（0.0〜1.0）。クラス・種族・ランクから算出して確定後不変。当面は値のみ保持 |
