@@ -42,6 +42,14 @@ const CLASS_NAME_JP: Dictionary = {
 ## パーティー最大人数（これを超えて仲間にはできない）
 const MAX_PARTY_MEMBERS: int = 12
 
+## 攻撃タイプ別ダメージ倍率（power × type_mult × damage_mult = ベースダメージ）
+const ATTACK_TYPE_MULT: Dictionary = {
+	"melee":  0.5,
+	"ranged": 0.2,
+	"dive":   0.5,
+	"magic":  0.2,
+}
+
 ## フロア難易度ランク（フロアインデックス → 強さスコア基準値）
 ## NPC が同フロアに留まるか上下するかの判断に使用
 ## member_score = attack_power + physical_resistance + magic_resistance + defense_accuracy

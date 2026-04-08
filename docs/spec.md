@@ -2712,10 +2712,32 @@ CharacterGenerator.apply_enemy_stats()     ← ステータスを上書き（上
 - **判定**：`character.gd` の `take_damage()` 冒頭で処理
   - クリティカル率 = 攻撃側 `skill ÷ 3`%（例: skill=30 → 10%）
   - `randf() < float(atk_skill) / 300.0` で判定
-  - 成功時: `multiplier *= 2.0`（最終ダメージ2倍）
+  - 成功時: ベースダメージ × 2.0（`power` ステータス自体は変化しない）
 - **エフェクト**：`_spawn_hit_effect(actual)` を2回呼んで二重表示で強調
-- **通知**：MessageLog へのメッセージ出力なし
+- **通知**：MessageLog の戦闘ログに「[クリティカル!×2]→X」と表示
 - **SE・グラフィック**：既存の HitEffect / take_damage SE をそのまま流用
+
+### 攻撃タイプ別ダメージ倍率（実装済み）
+
+`GlobalConstants.ATTACK_TYPE_MULT` に定数として管理。  
+ベースダメージ = `power × type_mult × damage_mult`
+
+| attack_type | type_mult | 備考 |
+|-------------|-----------|------|
+| melee       | 0.5       | 近接攻撃（剣士・斧戦士・斥候） |
+| ranged      | 0.2       | 遠距離物理（弓使い） |
+| dive        | 0.5       | 降下攻撃（ハーピー） |
+| magic       | 0.2       | 遠距離魔法（魔法使い系・goblin-mage 等） |
+
+- `damage_mult` はスロット JSON の `damage_mult` フィールド（未指定時 1.0）
+- player_controller・unit_ai 両方で適用
+- 適用箇所: `_execute_melee` / `_execute_ranged` / `_execute_water_stun` / `_execute_whirlwind` / `_execute_rush` / `_execute_headshot`（×3.0 ケース） / `_execute_flame_circle` / `_execute_attack`（UnitAI）
+
+### 人間キャラクターのランク上限（実装済み）
+
+- `character_generator._random_rank_human()`：A=15%, B=35%, C=50%（Sなし）
+- `generate_character()` 内で `_random_rank()` の代わりに使用
+- Sランクはダークロード等のボス級専用（`enemy_list.json` で `"rank": "S"` を直接指定）
 
 ## Phase 13: Steam配布準備（未実装）
 

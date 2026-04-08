@@ -673,8 +673,8 @@ func _execute_attack() -> void:
 	if _attack_target == null or not is_instance_valid(_attack_target):
 		return
 	var atype := _get_attack_type()
-	# magic attack_type も attack_type != magic も power フィールドを共通使用
-	var dmg_power := _member.power if atype == "magic" else _member.power
+	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get(atype, 1.0)
+	var dmg_power := int(float(_member.power) * type_mult)
 	match atype:
 		"ranged", "magic":
 			# 遠距離攻撃（物理弓/魔法）：飛翔体を生成して命中確定ダメージ

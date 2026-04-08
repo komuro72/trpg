@@ -79,8 +79,8 @@ static func generate_character(class_id: String = "") -> CharacterData:
 		push_error("CharacterGenerator: クラスデータが見つかりません: " + chosen_class)
 		return null
 
-	# 3. ランク決定
-	var rank := _random_rank()
+	# 3. ランク決定（人間キャラクターは A〜C に限定。S はダークロード等のボス専用）
+	var rank := _random_rank_human()
 
 	# 4. 名前・属性取得
 	var sex:   String = chosen_set.get("sex",   "male")
@@ -326,6 +326,18 @@ static func _random_rank() -> String:
 		if roll < int(entry[0]):
 			return str(entry[1])
 	return "C"
+
+
+## 人間キャラクター用ランク決定（A〜C のみ・Sなし）
+## A=15%, B=35%, C=50%（Sの5%分をB・Cに再分配）
+static func _random_rank_human() -> String:
+	var roll := randi() % 100
+	if roll < 15:
+		return "A"
+	elif roll < 50:
+		return "B"
+	else:
+		return "C"
 
 
 ## names.json から未使用の名前を優先してランダム選択（枯渇時はフォールバック）
