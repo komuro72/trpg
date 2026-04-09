@@ -1529,11 +1529,17 @@ func activate() -> void:
 
 **DialogueTrigger**
 - `_process()` は **NPC 自発（wants_to_initiate=true）のみ** 自動トリガー
-  - プレイヤー起点（矢印キーバンプ）は `try_trigger_for_member()` 経由で呼ばれる
+  - プレイヤー起点（A ボタン）は `try_trigger_for_member()` 経由で呼ばれる
   - これにより「立ち去る」選択後に毎フレーム再トリガーされるバグを防止
-- 会話トリガー条件: 現エリアに生存敵なし + プレイヤーと NPC 隣接（距離1）+ 通路でない（エリアID空は除外）
+- 会話トリガー条件（`try_trigger_for_member()`）:
+  1. **話しかけたメンバーのエリアに生存敵がいない**（いれば `dialogue_blocked("enemy_in_area")` を発火）
+  2. **同パーティーの別メンバーが戦闘中エリアにいない**（いれば `dialogue_blocked("member_in_combat")` を発火）
+  3. 通路（エリアIDなし）には出ないので is_area_enemy_free が false を返すことで自然に除外
 - `is_area_enemy_free(area)` はゲームマップの敵入室中断チェックでも共用
-- `try_trigger_for_member(member: Character)`: 矢印キーバンプ時に PlayerController 経由で呼ばれる。同じ条件を確認して `dialogue_requested` を発火
+- `try_trigger_for_member(member: Character)`: A ボタン押下時に PlayerController 経由で呼ばれる。上記条件を確認して `dialogue_requested` または `dialogue_blocked` を発火
+- `dialogue_blocked(member, reason)` シグナルを `game_map._on_dialogue_blocked()` が受信し、MessageLog にシステムメッセージを出力
+  - `"enemy_in_area"` → 「○○は戦いに集中している」
+  - `"member_in_combat"` → 「○○の仲間が戦闘中のため話せない」
 
 **PlayerController の変更（矢印キーバンプ）**
 ```gdscript

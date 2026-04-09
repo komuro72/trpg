@@ -525,12 +525,14 @@ rank値: C=0, B=1, A=2, S=3
     - [x] game_map.gd：会話中は対象 NpcManager の process_mode を DISABLED に設定（NPC 停止）
     - [x] player_controller.gd：_get_valid_targets() で is_friendly チェック追加（合流後の仲間を攻撃対象から除外）
     - [x] ~~dialogue_window.gd~~：MessageWindowに統合済み（選択肢をインライン表示）
-    - 会話トリガー条件
-      - 部屋内の敵が全滅していること
+    - 会話トリガー条件（`try_trigger_for_member()` 内で判定）
       - プレイヤーと NPC メンバーが隣接（マンハッタン距離1）
-      - 通路（エリアIDなし）では会話しない
+      - 通路（エリアIDなし）では会話しない（is_area_enemy_free が false を返すため）
       - プレイヤー起点：A ボタン押下時に隣接 NPC を検索して発火（Phase 12-14 で矢印キーバンプ方式から変更）
       - NPC 自発：現在は無効（`wants_to_initiate()` が常に false を返す）
+    - 会話トリガー失敗時のメッセージ（`DialogueTrigger.dialogue_blocked` シグナル → `game_map._on_dialogue_blocked()`）
+      - 話しかけたメンバーのエリアに敵がいる → 「○○は戦いに集中している」（MessageLog システムメッセージ）
+      - 同パーティーの別メンバーが戦闘中エリアにいる → 「○○の仲間が戦闘中のため話せない」（MessageLog システムメッセージ）
     - 会話UI（NpcDialogueWindow）
       - 画面中央に半透明パネル。NPC メンバーの顔画像・名前・クラス名＋ランクを表示
       - プレイヤー起点の選択肢：「仲間にする」（→確認ダイアログ）・「一緒に行く」・「キャンセル」の3択

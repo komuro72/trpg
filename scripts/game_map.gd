@@ -572,6 +572,7 @@ func _setup_dialogue_system() -> void:
 	add_child(dialogue_trigger)
 	dialogue_trigger.setup(hero, npc_managers, enemy_managers, vision_system, map_data)
 	dialogue_trigger.dialogue_requested.connect(_on_dialogue_requested)
+	dialogue_trigger.dialogue_blocked.connect(_on_dialogue_blocked)
 	# 矢印キーバンプによる会話トリガーを接続
 	if player_controller != null:
 		player_controller.npc_bumped.connect(_on_npc_bumped)
@@ -688,6 +689,24 @@ func _on_npc_bumped(npc_member: Character) -> void:
 	if player_controller.is_blocked:
 		return
 	dialogue_trigger.try_trigger_for_member(npc_member)
+
+
+## 会話トリガー失敗時のメッセージ出力
+## reason "enemy_in_area"    → 話しかけた NPC のエリアに敵がいる
+## reason "member_in_combat" → NPC の仲間が戦闘中のエリアにいる
+func _on_dialogue_blocked(member: Character, reason: String) -> void:
+	if not is_instance_valid(member):
+		return
+	var name_str := ""
+	if member.character_data != null and not member.character_data.character_name.is_empty():
+		name_str = member.character_data.character_name
+	else:
+		name_str = "NPC"
+	match reason:
+		"enemy_in_area":
+			MessageLog.add_system("%sは戦いに集中している" % name_str)
+		"member_in_combat":
+			MessageLog.add_system("%sの仲間が戦闘中のため話せない" % name_str)
 
 
 func _on_dialogue_requested(nm: NpcManager, npc_initiates: bool) -> void:

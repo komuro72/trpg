@@ -11,6 +11,10 @@ extends Node
 
 ## 会話開始を要求するシグナル（npc_initiates: NPC が先に話しかけてきた場合 true）
 signal dialogue_requested(npc_manager: NpcManager, npc_initiates: bool)
+## 会話が条件不成立で開始できなかったときに発火する
+## reason: "enemy_in_area"（NPC のエリアに敵がいる）
+##         "member_in_combat"（NPC の仲間が戦闘中のエリアにいる）
+signal dialogue_blocked(member: Character, reason: String)
 
 var _player:          Character
 var _npc_managers:    Array[NpcManager]   = []
@@ -76,24 +80,48 @@ func _process(_delta: float) -> void:
 		return
 
 
-## 矢印キーで NPC に接触したときに PlayerController 経由で呼ばれる
-## エリア条件を確認してから dialogue_requested を発火する
+## A ボタンで隣接 NPC に話しかけたときに PlayerController 経由で呼ばれる
+## NPC 側のエリア条件を確認して dialogue_requested または dialogue_blocked を発火する
+## 判定順:
+##   1. NPC が属するパーティーの「話しかけたメンバーのエリア」に生存敵がいれば "enemy_in_area"
+##   2. 同パーティーの別メンバーが戦闘中エリアにいれば "member_in_combat"
+##   3. いずれも該当しなければ会話開始
 func try_trigger_for_member(member: Character) -> void:
 	if _dialogue_active or _player == null:
 		return
-	var current_area := _vision_system.get_current_area() if _vision_system != null else ""
-	if current_area.is_empty():
+	if _map_data == null:
 		return
-	if not is_area_enemy_free(current_area):
-		return
+
+	# 話しかけた NPC の所属マネージャーを探す
+	var target_nm: NpcManager = null
 	for nm: NpcManager in _npc_managers:
 		if not is_instance_valid(nm):
 			continue
 		if nm.get_members().has(member):
-			var npc_initiates := _npc_wants_to_initiate(nm)
-			set_dialogue_active(true)
-			dialogue_requested.emit(nm, npc_initiates)
+			target_nm = nm
+			break
+	if target_nm == null:
+		return
+
+	# ① 話しかけたメンバーのエリアに生存敵がいるか確認
+	var npc_area := _map_data.get_area(member.grid_pos)
+	if not npc_area.is_empty() and not is_area_enemy_free(npc_area):
+		dialogue_blocked.emit(member, "enemy_in_area")
+		return
+
+	# ② 同パーティーの別メンバーが戦闘中エリアにいるか確認
+	for other: Character in target_nm.get_members():
+		if not is_instance_valid(other) or other == member or other.hp <= 0:
+			continue
+		var other_area := _map_data.get_area(other.grid_pos)
+		if not other_area.is_empty() and not is_area_enemy_free(other_area):
+			dialogue_blocked.emit(member, "member_in_combat")
 			return
+
+	# 条件クリア → 会話開始
+	var npc_initiates := _npc_wants_to_initiate(target_nm)
+	set_dialogue_active(true)
+	dialogue_requested.emit(target_nm, npc_initiates)
 
 
 ## NpcManager の生存・可視メンバーがプレイヤーに隣接しているか確認する
