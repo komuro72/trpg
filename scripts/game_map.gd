@@ -1301,8 +1301,10 @@ func _find_free_adjacent_to(center: Vector2i, map_ref: MapData,
 	var occupied: Dictionary = {}
 	if party != null:
 		for m_var: Variant in party.members:
+			if not is_instance_valid(m_var):
+				continue
 			var m := m_var as Character
-			if is_instance_valid(m):
+			if m != null:
 				occupied[m.grid_pos] = true
 	for em: EnemyManager in enemy_managers:
 		if is_instance_valid(em):
