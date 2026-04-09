@@ -981,6 +981,8 @@ static func _dir_to_jp(dir: String) -> String:
 ## ヒット位置に HitEffect を生成する（親ノードに追加してワールド座標固定）
 ## damage を渡してエフェクトサイズをダメージ量に比例させる
 func _spawn_hit_effect(actual_damage: int) -> void:
+	if not visible:
+		return  # 別フロアのキャラはエフェクトを出さない
 	var parent := get_parent()
 	if parent == null:
 		return
@@ -993,6 +995,8 @@ func _spawn_hit_effect(actual_damage: int) -> void:
 ## 回復エフェクトを生成する（AI・プレイヤー両方から呼び出し可能）
 ## eff_mode: "cast"（キャスト側・外広がり）または "hit"（ターゲット側・内縮み）
 func spawn_heal_effect(eff_mode: String) -> void:
+	if not visible:
+		return  # 別フロアのキャラはエフェクトを出さない
 	var parent := get_parent()
 	if parent == null:
 		return

@@ -89,6 +89,8 @@ func _find_warp_destination() -> Vector2i:
 
 ## 指定ワールド座標に FlameCircle を設置する
 func _place_flame_circle(world_pos: Vector2) -> void:
+	if not _member.visible:
+		return  # 別フロアのキャラはエフェクトを出さない
 	var map_node := _member.get_parent()
 	if map_node == null:
 		return
