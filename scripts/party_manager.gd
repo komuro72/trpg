@@ -290,7 +290,7 @@ func _on_member_died(character: Character) -> void:
 		var cd := character.character_data
 		var name_str := cd.character_name if cd != null else "?"
 		var class_str := GlobalConstants.CLASS_NAME_JP.get(
-				cd.class_id if cd != null else "", cd.class_id if cd != null else "?")
+				cd.class_id if cd != null else "", cd.class_id if cd != null else "?") as String
 		var floor_str := "F%d" % character.current_floor
 		MessageLog.add_ai("[NPC死亡] %s（%s・%s）" % [name_str, class_str, floor_str])
 	# 全メンバー死亡 → party_wiped シグナル発火（床ドロップ処理）
