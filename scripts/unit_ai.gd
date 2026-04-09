@@ -573,14 +573,12 @@ func _generate_floor_follow_queue() -> Array:
 	var stairs := _map_data.find_stairs(stair_type)
 	if stairs.is_empty():
 		return [{"action": "wait"}]
-	# 最近傍の階段を選ぶ
-	var best := stairs[0]
-	var best_dist := _manhattan(_member.grid_pos, best)
-	for s: Vector2i in stairs:
-		var d := _manhattan(_member.grid_pos, s)
-		if d < best_dist:
-			best_dist = d
-			best      = s
+	# join_index で階段を分散割り当て（複数メンバーが同じ階段に重なるのを防ぐ）
+	# 手順: 距離順にソート → join_index % 件数 番目を選択
+	stairs.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return _manhattan(_member.grid_pos, a) < _manhattan(_member.grid_pos, b))
+	var idx := _member.join_index % stairs.size()
+	var best := stairs[idx]
 	# すでに階段タイルにいる場合は待機（game_map が遷移を処理する）
 	if best == _member.grid_pos:
 		return [{"action": "wait"}]
