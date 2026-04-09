@@ -189,6 +189,9 @@ func _process(delta: float) -> void:
 	# 床アイテムの拾得チェック
 	_check_item_pickup()
 
+	# NPC 共闘フラグの更新（プレイヤーと同エリアで NPC が戦闘中なら has_fought_together をセット）
+	_update_fought_together_flags()
+
 	# 階段踏み判定（hero）
 	_check_stairs_step()
 	# 階段踏み判定（パーティーメンバー・未加入 NPC）
@@ -574,6 +577,7 @@ func _setup_dialogue_system() -> void:
 	if player_controller != null:
 		player_controller.npc_bumped.connect(_on_npc_bumped)
 		player_controller.switch_char_requested.connect(_on_switch_character_requested)
+		player_controller.healed_npc_member.connect(_on_npc_healed)
 		player_controller._party_sorted_members.assign(party.sorted_members())
 
 	# NPC会話専用ウィンドウを生成してシグナルを接続
@@ -717,13 +721,12 @@ func _on_dialogue_choice(choice_id: String) -> void:
 		_close_dialogue()
 		return
 
-	# NPC の承諾/拒否判定（NPC が自発的に申し出た場合は常に承諾）
+	# NPC の承諾/拒否判定（プレイヤー起点のみスコア比較。NPC 自発は常に承諾）
 	var accepted := true
 	if not _dialogue_npc_initiates:
 		var leader_ai := _dialogue_npc_manager.enemy_ai
 		if leader_ai != null and is_instance_valid(leader_ai) and leader_ai is NpcLeaderAI:
-			var player_strength := _calc_party_strength(party)
-			accepted = (leader_ai as NpcLeaderAI).will_accept(choice_id, player_strength)
+			accepted = (leader_ai as NpcLeaderAI).will_accept(choice_id, party)
 
 	var npc_name := _get_npc_party_leader_name(_dialogue_npc_manager)
 	if not accepted:
@@ -861,6 +864,51 @@ func _calc_party_strength(p: Party) -> float:
 		if is_instance_valid(ch):
 			total += float(ch.max_hp)
 	return total
+
+
+## NPC 共闘フラグの更新
+## プレイヤーと同フロア・同エリアで NPC が戦闘中 → has_fought_together をセット
+func _update_fought_together_flags() -> void:
+	if hero == null or not is_instance_valid(hero):
+		return
+	if vision_system == null:
+		return
+	var player_area := vision_system.get_current_area()
+	if player_area.is_empty():
+		return
+	for nm: NpcManager in npc_managers:
+		if not is_instance_valid(nm):
+			continue
+		var leader_ai := nm.enemy_ai
+		if leader_ai == null or not is_instance_valid(leader_ai) or not (leader_ai is NpcLeaderAI):
+			continue
+		var npc_leader := leader_ai as NpcLeaderAI
+		if npc_leader.has_fought_together:
+			continue  # 既にセット済み
+		if not npc_leader.is_in_combat():
+			continue
+		# NPC メンバーがプレイヤーと同フロア・同エリアにいるか確認
+		for member: Character in nm.get_members():
+			if not is_instance_valid(member) or member.hp <= 0:
+				continue
+			if member.current_floor != hero.current_floor:
+				continue
+			if map_data.get_area(member.grid_pos) == player_area:
+				npc_leader.notify_fought_together()
+				break
+
+
+## プレイヤー側ヒーラーが未加入 NPC メンバーを回復したときに呼ばれる
+## 対象キャラが所属する NpcManager を探し、has_been_healed フラグをセットする
+func _on_npc_healed(target: Character) -> void:
+	for nm: NpcManager in npc_managers:
+		if not is_instance_valid(nm):
+			continue
+		if nm.get_members().has(target):
+			var leader_ai := nm.enemy_ai
+			if leader_ai != null and is_instance_valid(leader_ai) and leader_ai is NpcLeaderAI:
+				(leader_ai as NpcLeaderAI).notify_healed()
+			return
 
 
 # --------------------------------------------------------------------------

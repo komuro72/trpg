@@ -510,12 +510,15 @@ rank値: C=0, B=1, A=2, S=3
     - [x] game_map._setup_initial_allies()：初期パーティーの追加メンバーを NpcManager 経由でスポーン → activate() で即時 AI 起動 → 合流処理
   - [x] Phase 6-2: 仲間の加入の仕組み
     - [x] DialogueTrigger.gd：隣接チェック・エリア敵全滅チェック・NPC自発申し出検出
-    - [x] DialogueTrigger.gd：NPC 自発（wants_to_initiate=true）のみ自動トリガーに変更。プレイヤー起点は A ボタン隣接検出経由（Phase 12-14 でバンプ方式から変更）
+    - [x] DialogueTrigger.gd：NPC 自発申し出は無効（`wants_to_initiate()` は常に false）。プレイヤー起点の A ボタン隣接検出経由のみ（Phase 12-14 でバンプ方式から変更）
     - [x] DialogueTrigger.try_trigger_for_member()：プレイヤー起点会話用の直接トリガーメソッド
     - [x] PlayerController.gd：npc_bumped シグナル追加（A ボタン押下時に隣接 NPC を検索して発火）
+    - [x] PlayerController.gd：healed_npc_member シグナル追加（ヒーラーが未加入 NPC を回復したときに発火）
     - [x] game_map._on_npc_bumped()：npc_bumped を受け取り DialogueTrigger.try_trigger_for_member() を呼ぶ
+    - [x] game_map._on_npc_healed()：healed_npc_member を受け取り対象 NpcManager に notify_healed() を呼ぶ
+    - [x] game_map._update_fought_together_flags()：_process() から毎フレーム呼ぶ。NPC が ATTACK 中かつプレイヤーと同エリアなら has_fought_together をセット
     - [x] ~~DialogueWindow.gd~~：会話UIはMessageWindowに統合済み（Phase 10-2準備で移行）
-    - [x] NpcLeaderAI：wants_to_initiate() / will_accept() / get_party_strength() 追加
+    - [x] NpcLeaderAI：will_accept() をスコア比較方式に刷新。has_fought_together / has_been_healed フラグ・定数を追加
     - [x] player_controller.gd：is_blocked フラグ追加（会話中は移動・攻撃入力を無効化）
     - [x] vision_system.gd：remove_npc_manager() 追加
     - [x] game_map.gd：_setup_dialogue_system() / 合流処理 / 敵入室による会話中断
@@ -527,14 +530,15 @@ rank値: C=0, B=1, A=2, S=3
       - プレイヤーと NPC メンバーが隣接（マンハッタン距離1）
       - 通路（エリアIDなし）では会話しない
       - プレイヤー起点：A ボタン押下時に隣接 NPC を検索して発火（Phase 12-14 で矢印キーバンプ方式から変更）
-      - NPC 自発：wants_to_initiate=true のとき毎フレーム自動チェック。一度断られたら再申し出しない（mark_refused）
+      - NPC 自発：現在は無効（`wants_to_initiate()` が常に false を返す）
     - 会話UI（NpcDialogueWindow）
       - 画面中央に半透明パネル。NPC メンバーの顔画像・名前・クラス名＋ランクを表示
-      - ���レイヤー起点の選択肢：「仲間にする」（→確認ダイアログ）・「一緒に行く」・「キャンセル」の3択
-      - NPC 自発の選択肢：「承諾する」（→確認ダイアログ）・「断る」の2択
-      - 「仲間にする」/「承諾する」→ CONFIRM 状態で「本当に仲間にしますか？（はい/いいえ）」
-      - 承諾時は NpcLeaderAI.will_accept() で強さチェック（NPC が 1.5 倍超強ければ拒否）
-      - NPCの申し出ロジック：重傷者が過半数（HP<50%）なら申し出
+      - プレイヤー起点の選択肢：「仲間にする」（→確認ダイアログ）・「一緒に行く」・「キャンセル」の3択
+      - 「仲間にする」→ CONFIRM 状態で「本当に仲間にしますか？（はい/いいえ）」
+      - 承諾判定（join_us のみ）：スコア比較方式。join_them は常に承諾
+        - プレイヤー側スコア = リーダーの統率力 + パーティーランク和×10 + 共闘ボーナス(5) + 回復ボーナス(5)
+        - NPC 側スコア = (100 - 従順度平均×100) + NPCランク和×10
+        - ランク数値: C=3, B=4, A=5, S=6
       - 結果（合流・拒否・中断）は MessageLog に記録
     - 合流処理
       - 合流メンバーを party に追加・常時表示
@@ -1233,9 +1237,8 @@ rank値: C=0, B=1, A=2, S=3
     - `_find_adjacent_npc()` 追加・攻撃入力時に隣接 NPC チェックを挿入
     - 断られた NPC は `mark_refused()` で再申し出を永続停止（`NpcLeaderAI._was_refused` フラグ）
   - **NPC会話選択肢の刷新**（`npc_dialogue_window.gd`）
-    - プレイヤー起点: 「仲間にする」「一緒に行く」「キャンセル」の3択
-    - NPC 自発: 「承諾する」「断る」の2択
-    - 「仲間にする」/「承諾する」→ CONFIRM 状態（「本当に仲間にしますか？」）経由で確定
+    - プレイヤー起点: 「仲間にする」「一緒に行く」「キャンセル」の3択（NPC 自発は現在無効）
+    - 「仲間にする」→ CONFIRM 状態（「本当に仲間にしますか？」）経由で確定
     - 「一緒に行く」→ 直接 `choice_confirmed("join_them")` を発火
     - 会話UI開き直後2フレームの入力スキップ（ボタンリーク修正）
   - **「一緒に行く」合流処理修正**（`game_map._merge_player_into_npc_party()`）

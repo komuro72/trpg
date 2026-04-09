@@ -1350,9 +1350,19 @@ assets/images/characters/{class}_{sex}_{age}_{build}_{id}/
   |--------|------|
   | 「仲間になってほしい」 | 相手パーティー全員がプレイヤー側に加入。プレイヤーがリーダー維持 |
   | 「一緒に連れて行ってほしい」 | プレイヤー側が相手パーティーに加入。NPCリーダーがリーダーになる |
-- **NPCから話しかけてくる場合**: 上記2択のどちらかで申し出、プレイヤーが承諾/拒否を選択
-- **NPCの申し出ロジック（当面）**: パーティーに重傷者が多い場合、相手パーティーの傘下に入る形で申し出
-- **NPCリーダーAIの承諾/拒否判断（当面）**: 双方のパーティー総合力を比較して判断
+- **NPC自発申し出**: 現在は無効（`wants_to_initiate()` は常に false）。プレイヤー起点のみ対応
+- **NpcLeaderAI の承諾/拒否判断（スコア比較方式）**:
+  - `join_us`（NPC がプレイヤー傘下に入る）のみスコア比較。`join_them` は常に承諾。
+  - **プレイヤー側スコア** = リーダーの統率力
+                              + パーティーランク和 × 10
+                              + 共闘フラグ（`has_fought_together`） × 5
+                              + 回復フラグ（`has_been_healed`） × 5
+  - **NPC 側スコア** = (100 − 従順度平均×100) + パーティーランク和 × 10
+  - プレイヤー側スコア ≥ NPC 側スコア なら承諾
+  - **ランク数値**: C=3, B=4, A=5, S=6
+  - 数値は `NpcLeaderAI` の定数（`RANK_VALUES / RANK_SCORE_PER_RANK / FOUGHT_TOGETHER_BONUS / HEALED_BONUS`）で管理
+- **`has_fought_together` 更新タイミング**: NPC が ATTACK 戦略中にプレイヤーと同フロア・同エリアにいるとき（`game_map._update_fought_together_flags()`）
+- **`has_been_healed` 更新タイミング**: プレイヤー側ヒーラーがNPCメンバーを回復したとき（`player_controller.healed_npc_member` シグナル → `game_map._on_npc_healed()`）
 
 #### 合流処理
 - 承諾された場合、NPC パーティー全員が合流
@@ -1560,12 +1570,16 @@ func _on_npc_bumped(npc_member: Character) -> void:
 - `show_rejected()` で拒否メッセージを 1.5 秒表示後に `dialogue_dismissed` 発火
 - 操作: ↑↓ 選択 / Z・右 決定 / X・左・Esc 閉じる
 
-**NpcLeaderAI の新メソッド**
-| メソッド | 説明 |
-|---------|------|
-| `wants_to_initiate() -> bool` | 重傷者（HP<50%）が過半数なら true |
-| `get_party_strength() -> float` | 全メンバーの max_hp 合計 |
-| `will_accept(offer_type, player_strength) -> bool` | "join_us": NPC 総合力 ≤ プレイヤー総合力×1.5 なら承諾。"join_them": 常に承諾 |
+**NpcLeaderAI の会話関連メソッド・フィールド**
+| メソッド / フィールド | 説明 |
+|--------------------|------|
+| `wants_to_initiate() -> bool` | 常に `false`（NPC自発申し出は現在無効） |
+| `has_fought_together: bool` | 同エリアで共に戦闘したことがあるか |
+| `has_been_healed: bool` | プレイヤー側ヒーラーに回復されたことがあるか |
+| `is_in_combat() -> bool` | 現在 ATTACK 戦略中か（共闘フラグ更新に使用） |
+| `notify_fought_together()` | `has_fought_together = true` にセット |
+| `notify_healed()` | `has_been_healed = true` にセット |
+| `will_accept(offer_type, player_party) -> bool` | "join_us": スコア比較で承諾/拒否。"join_them": 常に承諾 |
 
 **合流処理（game_map.gd）**
 - 会話開始時: `nm.set_process_mode(DISABLED)` で NPC AI を一時停止（会話中に動き回らないようにする）

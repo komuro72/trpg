@@ -29,6 +29,9 @@ var is_blocked: bool = false
 ## 移動先に友好的キャラクターがいたときに発火するシグナル（会話トリガー用）
 signal npc_bumped(npc_member: Character)
 
+## プレイヤー側ヒーラーが未加入 NPC メンバーを回復したときに発火（has_been_healed フラグ更新用）
+signal healed_npc_member(target: Character)
+
 ## パーティーメンバー切り替えリクエストシグナル（game_map が処理）
 signal switch_char_requested(new_char: Character)
 
@@ -903,6 +906,10 @@ func _execute_heal(target: Character, slot_data: Dictionary) -> void:
 	_spawn_heal_effect(target.position, "hit")
 	MessageLog.add_combat("[%s] %s → %s +%d HP" % \
 		[skill_name, _char_name(character), _char_name(target), heal_amount])
+	# 未加入 NPC への回復：has_been_healed フラグ更新用シグナルを発火
+	# （パーティーメンバーでない友好キャラ = 未加入NPC）
+	if target.is_friendly and not _party_sorted_members.has(target):
+		healed_npc_member.emit(target)
 
 
 func _execute_buff(target: Character, slot_data: Dictionary) -> void:

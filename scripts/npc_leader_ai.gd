@@ -5,8 +5,25 @@ extends PartyLeaderAI
 ## 敵（ゴブリン等の enemy_party）を優先的にターゲットにして攻撃する。
 ## 生存敵がいれば ATTACK、いなければ EXPLORE（探索行動）。
 
+# --------------------------------------------------------------------------
+# 合流承諾判定スコア定数（調整しやすいよう定数化）
+# --------------------------------------------------------------------------
+## ランク文字列 → スコア数値の変換テーブル（C=3, B=4, A=5, S=6）
+const RANK_VALUES: Dictionary = { "C": 3, "B": 4, "A": 5, "S": 6 }
+## ランク和への乗数
+const RANK_SCORE_PER_RANK: float = 10.0
+## 共闘フラグによるボーナス
+const FOUGHT_TOGETHER_BONUS: float = 5.0
+## 回復フラグによるボーナス
+const HEALED_BONUS: float = 5.0
+
 var _enemy_list: Array[Character] = []
 var _was_refused: bool = false  ## 一度断られたら二度と自発申し出をしない
+
+## 同じ敵パーティーと共に戦ったことがあるか
+var has_fought_together: bool = false
+## プレイヤー側ヒーラーに回復されたことがあるか
+var has_been_healed: bool = false
 
 
 ## 攻撃対象とする敵リストを設定する（NpcManager が初期化後に呼ぶ）
@@ -111,38 +128,75 @@ func mark_refused() -> void:
 
 
 ## NPC が自発的に会話を開始したいか判断する
-## 重傷者（HP50%未満）が過半数を超えた場合に申し出る。一度断られたら申し出ない。
+## 現在は無効（プレイヤー起点の会話のみ対応）
 func wants_to_initiate() -> bool:
-	if _was_refused:
-		return false
-	if _party_members.is_empty():
-		return false
-	var wounded := 0
-	for m: Character in _party_members:
-		if is_instance_valid(m) and m.max_hp > 0:
-			if float(m.hp) / float(m.max_hp) < 0.5:
-				wounded += 1
-	return wounded * 2 > _party_members.size()
+	return false
 
 
-## パーティーの総合力（最大HP合計）を返す（承諾/拒否判断に使用）
-func get_party_strength() -> float:
-	var total := 0.0
-	for m: Character in _party_members:
-		if is_instance_valid(m):
-			total += float(m.max_hp)
-	return total
+## 現在 ATTACK 戦略中か（共闘フラグ更新に使用）
+func is_in_combat() -> bool:
+	return _party_strategy == Strategy.ATTACK
+
+
+## 共闘フラグを設定する（game_map が同エリア戦闘を検出したときに呼ぶ）
+func notify_fought_together() -> void:
+	has_fought_together = true
+
+
+## 回復フラグを設定する（player_controller がNPCメンバーを回復したときに呼ぶ）
+func notify_healed() -> void:
+	has_been_healed = true
 
 
 ## 指定の申し出を承諾するか判断する
 ## offer_type: "join_us"   = NPC がプレイヤー傘下に入る申し出（プレイヤーがリーダー）
 ##             "join_them" = プレイヤーが NPC 傘下に入る申し出（NPC がリーダー）
-func will_accept(offer_type: String, player_strength: float) -> bool:
-	var npc_strength := get_party_strength()
-	if offer_type == "join_us":
-		# NPC がプレイヤー傘下に入る場合
-		# NPC が圧倒的に強い（1.5倍超）なら拒否
-		return npc_strength <= player_strength * 1.5
-	else:
+##
+## 【判定式】join_us のみスコア比較。join_them は常に承諾。
+##   プレイヤー側スコア = リーダーの統率力
+##                     + パーティーランク和 × RANK_SCORE_PER_RANK
+##                     + has_fought_together × FOUGHT_TOGETHER_BONUS
+##                     + has_been_healed × HEALED_BONUS
+##   NPC側スコア = (100 - 従順度平均×100) + パーティーランク和 × RANK_SCORE_PER_RANK
+##   プレイヤー側スコア ≥ NPC側スコア なら承諾
+func will_accept(offer_type: String, player_party: Party) -> bool:
+	if offer_type != "join_us":
 		# プレイヤーが NPC 傘下に入る場合：戦力強化になるので常に承諾
 		return true
+
+	# ---- プレイヤー側スコア ----
+	var leader_leadership := 0
+	var player_rank_sum := 0
+	for mv: Variant in player_party.members:
+		var ch := mv as Character
+		if not is_instance_valid(ch):
+			continue
+		if ch.is_leader and ch.character_data != null:
+			leader_leadership = ch.character_data.leadership
+		if ch.character_data != null:
+			player_rank_sum += RANK_VALUES.get(ch.character_data.rank, 3) as int
+
+	var player_score := float(leader_leadership) \
+		+ float(player_rank_sum) * RANK_SCORE_PER_RANK
+	if has_fought_together:
+		player_score += FOUGHT_TOGETHER_BONUS
+	if has_been_healed:
+		player_score += HEALED_BONUS
+
+	# ---- NPC 側スコア ----
+	var npc_obedience_sum := 0.0
+	var npc_rank_sum := 0
+	var npc_count := 0
+	for m: Character in _party_members:
+		if not is_instance_valid(m):
+			continue
+		if m.character_data != null:
+			npc_obedience_sum += m.character_data.obedience
+			npc_rank_sum += RANK_VALUES.get(m.character_data.rank, 3) as int
+		npc_count += 1
+
+	var obedience_avg := npc_obedience_sum / float(npc_count) if npc_count > 0 else 0.5
+	var npc_score := (100.0 - obedience_avg * 100.0) \
+		+ float(npc_rank_sum) * RANK_SCORE_PER_RANK
+
+	return player_score >= npc_score
