@@ -25,6 +25,9 @@ var has_fought_together: bool = false
 ## プレイヤー側ヒーラーに回復されたことがあるか
 var has_been_healed: bool = false
 
+## 前回の目標フロア（変化検出用。-1=未初期化）
+var _prev_target_floor: int = -1
+
 
 ## 攻撃対象とする敵リストを設定する（NpcManager が初期化後に呼ぶ）
 func set_enemy_list(enemies: Array[Character]) -> void:
@@ -128,7 +131,28 @@ func _get_explore_move_policy() -> String:
 	if hp_fail or energy_fail:
 		target_floor = maxi(0, appropriate_floor - 1)
 
-	# --- 6. 方針を返す ---
+	# --- 6. デバッグログ（初回 or 目標フロア変化時） ---
+	if _prev_target_floor != target_floor:
+		var leader_name := _get_leader_name()
+		# 次フロア・退避基準スコアを文字列化
+		var next_rank  := GlobalConstants.FLOOR_RANK.get(current_floor + 1, 9999) as int
+		var half_rank  := (GlobalConstants.FLOOR_RANK.get(current_floor, 0) as int) / 2
+		var score_part := "スコア%d（次F%d基準%d / 退避%d）" % [
+			static_score, current_floor + 1, next_rank, half_rank]
+		# HP・エネルギー結果
+		var hp_part := "HP最低%.0f%%%s" % [hp_min_ratio * 100.0, "×" if hp_fail else "○"]
+		var en_avg  := (energy_sum / float(energy_count) * 100.0) if energy_count > 0 else 100.0
+		var en_part := "En平均%.0f%%%s" % [en_avg, "×" if energy_fail else "○"]
+		# 補正の有無
+		var adj_part := " →補正-1" if (hp_fail or energy_fail) else ""
+		MessageLog.add_ai(
+			"[NPCフロア判断] %s: %s / %s / %s / 適正F%d%s → 目標F%d" % [
+				leader_name, score_part, hp_part, en_part,
+				appropriate_floor, adj_part, target_floor]
+		)
+		_prev_target_floor = target_floor
+
+	# --- 7. 方針を返す ---
 	if target_floor > current_floor:
 		return "stairs_down"
 	if target_floor < current_floor:
