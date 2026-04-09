@@ -204,7 +204,7 @@ func will_accept(offer_type: String, player_party: Party) -> bool:
 	var fought_str := "+%.0f(共闘)" % FOUGHT_TOGETHER_BONUS if has_fought_together else ""
 	var healed_str := "+%.0f(回復)" % HEALED_BONUS        if has_been_healed       else ""
 	MessageLog.add_ai(
-		"[合流判定] P: 統率%d + ランク和%d×10%s%s = %.0f　NPC: (100-従順%.0f×100) + ランク和%d×10 = %.0f　→ %s" % [
+		"[合流判定] P: 統率%d + ランク和%d×10%s%s = %.0f　NPC: (100-従順%.2f×100) + ランク和%d×10 = %.0f　→ %s" % [
 			leader_leadership, player_rank_sum, fought_str, healed_str, player_score,
 			obedience_avg, npc_rank_sum, npc_score,
 			"承諾" if result else "拒否"
