@@ -17,6 +17,10 @@ enum Direction { DOWN, UP, LEFT, RIGHT }
 
 ## キャラクターが死亡してフィールドから除去されたときに発火する
 signal died(character: Character)
+## ダメージを受けたときに発火（attacker はダメージ源・null の場合もある）
+signal took_damage_from(attacker: Character)
+## ダメージを与えたときに発火（target はダメージを受けたキャラクター）
+signal dealt_damage_to(target: Character)
 
 ## コミット競合チェック用：全キャラクターを静的に管理
 static var _all_chars: Array = []
@@ -787,6 +791,10 @@ func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character =
 	if is_critical:
 		_spawn_hit_effect(actual)
 	SoundManager.play_from(SoundManager.TAKE_DAMAGE, self)
+	# シグナル発火（共闘フラグ更新など各システムが購読）
+	took_damage_from.emit(attacker)
+	if attacker != null and is_instance_valid(attacker):
+		attacker.dealt_damage_to.emit(self)
 	if hp <= 0:
 		die()
 

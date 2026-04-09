@@ -1361,7 +1361,7 @@ assets/images/characters/{class}_{sex}_{age}_{build}_{id}/
   - プレイヤー側スコア ≥ NPC 側スコア なら承諾
   - **ランク数値**: C=3, B=4, A=5, S=6
   - 数値は `NpcLeaderAI` の定数（`RANK_VALUES / RANK_SCORE_PER_RANK / FOUGHT_TOGETHER_BONUS / HEALED_BONUS`）で管理
-- **`has_fought_together` 更新タイミング**: NPC が ATTACK 戦略中にプレイヤーと同フロア・同エリアにいるとき（`game_map._update_fought_together_flags()`）
+- **`has_fought_together` 更新タイミング**: NPC メンバーが敵を攻撃した（`Character.dealt_damage_to` シグナル）または敵から攻撃を受けた（`Character.took_damage_from` シグナル）ときにイベント駆動で更新。NPC とプレイヤーが同フロア・同エリアにいる場合のみセット（`game_map._check_fought_together()`）
 - **`has_been_healed` 更新タイミング**: プレイヤー側ヒーラーがNPCメンバーを回復したとき（`player_controller.healed_npc_member` シグナル → `game_map._on_npc_healed()`）
 
 #### 合流処理
@@ -1576,7 +1576,7 @@ func _on_npc_bumped(npc_member: Character) -> void:
 | `wants_to_initiate() -> bool` | 常に `false`（NPC自発申し出は現在無効） |
 | `has_fought_together: bool` | 同エリアで共に戦闘したことがあるか |
 | `has_been_healed: bool` | プレイヤー側ヒーラーに回復されたことがあるか |
-| `is_in_combat() -> bool` | 現在 ATTACK 戦略中か（共闘フラグ更新に使用） |
+| `is_in_combat() -> bool` | 現在 ATTACK 戦略中か |
 | `notify_fought_together()` | `has_fought_together = true` にセット |
 | `notify_healed()` | `has_been_healed = true` にセット |
 | `will_accept(offer_type, player_party) -> bool` | "join_us": スコア比較で承諾/拒否。"join_them": 常に承諾 |

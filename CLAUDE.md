@@ -516,7 +516,7 @@ rank値: C=0, B=1, A=2, S=3
     - [x] PlayerController.gd：healed_npc_member シグナル追加（ヒーラーが未加入 NPC を回復したときに発火）
     - [x] game_map._on_npc_bumped()：npc_bumped を受け取り DialogueTrigger.try_trigger_for_member() を呼ぶ
     - [x] game_map._on_npc_healed()：healed_npc_member を受け取り対象 NpcManager に notify_healed() を呼ぶ
-    - [x] game_map._update_fought_together_flags()：_process() から毎フレーム呼ぶ。NPC が ATTACK 中かつプレイヤーと同エリアなら has_fought_together をセット
+    - [x] game_map._check_fought_together()：Character.dealt_damage_to / took_damage_from シグナルのイベント駆動で呼ばれる。NPC がプレイヤーと同フロア・同エリアで敵と戦闘したとき has_fought_together をセット（旧：_update_fought_together_flags() ポーリング方式から変更）
     - [x] ~~DialogueWindow.gd~~：会話UIはMessageWindowに統合済み（Phase 10-2準備で移行）
     - [x] NpcLeaderAI：will_accept() をスコア比較方式に刷新。has_fought_together / has_been_healed フラグ・定数を追加
     - [x] player_controller.gd：is_blocked フラグ追加（会話中は移動・攻撃入力を無効化）

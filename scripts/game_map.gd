@@ -189,9 +189,6 @@ func _process(delta: float) -> void:
 	# 床アイテムの拾得チェック
 	_check_item_pickup()
 
-	# NPC 共闘フラグの更新（プレイヤーと同エリアで NPC が戦闘中なら has_fought_together をセット）
-	_update_fought_together_flags()
-
 	# 階段踏み判定（hero）
 	_check_stairs_step()
 	# 階段踏み判定（パーティーメンバー・未加入 NPC）
@@ -348,6 +345,7 @@ func _setup_floor_npcs(floor_idx: int) -> void:
 		# スポーン時にフロアインデックスをセット（クロスフロア攻撃防止）
 		for ch: Character in nm.get_members():
 			ch.current_floor = floor_idx
+		_connect_npc_combat_signals(nm)
 		fnms.append(nm)
 		idx += 1
 
@@ -381,6 +379,7 @@ func _setup_initial_allies() -> void:
 		nm.set_enemy_list(all_enemies)
 		var color := _NPC_PARTY_COLORS[(color_offset + i - 1) % _NPC_PARTY_COLORS.size()] as Color
 		nm.set_party_color(color)
+		_connect_npc_combat_signals(nm)
 		npc_managers.append(nm)
 		_pre_joined_npc_managers.append(nm)
 
@@ -866,57 +865,51 @@ func _calc_party_strength(p: Party) -> float:
 	return total
 
 
-## NPC 共闘フラグの更新
-## プレイヤーと同フロア・同エリアで NPC が戦闘中 → has_fought_together をセット
-## 条件: ① プレイヤーのエリアに生存敵がいる
-##       ② NPC が ATTACK 戦略中
-##       ③ NPC メンバーがプレイヤーと同フロア・同エリアにいる
-func _update_fought_together_flags() -> void:
-	if hero == null or not is_instance_valid(hero):
+## NPC メンバーの戦闘シグナルを接続する（共闘フラグ更新に使用）
+## NPC が敵を攻撃した・敵から攻撃を受けたときにイベント駆動でフラグを更新する
+func _connect_npc_combat_signals(nm: NpcManager) -> void:
+	for member: Character in nm.get_members():
+		if not is_instance_valid(member):
+			continue
+		# NPC が敵を攻撃したとき（dealt_damage_to は NPC メンバーに接続）
+		member.dealt_damage_to.connect(
+			func(target: Character) -> void: _check_fought_together(nm, member, target)
+		)
+		# NPC が敵から攻撃を受けたとき（took_damage_from は NPC メンバーに接続）
+		member.took_damage_from.connect(
+			func(attacker: Character) -> void:
+				if attacker != null: _check_fought_together(nm, member, attacker)
+		)
+
+
+## NPC メンバーが敵と同エリアで戦闘したとき（攻撃または被攻撃）に共闘フラグをセットする
+## nm: 対象の NpcManager
+## npc_member: 戦闘したNPCメンバー（攻撃者または被攻撃者）
+## other: 相手キャラクター（敵である必要がある）
+func _check_fought_together(nm: NpcManager, npc_member: Character, other: Character) -> void:
+	if not is_instance_valid(nm) or not is_instance_valid(npc_member) or not is_instance_valid(other):
 		return
+	if not is_instance_valid(hero):
+		return
+	# 相手が敵（非フレンドリー）であること
+	if other.is_friendly:
+		return
+	# NPC がプレイヤーと同フロアにいること
+	if npc_member.current_floor != hero.current_floor:
+		return
+	# プレイヤーのエリアを確認
 	if vision_system == null:
 		return
 	var player_area := vision_system.get_current_area()
 	if player_area.is_empty():
 		return
-
-	# ① プレイヤーのいるエリアに生存敵が存在するか先に確認（なければ即返却）
-	var enemy_in_player_area := false
-	for em: EnemyManager in enemy_managers:
-		if not is_instance_valid(em):
-			continue
-		for enemy: Character in em.get_enemies():
-			if not is_instance_valid(enemy) or enemy.hp <= 0:
-				continue
-			if enemy.current_floor == hero.current_floor \
-					and map_data.get_area(enemy.grid_pos) == player_area:
-				enemy_in_player_area = true
-				break
-		if enemy_in_player_area:
-			break
-	if not enemy_in_player_area:
+	# NPC がプレイヤーと同エリアにいること
+	if map_data.get_area(npc_member.grid_pos) != player_area:
 		return
-
-	# ② NPC が ATTACK 中かつ ③ そのメンバーがプレイヤーと同エリアにいるか確認
-	for nm: NpcManager in npc_managers:
-		if not is_instance_valid(nm):
-			continue
-		var leader_ai := nm.enemy_ai
-		if leader_ai == null or not is_instance_valid(leader_ai) or not (leader_ai is NpcLeaderAI):
-			continue
-		var npc_leader := leader_ai as NpcLeaderAI
-		if npc_leader.has_fought_together:
-			continue  # 既にセット済み
-		if not npc_leader.is_in_combat():
-			continue
-		for member: Character in nm.get_members():
-			if not is_instance_valid(member) or member.hp <= 0:
-				continue
-			if member.current_floor != hero.current_floor:
-				continue
-			if map_data.get_area(member.grid_pos) == player_area:
-				npc_leader.notify_fought_together()
-				break
+	# 共闘フラグをセット
+	var leader_ai := nm.enemy_ai
+	if leader_ai != null and is_instance_valid(leader_ai) and leader_ai is NpcLeaderAI:
+		(leader_ai as NpcLeaderAI).notify_fought_together()
 
 
 ## プレイヤー側ヒーラーが未加入 NPC メンバーを回復したときに呼ばれる
