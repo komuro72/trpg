@@ -63,6 +63,10 @@ const NPC_HP_THRESHOLD: float = 0.5
 ## NPC フロア遷移・戦闘継続の エネルギー（MP/SP）平均閾値（平均エネルギー率がこれを下回ると適正フロア-1）
 const NPC_ENERGY_THRESHOLD: float = 0.3
 
+## NPC が階段の位置を最初から知っているか（true: 地図持ち / false: 探索して発見）
+## false の場合、訪問済みエリアにある階段のみ目標にし、未発見なら通常 explore にフォールバック
+const NPC_KNOWS_STAIRS_LOCATION: bool = false
+
 ## 階段タイル種別定数（MapData.TileType と対応）
 const TILE_STAIRS_DOWN: int = 4
 const TILE_STAIRS_UP:   int = 5

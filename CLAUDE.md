@@ -1162,6 +1162,11 @@ rank値: C=0, B=1, A=2, S=3
     - Phase 12-11 時点での修正：`global_constants.gd` の `FLOOR_RANK` を平均スコアベースの `{0:5, 1:12, 2:20, 3:30, 4:45}` に変更
     - **スコアロジック全面改修（Phase 12-11 後）**：平均スコアから和スコアに変更 + 動的スコア（HP/MP/SP）を追加。FLOOR_RANK を和ベースの `{0:200, 1:280, 2:420, 3:580, 4:780}` に更新。`NPC_HP_THRESHOLD = 0.5`・`NPC_ENERGY_THRESHOLD = 0.3` を追加
     - **スコア方式をランク和に変更（最終版）**：`power + physical_resistance + ...` の stat 和を廃止し、RANK_VALUES（C=3, B=4, A=5, S=6）の合計に変更。FLOOR_RANK を `{0:0, 1:8, 2:13, 3:18, 4:24}` に更新（各フロアの敵パーティー構成を参照した現実的な値）
+  - [x] **NPC の階段探索を視界ベースに変更・ダンジョン階段を増設**
+    - `global_constants.gd`: `NPC_KNOWS_STAIRS_LOCATION: bool = false` 追加（false=視界ベース探索 / true=地図持ち切り替えフラグ）
+    - `party_leader_ai.gd`: `_visited_areas: Dictionary = {}` 追加。`setup()` で全 UnitAI に同一 dict 参照を渡してパーティー単位で訪問情報を共有
+    - `unit_ai.gd`: `_visited_areas: Dictionary` フィールド追加・`set_visited_areas()` 追加・`_generate_queue()` 先頭で現在エリアを記録・`_generate_stair_queue()` に訪問済みフィルタを追加（未発見なら `_generate_explore_queue()` にフォールバック）
+    - `dungeon_handcrafted.json`: 各方向の階段を3か所→6か所に増設し、フロア全体（3列×4行）に均等分散
   - [x] **NPC がフロア遷移後にプレイヤーと同フロアに降りてくるまで動かない問題**
     - 原因：`unit_ai._generate_queue()` のフロア追従チェックが `_member.is_friendly` で判定していたため、未加入 NPC が hero と別フロアにいると「hero を追って戻れ」という指示になり階段付近で停止していた。hero が降りてきた瞬間に動き出すという現象
     - 修正：`unit_ai.gd` に `_follow_hero_floors: bool = false` フラグを追加。フロア追従は `_follow_hero_floors == true` のときのみ発動

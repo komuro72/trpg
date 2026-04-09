@@ -29,6 +29,7 @@ var _party_peers:  Array[Character] = []       ## 同一パーティーメンバ
 var _floor_following: bool = false             ## フロア追従中：_is_passable で友好キャラを通過可能にする
 var _follow_hero_floors: bool = false          ## true: hero が別フロアにいるとき階段を追う（合流済みメンバー専用）
 var _vision_system: VisionSystem = null       ## 探索行動（explore）に使用
+var _visited_areas: Dictionary = {}           ## 訪問済みエリアID集合（PartyLeaderAI が共有 dict を渡す）
 
 ## ステートマシン
 var _state:         _State = _State.IDLE
@@ -91,6 +92,11 @@ func set_map_data(new_map_data: MapData) -> void:
 ## VisionSystem をセットする（explore 移動方針に必要）
 func set_vision_system(vs: VisionSystem) -> void:
 	_vision_system = vs
+
+
+## 訪問済みエリア辞書をセットする（PartyLeaderAI が全 UnitAI に同一 dict を渡して共有）
+func set_visited_areas(d: Dictionary) -> void:
+	_visited_areas = d
 
 
 ## PartyLeaderAI からオーダーを受け取る
@@ -465,6 +471,12 @@ func _fallback_evaluate() -> void:
 # --------------------------------------------------------------------------
 
 func _generate_queue(strategy: Strategy, target: Character) -> Array:
+	# 現在いるエリアを訪問済みとして記録（NPC の階段探索に使用）
+	if _map_data != null and _member != null and is_instance_valid(_member):
+		var cur_area := _map_data.get_area(_member.grid_pos)
+		if cur_area != "":
+			_visited_areas[cur_area] = true
+
 	# フロア追従（最優先）：合流済みメンバーが hero と別フロアにいる場合は階段を目指す
 	# 未加入 NPC は _follow_hero_floors=false のため対象外（自律行動を維持）
 	_floor_following = false
@@ -587,6 +599,8 @@ func _generate_floor_follow_queue() -> Array:
 
 ## 階段移動キューを生成する（move_policy == "stairs_down"/"stairs_up" 時に使用）
 ## 未加入 NPC のフロアランク判断による階段移動に使用する
+## GlobalConstants.NPC_KNOWS_STAIRS_LOCATION が false の場合は訪問済みエリアの階段のみ対象
+## 訪問済みエリアに目的の階段がなければ通常の探索行動にフォールバック
 func _generate_stair_queue(direction: int) -> Array:
 	if _map_data == null or _member == null or not is_instance_valid(_member):
 		return [{"action": "wait"}]
@@ -595,6 +609,19 @@ func _generate_stair_queue(direction: int) -> Array:
 	var stairs := _map_data.find_stairs(stair_type)
 	if stairs.is_empty():
 		return [{"action": "wait"}]
+
+	# 視界ベース：訪問済みエリアの階段のみ対象（フラグで地図持ちに切り替え可）
+	if not GlobalConstants.NPC_KNOWS_STAIRS_LOCATION:
+		var known: Array[Vector2i] = []
+		for s: Vector2i in stairs:
+			var area := _map_data.get_area(s)
+			if area != "" and _visited_areas.has(area):
+				known.append(s)
+		if known.is_empty():
+			# 訪問済みエリアに階段未発見 → 通常探索にフォールバック
+			return _generate_explore_queue()
+		stairs = known
+
 	var best := stairs[0]
 	var best_dist := _manhattan(_member.grid_pos, best)
 	for s: Vector2i in stairs:

@@ -2795,6 +2795,7 @@ CharacterGenerator.apply_enemy_stats()     ← ステータスを上書き（上
 FLOOR_RANK: Dictionary = {0: 0, 1: 8, 2: 13, 3: 18, 4: 24}
 NPC_HP_THRESHOLD: float = 0.5
 NPC_ENERGY_THRESHOLD: float = 0.3
+NPC_KNOWS_STAIRS_LOCATION: bool = false  # false=視界ベース探索 / true=地図持ち（テスト用）
 ```
 
 #### ヘルパーメソッド（`npc_leader_ai.gd`）
@@ -2814,6 +2815,26 @@ NPC_ENERGY_THRESHOLD: float = 0.3
 5. hp_fail or energy_fail → target_floor = max(0, appropriate_floor - 1)
 6. target > current → "stairs_down"、target < current → "stairs_up"、同じ → "explore"
 ```
+
+#### NPC の階段探索（視界ベース）
+
+`NPC_KNOWS_STAIRS_LOCATION = false`（デフォルト）の場合、`UnitAI._generate_stair_queue()` は訪問済みエリアにある階段のみを目標にする。
+
+- 訪問済みエリアは `UnitAI._visited_areas: Dictionary`（エリアID→true）で管理
+- `_visited_areas` は `PartyLeaderAI._visited_areas` の参照を全 UnitAI が共有（パーティー全員の知識を統合）
+- `_generate_queue()` の先頭で現在エリアを記録。移動しながら自然に発見する
+- 訪問済みエリアに目的の階段がなければ通常の `_generate_explore_queue()` にフォールバック（探索継続）
+- `NPC_KNOWS_STAIRS_LOCATION = true` に切り替えると旧来の地図持ち動作に戻る（デバッグ・比較用）
+
+#### ダンジョン階段配置（dungeon_handcrafted.json）
+
+各方向6か所・フロア全体（3列×4行）に均等分散。
+
+| フロア | stairs_up | stairs_down |
+|-------|-----------|-------------|
+| F0 | なし | r1_2/3/5/7/9/11（各行2列分散） |
+| F1〜F3 | 行1〜2の全6室 | 行3〜4の全6室 |
+| F4（ボス） | r5_1内6か所 | なし |
 
 ## Phase 13: Steam配布準備（未実装）
 

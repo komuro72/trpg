@@ -1132,24 +1132,12 @@
           }
         ],
         "stairs": [
-          {
-            "room": "r1_8",
-            "type": "stairs_down",
-            "x": 22,
-            "y": 27
-          },
-          {
-            "room": "r1_11",
-            "type": "stairs_down",
-            "x": 22,
-            "y": 39
-          },
-          {
-            "room": "r1_12",
-            "type": "stairs_down",
-            "x": 37,
-            "y": 39
-          }
+          { "room": "r1_2",  "type": "stairs_down", "x": 21, "y": 6  },
+          { "room": "r1_3",  "type": "stairs_down", "x": 35, "y": 6  },
+          { "room": "r1_5",  "type": "stairs_down", "x": 21, "y": 18 },
+          { "room": "r1_7",  "type": "stairs_down", "x": 7,  "y": 30 },
+          { "room": "r1_9",  "type": "stairs_down", "x": 35, "y": 30 },
+          { "room": "r1_11", "type": "stairs_down", "x": 21, "y": 42 }
         ]
       },
       {
@@ -1957,42 +1945,18 @@
           }
         ],
         "stairs": [
-          {
-            "room": "r2_1",
-            "type": "stairs_up",
-            "x": 4,
-            "y": 3
-          },
-          {
-            "room": "r2_5",
-            "type": "stairs_up",
-            "x": 22,
-            "y": 15
-          },
-          {
-            "room": "r2_8",
-            "type": "stairs_up",
-            "x": 22,
-            "y": 27
-          },
-          {
-            "room": "r2_10",
-            "type": "stairs_down",
-            "x": 4,
-            "y": 39
-          },
-          {
-            "room": "r2_11",
-            "type": "stairs_down",
-            "x": 22,
-            "y": 39
-          },
-          {
-            "room": "r2_12",
-            "type": "stairs_down",
-            "x": 37,
-            "y": 39
-          }
+          { "room": "r2_1",  "type": "stairs_up",   "x": 7,  "y": 6  },
+          { "room": "r2_2",  "type": "stairs_up",   "x": 21, "y": 6  },
+          { "room": "r2_3",  "type": "stairs_up",   "x": 35, "y": 6  },
+          { "room": "r2_4",  "type": "stairs_up",   "x": 7,  "y": 18 },
+          { "room": "r2_5",  "type": "stairs_up",   "x": 21, "y": 18 },
+          { "room": "r2_6",  "type": "stairs_up",   "x": 35, "y": 18 },
+          { "room": "r2_7",  "type": "stairs_down", "x": 7,  "y": 30 },
+          { "room": "r2_8",  "type": "stairs_down", "x": 21, "y": 30 },
+          { "room": "r2_9",  "type": "stairs_down", "x": 35, "y": 30 },
+          { "room": "r2_10", "type": "stairs_down", "x": 7,  "y": 42 },
+          { "room": "r2_11", "type": "stairs_down", "x": 21, "y": 42 },
+          { "room": "r2_12", "type": "stairs_down", "x": 35, "y": 42 }
         ]
       },
       {
@@ -2863,42 +2827,18 @@
           }
         ],
         "stairs": [
-          {
-            "room": "r3_1",
-            "type": "stairs_up",
-            "x": 4,
-            "y": 3
-          },
-          {
-            "room": "r3_5",
-            "type": "stairs_up",
-            "x": 22,
-            "y": 15
-          },
-          {
-            "room": "r3_8",
-            "type": "stairs_up",
-            "x": 22,
-            "y": 27
-          },
-          {
-            "room": "r3_10",
-            "type": "stairs_down",
-            "x": 4,
-            "y": 39
-          },
-          {
-            "room": "r3_11",
-            "type": "stairs_down",
-            "x": 22,
-            "y": 39
-          },
-          {
-            "room": "r3_12",
-            "type": "stairs_down",
-            "x": 37,
-            "y": 39
-          }
+          { "room": "r3_1",  "type": "stairs_up",   "x": 7,  "y": 6  },
+          { "room": "r3_2",  "type": "stairs_up",   "x": 21, "y": 6  },
+          { "room": "r3_3",  "type": "stairs_up",   "x": 35, "y": 6  },
+          { "room": "r3_4",  "type": "stairs_up",   "x": 7,  "y": 18 },
+          { "room": "r3_5",  "type": "stairs_up",   "x": 21, "y": 18 },
+          { "room": "r3_6",  "type": "stairs_up",   "x": 35, "y": 18 },
+          { "room": "r3_7",  "type": "stairs_down", "x": 7,  "y": 30 },
+          { "room": "r3_8",  "type": "stairs_down", "x": 21, "y": 30 },
+          { "room": "r3_9",  "type": "stairs_down", "x": 35, "y": 30 },
+          { "room": "r3_10", "type": "stairs_down", "x": 7,  "y": 42 },
+          { "room": "r3_11", "type": "stairs_down", "x": 21, "y": 42 },
+          { "room": "r3_12", "type": "stairs_down", "x": 35, "y": 42 }
         ]
       },
       {
@@ -3804,42 +3744,18 @@
           }
         ],
         "stairs": [
-          {
-            "room": "r4_1",
-            "type": "stairs_up",
-            "x": 4,
-            "y": 3
-          },
-          {
-            "room": "r4_5",
-            "type": "stairs_up",
-            "x": 22,
-            "y": 15
-          },
-          {
-            "room": "r4_8",
-            "type": "stairs_up",
-            "x": 22,
-            "y": 27
-          },
-          {
-            "room": "r4_10",
-            "type": "stairs_down",
-            "x": 4,
-            "y": 39
-          },
-          {
-            "room": "r4_11",
-            "type": "stairs_down",
-            "x": 22,
-            "y": 39
-          },
-          {
-            "room": "r4_12",
-            "type": "stairs_down",
-            "x": 37,
-            "y": 39
-          }
+          { "room": "r4_1",  "type": "stairs_up",   "x": 7,  "y": 6  },
+          { "room": "r4_2",  "type": "stairs_up",   "x": 21, "y": 6  },
+          { "room": "r4_3",  "type": "stairs_up",   "x": 35, "y": 6  },
+          { "room": "r4_4",  "type": "stairs_up",   "x": 7,  "y": 18 },
+          { "room": "r4_5",  "type": "stairs_up",   "x": 21, "y": 18 },
+          { "room": "r4_6",  "type": "stairs_up",   "x": 35, "y": 18 },
+          { "room": "r4_7",  "type": "stairs_down", "x": 7,  "y": 30 },
+          { "room": "r4_8",  "type": "stairs_down", "x": 21, "y": 30 },
+          { "room": "r4_9",  "type": "stairs_down", "x": 35, "y": 30 },
+          { "room": "r4_10", "type": "stairs_down", "x": 7,  "y": 42 },
+          { "room": "r4_11", "type": "stairs_down", "x": 21, "y": 42 },
+          { "room": "r4_12", "type": "stairs_down", "x": 35, "y": 42 }
         ]
       },
       {
@@ -3895,24 +3811,12 @@
         ],
         "corridors": [],
         "stairs": [
-          {
-            "room": "r5_1",
-            "type": "stairs_up",
-            "x": 10,
-            "y": 7
-          },
-          {
-            "room": "r5_1",
-            "type": "stairs_up",
-            "x": 20,
-            "y": 7
-          },
-          {
-            "room": "r5_1",
-            "type": "stairs_up",
-            "x": 30,
-            "y": 7
-          }
+          { "room": "r5_1", "type": "stairs_up", "x": 12, "y": 8  },
+          { "room": "r5_1", "type": "stairs_up", "x": 18, "y": 8  },
+          { "room": "r5_1", "type": "stairs_up", "x": 24, "y": 8  },
+          { "room": "r5_1", "type": "stairs_up", "x": 30, "y": 8  },
+          { "room": "r5_1", "type": "stairs_up", "x": 15, "y": 20 },
+          { "room": "r5_1", "type": "stairs_up", "x": 29, "y": 20 }
         ]
       }
     ]
