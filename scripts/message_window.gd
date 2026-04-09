@@ -133,13 +133,14 @@ func _on_draw() -> void:
 	var vw  := _control.size.x
 	var vh  := _control.size.y
 
-	var fs     := clampi(int(float(gs) * 0.16), 10, 16)
+	## MSG_FONT_SIZE = GRID_SIZE / 3
+	var fs     := maxi(10, int(float(gs) / 3.0))
 	var line_h := float(fs) * 1.5
 	## MSG_ICON_SIZE = MSG_FONT_SIZE * 2
 	var icon_sz := float(fs * 2)
 
-	# ── ウィンドウ全体（左右パネル幅より狭くならない）
-	var margin_x := maxf(vw * 0.12, float(pw) + 4.0)
+	# ── ウィンドウ全体（画面幅の中央50〜60%・左右20〜25%マージン）
+	var margin_x := maxf(vw * 0.22, float(pw) + 4.0)
 	var box_w    := vw - 2.0 * margin_x
 	var box_h    := line_h * float(VISIBLE_LINES) + 16.0
 	var bx       := margin_x
