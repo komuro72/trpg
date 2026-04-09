@@ -55,10 +55,20 @@ func add_ai(text: String, grid_pos: Vector2i = Vector2i(-1, -1)) -> void:
 
 
 ## バトルメッセージ（オレンジ）— エリアフィルタなし・battle_message_added シグナルも発火
-## attacker_data / defender_data は MessageWindow のバスト画像更新に使用する（null 可）
+## attacker_data / defender_data はエントリ dict に格納し MessageWindow のアイコン表示に使用（null 可）
 func add_battle(attacker_data: CharacterData, defender_data: CharacterData,
 		message: String) -> void:
-	_add(message, MsgType.BATTLE, Color(1.0, 0.60, 0.20))
+	var entry: Dictionary = {
+		"text": message,
+		"type": int(MsgType.BATTLE),
+		"color": Color(1.0, 0.60, 0.20),
+		"attacker_data": attacker_data,
+		"defender_data": defender_data,
+	}
+	entries.append(entry)
+	if entries.size() > LOG_MAX:
+		entries = entries.slice(entries.size() - LOG_MAX)
+	entry_added.emit()
 	battle_message_added.emit(attacker_data, defender_data, message)
 
 

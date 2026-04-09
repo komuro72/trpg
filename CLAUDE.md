@@ -1371,17 +1371,16 @@ rank値: C=0, B=1, A=2, S=3
     - `_input()` の KEY_ESCAPE をポーズメニュー開閉に変更（旧 get_tree().quit() を廃止）
     - `_setup_pause_menu()` で PauseMenu をインスタンス化・add_child
   - [x] **SoundManager.set_volume()** 追加（linear_to_db 変換して Master バスに適用）
-- [x] Phase 13-1（Phase 14準備）: MessageWindow刷新（バスト画像＋戦闘メッセージ自然言語化）
-  - [x] **GlobalConstants** に `MESSAGE_WINDOW_SCROLL_MODE: bool = false` と `DAMAGE_LEVEL_SMALL/MEDIUM/LARGE` 定数を追加
-  - [x] **MessageLog** に `BATTLE` enum値・`battle_message_added` シグナル・`add_battle()` メソッドを追加。`get_visible_entries()` でデバッグOFF時も BATTLE を表示
-  - [x] **MessageWindow** を全面刷新（Phase 14〜 版）
-    - 画面中央寄せ（左右マージン最大12%・ただしパネル幅以上を確保）・高さ10行
-    - 左右にバスト画像エリア（正方形・高さいっぱい）・中央にテキストエリア
-    - `_on_battle_message()` で左右バスト画像とテキストを更新
-    - `_load_bust_tex()`: `sprite_front`→`sprite_face` の順でテクスチャ取得・キャッシュ
-    - `_draw_bust()`: 1024×1024+ 画像は中央上半分（x=256,y=0,w=512,h=512）をクロップ
-    - リセット型モード（`MESSAGE_WINDOW_SCROLL_MODE=false`）: ペア変更時にテキストリセット
-    - スクロール型モード（`MESSAGE_WINDOW_SCROLL_MODE=true`）: MessageLog の流れに任せる
+- [x] Phase 13-1（Phase 14準備）: MessageWindow刷新（アイコン行方式＋戦闘メッセージ自然言語化）
+  - [x] **GlobalConstants** に `DAMAGE_LEVEL_SMALL/MEDIUM/LARGE` 定数を追加（5/15/30）
+  - [x] **MessageLog** に `BATTLE` enum値・`battle_message_added` シグナル・`add_battle()` メソッドを追加。`get_visible_entries()` でデバッグOFF時も BATTLE を表示。`add_battle()` はエントリ dict に `attacker_data`・`defender_data` を格納（アイコン表示用）
+  - [x] **MessageWindow** を全面刷新（アイコン行方式）
+    - 画面中央寄せ（左右マージン最大12%・ただしパネル幅以上を確保）・高さ10行相当
+    - バトルメッセージ：行左端に `[攻撃側face.png] → [被攻撃側face.png]` アイコン2枚を表示。テキストはアイコン右に折り返し
+    - システムメッセージ：アイコンなし（フル幅テキスト）
+    - アイコンサイズ = フォントサイズ × 2（2行分）。face.png がなければグレー正方形フォールバック
+    - スクロール型に統一（左右バスト画像・`MESSAGE_WINDOW_SCROLL_MODE` フラグを廃止）
+    - `_entry_height()` で各エントリの描画高さを動的計算（`Font.get_multiline_string_size()` 使用）
     - 既存の会話モードスタブを後方互換として維持
   - [x] **character.gd** に自然言語戦闘メッセージ生成を追加
     - `_damage_label()`: ダメージ量を「小/中/大/特大ダメージ」に変換（GlobalConstants の定数を参照）
