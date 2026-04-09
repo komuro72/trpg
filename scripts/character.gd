@@ -1030,6 +1030,7 @@ func _emit_damage_battle_msg(attacker: Character, raw: int, actual: int,
 
 
 ## 戦闘計算ログを出力する
+func _log_damage(attacker: Character, raw: int, mult: float, is_magic: bool,
 		dir: String, def_ok: bool, blocked: int, resist: float, actual: int,
 		is_critical: bool = false) -> void:
 	if MessageLog == null:
