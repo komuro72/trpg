@@ -1072,7 +1072,7 @@ func _rebuild_blocking_characters() -> void:
 
 ## パーティーメンバーが階段にいるかチェックし、hero と別フロアならば遷移させる
 func _check_party_member_stairs() -> void:
-	if party == null or hero == null:
+	if party == null or not is_instance_valid(hero):
 		return
 	# _current_floor_index ではなく hero.current_floor を基準にする。
 	# 操作キャラ切替で _switch_floor_view() が呼ばれると _current_floor_index が
@@ -1111,14 +1111,17 @@ func _transition_member_floor(ch: Character, direction: int) -> void:
 	# hero と同じ階段タイルへ向かい、空いていればそこに、塞がっていれば隣接タイルに
 	var spawn_type := MapData.TileType.STAIRS_UP if direction > 0 else MapData.TileType.STAIRS_DOWN
 	var stair_tiles := new_map.find_stairs(spawn_type)
-	var stair_center := hero.grid_pos  # デフォルトは hero と同位置（フォールバック）
+	# デフォルトは hero と同位置（フォールバック）。hero が freed の場合は原点
+	var stair_center := hero.grid_pos if is_instance_valid(hero) else Vector2i.ZERO
 	if not stair_tiles.is_empty():
 		stair_center = stair_tiles[0]
 	# 階段タイル自体が空いていれば直接着地、塞がっていれば隣接タイルを探す
 	var spawn_pos := stair_center
 	for m_var: Variant in party.members:
+		if not is_instance_valid(m_var):
+			continue
 		var m := m_var as Character
-		if is_instance_valid(m) and m.current_floor == new_floor and m.grid_pos == stair_center:
+		if m != null and m.current_floor == new_floor and m.grid_pos == stair_center:
 			spawn_pos = _find_free_adjacent_to(stair_center, new_map, ch.is_flying)
 			if spawn_pos == Vector2i(-1, -1):
 				spawn_pos = stair_center
