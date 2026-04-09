@@ -1391,6 +1391,13 @@ rank値: C=0, B=1, A=2, S=3
     - `die()` で死亡メッセージを add_battle で発火
     - `log_heal()` で回復メッセージを add_battle で発火
   - [x] **projectile.gd** 修正: `apply_stun()` に attacker を渡す・スタン攻撃時は `take_damage()` の battle メッセージを抑制（`suppress` フラグ）
+  - [x] **MessageWindow 上半身画像追加**
+    - 左エリア：操作キャラの `front.png`（上半分中央クロップ）を表示。操作キャラ切り替え時にリセット
+    - 右エリア：操作キャラが関わった交戦相手。AI同士の戦闘では更新しない
+    - `set_player_character(data)` / `set_combat_target(data)` の公開 API を追加
+    - `battle_message_added` シグナルを購読し、atk/def が操作キャラと一致したとき右エリアを自動更新
+    - `game_map.gd`: 初期設定・操作キャラ切り替え時に `set_player_character()` を呼ぶ
+    - 全体背景は `[左バスト + 中央テキスト + 右バスト]` を一括描画。中央ログは変更なし
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム

@@ -163,6 +163,9 @@ func _finish_setup() -> void:
 	if hero.character_data != null:
 		var class_jp := GlobalConstants.CLASS_NAME_JP.get(hero.character_data.class_id, hero.character_data.class_id) as String
 		MessageLog.add_system("あなたは%sです。" % class_jp)
+	# 操作キャラの上半身画像を初期設定
+	if message_window != null and hero != null and hero.character_data != null:
+		message_window.set_player_character(hero.character_data)
 	queue_redraw()
 
 
@@ -678,6 +681,10 @@ func _on_switch_character_requested(new_char: Character) -> void:
 
 	# LB/RBキャラ切り替え用リストを更新
 	player_controller._party_sorted_members.assign(party.sorted_members())
+
+	# メッセージウィンドウの左エリアを新操作キャラに更新
+	if message_window != null and new_char.character_data != null:
+		message_window.set_player_character(new_char.character_data)
 
 	# SoundManager の操作キャラを更新（部屋単位の音フィルタ用）
 	SoundManager.set_listener(new_char, map_data)
