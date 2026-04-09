@@ -1246,12 +1246,26 @@ func _transition_npc_floor(nm: NpcManager, direction: int) -> void:
 		_setup_floor_enemies(new_floor)
 	if (_per_floor_npcs[new_floor] as Array).is_empty() and not new_map.npc_parties.is_empty():
 		_setup_floor_npcs(new_floor)
-	# 着地位置: 新フロアの逆方向階段付近に分散
+	# 着地位置: NPC が踏んでいた旧フロアの階段に最も近い新フロアの階段を選ぶ（分散着地）
 	var spawn_type := MapData.TileType.STAIRS_UP if direction > 0 else MapData.TileType.STAIRS_DOWN
 	var spawn_stairs := new_map.find_stairs(spawn_type)
 	var base_spawn := Vector2i(5, 5)
 	if not spawn_stairs.is_empty():
-		base_spawn = spawn_stairs[0]
+		# 旧フロアで踏んでいた階段位置に最も近い着地階段を選ぶ
+		var old_stair_pos := Vector2i(-1, -1)
+		for member: Character in members:
+			if is_instance_valid(member):
+				old_stair_pos = member.grid_pos
+				break
+		if old_stair_pos != Vector2i(-1, -1):
+			var best_dist := INF
+			for s: Vector2i in spawn_stairs:
+				var dist: float = float((s - old_stair_pos).length())
+				if dist < best_dist:
+					best_dist = dist
+					base_spawn = s
+		else:
+			base_spawn = spawn_stairs[0]
 	# 全メンバーを新フロアに移動
 	# 1人目は階段タイルに直接着地、2人目以降は隣接タイルへ分散
 	var placed_positions: Array[Vector2i] = []

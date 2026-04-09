@@ -1177,6 +1177,13 @@ rank値: C=0, B=1, A=2, S=3
   - [x] **NPC がフロア遷移後にすり抜けられる問題**
     - 原因：`_transition_npc_floor()` で NPC が現フロアに到着した際、`npc_managers` には追加されているが `_rebuild_blocking_characters()` が呼ばれておらず `player_controller.blocking_characters` が未更新だった
     - 修正：`_transition_npc_floor()` の `new_floor == _current_floor_index` ブロックに `_rebuild_blocking_characters()` 呼び出しを追加
+  - [x] **NPC 死亡・フロア遷移のデバッグログ追加**
+    - `party_manager._on_member_died()` で `is_friendly` キャラ死亡時に `[NPC死亡] 名前（クラス・フロア）` を MessageLog（ai チャンネル）に出力
+    - `game_map._transition_npc_floor()` でフロア遷移時に `[NPC遷移] 名前: F旧 ↓/↑ F新` を MessageLog に出力
+  - [x] **NPC 複数パーティーが同一階段タイルに集中する問題**
+    - 原因：`_transition_npc_floor()` が常に `spawn_stairs[0]`（新フロアの最初の階段）を全パーティーの着地基点にしていたため、異なるパーティーが同じタイルに降り立ち密集していた
+    - 修正：NPC が旧フロアで踏んでいた階段タイルの座標に最も近い新フロアの階段を着地点として選択。`(s - old_stair_pos).length()` で最短距離の階段を探索
+    - 結果：フロア全体に分散した6か所の階段から対応する着地点に散らばるようになった
 - [x] Phase 12-12: アンデッド・新敵種実装
   - CharacterData に `is_undead: bool = false` フィールド追加
   - skeleton / skeleton-archer / lich / demon / dark-lord の JSON マスターデータ作成・enemies_list.json に追加
