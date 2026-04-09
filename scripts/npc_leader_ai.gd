@@ -37,7 +37,7 @@ func _create_unit_ai(_member: Character) -> UnitAI:
 
 
 ## パーティー全体の戦略を評価する
-## 同じフロアに生存している敵がいれば ATTACK、いなければ EXPLORE（探索行動）
+## 同じフロアに生存 かつ 可視（訪問済みエリア）の敵がいれば ATTACK、いなければ EXPLORE
 func _evaluate_party_strategy() -> Strategy:
 	# 自パーティーのフロアを取得
 	var my_floor := -1
@@ -50,6 +50,9 @@ func _evaluate_party_strategy() -> Strategy:
 			continue
 		# 同フロアの敵のみ ATTACK トリガーにする（他フロアの敵は無視）
 		if my_floor >= 0 and enemy.current_floor != my_floor:
+			continue
+		# 未探索エリアの敵は無視（プレイヤーが発見していない敵には反応しない）
+		if not enemy.visible:
 			continue
 		return Strategy.ATTACK
 	return Strategy.EXPLORE
@@ -104,12 +107,16 @@ func _get_strategy_change_reason() -> String:
 	return super._get_strategy_change_reason()
 
 
-## 各メンバーの攻撃ターゲットを選択する（最も近い生存敵）
+## 各メンバーの攻撃ターゲットを選択する（最も近い生存・可視敵）
+## visible=false の敵（未探索エリア）はターゲットにしない
 func _select_target_for(member: Character) -> Character:
 	var closest: Character = null
 	var min_dist := INF
 	for enemy: Character in _enemy_list:
 		if not is_instance_valid(enemy) or enemy.hp <= 0:
+			continue
+		# 未探索エリアの敵は対象外（壁越し・未発見エリアへの攻撃を防ぐ）
+		if not enemy.visible:
 			continue
 		var dist := float((enemy.grid_pos - member.grid_pos).length())
 		if dist < min_dist:
