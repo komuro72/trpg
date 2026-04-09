@@ -59,41 +59,111 @@ func _evaluate_party_strategy() -> Strategy:
 
 
 ## 探索時の移動方針（フロアランクに基づいて階段移動を決定）
-## party_score = average(power + physical_resistance + magic_resistance + defense_accuracy)
-## FLOOR_RANK との比較で上下フロア移動を決定する
+## party_score = 全メンバーの (power + physical_resistance + magic_resistance + defense_accuracy) の和
+## ① 静的スコアで適正フロアを決定
+## ② HP最低値・エネルギー平均値が閾値を下回る場合は適正フロア-1（休息・浅層退避）
 func _get_explore_move_policy() -> String:
 	if _party_members.is_empty():
 		return "explore"
-	# パーティースコアを計算
-	var total_score := 0.0
+
+	# --- 1. 静的スコア（全メンバーの和） ---
+	var static_score := 0
 	var count := 0
-	for m: Character in _party_members:
-		if is_instance_valid(m) and m.character_data != null:
-			var cd := m.character_data
-			total_score += float(cd.power + cd.physical_resistance \
-				+ cd.magic_resistance + cd.defense_accuracy)
-			count += 1
-	if count == 0:
-		return "explore"
-	var party_score := total_score / float(count)
-	# 現在フロアインデックスを取得（いずれかのメンバーから）
 	var current_floor := 0
 	for m: Character in _party_members:
-		if is_instance_valid(m):
-			current_floor = m.current_floor
-			break
+		if not is_instance_valid(m):
+			continue
+		current_floor = m.current_floor
+		if m.character_data != null:
+			var cd := m.character_data
+			static_score += cd.power + cd.physical_resistance \
+				+ cd.magic_resistance + cd.defense_accuracy
+		count += 1
+	if count == 0:
+		return "explore"
+
+	# --- 2. 静的スコアで適正フロアを決定 ---
 	var floor_count: int = GlobalConstants.FLOOR_RANK.size()
-	# 次フロアが存在する場合、スコアが十分なら下へ
+	var appropriate_floor := current_floor
 	if current_floor + 1 < floor_count:
-		var next_rank := GlobalConstants.FLOOR_RANK.get(current_floor + 1, 100) as int
-		if party_score >= float(next_rank):
-			return "stairs_down"
-	# 前フロアが存在する場合、スコアが現フロア基準の半分未満なら退却
-	if current_floor > 0:
+		var next_rank := GlobalConstants.FLOOR_RANK.get(current_floor + 1, 9999) as int
+		if static_score >= next_rank:
+			appropriate_floor = current_floor + 1
+	if appropriate_floor == current_floor and current_floor > 0:
 		var this_rank := GlobalConstants.FLOOR_RANK.get(current_floor, 0) as int
-		if party_score < float(this_rank) * 0.5:
-			return "stairs_up"
+		if static_score < this_rank / 2:
+			appropriate_floor = current_floor - 1
+
+	# --- 3. HP チェック（最低値） ---
+	var hp_fail := false
+	var hp_min_ratio := 1.0
+	for m: Character in _party_members:
+		if not is_instance_valid(m) or m.max_hp <= 0:
+			continue
+		var recoverable := float(_calc_recoverable_hp(m))
+		var ratio := clampf((float(m.hp) + recoverable) / float(m.max_hp), 0.0, 1.0)
+		hp_min_ratio = minf(hp_min_ratio, ratio)
+	if hp_min_ratio < GlobalConstants.NPC_HP_THRESHOLD:
+		hp_fail = true
+
+	# --- 4. エネルギー（MP/SP）チェック（平均値） ---
+	var energy_fail := false
+	var energy_sum := 0.0
+	var energy_count := 0
+	for m: Character in _party_members:
+		if not is_instance_valid(m):
+			continue
+		var max_energy := m.max_mp if m.max_mp > 0 else m.max_sp
+		if max_energy <= 0:
+			continue
+		var cur_energy := m.mp if m.max_mp > 0 else m.sp
+		var recoverable := float(_calc_recoverable_energy(m))
+		energy_sum += clampf((float(cur_energy) + recoverable) / float(max_energy), 0.0, 1.0)
+		energy_count += 1
+	if energy_count > 0 and energy_sum / float(energy_count) < GlobalConstants.NPC_ENERGY_THRESHOLD:
+		energy_fail = true
+
+	# --- 5. 目標フロア決定（HP/Energy が低ければ-1） ---
+	var target_floor := appropriate_floor
+	if hp_fail or energy_fail:
+		target_floor = maxi(0, appropriate_floor - 1)
+
+	# --- 6. 方針を返す ---
+	if target_floor > current_floor:
+		return "stairs_down"
+	if target_floor < current_floor:
+		return "stairs_up"
 	return "explore"
+
+
+## インベントリ内の HP 回復ポーションで回復できる HP 量を計算する
+func _calc_recoverable_hp(member: Character) -> int:
+	if member.character_data == null:
+		return 0
+	var total := 0
+	for item: Variant in member.character_data.inventory:
+		var it := item as Dictionary
+		if it == null:
+			continue
+		var eff := it.get("effect", {}) as Dictionary
+		total += eff.get("restore_hp", 0) as int
+	return total
+
+
+## インベントリ内のポーションで回復できるエネルギー（MP または SP）量を計算する
+func _calc_recoverable_energy(member: Character) -> int:
+	if member.character_data == null:
+		return 0
+	var use_mp := member.max_mp > 0
+	var key := "restore_mp" if use_mp else "restore_sp"
+	var total := 0
+	for item: Variant in member.character_data.inventory:
+		var it := item as Dictionary
+		if it == null:
+			continue
+		var eff := it.get("effect", {}) as Dictionary
+		total += eff.get(key, 0) as int
+	return total
 
 
 ## 戦略変更の理由

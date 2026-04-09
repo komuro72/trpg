@@ -2762,6 +2762,55 @@ CharacterGenerator.apply_enemy_stats()     ← ステータスを上書き（上
 - `generate_character()` 内で `_random_rank()` の代わりに使用
 - Sランクはダークロード等のボス級専用（`enemy_list.json` で `"rank": "S"` を直接指定）
 
+### 未加入NPC フロア遷移スコアロジック（実装済み）
+
+`NpcLeaderAI._get_explore_move_policy()` が EXPLORE 戦略時の移動方針（`stairs_down` / `stairs_up` / `explore`）を決定する。
+
+#### スコア計算
+
+| 項目 | 内容 |
+|------|------|
+| 静的スコア | 全メンバーの `power + physical_resistance + magic_resistance + defense_accuracy` の**和** |
+| 適正フロア | 静的スコアと `GlobalConstants.FLOOR_RANK` を比較して決定 |
+| HP チェック | 最低 HP 割合（ポーション回復量を加算）が `NPC_HP_THRESHOLD(0.5)` 未満 → 適正フロア-1 |
+| エネルギーチェック | 平均 MP/SP 割合（ポーション回復量を加算）が `NPC_ENERGY_THRESHOLD(0.3)` 未満 → 適正フロア-1 |
+
+#### `GlobalConstants.FLOOR_RANK`（和ベース）
+
+| フロア | 必要スコア | 備考 |
+|--------|---------|------|
+| 0 | 200 | 入口フロア |
+| 1 | 280 | ランクC・2人パーティーが通過できる下限 |
+| 2 | 420 | |
+| 3 | 580 | |
+| 4 | 780 | 最下層（ボス） |
+
+#### 関連定数（`global_constants.gd`）
+
+```
+FLOOR_RANK: Dictionary = {0: 200, 1: 280, 2: 420, 3: 580, 4: 780}
+NPC_HP_THRESHOLD: float = 0.5
+NPC_ENERGY_THRESHOLD: float = 0.3
+```
+
+#### ヘルパーメソッド（`npc_leader_ai.gd`）
+
+- `_calc_recoverable_hp(member)`: インベントリ内の HP ポーション合計回復量を返す
+- `_calc_recoverable_energy(member)`: インベントリ内の MP/SP ポーション合計回復量を返す（`max_mp > 0` ならMP、それ以外はSP）
+
+#### 判定フロー
+
+```
+1. 静的スコア = Σ(power + physical_resistance + magic_resistance + defense_accuracy)
+2. 適正フロア = FLOOR_RANK 比較で決定
+   - スコア >= FLOOR_RANK[current+1] → appropriate_floor = current + 1
+   - スコア <  FLOOR_RANK[current] / 2 → appropriate_floor = current - 1
+3. HP 最低割合 = min(各メンバーの (hp + ポーション回復) / max_hp)
+4. エネルギー平均 = avg(各メンバーの (mp or sp + ポーション回復) / max_energy)
+5. hp_fail or energy_fail → target_floor = max(0, appropriate_floor - 1)
+6. target > current → "stairs_down"、target < current → "stairs_up"、同じ → "explore"
+```
+
 ## Phase 13: Steam配布準備（未実装）
 
 ---

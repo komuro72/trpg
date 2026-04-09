@@ -52,9 +52,14 @@ const ATTACK_TYPE_MULT: Dictionary = {
 
 ## フロア難易度ランク（フロアインデックス → 強さスコア基準値）
 ## NPC が同フロアに留まるか上下するかの判断に使用
-## member_score = attack_power + physical_resistance + magic_resistance + defense_accuracy
-## ランクC・細身・女性・若い の最弱ケースでも archer≈14, mage≈17 程度を想定して調整済み
-const FLOOR_RANK: Dictionary = {0: 5, 1: 12, 2: 20, 3: 30, 4: 45}
+## party_score = 全メンバーの (power + physical_resistance + magic_resistance + defense_accuracy) の和
+## ランクC・2人パーティーの最弱ケースで score≈280 を想定して調整済み
+const FLOOR_RANK: Dictionary = {0: 200, 1: 280, 2: 420, 3: 580, 4: 780}
+
+## NPC フロア遷移・戦闘継続の HP 最低閾値（最低 HP 率がこれを下回ると適正フロア-1）
+const NPC_HP_THRESHOLD: float = 0.5
+## NPC フロア遷移・戦闘継続の エネルギー（MP/SP）平均閾値（平均エネルギー率がこれを下回ると適正フロア-1）
+const NPC_ENERGY_THRESHOLD: float = 0.3
 
 ## 階段タイル種別定数（MapData.TileType と対応）
 const TILE_STAIRS_DOWN: int = 4
