@@ -21,8 +21,15 @@ func add_member(character: Character) -> void:
 
 func remove_member(character: Character) -> void:
 	members.erase(character)
-	if active_character == character:
-		active_character = members[0] if members.size() > 0 else null
+	# freed メンバーも合わせて除去する
+	members = members.filter(func(m: Variant) -> bool: return is_instance_valid(m))
+	if active_character == character or not is_instance_valid(active_character):
+		# 有効な最初のメンバーを新しい active_character に設定
+		active_character = null
+		for m: Variant in members:
+			if is_instance_valid(m):
+				active_character = m as Character
+				break
 
 
 func set_active(character: Character) -> void:
