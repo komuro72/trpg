@@ -90,6 +90,17 @@ const STAT_NAME_JP: Dictionary = {
 ## Autoload の GlobalConstants に定義して回避する
 enum ConsumableDisplayMode { NORMAL, ITEM_SELECT, ACTION_SELECT, TRANSFER_SELECT }
 
+## MessageWindow の表示モード（false = リセット型 / true = スクロール型）
+## false: 左右画像が切り替わったらテキストをリセット。直近のアクションのログを上から表示
+## true: テキストは流れ続け、左右画像は直近アクションの当事者に随時切り替わり
+var MESSAGE_WINDOW_SCROLL_MODE: bool = false
+
+## ダメージ段階の閾値（battle メッセージの「小/中/大/特大ダメージ」判定に使用）
+const DAMAGE_LEVEL_SMALL:  int = 5   ## 小ダメージの上限（これ以下）
+const DAMAGE_LEVEL_MEDIUM: int = 15  ## 中ダメージの上限（これ以下）
+const DAMAGE_LEVEL_LARGE:  int = 30  ## 大ダメージの上限（これ以下）
+## 特大ダメージ: DAMAGE_LEVEL_LARGE より大きい
+
 
 ## 画面サイズからGRID_SIZEを計算する
 ## 縦方向タイル数を固定してGRID_SIZEを決定（最小32px）

@@ -719,11 +719,20 @@ func _remove_buff_effect() -> void:
 
 
 ## スタンを付与する（duration 秒間 is_stunned=true。UnitAI の行動をスキップさせる）
-func apply_stun(duration: float) -> void:
+## attacker: スタンの発生源（battle メッセージ生成に使用。null 可）
+func apply_stun(duration: float, attacker: Character = null) -> void:
 	is_stunned = true
 	stun_timer = maxf(stun_timer, duration)  # 残り時間が長い方を採用
 	var char_name := character_data.character_name if character_data != null else str(name)
 	MessageLog.add_combat("[スタン] %s がスタンした（%.1f秒）" % [char_name, duration])
+	# 自然言語バトルメッセージ
+	if MessageLog != null:
+		var atk_name := _battle_name(attacker)
+		var def_name := _battle_name(self)
+		var atk_data: CharacterData = attacker.character_data \
+				if attacker != null and is_instance_valid(attacker) else null
+		var msg := "%sが%sに水魔法を放ち、動きを封じた" % [atk_name, def_name]
+		MessageLog.add_battle(atk_data, character_data, msg)
 
 
 ## バフ込みの防御力を返す
@@ -734,10 +743,11 @@ func get_effective_defense() -> int:
 
 
 ## ダメージを受ける（Phase 12-14: クリティカル・新防御ロジック対応版）
-## attack_is_magic: true なら魔法耐性を、false なら物理耐性を適用
-## attacker:        ダメージ源（方向判定・クリティカル判定・ドロップ帰属追跡用。null 可）
+## attack_is_magic:      true なら魔法耐性を、false なら物理耐性を適用
+## attacker:             ダメージ源（方向判定・クリティカル判定・ドロップ帰属追跡用。null 可）
+## suppress_battle_msg:  true のとき battle メッセージを生成しない（スタン攻撃等でスタン側にまとめる場合）
 func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character = null,
-		attack_is_magic: bool = false) -> void:
+		attack_is_magic: bool = false, suppress_battle_msg: bool = false) -> void:
 	if is_sliding:
 		return  # スライディング中は無敵
 	if attacker != null:
@@ -770,7 +780,9 @@ func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character =
 					defense_succeeded = true
 
 	# 2. 防御強度を差し引き
-	var after_block: int = maxi(0, int(float(raw_amount) * multiplier) - get_effective_defense() - blocked)
+	var raw_after_mult: int = int(float(raw_amount) * multiplier)
+	var after_block: int = maxi(0, raw_after_mult - get_effective_defense() - blocked)
+	var is_fully_blocked := blocked > 0 and (raw_after_mult - get_effective_defense()) <= blocked
 
 	# 3. 耐性適用（逓減軽減）
 	var resistance := 0.0
@@ -781,16 +793,22 @@ func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character =
 			resistance = character_data.get_total_physical_resistance()
 	var actual: int = maxi(1, int(float(after_block) * (1.0 - resistance)))
 
-	# 戦闘計算ログ出力
+	# 戦闘計算ログ出力（デバッグ用 COMBAT メッセージ）
 	_log_damage(attacker, raw_amount, multiplier, attack_is_magic,
 		dir_result, defense_succeeded, blocked, resistance, actual, is_critical)
 
 	hp = max(0, hp - actual)
 	_spawn_hit_effect(actual)
-	# クリティカル時は HitEffect をもう1発重ねて強調（メッセージ通知なし）
+	# クリティカル時は HitEffect をもう1発重ねて強調
 	if is_critical:
 		_spawn_hit_effect(actual)
 	SoundManager.play_from(SoundManager.TAKE_DAMAGE, self)
+
+	# 自然言語バトルメッセージ出力
+	if not suppress_battle_msg:
+		_emit_damage_battle_msg(attacker, raw_amount, actual,
+			is_critical, blocked, is_fully_blocked, attack_is_magic)
+
 	# シグナル発火（共闘フラグ更新など各システムが購読）
 	took_damage_from.emit(attacker)
 	if attacker != null and is_instance_valid(attacker):
@@ -883,8 +901,135 @@ func _calc_block_per_class(direction: String) -> int:
 	return total
 
 
+## ======================================================================
+## 自然言語バトルメッセージ生成（MessageLog.add_battle に渡す文章を作る）
+## ======================================================================
+
+## ダメージ量を日本語の段階ラベルに変換する
+static func _damage_label(dmg: int) -> String:
+	if dmg <= GlobalConstants.DAMAGE_LEVEL_SMALL:
+		return "小ダメージ"
+	elif dmg <= GlobalConstants.DAMAGE_LEVEL_MEDIUM:
+		return "中ダメージ"
+	elif dmg <= GlobalConstants.DAMAGE_LEVEL_LARGE:
+		return "大ダメージ"
+	else:
+		return "特大ダメージ"
+
+
+## バトルメッセージ用のキャラクター表示名を返す
+## 友好キャラクター（is_friendly=true）はキャラクター名、敵はクラス日本語名を使用
+static func _battle_name(ch: Character) -> String:
+	if ch == null or not is_instance_valid(ch) or ch.character_data == null:
+		return "不明"
+	if ch.is_friendly:
+		if not ch.character_data.character_name.is_empty():
+			return ch.character_data.character_name
+	else:
+		var class_jp: String = GlobalConstants.CLASS_NAME_JP.get(
+				ch.character_data.class_id, "") as String
+		if not class_jp.is_empty():
+			return class_jp
+	# fallback: どちらでもなければキャラ名
+	return ch.character_data.character_name if not ch.character_data.character_name.is_empty() \
+			else ch.character_data.character_id
+
+
+## 攻撃動詞フレーズを返す（mode: "normal"=し, "negative"=したが, "critical"=クリ用）
+static func _weapon_action(attacker: Character, mode: String) -> String:
+	if attacker == null or not is_instance_valid(attacker) or attacker.character_data == null:
+		return "攻撃し" if mode != "negative" else "攻撃したが"
+	var cd := attacker.character_data
+	var atype := cd.attack_type
+	var weapon_type: String = cd.equipped_weapon.get("item_type", "") as String
+	match atype:
+		"heal":
+			return "回復魔法をかけ"
+		"dive":
+			if mode == "negative":
+				return "急降下攻撃を仕掛けたが"
+			return "急降下攻撃を仕掛け"
+		"magic":
+			if mode == "critical":
+				return "強烈な魔法を放ち"
+			elif mode == "negative":
+				return "魔法を放ったが"
+			return "魔法を放ち"
+		"ranged":
+			if mode == "critical":
+				return "弓で正確に射抜き"
+			elif mode == "negative":
+				return "弓で攻撃したが"
+			return "弓で攻撃し"
+		"melee":
+			var wlabel: String
+			match weapon_type:
+				"sword":  wlabel = "剣"
+				"axe":    wlabel = "斧"
+				"dagger": wlabel = "短剣"
+				_:        wlabel = "武器"
+			if mode == "critical":
+				return "%sで渾身の一撃を放ち" % wlabel
+			elif mode == "negative":
+				return "%sで攻撃したが" % wlabel
+			return "%sで攻撃し" % wlabel
+	return "攻撃し" if mode != "negative" else "攻撃したが"
+
+
+## 自然言語ダメージバトルメッセージを MessageLog.add_battle に送出する
+func _emit_damage_battle_msg(attacker: Character, raw: int, actual: int,
+		is_critical: bool, blocked: int, is_fully_blocked: bool,
+		attack_is_magic: bool) -> void:
+	if MessageLog == null:
+		return
+	var atk_data: CharacterData = attacker.character_data \
+			if attacker != null and is_instance_valid(attacker) else null
+	var def_data: CharacterData = character_data
+
+	var atk_name := _battle_name(attacker)
+	var def_name := _battle_name(self)
+
+	var msg: String
+
+	# ── アンデッド特効（ヒーラーがアンデッドを攻撃）
+	if atk_data != null and atk_data.attack_type == "heal" \
+			and def_data != null and def_data.is_undead:
+		msg = "%sが%sに聖なる光を放ち、%sを与えた" % [atk_name, def_name, _damage_label(actual)]
+
+	# ── ヘッドショット（即死）
+	elif raw >= 9999:
+		msg = "%sが%sを射抜き、即座に倒した" % [atk_name, def_name]
+
+	# ── 完全ブロック
+	elif is_fully_blocked:
+		var verb := _weapon_action(attacker, "negative")
+		msg = "%sが%sに%s、%sは盾で防いだ" % [atk_name, def_name, verb, def_name]
+
+	# ── クリティカルヒット
+	elif is_critical:
+		var verb := _weapon_action(attacker, "critical")
+		msg = "%sが%sに%s、%sを与えた" % [atk_name, def_name, verb, _damage_label(actual)]
+
+	# ── 部分ブロック
+	elif blocked > 0:
+		var verb := _weapon_action(attacker, "negative")
+		msg = "%sが%sに%s、%sは盾で防ぎ、%sに抑えた" % \
+				[atk_name, def_name, verb, def_name, _damage_label(actual)]
+
+	# ── 0ダメージ（耐性等で吸収）
+	elif actual <= 1:
+		var verb := _weapon_action(attacker, "negative")
+		msg = "%sが%sに%s、ダメージを与えられなかった" % [atk_name, def_name, verb]
+
+	# ── 通常攻撃
+	else:
+		var verb := _weapon_action(attacker, "normal")
+		msg = "%sが%sに%s、%sを与えた" % [atk_name, def_name, verb, _damage_label(actual)]
+
+	MessageLog.add_battle(atk_data, def_data, msg)
+
+
 ## 戦闘計算ログを出力する
-func _log_damage(attacker: Character, raw: int, mult: float, is_magic: bool,
 		dir: String, def_ok: bool, blocked: int, resist: float, actual: int,
 		is_critical: bool = false) -> void:
 	if MessageLog == null:
@@ -955,6 +1100,13 @@ func log_heal(healer: Character, amount: int, hp_before: int) -> void:
 	var text := "%s → %s: 回復 魔力%d → HP%d→%d" % [
 		h_name, t_name, amount, hp_before, hp]
 	MessageLog.add_combat(text, grid_pos)
+	# 自然言語バトルメッセージ（回復）
+	var healer_data: CharacterData = healer.character_data \
+			if healer != null and is_instance_valid(healer) else null
+	var heal_name := _battle_name(healer)
+	var target_name := _battle_name(self)
+	var battle_msg := "%sが%sに回復魔法をかけ、体力を回復した" % [heal_name, target_name]
+	MessageLog.add_battle(healer_data, character_data, battle_msg)
 
 
 ## キャラクターの表示名を返す
@@ -1032,5 +1184,11 @@ static func dir_to_vec(dir: Direction) -> Vector2i:
 ## 死亡処理：シグナルを発火してフィールドから除去する
 func die() -> void:
 	SoundManager.play_from(SoundManager.DEATH, self)
+	# 自然言語バトルメッセージ（死亡通知）
+	if MessageLog != null:
+		var def_name := _battle_name(self)
+		var atk_data: CharacterData = last_attacker.character_data \
+				if last_attacker != null and is_instance_valid(last_attacker) else null
+		MessageLog.add_battle(atk_data, character_data, "%sは倒れた" % def_name)
 	died.emit(self)
 	queue_free()

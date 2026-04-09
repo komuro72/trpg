@@ -1371,6 +1371,27 @@ rank値: C=0, B=1, A=2, S=3
     - `_input()` の KEY_ESCAPE をポーズメニュー開閉に変更（旧 get_tree().quit() を廃止）
     - `_setup_pause_menu()` で PauseMenu をインスタンス化・add_child
   - [x] **SoundManager.set_volume()** 追加（linear_to_db 変換して Master バスに適用）
+- [x] Phase 13-1（Phase 14準備）: MessageWindow刷新（バスト画像＋戦闘メッセージ自然言語化）
+  - [x] **GlobalConstants** に `MESSAGE_WINDOW_SCROLL_MODE: bool = false` と `DAMAGE_LEVEL_SMALL/MEDIUM/LARGE` 定数を追加
+  - [x] **MessageLog** に `BATTLE` enum値・`battle_message_added` シグナル・`add_battle()` メソッドを追加。`get_visible_entries()` でデバッグOFF時も BATTLE を表示
+  - [x] **MessageWindow** を全面刷新（Phase 14〜 版）
+    - 画面中央寄せ（左右マージン最大12%・ただしパネル幅以上を確保）・高さ10行
+    - 左右にバスト画像エリア（正方形・高さいっぱい）・中央にテキストエリア
+    - `_on_battle_message()` で左右バスト画像とテキストを更新
+    - `_load_bust_tex()`: `sprite_front`→`sprite_face` の順でテクスチャ取得・キャッシュ
+    - `_draw_bust()`: 1024×1024+ 画像は中央上半分（x=256,y=0,w=512,h=512）をクロップ
+    - リセット型モード（`MESSAGE_WINDOW_SCROLL_MODE=false`）: ペア変更時にテキストリセット
+    - スクロール型モード（`MESSAGE_WINDOW_SCROLL_MODE=true`）: MessageLog の流れに任せる
+    - 既存の会話モードスタブを後方互換として維持
+  - [x] **character.gd** に自然言語戦闘メッセージ生成を追加
+    - `_damage_label()`: ダメージ量を「小/中/大/特大ダメージ」に変換（GlobalConstants の定数を参照）
+    - `_battle_name()`: 友軍は `character_name`、敵は `CLASS_NAME_JP[class_id]` で表示名を取得
+    - `_weapon_action()`: 攻撃タイプ・武器種・成否（normal/critical/negative）からアクション動詞を生成
+    - `_emit_damage_battle_msg()`: 全戦闘ケース（通常/0ダメ/クリティカル/完全ブロック/部分ブロック/即死）の自然言語メッセージを `MessageLog.add_battle()` に送信。`suppress_battle_msg` フラグでスタン攻撃の二重メッセージを抑制
+    - `apply_stun()` に `attacker: Character = null` 引数追加・スタンメッセージを add_battle で発火
+    - `die()` で死亡メッセージを add_battle で発火
+    - `log_heal()` で回復メッセージを add_battle で発火
+  - [x] **projectile.gd** 修正: `apply_stun()` に attacker を渡す・スタン攻撃時は `take_damage()` の battle メッセージを抑制（`suppress` フラグ）
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム
@@ -1733,6 +1754,8 @@ rank値: C=0, B=1, A=2, S=3
 - BGM
 - 巻き添え（`friendly_fire`）：範囲攻撃（炎陣など）が味方・他パーティーにも当たる仕様。`CharacterData.friendly_fire: bool`（当面 false 固定）で管理し、将来切り替え可能にする
 - 大型ボスの即死耐性設計：`instant_death_immune: bool`（ボス級は true）。ヘッドショット無効・無力化水魔法持続短縮。敵 JSON でフラグを設定できる設計にする
+- ログ参照の改善（OrderWindowのログをより使いやすく）：現在は最新50件をそのまま表示するだけ。フィルタリング・検索・スクロール操作の改善を検討
+- 移動せずに向きだけ変える操作の追加：ガード中の向き変更は実装済みだが、通常状態で「移動せずに向きだけ変える」ための専用操作（ボタン長押し中にスティック/矢印で向き変更など）が未実装
 
 ## 参照ファイル
 - docs/spec.md：詳細仕様書（実装前に参照すること）

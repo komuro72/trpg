@@ -5,7 +5,7 @@
 extends Node
 
 ## メッセージ種別
-enum MsgType { SYSTEM, COMBAT, AI }
+enum MsgType { SYSTEM, COMBAT, AI, BATTLE }
 
 ## デバッグメッセージ（COMBAT / AI）の表示切替。F1 キーでトグル
 var debug_visible: bool = true
@@ -17,6 +17,10 @@ var entries: Array[Dictionary] = []
 
 ## 新しいエントリが追加されたとき発火するシグナル
 signal entry_added()
+
+## バトルメッセージが追加されたとき発火するシグナル
+## MessageWindow がバスト画像とテキストを更新するために購読する
+signal battle_message_added(attacker_data: CharacterData, defender_data: CharacterData, message: String)
 
 ## エリアフィルタ用（setup_area_filter で設定）
 var _map_data: MapData = null
@@ -50,6 +54,14 @@ func add_ai(text: String, grid_pos: Vector2i = Vector2i(-1, -1)) -> void:
 	_add(text, MsgType.AI, Color(0.4, 0.9, 1.0))
 
 
+## バトルメッセージ（オレンジ）— エリアフィルタなし・battle_message_added シグナルも発火
+## attacker_data / defender_data は MessageWindow のバスト画像更新に使用する（null 可）
+func add_battle(attacker_data: CharacterData, defender_data: CharacterData,
+		message: String) -> void:
+	_add(message, MsgType.BATTLE, Color(1.0, 0.60, 0.20))
+	battle_message_added.emit(attacker_data, defender_data, message)
+
+
 ## デバッグ表示トグル
 func toggle_debug() -> void:
 	debug_visible = not debug_visible
@@ -57,12 +69,14 @@ func toggle_debug() -> void:
 
 
 ## 現在の表示フィルタに合致するエントリのみ返す
+## デバッグOFF時は SYSTEM と BATTLE のみ表示（COMBAT/AI は非表示）
 func get_visible_entries() -> Array[Dictionary]:
 	if debug_visible:
 		return entries
 	var result: Array[Dictionary] = []
 	for e: Dictionary in entries:
-		if int(e.get("type", 0)) == int(MsgType.SYSTEM):
+		var t: int = int(e.get("type", 0))
+		if t == int(MsgType.SYSTEM) or t == int(MsgType.BATTLE):
 			result.append(e)
 	return result
 
