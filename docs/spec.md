@@ -1353,6 +1353,7 @@ assets/images/characters/{class}_{sex}_{age}_{build}_{id}/
 - **NPC自発申し出**: 現在は無効（`wants_to_initiate()` は常に false）。プレイヤー起点のみ対応
 - **NpcLeaderAI の承諾/拒否判断（スコア比較方式）**:
   - `join_us`（NPC がプレイヤー傘下に入る）のみスコア比較。`join_them` は常に承諾。
+  - **足切り条件（先にチェック）**: NPC パーティーの現在フロアが `_get_target_floor()` の返値より低い場合は即座に拒否。適正フロアに到達していない = まだ下層探索の必要がなく仲間を増やすメリットが薄い
   - **プレイヤー側スコア** = リーダーの統率力
                               + パーティーランク和 × 10
                               + 共闘フラグ（`has_fought_together`） × 5
@@ -1585,7 +1586,8 @@ func _on_npc_bumped(npc_member: Character) -> void:
 | `is_in_combat() -> bool` | 現在 ATTACK 戦略中か |
 | `notify_fought_together()` | `has_fought_together = true` にセット |
 | `notify_healed()` | `has_been_healed = true` にセット |
-| `will_accept(offer_type, player_party) -> bool` | "join_us": スコア比較で承諾/拒否。"join_them": 常に承諾 |
+| `_get_target_floor() -> int` | 現在の状態に基づく目標フロアを返す（HP/Energy 補正込み）。`_get_explore_move_policy()` と `will_accept()` の共通処理 |
+| `will_accept(offer_type, player_party) -> bool` | "join_us": 足切り（適正フロア未到達は即拒否）→スコア比較で承諾/拒否。"join_them": 常に承諾 |
 
 **合流処理（game_map.gd）**
 - 会話開始時: `nm.set_process_mode(DISABLED)` で NPC AI を一時停止（会話中に動き回らないようにする）

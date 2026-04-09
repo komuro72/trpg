@@ -66,30 +66,32 @@ func _evaluate_party_strategy() -> Strategy:
 	return Strategy.EXPLORE
 
 
-## 探索時の移動方針（フロアランクに基づいて階段移動を決定）
+## 現在の状態に基づく目標フロアを返す（HP/Energy 補正込み）
 ## rank_sum = 全メンバーの RANK_VALUES（C=3, B=4, A=5, S=6）の和
 ## ① ランク和スコアで適正フロアを決定
 ## ② HP最低値・エネルギー平均値が閾値を下回る場合は適正フロア-1（休息・浅層退避）
-func _get_explore_move_policy() -> String:
+## suppress_floor_navigation = true またはメンバーなしの場合は現在フロアをそのまま返す
+func _get_target_floor() -> int:
 	# hero パーティーマネージャー等ではフロア遷移判断を行わない
-	if suppress_floor_navigation:
-		return "explore"
-	if _party_members.is_empty():
-		return "explore"
+	var current_floor := 0
+	for m: Character in _party_members:
+		if is_instance_valid(m):
+			current_floor = m.current_floor
+			break
+	if suppress_floor_navigation or _party_members.is_empty():
+		return current_floor
 
 	# --- 1. ランク和スコア（全メンバーの RANK_VALUES 合計） ---
 	var rank_sum := 0
 	var count := 0
-	var current_floor := 0
 	for m: Character in _party_members:
 		if not is_instance_valid(m):
 			continue
-		current_floor = m.current_floor
 		if m.character_data != null:
 			rank_sum += RANK_VALUES.get(m.character_data.rank, 3) as int
 		count += 1
 	if count == 0:
-		return "explore"
+		return current_floor
 
 	# --- 2. ランク和スコアで適正フロアを決定 ---
 	var floor_count: int = GlobalConstants.FLOOR_RANK.size()
@@ -140,16 +142,13 @@ func _get_explore_move_policy() -> String:
 	# --- 6. デバッグログ（初回 or 目標フロア変化時） ---
 	if _prev_target_floor != target_floor:
 		var leader_name := _get_leader_name()
-		# 次フロア・退避基準スコアを文字列化
 		var next_rank  := GlobalConstants.FLOOR_RANK.get(current_floor + 1, 9999) as int
 		var half_rank  := (GlobalConstants.FLOOR_RANK.get(current_floor, 0) as int) / 2
 		var score_part := "ランク和%d（次F%d基準%d / 退避%d）" % [
 			rank_sum, current_floor + 1, next_rank, half_rank]
-		# HP・エネルギー結果
 		var hp_part := "HP最低%.0f%%%s" % [hp_min_ratio * 100.0, "×" if hp_fail else "○"]
 		var en_avg  := (energy_sum / float(energy_count) * 100.0) if energy_count > 0 else 100.0
 		var en_part := "En平均%.0f%%%s" % [en_avg, "×" if energy_fail else "○"]
-		# 補正の有無
 		var adj_part := " →補正-1" if (hp_fail or energy_fail) else ""
 		MessageLog.add_ai(
 			"[NPCフロア判断] %s: %s / %s / %s / 適正F%d%s → 目標F%d" % [
@@ -158,7 +157,19 @@ func _get_explore_move_policy() -> String:
 		)
 		_prev_target_floor = target_floor
 
-	# --- 7. 方針を返す ---
+	return target_floor
+
+
+## 探索時の移動方針を返す（_get_target_floor() の結果を方針文字列に変換）
+func _get_explore_move_policy() -> String:
+	if suppress_floor_navigation or _party_members.is_empty():
+		return "explore"
+	var current_floor := 0
+	for m: Character in _party_members:
+		if is_instance_valid(m):
+			current_floor = m.current_floor
+			break
+	var target_floor := _get_target_floor()
 	if target_floor > current_floor:
 		return "stairs_down"
 	if target_floor < current_floor:
@@ -270,6 +281,18 @@ func will_accept(offer_type: String, player_party: Party) -> bool:
 	if offer_type != "join_us":
 		# プレイヤーが NPC 傘下に入る場合：戦力強化になるので常に承諾
 		return true
+
+	# ---- 足切り：適正フロアに到達していなければ断る ----
+	# まだ下層に進む必要がないため、仲間を増やすメリットが薄い
+	var current_floor := 0
+	for m: Character in _party_members:
+		if is_instance_valid(m):
+			current_floor = m.current_floor
+			break
+	if current_floor < _get_target_floor():
+		MessageLog.add_ai(
+			"[合流判定] %s: 適正フロア未到達のため断る（現在F%d）" % [_get_leader_name(), current_floor])
+		return false
 
 	# ---- プレイヤー側スコア ----
 	var leader_leadership := 0
