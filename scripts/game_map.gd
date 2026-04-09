@@ -1267,6 +1267,14 @@ func _transition_npc_floor(nm: NpcManager, direction: int) -> void:
 		placed_positions.append(land_pos)
 		member.grid_pos = land_pos
 		member.sync_position()
+	# NPC フロア遷移デバッグログ
+	var leader_name := "NPC"
+	for m: Character in members:
+		if is_instance_valid(m) and m.is_leader and m.character_data != null:
+			leader_name = m.character_data.character_name
+			break
+	var dir_str := "↓" if direction > 0 else "↑"
+	MessageLog.add_ai("[NPC遷移] %s: F%d %s F%d" % [leader_name, old_floor, dir_str, new_floor])
 	# NpcManager の map_data を更新
 	nm.set_map_data(new_map)
 	# _per_floor_npcs の管理を更新

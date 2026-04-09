@@ -285,6 +285,14 @@ func _on_member_died(character: Character) -> void:
 	# AI に状況変化を通知（逃走判定の再評価を即座に行わせる）
 	if _leader_ai != null:
 		_leader_ai.notify_situation_changed()
+	# NPC 死亡デバッグログ
+	if character.is_friendly:
+		var cd := character.character_data
+		var name_str := cd.character_name if cd != null else "?"
+		var class_str := GlobalConstants.CLASS_NAME_JP.get(
+				cd.class_id if cd != null else "", cd.class_id if cd != null else "?")
+		var floor_str := "F%d" % character.current_floor
+		MessageLog.add_ai("[NPC死亡] %s（%s・%s）" % [name_str, class_str, floor_str])
 	# 全メンバー死亡 → party_wiped シグナル発火（床ドロップ処理）
 	if _members.is_empty() and party_type == "enemy":
 		party_wiped.emit(_drop_items, _room_id)
