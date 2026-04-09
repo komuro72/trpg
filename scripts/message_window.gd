@@ -133,14 +133,14 @@ func _on_draw() -> void:
 	var vw  := _control.size.x
 	var vh  := _control.size.y
 
-	## MSG_FONT_SIZE = GRID_SIZE / 3
-	var fs     := maxi(10, int(float(gs) / 3.0))
-	var line_h := float(fs) * 1.5
-	## MSG_ICON_SIZE = MSG_FONT_SIZE * 2
-	var icon_sz := float(fs * 2)
+	## MSG_ICON_SIZE: 右パネルのアイコンと同サイズ（gs * 0.8 - 8 相当）
+	var icon_sz := float(maxi(20, gs * 2 / 3))
+	## MSG_FONT_SIZE = MSG_ICON_SIZE / 2（アイコン高さ = テキスト2行分）
+	var fs      := maxi(8, int(icon_sz * 0.5))
+	var line_h  := float(fs) * 1.5
 
-	# ── ウィンドウ全体（画面幅の中央50〜60%・左右20〜25%マージン）
-	var margin_x := maxf(vw * 0.22, float(pw) + 4.0)
+	# ── ウィンドウ全体（画面幅の40〜50%・左右28%マージン）
+	var margin_x := maxf(vw * 0.28, float(pw) + 4.0)
 	var box_w    := vw - 2.0 * margin_x
 	var box_h    := line_h * float(VISIBLE_LINES) + 16.0
 	var bx       := margin_x
