@@ -134,9 +134,9 @@ func _on_draw() -> void:
 	var vw  := _control.size.x
 	var vh  := _control.size.y
 
-	## MSG_FONT_SIZE は固定値・MSG_ICON_SIZE = MSG_FONT_SIZE * 2
+	## MSG_FONT_SIZE は固定値。アイコンは右パネルと同サイズ（gs * 2/3）
 	var fs      := MSG_FONT_SIZE
-	var icon_sz := float(fs * 2)
+	var icon_sz := float(maxi(20, gs * 2 / 3))
 	var line_h  := float(fs) * 1.5
 
 	# ── ウィンドウ全体（画面幅の40〜50%・左右28%マージン）
