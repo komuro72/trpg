@@ -1036,8 +1036,8 @@ rank値: C=0, B=1, A=2, S=3
       - `_transition_member_floor()`: hero の隣接空きタイルに着地・NpcManager の `map_data` 更新・`blocking_characters` 再構築
       - `_member_stair_cooldown` 変数でパーティー遷移クールダウンを hero の `_stair_cooldown` とは独立管理
     - **未加入 NPC のフロアランク判断**
-      - `global_constants.gd`: `FLOOR_RANK = {0:200, 1:280, 2:420, 3:580, 4:780}` / `NPC_HP_THRESHOLD = 0.5` / `NPC_ENERGY_THRESHOLD = 0.3` 追加
-      - `npc_leader_ai.gd`: `_get_explore_move_policy()` 追加（全メンバーの `power + physical_resistance + magic_resistance + defense_accuracy` の**和**と `FLOOR_RANK` を比較して適正フロアを決定。HP最低値・エネルギー平均値が閾値未満なら-1補正。`_calc_recoverable_hp()` / `_calc_recoverable_energy()` ヘルパー追加）
+      - `global_constants.gd`: `FLOOR_RANK = {0:0, 1:8, 2:13, 3:18, 4:24}` / `NPC_HP_THRESHOLD = 0.5` / `NPC_ENERGY_THRESHOLD = 0.3` 追加
+      - `npc_leader_ai.gd`: `_get_explore_move_policy()` 追加（全メンバーの RANK_VALUES（C=3, B=4, A=5, S=6）の**和**と `FLOOR_RANK` を比較して適正フロアを決定。HP最低値・エネルギー平均値が閾値未満なら-1補正。`_calc_recoverable_hp()` / `_calc_recoverable_energy()` ヘルパー追加）
       - `party_leader_ai.gd`: `_get_explore_move_policy()` 仮想メソッド追加・EXPLORE 戦略の `move_policy` 設定をこのメソッド経由に変更
       - `unit_ai.gd`: `"stairs_down"` / `"stairs_up"` move_policy で `_generate_stair_queue()` を生成
       - `game_map.gd`: `_check_npc_member_stairs()` で全フロアの NPC を監視・`_transition_npc_floor()` で NPC パーティーを遷移
@@ -1160,6 +1160,7 @@ rank値: C=0, B=1, A=2, S=3
   - [x] **NPC がパーティー強度十分でも階段を使わず他の部屋を探索する問題**（修正済み・値は後続でさらに更新）
     - Phase 12-11 時点での修正：`global_constants.gd` の `FLOOR_RANK` を平均スコアベースの `{0:5, 1:12, 2:20, 3:30, 4:45}` に変更
     - **スコアロジック全面改修（Phase 12-11 後）**：平均スコアから和スコアに変更 + 動的スコア（HP/MP/SP）を追加。FLOOR_RANK を和ベースの `{0:200, 1:280, 2:420, 3:580, 4:780}` に更新。`NPC_HP_THRESHOLD = 0.5`・`NPC_ENERGY_THRESHOLD = 0.3` を追加
+    - **スコア方式をランク和に変更（最終版）**：`power + physical_resistance + ...` の stat 和を廃止し、RANK_VALUES（C=3, B=4, A=5, S=6）の合計に変更。FLOOR_RANK を `{0:0, 1:8, 2:13, 3:18, 4:24}` に更新（各フロアの敵パーティー構成を参照した現実的な値）
   - [x] **NPC がフロア遷移後にプレイヤーと同フロアに降りてくるまで動かない問題**
     - 原因：`unit_ai._generate_queue()` のフロア追従チェックが `_member.is_friendly` で判定していたため、未加入 NPC が hero と別フロアにいると「hero を追って戻れ」という指示になり階段付近で停止していた。hero が降りてきた瞬間に動き出すという現象
     - 修正：`unit_ai.gd` に `_follow_hero_floors: bool = false` フラグを追加。フロア追従は `_follow_hero_floors == true` のときのみ発動

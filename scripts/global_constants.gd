@@ -50,11 +50,13 @@ const ATTACK_TYPE_MULT: Dictionary = {
 	"magic":  0.2,
 }
 
-## フロア難易度ランク（フロアインデックス → 強さスコア基準値）
+## フロア難易度ランク（フロアインデックス → ランク和の基準値）
 ## NPC が同フロアに留まるか上下するかの判断に使用
-## party_score = 全メンバーの (power + physical_resistance + magic_resistance + defense_accuracy) の和
-## ランクC・2人パーティーの最弱ケースで score≈280 を想定して調整済み
-const FLOOR_RANK: Dictionary = {0: 200, 1: 280, 2: 420, 3: 580, 4: 780}
+## rank_sum = 全メンバーの RANK_VALUES（C=3, B=4, A=5, S=6）の合計
+## 各フロアの敵パーティー構成を参照して設定（F0: goblin中心, F1: B混成, F2: A混成, F3: 暗黒系A）
+## F0→F1: rank_sum≥8（2人BまたはC3+1）/ F1→F2: rank_sum≥13（B3+でも進めない壁）
+## F2→F3: rank_sum≥18（A3+以上が必要）/ F3→F4: rank_sum≥24（事実上不達・ボスフロア）
+const FLOOR_RANK: Dictionary = {0: 0, 1: 8, 2: 13, 3: 18, 4: 24}
 
 ## NPC フロア遷移・戦闘継続の HP 最低閾値（最低 HP 率がこれを下回ると適正フロア-1）
 const NPC_HP_THRESHOLD: float = 0.5

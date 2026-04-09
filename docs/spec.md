@@ -2770,25 +2770,27 @@ CharacterGenerator.apply_enemy_stats()     ← ステータスを上書き（上
 
 | 項目 | 内容 |
 |------|------|
-| 静的スコア | 全メンバーの `power + physical_resistance + magic_resistance + defense_accuracy` の**和** |
-| 適正フロア | 静的スコアと `GlobalConstants.FLOOR_RANK` を比較して決定 |
+| ランク和スコア | 全メンバーの `RANK_VALUES`（C=3, B=4, A=5, S=6）の**合計** |
+| 適正フロア | ランク和スコアと `GlobalConstants.FLOOR_RANK` を比較して決定 |
 | HP チェック | 最低 HP 割合（ポーション回復量を加算）が `NPC_HP_THRESHOLD(0.5)` 未満 → 適正フロア-1 |
 | エネルギーチェック | 平均 MP/SP 割合（ポーション回復量を加算）が `NPC_ENERGY_THRESHOLD(0.3)` 未満 → 適正フロア-1 |
 
-#### `GlobalConstants.FLOOR_RANK`（和ベース）
+#### `GlobalConstants.FLOOR_RANK`（ランク和ベース）
 
-| フロア | 必要スコア | 備考 |
+各フロアの敵パーティー構成（dungeon_handcrafted.json）を参照して設定。
+
+| フロア | 必要ランク和 | 備考 |
 |--------|---------|------|
-| 0 | 200 | 入口フロア |
-| 1 | 280 | ランクC・2人パーティーが通過できる下限 |
-| 2 | 420 | |
-| 3 | 580 | |
-| 4 | 780 | 最下層（ボス） |
+| 0 | 0 | 入口フロア（誰でも滞在可） |
+| 1 | 8 | F0→F1: ランクB×2（=8）以上。ランクC×2（=6）では不可 |
+| 2 | 13 | F1→F2: ランクB×3（=12）では不可・B+A（=13）以上が必要 |
+| 3 | 18 | F2→F3: ランクA×3（=15）では不可・A×3+B（=19）以上が必要 |
+| 4 | 24 | 最下層（ボス）。事実上 NPC は到達しない |
 
 #### 関連定数（`global_constants.gd`）
 
 ```
-FLOOR_RANK: Dictionary = {0: 200, 1: 280, 2: 420, 3: 580, 4: 780}
+FLOOR_RANK: Dictionary = {0: 0, 1: 8, 2: 13, 3: 18, 4: 24}
 NPC_HP_THRESHOLD: float = 0.5
 NPC_ENERGY_THRESHOLD: float = 0.3
 ```
@@ -2801,10 +2803,10 @@ NPC_ENERGY_THRESHOLD: float = 0.3
 #### 判定フロー
 
 ```
-1. 静的スコア = Σ(power + physical_resistance + magic_resistance + defense_accuracy)
+1. ランク和 = Σ(RANK_VALUES[member.rank])  ← C=3, B=4, A=5, S=6
 2. 適正フロア = FLOOR_RANK 比較で決定
-   - スコア >= FLOOR_RANK[current+1] → appropriate_floor = current + 1
-   - スコア <  FLOOR_RANK[current] / 2 → appropriate_floor = current - 1
+   - ランク和 >= FLOOR_RANK[current+1] → appropriate_floor = current + 1
+   - ランク和 <  FLOOR_RANK[current] / 2 → appropriate_floor = current - 1
 3. HP 最低割合 = min(各メンバーの (hp + ポーション回復) / max_hp)
 4. エネルギー平均 = avg(各メンバーの (mp or sp + ポーション回復) / max_energy)
 5. hp_fail or energy_fail → target_floor = max(0, appropriate_floor - 1)

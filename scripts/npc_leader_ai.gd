@@ -67,8 +67,8 @@ func _evaluate_party_strategy() -> Strategy:
 
 
 ## 探索時の移動方針（フロアランクに基づいて階段移動を決定）
-## party_score = 全メンバーの (power + physical_resistance + magic_resistance + defense_accuracy) の和
-## ① 静的スコアで適正フロアを決定
+## rank_sum = 全メンバーの RANK_VALUES（C=3, B=4, A=5, S=6）の和
+## ① ランク和スコアで適正フロアを決定
 ## ② HP最低値・エネルギー平均値が閾値を下回る場合は適正フロア-1（休息・浅層退避）
 func _get_explore_move_policy() -> String:
 	# hero パーティーマネージャー等ではフロア遷移判断を行わない
@@ -77,8 +77,8 @@ func _get_explore_move_policy() -> String:
 	if _party_members.is_empty():
 		return "explore"
 
-	# --- 1. 静的スコア（全メンバーの和） ---
-	var static_score := 0
+	# --- 1. ランク和スコア（全メンバーの RANK_VALUES 合計） ---
+	var rank_sum := 0
 	var count := 0
 	var current_floor := 0
 	for m: Character in _party_members:
@@ -86,23 +86,21 @@ func _get_explore_move_policy() -> String:
 			continue
 		current_floor = m.current_floor
 		if m.character_data != null:
-			var cd := m.character_data
-			static_score += cd.power + cd.physical_resistance \
-				+ cd.magic_resistance + cd.defense_accuracy
+			rank_sum += RANK_VALUES.get(m.character_data.rank, 3) as int
 		count += 1
 	if count == 0:
 		return "explore"
 
-	# --- 2. 静的スコアで適正フロアを決定 ---
+	# --- 2. ランク和スコアで適正フロアを決定 ---
 	var floor_count: int = GlobalConstants.FLOOR_RANK.size()
 	var appropriate_floor := current_floor
 	if current_floor + 1 < floor_count:
 		var next_rank := GlobalConstants.FLOOR_RANK.get(current_floor + 1, 9999) as int
-		if static_score >= next_rank:
+		if rank_sum >= next_rank:
 			appropriate_floor = current_floor + 1
 	if appropriate_floor == current_floor and current_floor > 0:
 		var this_rank := GlobalConstants.FLOOR_RANK.get(current_floor, 0) as int
-		if static_score < this_rank / 2:
+		if rank_sum < this_rank / 2:
 			appropriate_floor = current_floor - 1
 
 	# --- 3. HP チェック（最低値） ---
@@ -145,8 +143,8 @@ func _get_explore_move_policy() -> String:
 		# 次フロア・退避基準スコアを文字列化
 		var next_rank  := GlobalConstants.FLOOR_RANK.get(current_floor + 1, 9999) as int
 		var half_rank  := (GlobalConstants.FLOOR_RANK.get(current_floor, 0) as int) / 2
-		var score_part := "スコア%d（次F%d基準%d / 退避%d）" % [
-			static_score, current_floor + 1, next_rank, half_rank]
+		var score_part := "ランク和%d（次F%d基準%d / 退避%d）" % [
+			rank_sum, current_floor + 1, next_rank, half_rank]
 		# HP・エネルギー結果
 		var hp_part := "HP最低%.0f%%%s" % [hp_min_ratio * 100.0, "×" if hp_fail else "○"]
 		var en_avg  := (energy_sum / float(energy_count) * 100.0) if energy_count > 0 else 100.0
