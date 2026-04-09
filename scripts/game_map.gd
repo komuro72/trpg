@@ -868,6 +868,9 @@ func _calc_party_strength(p: Party) -> float:
 
 ## NPC 共闘フラグの更新
 ## プレイヤーと同フロア・同エリアで NPC が戦闘中 → has_fought_together をセット
+## 条件: ① プレイヤーのエリアに生存敵がいる
+##       ② NPC が ATTACK 戦略中
+##       ③ NPC メンバーがプレイヤーと同フロア・同エリアにいる
 func _update_fought_together_flags() -> void:
 	if hero == null or not is_instance_valid(hero):
 		return
@@ -876,6 +879,25 @@ func _update_fought_together_flags() -> void:
 	var player_area := vision_system.get_current_area()
 	if player_area.is_empty():
 		return
+
+	# ① プレイヤーのいるエリアに生存敵が存在するか先に確認（なければ即返却）
+	var enemy_in_player_area := false
+	for em: EnemyManager in enemy_managers:
+		if not is_instance_valid(em):
+			continue
+		for enemy: Character in em.get_enemies():
+			if not is_instance_valid(enemy) or enemy.hp <= 0:
+				continue
+			if enemy.current_floor == hero.current_floor \
+					and map_data.get_area(enemy.grid_pos) == player_area:
+				enemy_in_player_area = true
+				break
+		if enemy_in_player_area:
+			break
+	if not enemy_in_player_area:
+		return
+
+	# ② NPC が ATTACK 中かつ ③ そのメンバーがプレイヤーと同エリアにいるか確認
 	for nm: NpcManager in npc_managers:
 		if not is_instance_valid(nm):
 			continue
@@ -887,7 +909,6 @@ func _update_fought_together_flags() -> void:
 			continue  # 既にセット済み
 		if not npc_leader.is_in_combat():
 			continue
-		# NPC メンバーがプレイヤーと同フロア・同エリアにいるか確認
 		for member: Character in nm.get_members():
 			if not is_instance_valid(member) or member.hp <= 0:
 				continue
