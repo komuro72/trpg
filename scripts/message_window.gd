@@ -7,7 +7,8 @@ extends CanvasLayer
 ## ・システムメッセージ：アイコンなし（フル幅テキスト）
 ## ・スクロール型：最新エントリが常に下端に表示される
 
-const VISIBLE_LINES: int = 10
+const VISIBLE_LINES: int = 7
+const MSG_FONT_SIZE:  int = 20
 
 ## 会話の選択肢が確定したとき発火する（後方互換用・現在は NpcDialogueWindow が担当）
 signal choice_confirmed(choice_id: String)
@@ -133,10 +134,9 @@ func _on_draw() -> void:
 	var vw  := _control.size.x
 	var vh  := _control.size.y
 
-	## MSG_ICON_SIZE: 右パネルのアイコンと同サイズ（gs * 0.8 - 8 相当）
-	var icon_sz := float(maxi(20, gs * 2 / 3))
-	## MSG_FONT_SIZE = MSG_ICON_SIZE / 2（アイコン高さ = テキスト2行分）
-	var fs      := maxi(8, int(icon_sz * 0.5))
+	## MSG_FONT_SIZE は固定値・MSG_ICON_SIZE = MSG_FONT_SIZE * 2
+	var fs      := MSG_FONT_SIZE
+	var icon_sz := float(fs * 2)
 	var line_h  := float(fs) * 1.5
 
 	# ── ウィンドウ全体（画面幅の40〜50%・左右28%マージン）
