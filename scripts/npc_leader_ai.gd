@@ -28,6 +28,11 @@ var has_been_healed: bool = false
 ## 前回の目標フロア（変化検出用。-1=未初期化）
 var _prev_target_floor: int = -1
 
+## trueにするとフロア遷移スコア判断をスキップして常に "explore" を返す
+## hero パーティーのマネージャー（_hero_manager）など、
+## プレイヤーが階段を手動操作するケースで使用する
+var suppress_floor_navigation: bool = false
+
 
 ## 攻撃対象とする敵リストを設定する（NpcManager が初期化後に呼ぶ）
 func set_enemy_list(enemies: Array[Character]) -> void:
@@ -66,6 +71,9 @@ func _evaluate_party_strategy() -> Strategy:
 ## ① 静的スコアで適正フロアを決定
 ## ② HP最低値・エネルギー平均値が閾値を下回る場合は適正フロア-1（休息・浅層退避）
 func _get_explore_move_policy() -> String:
+	# hero パーティーマネージャー等ではフロア遷移判断を行わない
+	if suppress_floor_navigation:
+		return "explore"
 	if _party_members.is_empty():
 		return "explore"
 

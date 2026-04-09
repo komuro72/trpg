@@ -197,14 +197,21 @@ func _assign_orders() -> void:
 		if _party_strategy == Strategy.FLEE:
 			effective_strat = int(Strategy.FLEE)
 		elif _party_strategy == Strategy.EXPLORE:
-			# 探索戦略：UnitAI には ATTACK を渡し、move を explore に設定
+			# 探索戦略：UnitAI には WAIT を渡し、move を explore / stairs に設定
 			var cd := member.character_data
 			if cd != null and (cd.power > 0 or cd.buff_mp_cost > 0):
 				effective_strat = int(Strategy.WAIT)
 			else:
 				effective_strat = int(Strategy.ATTACK)
-			if member.is_friendly:
-				move_policy = _get_explore_move_policy()
+			var pol := _get_explore_move_policy()
+			if pol == "stairs_down" or pol == "stairs_up":
+				# フロア移動判断: 全メンバーが一斉に階段を目指す
+				move_policy = pol
+			elif not member.is_friendly:
+				# 非フレンドリー（通常は来ないが念のため）は explore に
+				move_policy = "explore"
+			# フレンドリーかつ explore: OrderWindow の move 設定を尊重する
+			# (cluster/same_room/guard_room/standby 等、move_policy は order から設定済み)
 		else:
 			# 回復・バフ専用キャラ（heal_mp_cost > 0 または buff_mp_cost > 0）は常に WAIT を渡す
 			# UnitAI._generate_queue() の先頭で heal/buff キューが自動生成される

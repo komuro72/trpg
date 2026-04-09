@@ -261,6 +261,10 @@ func _setup_hero() -> void:
 	_hero_manager.set_vision_controlled(true)  # VisionSystem には登録しない
 	_hero_manager.suppress_ai_log = true  # プレイヤー操作中はログ不要
 	_hero_manager.activate()
+	# hero パーティーはプレイヤーが手動で階段を操作するため、
+	# フロア遷移スコア判断を無効化して "explore" のみ返すようにする
+	if _hero_manager.enemy_ai is NpcLeaderAI:
+		(_hero_manager.enemy_ai as NpcLeaderAI).suppress_floor_navigation = true
 
 
 func _setup_floor_enemies(floor_idx: int) -> void:
