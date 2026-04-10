@@ -44,9 +44,9 @@ const MAX_PARTY_MEMBERS: int = 12
 
 ## 攻撃タイプ別ダメージ倍率（power × type_mult × damage_mult = ベースダメージ）
 const ATTACK_TYPE_MULT: Dictionary = {
-	"melee":  0.5,
+	"melee":  0.3,
 	"ranged": 0.2,
-	"dive":   0.5,
+	"dive":   0.3,
 	"magic":  0.2,
 }
 

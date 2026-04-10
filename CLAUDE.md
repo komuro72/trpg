@@ -1398,6 +1398,31 @@ rank値: C=0, B=1, A=2, S=3
     - `battle_message_added` シグナルを購読し、atk/def が操作キャラと一致したとき右エリアを自動更新
     - `game_map.gd`: 初期設定・操作キャラ切り替え時に `set_player_character()` を呼ぶ
     - 全体背景は `[左バスト + 中央テキスト + 右バスト]` を一括描画。中央ログは変更なし
+- [x] Phase 13-2: バランス調整・UI改善
+  - [x] **攻撃タイプ別ダメージ倍率変更**（`GlobalConstants.ATTACK_TYPE_MULT`）
+    - melee: 0.5 → 0.3、dive: 0.5 → 0.3（ranged/magic は 0.2 で変更なし）
+  - [x] **NPC 探索分散**（`unit_ai._find_explore_target()`）
+    - 全員が同じ最近傍エリアを目標にして一塊になる問題を修正
+    - 未訪問エリアを距離順にソートし、`_member.name.hash() % candidates.size()` で NPC ごとに異なるエリアを割り当て
+  - [x] **NPC 目標フロア到達後の探索開始**（`party_leader_ai._assign_orders()`）
+    - EXPLORE 戦略・pol="explore" 時にフレンドリー NPC の move_policy が "same_room" のままになり通路で固まる問題を修正
+    - pol == "explore" のとき全メンバーの move_policy を "explore" に設定
+  - [x] **部屋制圧判定に敵走離脱を追加**（`party_manager._check_room_suppression()`）
+    - 従来は全員死亡のみが発火条件。部屋外にいる + FLEE 戦略のメンバーを離脱扱いにカウント
+    - `_on_member_died()` を `_check_room_suppression()` 呼び出しに変更。`_room_id = ""` で二重発火防止
+  - [x] **MessageLog.battle_message_added に Character 参照を追加**
+    - シグナル・`add_battle()` に `attacker: Character / defender: Character`（省略可）を追加
+    - `character.gd` の4箇所（apply_stun / _emit_damage_battle_msg / log_heal / die）で Character refs を渡す
+  - [x] **MessageWindow: 交戦相手死亡時に右エリアをクリア**
+    - `_on_battle_message` ハンドラで `def_char.hp <= 0` のとき `_combat_target_data = null` にリセット
+  - [x] **MessageWindow: 同アイコンペアのバトルメッセージをグループ表示**
+    - 連続する同 (attacker, defender) ペアのバトルエントリを `\n` 結合して1行に統合
+    - `_build_display_groups()` で前処理・`_group_height()` で高さ計算（旧 `_entry_height` を置き換え）
+  - [x] **リーダー方角インジケーター**（`player_controller.gd`）
+    - 非リーダーキャラ操作中（`character != party_leader`）かつリーダーが画面外のとき表示
+    - 操作キャラから 1.5 マス先、リーダー方向を向く三角形（リーダーの `party_color` 色・alpha 0.80・白輪郭線）
+    - `viewport.get_canvas_transform()` でスクリーン座標変換し `get_visible_rect().has_point()` で画面内外判定
+    - `map_node` セット時に `_setup_leader_indicator()` を即時呼び出し（セッタ経由）
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム
@@ -1495,9 +1520,16 @@ rank値: C=0, B=1, A=2, S=3
 - 敵パーティーの所持アイテムはドロップ用にパーティー単位で保持するのみ
 
 ### アイテムのドロップ（部屋制圧方式）
-- 部屋に配置された enemy_party の全員が**死亡 or その部屋から離脱**したら「制圧完了」
+- 部屋に配置された enemy_party の全員が**死亡 or 敵走離脱**したら「制圧完了」
 - 制圧時、敵パーティーの所持アイテムが**部屋の床タイルにランダムに散らばる**（1マスに1個）
 - 出現は1回きり（敵が戻っても再出現しない）
+- **制圧判定の詳細**（`party_manager._check_room_suppression()`）：
+  - 死亡 → 制圧対象
+  - 部屋の外にいる かつ パーティー戦略が FLEE → 離脱扱い・制圧対象
+  - 部屋の外にいる かつ FLEE 以外（追跡中など） → 制圧対象にしない
+  - 部屋の中で生存 → 制圧対象にしない
+  - 判定タイミング：メンバー死亡時（`_on_member_died`）
+  - 二重発火防止：`party_wiped` 発火後に `_room_id` を空文字にクリア
 - item_get 効果音を再生、メッセージウィンドウに通知（例：「アイテムが散らばった！」）
 - 表示：アイテム種類別アイコン（`assets/images/items/{item_type}.png`。画像なし時は黄色マーカーにフォールバック）
 - **取得方法**：同じマスに移動したら自動取得。拾ったキャラ個人の inventory に未装備品として入る
@@ -1574,9 +1606,9 @@ rank値: C=0, B=1, A=2, S=3
 **着弾判定**（命中精度）：攻撃が狙った対象に向かうか。`skill` が低いと別の敵・味方に誤射する可能性。
 
 **攻撃タイプ別ダメージ倍率**（`GlobalConstants.ATTACK_TYPE_MULT`）:
-- melee: × 0.5
+- melee: × 0.3
 - ranged: × 0.2
-- dive: × 0.5
+- dive: × 0.3
 - magic: × 0.2
 - ベースダメージ = `power × type_mult × damage_mult`（damage_mult はスロット定義値。通常攻撃は 1.0）
 

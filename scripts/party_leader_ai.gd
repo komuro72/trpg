@@ -209,11 +209,10 @@ func _assign_orders() -> void:
 			if pol == "stairs_down" or pol == "stairs_up":
 				# フロア移動判断: 全メンバーが一斉に階段を目指す
 				move_policy = pol
-			elif not member.is_friendly:
-				# 非フレンドリー（通常は来ないが念のため）は explore に
+			else:
+				# 目標フロア到達後は全メンバーが探索行動に移る
+				# （通路で同士が固まって待機する問題を防ぐ）
 				move_policy = "explore"
-			# フレンドリーかつ explore: OrderWindow の move 設定を尊重する
-			# (cluster/same_room/guard_room/standby 等、move_policy は order から設定済み)
 		else:
 			# 回復・バフ専用キャラ（heal_mp_cost > 0 または buff_mp_cost > 0）は常に WAIT を渡す
 			# UnitAI._generate_queue() の先頭で heal/buff キューが自動生成される

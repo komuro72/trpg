@@ -144,12 +144,16 @@ func _on_entry_changed() -> void:
 
 ## バトルメッセージ受信：操作キャラが関与していれば右エリアを更新する
 func _on_battle_message(atk_data: CharacterData, def_data: CharacterData,
-		_message: String) -> void:
+		_message: String, _atk_char: Character, def_char: Character) -> void:
 	if _player_char_data == null:
 		return
 	# 操作キャラが攻撃側 → 右エリアは被攻撃側
 	if atk_data == _player_char_data:
-		set_combat_target(def_data)
+		# defender が死亡済みなら右エリアをクリア
+		if def_char != null and is_instance_valid(def_char) and def_char.hp <= 0:
+			_combat_target_data = null
+		else:
+			set_combat_target(def_data)
 	# 操作キャラが被攻撃側 → 右エリアは攻撃側
 	elif def_data == _player_char_data:
 		set_combat_target(atk_data)
@@ -235,37 +239,38 @@ func _on_draw() -> void:
 	var sys_text_x := bx + 8.0
 	var sys_text_w := box_w - 16.0
 
-	# ── 表示エントリ取得
+	# ── 表示エントリ取得・同アイコンペアをグループ化
 	var visible: Array[Dictionary] = MessageLog.get_visible_entries()
 	if visible.is_empty():
 		return
+	var groups := _build_display_groups(visible)
 
-	# ── 下から積み上げて収まるエントリ範囲を決定
+	# ── 下から積み上げて収まるグループ範囲を決定
 	var avail_h := box_h - 8.0
 	var total_h := 0.0
-	var start_i := visible.size()
-	for i: int in range(visible.size() - 1, -1, -1):
-		var eh := _entry_height(visible[i], battle_text_w, sys_text_w, fs, line_h, icon_sz)
-		if total_h + eh > avail_h:
+	var start_g := groups.size()
+	for i: int in range(groups.size() - 1, -1, -1):
+		var gh := _group_height(groups[i], battle_text_w, sys_text_w, fs, line_h, icon_sz)
+		if total_h + gh > avail_h:
 			break
-		total_h += eh
-		start_i = i
+		total_h += gh
+		start_g = i
 
 	# ── 下詰めで描画開始 Y を決定
 	var entry_y := by + 4.0 + (avail_h - total_h)
 	entry_y = maxf(entry_y, by + 4.0)
 
-	# ── 各エントリを描画
-	for i: int in range(start_i, visible.size()):
-		var entry      := visible[i]
-		var eh         := _entry_height(entry, battle_text_w, sys_text_w, fs, line_h, icon_sz)
-		var is_battle  := int(entry.get("type", 0)) == int(MessageLog.MsgType.BATTLE)
-		var col: Color  = entry.get("color", Color.WHITE) as Color
-		var text: String = entry.get("text", "") as String
+	# ── 各グループを描画
+	for i: int in range(start_g, groups.size()):
+		var group      := groups[i] as Dictionary
+		var gh         := _group_height(group, battle_text_w, sys_text_w, fs, line_h, icon_sz)
+		var is_battle  : bool   = group.get("is_battle", false) as bool
+		var col        : Color  = group.get("color", Color.WHITE) as Color
+		var text       : String = group.get("text", "") as String
 
 		if is_battle:
-			var atk_data: CharacterData = entry.get("attacker_data") as CharacterData
-			var def_data: CharacterData = entry.get("defender_data") as CharacterData
+			var atk_data: CharacterData = group.get("atk_data") as CharacterData
+			var def_data: CharacterData = group.get("def_data") as CharacterData
 
 			# 攻撃側アイコン
 			_draw_face_icon(atk_data, bx + 8.0, entry_y, icon_sz)
@@ -280,7 +285,7 @@ func _on_draw() -> void:
 			# 被攻撃側アイコン
 			_draw_face_icon(def_data, bx + 8.0 + icon_sz + arrow_w, entry_y, icon_sz)
 
-			# テキスト（折り返し）
+			# テキスト（\n 区切りで複数行）
 			_control.draw_multiline_string(_font,
 				Vector2(battle_text_x, entry_y + float(fs)),
 				text, HORIZONTAL_ALIGNMENT_LEFT, battle_text_w, fs, -1, col)
@@ -290,22 +295,64 @@ func _on_draw() -> void:
 				Vector2(sys_text_x, entry_y + float(fs)),
 				text, HORIZONTAL_ALIGNMENT_LEFT, sys_text_w, fs, -1, col)
 
-		entry_y += eh
+		entry_y += gh
 
 
 # --------------------------------------------------------------------------
-# ヘルパー：エントリ高さ計算
+# ヘルパー：グループ化・高さ計算
 # --------------------------------------------------------------------------
 
-func _entry_height(entry: Dictionary, battle_tw: float, sys_tw: float,
+## 連続する同アイコンペアのバトルエントリをまとめて表示グループを作る
+## 異なるペア・システムメッセージは個別グループになる
+func _build_display_groups(entries: Array[Dictionary]) -> Array[Dictionary]:
+	var groups: Array[Dictionary] = []
+	var i := 0
+	while i < entries.size():
+		var e          := entries[i] as Dictionary
+		var is_battle  : bool = int(e.get("type", 0)) == int(MessageLog.MsgType.BATTLE)
+		if not is_battle:
+			groups.append({
+				"is_battle": false,
+				"text":  e.get("text",  "") as String,
+				"color": e.get("color", Color.WHITE) as Color,
+			})
+			i += 1
+			continue
+		# バトルエントリ：同ペアが続く限りまとめる
+		var atk_data : CharacterData = e.get("attacker_data") as CharacterData
+		var def_data : CharacterData = e.get("defender_data") as CharacterData
+		var color    : Color         = e.get("color", Color.WHITE) as Color
+		var lines    : PackedStringArray = PackedStringArray([e.get("text", "") as String])
+		i += 1
+		while i < entries.size():
+			var nxt := entries[i] as Dictionary
+			if int(nxt.get("type", 0)) != int(MessageLog.MsgType.BATTLE):
+				break
+			if (nxt.get("attacker_data") as CharacterData) != atk_data:
+				break
+			if (nxt.get("defender_data") as CharacterData) != def_data:
+				break
+			lines.append(nxt.get("text", "") as String)
+			i += 1
+		groups.append({
+			"is_battle": true,
+			"atk_data": atk_data,
+			"def_data": def_data,
+			"text":  "\n".join(lines),
+			"color": color,
+		})
+	return groups
+
+
+## グループの描画高さを返す
+func _group_height(group: Dictionary, battle_tw: float, sys_tw: float,
 		fs: int, line_h: float, icon_sz: float) -> float:
-	var is_battle: bool = int(entry.get("type", 0)) == int(MessageLog.MsgType.BATTLE)
-	var text: String = entry.get("text", "") as String
+	var is_battle : bool   = group.get("is_battle", false) as bool
+	var text      : String = group.get("text", "") as String
 	if _font == null or text.is_empty():
 		return line_h
 	var tw := battle_tw if is_battle else sys_tw
-	var sz := _font.get_multiline_string_size(
-		text, HORIZONTAL_ALIGNMENT_LEFT, tw, fs)
+	var sz := _font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, tw, fs)
 	var text_h := sz.y + 4.0
 	if is_battle:
 		return maxf(icon_sz + 4.0, text_h)

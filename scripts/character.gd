@@ -732,7 +732,7 @@ func apply_stun(duration: float, attacker: Character = null) -> void:
 		var atk_data: CharacterData = attacker.character_data \
 				if attacker != null and is_instance_valid(attacker) else null
 		var msg := "%sが%sに水魔法を放ち、動きを封じた" % [atk_name, def_name]
-		MessageLog.add_battle(atk_data, character_data, msg)
+		MessageLog.add_battle(atk_data, character_data, msg, attacker, self)
 
 
 ## バフ込みの防御力を返す
@@ -1026,7 +1026,7 @@ func _emit_damage_battle_msg(attacker: Character, raw: int, actual: int,
 		var verb := _weapon_action(attacker, "normal")
 		msg = "%sが%sに%s、%sを与えた" % [atk_name, def_name, verb, _damage_label(actual)]
 
-	MessageLog.add_battle(atk_data, def_data, msg)
+	MessageLog.add_battle(atk_data, def_data, msg, attacker, self)
 
 
 ## 戦闘計算ログを出力する
@@ -1107,7 +1107,7 @@ func log_heal(healer: Character, amount: int, hp_before: int) -> void:
 	var heal_name := _battle_name(healer)
 	var target_name := _battle_name(self)
 	var battle_msg := "%sが%sに回復魔法をかけ、体力を回復した" % [heal_name, target_name]
-	MessageLog.add_battle(healer_data, character_data, battle_msg)
+	MessageLog.add_battle(healer_data, character_data, battle_msg, healer, self)
 
 
 ## キャラクターの表示名を返す
@@ -1190,6 +1190,6 @@ func die() -> void:
 		var def_name := _battle_name(self)
 		var atk_data: CharacterData = last_attacker.character_data \
 				if last_attacker != null and is_instance_valid(last_attacker) else null
-		MessageLog.add_battle(atk_data, character_data, "%sは倒れた" % def_name)
+		MessageLog.add_battle(atk_data, character_data, "%sは倒れた" % def_name, last_attacker, self)
 	died.emit(self)
 	queue_free()

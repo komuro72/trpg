@@ -20,7 +20,8 @@ signal entry_added()
 
 ## バトルメッセージが追加されたとき発火するシグナル
 ## MessageWindow がバスト画像とテキストを更新するために購読する
-signal battle_message_added(attacker_data: CharacterData, defender_data: CharacterData, message: String)
+## attacker / defender は Character 実体（null 可）。死亡判定に使用
+signal battle_message_added(attacker_data: CharacterData, defender_data: CharacterData, message: String, attacker: Character, defender: Character)
 
 ## エリアフィルタ用（setup_area_filter で設定）
 var _map_data: MapData = null
@@ -56,8 +57,9 @@ func add_ai(text: String, grid_pos: Vector2i = Vector2i(-1, -1)) -> void:
 
 ## バトルメッセージ（オレンジ）— エリアフィルタなし・battle_message_added シグナルも発火
 ## attacker_data / defender_data はエントリ dict に格納し MessageWindow のアイコン表示に使用（null 可）
+## attacker / defender は Character 実体（null 可）。MessageWindow の死亡チェックに使用
 func add_battle(attacker_data: CharacterData, defender_data: CharacterData,
-		message: String) -> void:
+		message: String, attacker: Character = null, defender: Character = null) -> void:
 	var entry: Dictionary = {
 		"text": message,
 		"type": int(MsgType.BATTLE),
@@ -69,7 +71,7 @@ func add_battle(attacker_data: CharacterData, defender_data: CharacterData,
 	if entries.size() > LOG_MAX:
 		entries = entries.slice(entries.size() - LOG_MAX)
 	entry_added.emit()
-	battle_message_added.emit(attacker_data, defender_data, message)
+	battle_message_added.emit(attacker_data, defender_data, message, attacker, defender)
 
 
 ## デバッグ表示トグル

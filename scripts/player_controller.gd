@@ -21,7 +21,10 @@ var map_data: MapData = null
 var blocking_characters: Array[Character] = []
 
 ## 飛翔体・ターゲットカーソルの add_child 用
-var map_node: Node2D = null
+var map_node: Node2D = null:
+	set(v):
+		map_node = v
+		_setup_leader_indicator()
 
 ## 会話中など入力を一時的に無効化するフラグ
 var is_blocked: bool = false
@@ -144,6 +147,9 @@ var player_is_leader: bool = true
 ## パーティーメンバーリスト（game_map から設定。LB/RBキャラ切り替えに使用）
 var _party_sorted_members: Array[Character] = []
 
+## リーダー方角インジケーター（非リーダー操作中・リーダーが画面外のとき表示）
+var _leader_indicator: Node2D = null
+
 ## V スロットクールダウン（秒）
 const V_SLOT_COOLDOWN: float = 2.0
 var _v_slot_cooldown: float = 0.0
@@ -253,6 +259,71 @@ func _get_slot() -> Dictionary:
 # メインループ
 # --------------------------------------------------------------------------
 
+## リーダー方角インジケーターを初期化する（map_node 設定後の初回呼び出し時に生成）
+func _setup_leader_indicator() -> void:
+	if _leader_indicator != null or map_node == null:
+		return
+	_leader_indicator = Node2D.new()
+	_leader_indicator.z_index = 10
+	_leader_indicator.visible = false
+	var gs := float(GlobalConstants.GRID_SIZE)
+	var size := gs * 0.32
+	# ローカル +X 方向を向く三角形。rotation で実際の向きに対応
+	_leader_indicator.draw.connect(func() -> void:
+		var col := Color.WHITE
+		if is_instance_valid(party_leader) and party_leader.party_color != Color.TRANSPARENT:
+			col = party_leader.party_color
+		col.a = 0.80
+		var pts := PackedVector2Array([
+			Vector2(size,          0.0),
+			Vector2(-size * 0.55,  size * 0.50),
+			Vector2(-size * 0.55, -size * 0.50),
+		])
+		_leader_indicator.draw_colored_polygon(pts, col)
+		# 輪郭線（視認性向上）
+		_leader_indicator.draw_polyline(
+			PackedVector2Array([pts[0], pts[1], pts[2], pts[0]]),
+			Color(1.0, 1.0, 1.0, 0.50), 1.5)
+	)
+	map_node.add_child(_leader_indicator)
+
+
+## リーダー方角インジケーターを毎フレーム更新する
+func _update_leader_indicator() -> void:
+	_setup_leader_indicator()
+	if _leader_indicator == null:
+		return
+	# 表示条件：操作キャラがリーダーでない かつ リーダーが有効
+	# （player_is_leader はパーティー全体のリーダー権フラグであり、
+	#   LB/RB で非リーダーキャラに切り替えても true のまま。
+	#   正しくは character != party_leader で判定する）
+	if character == null or not is_instance_valid(character) \
+			or party_leader == null or not is_instance_valid(party_leader) \
+			or character == party_leader:
+		_leader_indicator.visible = false
+		return
+	# リーダーのスクリーン座標を取得して画面内外を判定
+	var viewport := character.get_viewport()
+	if viewport == null:
+		_leader_indicator.visible = false
+		return
+	var screen_pos := viewport.get_canvas_transform() * party_leader.global_position
+	if viewport.get_visible_rect().has_point(screen_pos):
+		_leader_indicator.visible = false
+		return
+	# 操作キャラ → リーダーの方向ベクトル
+	var dir := party_leader.global_position - character.global_position
+	if dir.length_squared() < 1.0:
+		_leader_indicator.visible = false
+		return
+	dir = dir.normalized()
+	var gs := float(GlobalConstants.GRID_SIZE)
+	_leader_indicator.global_position = character.global_position + dir * gs * 1.5
+	_leader_indicator.rotation = dir.angle()
+	_leader_indicator.visible = true
+	_leader_indicator.queue_redraw()
+
+
 func _process(delta: float) -> void:
 	# V スロットクールダウンのカウントダウン（is_blocked 中も進める）
 	if _v_slot_cooldown > 0.0:
@@ -263,6 +334,8 @@ func _process(delta: float) -> void:
 
 	if character == null:
 		return
+
+	_update_leader_indicator()
 
 	# world_time_running を現在の状態に応じて更新する（is_blocked チェックより前）
 	_update_world_time()

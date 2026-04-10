@@ -659,22 +659,25 @@ func _find_explore_target() -> Vector2i:
 		var pool: Array[Vector2i] = non_stair if not non_stair.is_empty() else tiles
 		return pool[randi() % pool.size()]
 
-	# 最近傍の未訪問エリアを選ぶ（各エリアの代表タイルで判定・階段以外を優先）
-	var best_pos  := Vector2i(-1, -1)
-	var best_dist := 999999
+	# 未訪問エリアを距離順にソートして候補リストを作る
+	# NPC ごとに異なるインデックスを選ぶことで、全員が同じ目標に集中するのを防ぐ
+	var candidates: Array[Dictionary] = []
 	for area_id: String in unvisited:
 		var tiles := _map_data.get_tiles_in_area(area_id)
 		if tiles.is_empty():
 			continue
-		# 階段以外のタイルを優先して代表タイルを選ぶ
 		var non_stair := tiles.filter(func(t: Vector2i) -> bool: return not _is_stair_tile(t))
 		var pool: Array[Vector2i] = non_stair if not non_stair.is_empty() else tiles
 		var mid := pool[pool.size() / 2]
 		var d   := _manhattan(_member.grid_pos, mid)
-		if d < best_dist and d > 0:
-			best_dist = d
-			best_pos  = mid
-	return best_pos
+		if d > 0:
+			candidates.append({"pos": mid, "dist": d})
+	if candidates.is_empty():
+		return Vector2i(-1, -1)
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.dist < b.dist)
+	# メンバー名のハッシュでオフセットを決定 → 各 NPC が異なるエリアを担当
+	var offset: int = abs(_member.name.hash()) % candidates.size()
+	return candidates[offset].get("pos", Vector2i(-1, -1)) as Vector2i
 
 
 func _pop_action() -> Dictionary:

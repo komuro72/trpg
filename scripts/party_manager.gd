@@ -293,6 +293,31 @@ func _on_member_died(character: Character) -> void:
 				cd.class_id if cd != null else "", cd.class_id if cd != null else "?") as String
 		var floor_str := "F%d" % character.current_floor
 		MessageLog.add_ai("[NPC死亡] %s（%s・%s）" % [name_str, class_str, floor_str])
-	# 全メンバー死亡 → party_wiped シグナル発火（床ドロップ処理）
-	if _members.is_empty() and party_type == "enemy":
-		party_wiped.emit(_drop_items, _room_id)
+	# 全メンバー死亡 or 離脱 → 制圧チェック
+	if party_type == "enemy":
+		_check_room_suppression()
+
+
+## 部屋制圧判定：全メンバーが「死亡 or 敵走離脱」なら party_wiped を発火する
+## 呼び出しタイミング：メンバー死亡時
+func _check_room_suppression() -> void:
+	if _room_id.is_empty() or _map_data == null:
+		return
+	# 既に発火済みなら再発火しない（_drop_items を空にして判別）
+	# ※ _drop_items が元から空のパーティーは常に通過するが、
+	#   _members が空でないなら制圧未完了なので問題ない
+	for member: Character in _members:
+		if not is_instance_valid(member):
+			continue
+		# 生存かつ部屋の中にいる → 制圧未完了
+		var member_area := _map_data.get_area(member.grid_pos)
+		if member_area == _room_id:
+			return
+		# 部屋の外にいる場合：FLEE 戦略なら離脱扱い、それ以外は追跡中
+		var is_fleeing := _leader_ai != null \
+				and _leader_ai._party_strategy == PartyLeaderAI.Strategy.FLEE
+		if not is_fleeing:
+			return  # 追跡で出た可能性があるため制圧対象にしない
+	# 全メンバーが「死亡 or FLEE 離脱」 → 制圧完了
+	party_wiped.emit(_drop_items, _room_id)
+	_room_id = ""  # 二重発火防止
