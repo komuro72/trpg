@@ -3,12 +3,12 @@ extends CanvasLayer
 
 ## NPC会話専用ウィンドウ（画面中央表示・ゲーム一時停止）
 ## NPC メンバーの顔画像・名前・クラスを上部に表示し、下部に選択肢を表示する。
-## MAIN 状態（プレイヤー起点）：「仲間にする」「一緒に行く」「キャンセル」の3択
+## MAIN 状態（プレイヤー起点）：「仲間にする」「キャンセル」の2択
 ## MAIN 状態（NPC 自発）：「承諾する」「断る」の2択
 ## CONFIRM 状態：「本当に仲間にしますか？」の確認ダイアログ（デフォルト：いいえ）
 ## 操作: ↑↓:選択  Z/A:決定  X/B:キャンセル/戻る
 
-## 選択が確定したとき発火する（choice_id = "join_us" / "join_them"）
+## 選択が確定したとき発火する（choice_id = "join_us"）
 signal choice_confirmed(choice_id: String)
 ## ウィンドウが閉じられたとき発火する（断る / キャンセル / Xキャンセル）
 signal dismissed()
@@ -92,11 +92,11 @@ func _process(_delta: float) -> void:
 func _handle_input() -> void:
 	match _state:
 		_State.MAIN:
-			var _choice_count := 2 if _npc_initiates else 3
+			# プレイヤー起点・NPC 自発ともに2択
 			if Input.is_action_just_pressed("ui_up"):
-				_main_cursor = (_main_cursor - 1 + _choice_count) % _choice_count
+				_main_cursor = (_main_cursor - 1 + 2) % 2
 			elif Input.is_action_just_pressed("ui_down"):
-				_main_cursor = (_main_cursor + 1) % _choice_count
+				_main_cursor = (_main_cursor + 1) % 2
 			elif Input.is_action_just_pressed("attack") \
 					or Input.is_action_just_pressed("ui_accept"):
 				if _npc_initiates:
@@ -108,15 +108,13 @@ func _handle_input() -> void:
 					else:
 						dismissed.emit()
 				else:
-					# プレイヤー起点：「仲間にする」「一緒に行く」「キャンセル」
+					# プレイヤー起点：「仲間にする」「キャンセル」
 					match _main_cursor:
 						0:
 							_confirm_pending = CHOICE_JOIN_US
 							_confirm_cursor  = 1
 							_state = _State.CONFIRM
 						1:
-							choice_confirmed.emit(CHOICE_JOIN_THEM)
-						2:
 							dismissed.emit()
 			elif Input.is_action_just_pressed("menu_back"):
 				dismissed.emit()
@@ -306,7 +304,7 @@ func _draw_panel(vp: Vector2, gs: float) -> void:
 		if _npc_initiates:
 			choices = ["承諾する", "断る"]
 		else:
-			choices = ["仲間にする", "一緒に行く", "キャンセル"]
+			choices = ["仲間にする", "キャンセル"]
 		for i: int in range(choices.size()):
 			var is_sel := (i == _main_cursor)
 			if is_sel:

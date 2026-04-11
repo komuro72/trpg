@@ -1575,6 +1575,15 @@ rank値: C=0, B=1, A=2, S=3
       - キーが離されていれば向きだけ変わって停止（`_pending_move_dir` をクリア）
     - `_enter_pre_delay()` と攻撃入力時に `_pending_move_dir` をクリア
   - **AI（`unit_ai.gd`）は変更なし**：AI は `move_to()` を直接呼ぶため影響なし
+- [x] Phase 13-8: アイテム自動受け渡し・自動装備（NPC パーティー専用）
+  - **`npc_dialogue_window.gd`**：プレイヤー起点の選択肢を「仲間にする」「キャンセル」の2択に変更（「一緒に行く」廃止）
+  - **`npc_leader_ai.gd`**：自動装備・ポーション受け渡しを追加（`joined_to_player == false` のパーティーのみ）
+    - `CLASS_EQUIP_TYPES` 定数をローカルに追加（order_window.gd と同内容）
+    - `_auto_item_timer` フィールドと `AUTO_ITEM_INTERVAL = 2.0` 定数を追加
+    - `_process()` オーバーライド：2秒ごとに `_auto_equip_members()` / `_auto_share_potions()` を呼ぶ
+    - `_auto_equip_members()`：パーティー全体の未装備品を item_type ごとにプール → 現装備が最弱のメンバーから順に最良アイテムを装備。旧装備はインベントリに戻す。`CharacterData._equip_item()` + `refresh_stats_from_equipment()` で反映
+    - `_auto_share_potions()`：HP が NEAR_DEATH_THRESHOLD 未満のメンバーが HP ポーションを持っていない場合、他メンバーから1個受け取る。SP/MP 50%未満も同様（kind="sp"/"mp"）
+    - ヘルパーメソッド：`_item_stats_sum()` / `_get_equipped_for_type()` / `_find_potion_in_cd()` / `_take_potion_from_party()`
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム

@@ -6,6 +6,22 @@ extends PartyLeaderAI
 ## 生存敵がいれば ATTACK、いなければ EXPLORE（探索行動）。
 
 # --------------------------------------------------------------------------
+# 装備クラス対応テーブル（order_window.gd の CLASS_EQUIP_TYPES と同内容）
+# --------------------------------------------------------------------------
+const CLASS_EQUIP_TYPES: Dictionary = {
+	"fighter-sword":  ["sword",  "armor_plate", "shield"],
+	"fighter-axe":    ["axe",    "armor_plate", "shield"],
+	"archer":         ["bow",    "armor_cloth"],
+	"scout":          ["dagger", "armor_cloth"],
+	"magician-fire":  ["staff",  "armor_robe"],
+	"magician-water": ["staff",  "armor_robe"],
+	"healer":         ["staff",  "armor_robe"],
+}
+
+## 自動装備・ポーション受け渡しの実行間隔（秒）
+const AUTO_ITEM_INTERVAL: float = 2.0
+
+# --------------------------------------------------------------------------
 # 合流承諾判定スコア定数（調整しやすいよう定数化）
 # --------------------------------------------------------------------------
 ## ランク文字列 → スコア数値の変換テーブル（C=3, B=4, A=5, S=6）
@@ -19,6 +35,7 @@ const HEALED_BONUS: float = 5.0
 
 var _enemy_list: Array[Character] = []
 var _was_refused: bool = false  ## 一度断られたら二度と自発申し出をしない
+var _auto_item_timer: float = 0.0
 
 ## 同じ敵パーティーと共に戦ったことがあるか
 var has_fought_together: bool = false
@@ -234,6 +251,177 @@ func _select_target_for(member: Character) -> Character:
 			min_dist = dist
 			closest = enemy
 	return closest
+
+
+# --------------------------------------------------------------------------
+# 自動装備・ポーション受け渡し
+# --------------------------------------------------------------------------
+
+func _process(delta: float) -> void:
+	super._process(delta)
+	# 合流済みパーティーは対象外（プレイヤーが直接管理する）
+	if joined_to_player:
+		return
+	_auto_item_timer += delta
+	if _auto_item_timer >= AUTO_ITEM_INTERVAL / GlobalConstants.game_speed:
+		_auto_item_timer = 0.0
+		_auto_equip_members()
+		_auto_share_potions()
+
+
+## パーティー全体の未装備品を最適配分する
+## 装備種類ごとに未装備品をまとめ、最も恩恵を受けるメンバー（現装備が最弱）から順に装備させる
+func _auto_equip_members() -> void:
+	# 装備可能な item_type ごとに未装備品を収集
+	var pool_by_type: Dictionary = {}  # item_type -> Array[{item, owner_data}]
+	for mv: Variant in _party_members:
+		var member := mv as Character
+		if not is_instance_valid(member) or member.character_data == null:
+			continue
+		var cd := member.character_data
+		for item_var: Variant in cd.inventory:
+			var item := item_var as Dictionary
+			if item == null:
+				continue
+			var cat: String = item.get("category", "") as String
+			if cat not in ["weapon", "armor", "shield"]:
+				continue
+			var itype: String = item.get("item_type", "") as String
+			if itype.is_empty():
+				continue
+			if not pool_by_type.has(itype):
+				pool_by_type[itype] = []
+			(pool_by_type[itype] as Array).append({"item": item, "owner": cd})
+
+	# 各 item_type ごとに最適配分
+	for itype: String in pool_by_type:
+		var entries: Array = pool_by_type[itype] as Array
+		if entries.is_empty():
+			continue
+		# 未装備品をステータス合計降順にソート
+		entries.sort_custom(
+			func(a: Dictionary, b: Dictionary) -> bool:
+				return _item_stats_sum(a.item as Dictionary) > _item_stats_sum(b.item as Dictionary)
+		)
+		for entry_var: Variant in entries:
+			var entry := entry_var as Dictionary
+			if entry == null:
+				continue
+			var new_item := entry.get("item", {}) as Dictionary
+			var owner_cd := entry.get("owner") as CharacterData
+			if owner_cd == null:
+				continue
+			# 最も恩恵を受けるメンバー（このタイプの現装備が最弱）を探す
+			var best_target: Character = null
+			var lowest_cur_sum := INF
+			for mv2: Variant in _party_members:
+				var member2 := mv2 as Character
+				if not is_instance_valid(member2) or member2.character_data == null:
+					continue
+				var cd2 := member2.character_data
+				var allowed: Array = CLASS_EQUIP_TYPES.get(cd2.class_id, []) as Array
+				if itype not in allowed:
+					continue
+				# 新装備が現装備より強い場合のみ候補にする
+				var cur := _get_equipped_for_type(cd2, itype)
+				var cur_sum := _item_stats_sum(cur)
+				if _item_stats_sum(new_item) <= cur_sum:
+					continue
+				if cur_sum < lowest_cur_sum:
+					lowest_cur_sum = cur_sum
+					best_target = member2
+			if best_target == null:
+				continue
+			var target_cd := best_target.character_data
+			# 旧装備を未装備品としてオーナーのインベントリに戻す
+			var old_equipped := _get_equipped_for_type(target_cd, itype)
+			# 自分が持ちからオーナーの手持ちに移す
+			owner_cd.inventory.erase(new_item)
+			if not old_equipped.is_empty():
+				target_cd.inventory.append(old_equipped)
+			target_cd._equip_item(new_item)
+			best_target.refresh_stats_from_equipment()
+
+
+## 必要なポーションがないメンバーに、余剰分を持つメンバーから渡す
+func _auto_share_potions() -> void:
+	for mv: Variant in _party_members:
+		var needer := mv as Character
+		if not is_instance_valid(needer) or needer.character_data == null:
+			continue
+		var cd := needer.character_data
+		# HP ポーション受け渡し
+		var hp_ratio := float(needer.hp) / float(needer.max_hp) if needer.max_hp > 0 else 1.0
+		if hp_ratio < GlobalConstants.NEAR_DEATH_THRESHOLD:
+			if _find_potion_in_cd(cd, "hp") == null:
+				var pot := _take_potion_from_party(needer, "hp")
+				if pot != null:
+					cd.inventory.append(pot)
+		# SP/MP ポーション受け渡し
+		var use_mp := needer.max_mp > 0
+		if use_mp:
+			var mp_ratio := float(needer.mp) / float(needer.max_mp) if needer.max_mp > 0 else 1.0
+			if mp_ratio < 0.5 and _find_potion_in_cd(cd, "mp") == null:
+				var pot := _take_potion_from_party(needer, "mp")
+				if pot != null:
+					cd.inventory.append(pot)
+		elif needer.max_sp > 0:
+			var sp_ratio := float(needer.sp) / float(needer.max_sp)
+			if sp_ratio < 0.5 and _find_potion_in_cd(cd, "sp") == null:
+				var pot := _take_potion_from_party(needer, "sp")
+				if pot != null:
+					cd.inventory.append(pot)
+
+
+## ステータス補正値の合計を返す（比較用）
+func _item_stats_sum(item: Dictionary) -> float:
+	if item.is_empty():
+		return 0.0
+	var total := 0.0
+	var stats := item.get("stats", {}) as Dictionary
+	for v: Variant in stats.values():
+		total += float(v)
+	return total
+
+
+## item_type に対応する現在の装備 Dictionary を返す（未装備なら空辞書）
+func _get_equipped_for_type(cd: CharacterData, itype: String) -> Dictionary:
+	match itype:
+		"sword", "axe", "bow", "dagger", "staff":
+			return cd.equipped_weapon
+		"armor_plate", "armor_cloth", "armor_robe":
+			return cd.equipped_armor
+		"shield":
+			return cd.equipped_shield
+	return {}
+
+
+## キャラクターのインベントリからポーションを検索する
+func _find_potion_in_cd(cd: CharacterData, kind: String) -> Variant:
+	var key := "restore_" + kind
+	for item_var: Variant in cd.inventory:
+		var it := item_var as Dictionary
+		if it == null:
+			continue
+		var eff := it.get("effect", {}) as Dictionary
+		if (eff.get(key, 0) as int) > 0:
+			return it
+	return null
+
+
+## needer 以外のメンバーからポーションを取り出す（所持あれば削除して返す）
+func _take_potion_from_party(needer: Character, kind: String) -> Variant:
+	for mv: Variant in _party_members:
+		var donor := mv as Character
+		if not is_instance_valid(donor) or donor == needer:
+			continue
+		if donor.character_data == null:
+			continue
+		var pot := _find_potion_in_cd(donor.character_data, kind)
+		if pot != null:
+			donor.character_data.inventory.erase(pot)
+			return pot
+	return null
 
 
 # --------------------------------------------------------------------------
