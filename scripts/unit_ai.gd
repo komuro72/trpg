@@ -1251,9 +1251,9 @@ func _generate_buff_queue() -> Array:
 			{"action": "buff", "target": buff_target}]
 
 
-## 回復対象を返す。heal_mode（current_order.heal_mode）に従って選定する。
+## 回復対象を返す。heal（current_order.heal）に従って選定する。
 ## _party_peers（自パーティーメンバー）と _player（hero）のみを対象とする。
-## heal_mode:
+## heal:
 ##   "aggressive"    : NEAR_DEATH_THRESHOLD 以下のキャラで最もHPが低い者
 ##   "leader_first"  : リーダー（_leader_ref）が閾値未満なら優先、その後 aggressive と同じ
 ##   "lowest_hp_first": 閾値なし・最もHP割合が低い者（0%は除く）
@@ -1263,7 +1263,7 @@ func _find_heal_target() -> Character:
 		return null
 	var heal_mode: String = "aggressive"
 	if _member.current_order != null:
-		heal_mode = _member.current_order.get("heal_mode", "aggressive") as String
+		heal_mode = _member.current_order.get("heal", "aggressive") as String
 
 	if heal_mode == "none":
 		return null

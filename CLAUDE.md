@@ -1534,7 +1534,7 @@ rank値: C=0, B=1, A=2, S=3
   - **`OrderWindow.gd`：GLOBAL_ROWS・MEMBER_COLS・HEALER_COLS を更新**
     - `GLOBAL_ROWS`：`move` キーを `combat` キーから差し替え。`hp_potion`/`sp_mp_potion` 行を追加
     - `MEMBER_COLS`：`battle_formation`（surround/rush/rear）・`combat`（attack/defense/flee）・`target`・`special_skill`（4択）
-    - `HEALER_COLS`：`battle_formation`・`combat`・`heal_mode`（aggressive/leader_first/lowest_hp_first/none）・`special_skill`
+    - `HEALER_COLS`（5列）：`target`・`battle_formation`・`combat`・`heal`（aggressive/leader_first/lowest_hp_first/none）・`special_skill`
     - `_sync_global_to_members()`：sync_keys を `["move","target","on_low_hp","item_pickup"]` に更新
     - `CLASS_EQUIP_TYPES` に `"magician-water"` を追加
   - **`PartyLeaderAI.gd`：global_orders 参照・AI ロジック更新**
@@ -1602,9 +1602,12 @@ rank値: C=0, B=1, A=2, S=3
   - **`party.gd`**：`global_orders` に `"battle_policy": "attack"` を追加（attack/defense/retreat の3択）
   - **`order_window.gd`**
     - `GLOBAL_ROWS` に `battle_policy`（戦闘方針）行を追加（move の直後）
-    - `MEMBER_COLS` / `HEALER_COLS` の `battle_formation` オプションに `"gather"` を追加
+    - `MEMBER_COLS`（4列）：target/battle_formation/combat/special_skill。`battle_formation` オプションに `"gather"` を追加
+    - `HEALER_COLS`（5列）：target/battle_formation/combat/heal/special_skill。`battle_formation` オプションに `"gather"` を追加。`heal` キー（aggressive/leader_first/lowest_hp_first/none）
     - `BATTLE_POLICY_PRESET` 定数を追加：クラスID × 戦闘方針 → {battle_formation, combat} のプリセットテーブル（7クラス × 3方針）
-    - `_apply_battle_policy_preset(policy)` メソッド追加：戦闘方針変更時に全メンバーへプリセット一括適用。ヒーラーは専用プリセット（rear/各combat/lowest_hp_first）を適用、非ヒーラーは BATTLE_POLICY_PRESET テーブルを参照
+    - `_apply_battle_policy_preset(policy)` メソッド追加：戦闘方針変更時に全メンバーへプリセット一括適用。ヒーラーは専用プリセット（rear/各combat/lowest_hp_first を `"heal"` キーに設定）を適用、非ヒーラーは BATTLE_POLICY_PRESET テーブルを参照
+    - `_get_active_total_cols()` ヘルパー追加：フォーカス中キャラの列数（名前列1+指示列）を動的に返す。`_col_cursor` の循環に使用
+    - `_get_col_xs()` を `max(MEMBER_COLS.size(), HEALER_COLS.size())` ベースの均等幅に変更
     - `_sync_global_to_members()` に `battle_policy` 変更時のプリセット適用分岐を追加
   - **`unit_ai.gd`**
     - `_calc_party_centroid()` ヘルパー追加（`_party_peers` の全メンバーの `grid_pos` 平均を返す）

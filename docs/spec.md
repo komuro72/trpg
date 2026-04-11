@@ -3332,13 +3332,27 @@ OrderWindow の `GLOBAL_ROWS` に表示行として追加（move 行の直後）
 | magician-* | rear / attack | rear / defense | rear / flee |
 
 **ヒーラーのプリセット（専用処理）**:
-| 戦闘方針 | battle_formation | combat | heal_mode |
-|---------|-----------------|--------|-----------|
+| 戦闘方針 | battle_formation | combat | heal (current_order["heal"]) |
+|---------|-----------------|--------|------------------------------|
 | 攻撃 | rear | attack | lowest_hp_first |
 | 防衛 | rear | defense | lowest_hp_first |
 | 撤退 | rear | flee | lowest_hp_first |
 
 ヒーラーは `_is_healer(ch)` で判定して専用プリセットを適用。`BATTLE_POLICY_PRESET` テーブルには載せない。
+
+### HEALER_COLS（5列、`order_window.gd`）
+非ヒーラーの MEMBER_COLS（4列）に対し、ヒーラーは5列。
+`_get_cols_for(ch)` でキャラクター別に切り替え。`_col_cursor` 循環は `_get_active_total_cols()` で動的取得。
+
+| 列 | key | 選択肢 |
+|----|-----|--------|
+| 0 | target | nearest / weakest / same_as_leader / support |
+| 1 | battle_formation | surround / rush / rear / gather |
+| 2 | combat | attack / defense / flee |
+| 3 | heal | aggressive / leader_first / lowest_hp_first / none |
+| 4 | special_skill | aggressive / strong_enemy / disadvantage / never |
+
+`unit_ai._find_heal_target()` は `current_order.get("heal", "aggressive")` を参照（旧 `"heal_mode"` から変更）。
 
 ### 集結隊形 "gather"（`unit_ai.gd`）
 `_calc_party_centroid()` — `_party_peers` の全メンバーの `grid_pos` 平均を返すヘルパー。

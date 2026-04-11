@@ -57,24 +57,27 @@ const MEMBER_COLS: Array = [
 	 "labels":  ["積極的に使う", "強敵なら使う", "劣勢なら使う", "使わない"]},
 ]
 
-## 個別指示列（ヒーラー専用）
-## 列順を MEMBER_COLS と合わせる（col0=回復、col1=隊形、col2=戦闘、col3=特殊攻撃）
+## 個別指示列（ヒーラー専用・5列）
+## 列順: ターゲット / 隊形 / 戦闘 / 回復 / 特殊攻撃
 const HEALER_COLS: Array = [
-	{"key": "heal_mode",        "header": "回復",
-	 "options": ["aggressive", "leader_first", "lowest_hp_first", "none"],
-	 "labels":  ["積極回復", "リーダー優先", "瀕死度優先", "回復しない"]},
+	{"key": "target",           "header": "ターゲット",
+	 "options": ["nearest", "weakest", "same_as_leader", "support"],
+	 "labels":  ["最近傍", "最弱優先", "リーダーと同じ", "援護"]},
 	{"key": "battle_formation", "header": "隊形",
 	 "options": ["surround", "rush", "rear", "gather"],
 	 "labels":  ["包囲", "突進", "後衛", "集結"]},
 	{"key": "combat",           "header": "戦闘",
 	 "options": ["attack", "defense", "flee"],
 	 "labels":  ["攻撃", "防御", "逃走"]},
+	{"key": "heal",             "header": "回復",
+	 "options": ["aggressive", "leader_first", "lowest_hp_first", "none"],
+	 "labels":  ["積極回復", "リーダー優先", "瀕死度優先", "回復しない"]},
 	{"key": "special_skill",    "header": "特殊攻撃",
 	 "options": ["aggressive", "strong_enemy", "disadvantage", "never"],
 	 "labels":  ["積極的に使う", "強敵なら使う", "劣勢なら使う", "使わない"]},
 ]
 
-const TOTAL_COLS := 5  ## 名前列1 + 個別指示列4
+const TOTAL_COLS := 6  ## 名前列1 + 個別指示列最大5（ヒーラーは5列・非ヒーラーは4列）
 
 ## 攻撃タイプの表示名
 const ATTACK_TYPE_LABELS: Dictionary = {
@@ -262,10 +265,12 @@ func _handle_input() -> void:
 						# 名前列左キー：ウィンドウを閉じる
 						close_window()
 					else:
-						_col_cursor = (_col_cursor - 1 + TOTAL_COLS) % TOTAL_COLS
+						var tc := _get_active_total_cols()
+						_col_cursor = (_col_cursor - 1 + tc) % tc
 				elif Input.is_action_just_pressed("ui_right"):
 					# 右キーは常に列移動（サブメニューを開くのは Z のみ）
-					_col_cursor = (_col_cursor + 1) % TOTAL_COLS
+					var tc := _get_active_total_cols()
+					_col_cursor = (_col_cursor + 1) % tc
 				elif Input.is_action_just_pressed("attack") \
 						or Input.is_action_just_pressed("ui_accept"):
 					if _col_cursor == 0:
@@ -611,7 +616,7 @@ func _apply_battle_policy_preset(policy: String) -> void:
 			var healer_combat: String = {"attack": "attack", "defense": "defense", "retreat": "flee"}.get(policy, "attack") as String
 			ch.current_order["battle_formation"] = "rear"
 			ch.current_order["combat"]           = healer_combat
-			ch.current_order["heal_mode"]        = "lowest_hp_first"
+			ch.current_order["heal"]             = "lowest_hp_first"
 		else:
 			var cid: String = ch.character_data.class_id
 			var class_presets: Dictionary = BATTLE_POLICY_PRESET.get(cid, {}) as Dictionary
@@ -1414,13 +1419,23 @@ func _draw_option_chips(x: float, y: float, avail_w: float, row_h: float,
 		cx += cw + chip_gap * scale
 
 
+## フォーカス中キャラに応じた総列数（名前列1 + 個別指示列）を返す
+func _get_active_total_cols() -> int:
+	if _focus_area == _FocusArea.MEMBER_TABLE and _member_cursor < _sorted_members.size():
+		var ch := _sorted_members[_member_cursor] as Character
+		if is_instance_valid(ch):
+			return 1 + _get_cols_for(ch).size()
+	return TOTAL_COLS
+
+
 func _get_col_xs(px: float, panel_w: float, pad: float) -> Array[float]:
 	var avail  := panel_w - pad * 2.0
 	var name_r := 0.22
-	var item_r := (1.0 - name_r) / float(MEMBER_COLS.size())
+	var n_cols  := maxi(MEMBER_COLS.size(), HEALER_COLS.size())
+	var item_r := (1.0 - name_r) / float(n_cols)
 	var xs: Array[float] = []
 	xs.append(px + pad)  # [0] 名前列
-	for ci: int in range(MEMBER_COLS.size()):
+	for ci: int in range(n_cols):
 		xs.append(px + pad + avail * (name_r + item_r * float(ci)))  # [1..n] 指示列
 	return xs
 
