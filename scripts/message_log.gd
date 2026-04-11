@@ -8,7 +8,7 @@ extends Node
 enum MsgType { SYSTEM, COMBAT, AI, BATTLE }
 
 ## デバッグメッセージ（COMBAT / AI）の表示切替。F1 キーでトグル
-var debug_visible: bool = true
+var debug_visible: bool = false
 
 const LOG_MAX: int = 50
 

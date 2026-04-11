@@ -11,6 +11,9 @@ extends CanvasLayer
 const VISIBLE_LINES: int = 7
 const MSG_FONT_SIZE:  int = 20
 
+## スクロールアニメーションの所要時間（秒）
+const SCROLL_DURATION: float = 0.15
+
 ## front.png のバスト領域クロップ（1024x1024 画像の上半分中央部分）
 const BUST_SRC_X: float = 256.0
 const BUST_SRC_Y: float = 0.0
@@ -51,6 +54,23 @@ var _font:    Font
 ## アイコン用テクスチャキャッシュ（face.png 用）
 var _tex_cache: Dictionary = {}
 
+# --------------------------------------------------------------------------
+# スクロールアニメーション
+# --------------------------------------------------------------------------
+## 現在のスクロールオフセット（px）。0 に向かって減少し、エントリが下から滑り上がる
+var _scroll_offset: float = 0.0
+## 1 秒あたりの減少量（px/s）。SCROLL_DURATION から算出
+var _scroll_speed:  float = 0.0
+## 次の _on_scroll_draw でスクロール初期化を行うフラグ
+var _should_init_scroll: bool = false
+
+# --------------------------------------------------------------------------
+# エントリ描画用 SubViewport（確実なピクセルクリッピング）
+# --------------------------------------------------------------------------
+var _svc:            SubViewportContainer = null  ## クリップ領域コンテナ
+var _svp:            SubViewport          = null  ## レンダリングビューポート
+var _scroll_content: Control              = null  ## エントリを描画するコントロール
+
 
 func _ready() -> void:
 	layer = 12
@@ -60,6 +80,22 @@ func _ready() -> void:
 	_control.focus_mode = Control.FOCUS_NONE
 	add_child(_control)
 	_control.draw.connect(_on_draw)
+
+	# SubViewport + Container でエントリ描画エリアをクリッピング
+	_svc = SubViewportContainer.new()
+	_svc.stretch = true          # SubViewport をコンテナサイズに自動追従
+	_svc.focus_mode = Control.FOCUS_NONE
+	_control.add_child(_svc)
+
+	_svp = SubViewport.new()
+	_svp.transparent_bg = true   # 背景はメインコントロールの描画に依存
+	_svc.add_child(_svp)
+
+	_scroll_content = Control.new()
+	_scroll_content.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_scroll_content.focus_mode = Control.FOCUS_NONE
+	_svp.add_child(_scroll_content)
+	_scroll_content.draw.connect(_on_scroll_draw)
 
 	if MessageLog != null:
 		MessageLog.entry_added.connect(_on_entry_changed)
@@ -138,8 +174,11 @@ func is_dialogue_active() -> bool:
 # --------------------------------------------------------------------------
 
 func _on_entry_changed() -> void:
+	_should_init_scroll = true
 	if _control != null:
 		_control.queue_redraw()
+	if _scroll_content != null:
+		_scroll_content.queue_redraw()
 
 
 ## バトルメッセージ受信：操作キャラが関与していれば右エリアを更新する
@@ -164,6 +203,15 @@ func _on_battle_message(atk_data: CharacterData, def_data: CharacterData,
 # --------------------------------------------------------------------------
 
 func _process(delta: float) -> void:
+	# スクロールアニメーション
+	if _scroll_offset > 0.0:
+		_scroll_offset = maxf(0.0, _scroll_offset - _scroll_speed * delta)
+		if _control != null:
+			_control.queue_redraw()
+		if _scroll_content != null:
+			_scroll_content.queue_redraw()
+
+	# リジェクトタイマー
 	if _reject_active:
 		_reject_timer -= delta
 		if _reject_timer <= 0.0:
@@ -226,27 +274,46 @@ func _on_draw() -> void:
 		Vector2(right_x, by + box_h - 4.0),
 		Color(0.30, 0.30, 0.45, 0.40), 1)
 
-	# ── アイコン列の幅
-	var arrow_str  := "→ "
-	var arrow_w    := _font.get_string_size(arrow_str, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	var icon_col_w := icon_sz + arrow_w + icon_sz + 6.0
+	# ── SubViewportContainer をテキストエリアに配置してエントリ描画をリクエスト
+	var avail_h := box_h - 12.0
+	_svc.set_position(Vector2(bx, by + 8.0))
+	_svc.set_size(Vector2(box_w, avail_h))
+	_scroll_content.queue_redraw()
 
-	# ── バトル行テキスト領域
-	var battle_text_x := bx + 8.0 + icon_col_w
+
+## エントリをローカル座標で描画（_scroll_content.draw に接続）
+## SubViewport のサイズがクリップ領域になるため y<0 や y>avail_h の描画は自動クリップされる
+func _on_scroll_draw() -> void:
+	if _font == null or MessageLog == null or _scroll_content == null:
+		return
+
+	# レイアウト変数を _control.size から再計算（_on_draw と同じ計算式）
+	var gs       := GlobalConstants.GRID_SIZE
+	var pw       := GlobalConstants.PANEL_TILES * gs
+	var vw       := _control.size.x
+	var fs       := MSG_FONT_SIZE
+	var icon_sz  := float(maxi(20, gs * 2 / 3))
+	var line_h   := float(fs) * 1.5
+	var margin_x := maxf(vw * 0.28, float(pw) + 4.0)
+	var box_w    := vw - 2.0 * margin_x
+	var box_h    := line_h * float(VISIBLE_LINES) + 16.0
+	var avail_h  := box_h - 12.0
+
+	# ローカル X オフセット（_svc.position.x = bx のため x=0 が bx に対応）
+	var arrow_str     := "→ "
+	var arrow_w       := _font.get_string_size(arrow_str, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var icon_col_w    := icon_sz + arrow_w + icon_sz + 6.0
+	var battle_text_x := 8.0 + icon_col_w
 	var battle_text_w := box_w - 16.0 - icon_col_w
+	var sys_text_w    := box_w - 16.0
 
-	# ── システム行テキスト領域
-	var sys_text_x := bx + 8.0
-	var sys_text_w := box_w - 16.0
-
-	# ── 表示エントリ取得・同アイコンペアをグループ化
 	var visible: Array[Dictionary] = MessageLog.get_visible_entries()
 	if visible.is_empty():
+		_should_init_scroll = false
 		return
 	var groups := _build_display_groups(visible)
 
 	# ── 下から積み上げて収まるグループ範囲を決定
-	var avail_h := box_h - 8.0
 	var total_h := 0.0
 	var start_g := groups.size()
 	for i: int in range(groups.size() - 1, -1, -1):
@@ -256,46 +323,72 @@ func _on_draw() -> void:
 		total_h += gh
 		start_g = i
 
-	# ── 下詰めで描画開始 Y を決定
-	var entry_y := by + 4.0 + (avail_h - total_h)
-	entry_y = maxf(entry_y, by + 4.0)
+	# ── スクロールアニメーション初期化（新エントリ追加時のみ）
+	if _should_init_scroll:
+		_should_init_scroll = false
+		if not groups.is_empty():
+			var newest_group := groups.back() as Dictionary
+			var new_h := _group_height(newest_group, battle_text_w, sys_text_w, fs, line_h, icon_sz)
+			_scroll_offset = new_h
+			_scroll_speed  = new_h / SCROLL_DURATION
 
-	# ── 各グループを描画
+	# ── 上端から退場するグループ（start_g - 1）を描画：y<0 の部分は自動クリップされる
+	if start_g > 0 and _scroll_offset > 0.0:
+		var exit_group := groups[start_g - 1] as Dictionary
+		var exit_gh    := _group_height(exit_group, battle_text_w, sys_text_w, fs, line_h, icon_sz)
+		var exit_y     := -exit_gh + _scroll_offset
+		if exit_y + exit_gh > 0.0:  # まだ一部が clip 領域内にある
+			_draw_group(exit_group, exit_y, arrow_str, arrow_w, icon_sz,
+					battle_text_x, battle_text_w, sys_text_w, fs)
+
+	# ── 通常エントリを描画（ローカル y=0 = クリップ上端 = by+8.0 のビューポート位置）
+	var entry_y := (avail_h - total_h) + _scroll_offset
 	for i: int in range(start_g, groups.size()):
-		var group      := groups[i] as Dictionary
-		var gh         := _group_height(group, battle_text_w, sys_text_w, fs, line_h, icon_sz)
-		var is_battle  : bool   = group.get("is_battle", false) as bool
-		var col        : Color  = group.get("color", Color.WHITE) as Color
-		var text       : String = group.get("text", "") as String
+		var group := groups[i] as Dictionary
+		var gh    := _group_height(group, battle_text_w, sys_text_w, fs, line_h, icon_sz)
+		# クリップ下端より下はスキップ（パフォーマンス最適化・自動クリップと二重防衛）
+		if entry_y >= avail_h:
+			entry_y += gh
+			continue
+		_draw_group(group, entry_y, arrow_str, arrow_w, icon_sz,
+				battle_text_x, battle_text_w, sys_text_w, fs)
+		entry_y += gh
 
-		if is_battle:
-			var atk_data: CharacterData = group.get("atk_data") as CharacterData
-			var def_data: CharacterData = group.get("def_data") as CharacterData
 
-			# 攻撃側アイコン
-			_draw_face_icon(atk_data, bx + 8.0, entry_y, icon_sz)
+## グループを _scroll_content 上のローカル座標 y に描画する
+func _draw_group(group: Dictionary, y: float, arrow_str: String, arrow_w: float,
+		icon_sz: float, battle_text_x: float, battle_text_w: float,
+		sys_text_w: float, fs: int) -> void:
+	var is_battle : bool   = group.get("is_battle", false) as bool
+	var col       : Color  = group.get("color", Color.WHITE) as Color
+	var text      : String = group.get("text", "") as String
 
-			# 矢印（アイコンの縦中央に揃える）
-			var arrow_y := entry_y + icon_sz * 0.5 + float(fs) * 0.35
-			_control.draw_string(_font,
-				Vector2(bx + 8.0 + icon_sz + 2.0, arrow_y),
+	if is_battle:
+		var atk_data: CharacterData = group.get("atk_data") as CharacterData
+		var def_data: CharacterData = group.get("def_data") as CharacterData
+
+		# 攻撃側アイコン
+		_draw_face_icon(atk_data, 8.0, y, icon_sz)
+
+		# 矢印（アイコンの縦中央に揃える）
+		var arrow_y := y + icon_sz * 0.5 + float(fs) * 0.35
+		_scroll_content.draw_string(_font,
+				Vector2(8.0 + icon_sz + 2.0, arrow_y),
 				arrow_str, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
 				Color(0.70, 0.70, 0.70))
 
-			# 被攻撃側アイコン
-			_draw_face_icon(def_data, bx + 8.0 + icon_sz + arrow_w, entry_y, icon_sz)
+		# 被攻撃側アイコン
+		_draw_face_icon(def_data, 8.0 + icon_sz + arrow_w, y, icon_sz)
 
-			# テキスト（\n 区切りで複数行）
-			_control.draw_multiline_string(_font,
-				Vector2(battle_text_x, entry_y + float(fs)),
+		# テキスト（\n 区切りで複数行）
+		_scroll_content.draw_multiline_string(_font,
+				Vector2(battle_text_x, y + float(fs)),
 				text, HORIZONTAL_ALIGNMENT_LEFT, battle_text_w, fs, -1, col)
-		else:
-			# システム・デバッグ行：アイコンなし・フル幅
-			_control.draw_multiline_string(_font,
-				Vector2(sys_text_x, entry_y + float(fs)),
+	else:
+		# システム・デバッグ行：アイコンなし・フル幅
+		_scroll_content.draw_multiline_string(_font,
+				Vector2(8.0, y + float(fs)),
 				text, HORIZONTAL_ALIGNMENT_LEFT, sys_text_w, fs, -1, col)
-
-		entry_y += gh
 
 
 # --------------------------------------------------------------------------
@@ -411,10 +504,11 @@ func _draw_bust(data: CharacterData, x: float, y: float, size: float) -> void:
 
 
 ## キャラクターアイコン（正方形）を描画する（face.png / グレーフォールバック）
+## _on_scroll_draw / _draw_group から呼ばれ、_scroll_content 上のローカル座標で描画する
 func _draw_face_icon(data: CharacterData, x: float, y: float, size: float) -> void:
 	var rect := Rect2(x, y, size, size)
 	var tex  := _load_face_tex(data)
 	if tex == null:
-		_control.draw_rect(rect, Color(0.28, 0.28, 0.33, 0.80))
+		_scroll_content.draw_rect(rect, Color(0.28, 0.28, 0.33, 0.80))
 		return
-	_control.draw_texture_rect(tex, rect, false)
+	_scroll_content.draw_texture_rect(tex, rect, false)

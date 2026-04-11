@@ -528,14 +528,24 @@ func _generate_queue(strategy: Strategy, target: Character) -> Array:
 		Strategy.ATTACK:
 			if target == null or not is_instance_valid(target):
 				# ターゲットがいない場合は move_policy に従って行動
-				# （例：explore 指示の NPC は敵がいなくても探索を続ける）
-				if _move_policy == "explore":
-					return _generate_explore_queue()
-				elif _move_policy == "stairs_down":
-					return _generate_stair_queue(1)
-				elif _move_policy == "stairs_up":
-					return _generate_stair_queue(-1)
-				return [{"action": "wait"}]
+				match _move_policy:
+					"explore":
+						return _generate_explore_queue()
+					"stairs_down":
+						return _generate_stair_queue(1)
+					"stairs_up":
+						return _generate_stair_queue(-1)
+					"follow", "cluster", "same_room", "guard_room":
+						# 隊形が崩れていれば移動、満たされていれば待機
+						if not _formation_satisfied():
+							var q: Array = []
+							for _i: int in range(3):
+								q.append({"action": "move_to_formation"})
+							q.append({"action": "wait"})
+							return q
+						return [{"action": "wait"}]
+					_:
+						return [{"action": "wait"}]
 			var atype := _get_attack_type()
 			# standby: 隣接のみ攻撃、移動しない（ranged/dive は射程内なら攻撃）
 			if _move_policy == "standby":
@@ -580,7 +590,11 @@ func _generate_queue(strategy: Strategy, target: Character) -> Array:
 					return [{"action": "wait"}]
 				_:
 					if not _formation_satisfied():
-						return [{"action": "move_to_formation"}, {"action": "wait"}]
+						var q: Array = []
+						for _i: int in range(3):
+							q.append({"action": "move_to_formation"})
+						q.append({"action": "wait"})
+						return q
 					return [{"action": "wait"}]
 
 	return [{"action": "wait"}]

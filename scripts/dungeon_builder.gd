@@ -42,12 +42,12 @@ static func build_floor(floor_data: Dictionary) -> MapData:
 	var data := MapData.new()
 	data.init_all_walls(map_w, map_h)
 
-	# 部屋を床に展開（外周1タイルは壁として保持）
+	# Step1: 部屋を床に展開（外周1タイルは壁として保持。wall_tiles/obstacle_tiles はまだ適用しない）
 	for room: Variant in rooms:
 		var r := room as Dictionary
 		_carve_room(data, r, offset)
 
-	# 通路を床に展開
+	# Step2: 通路を床に展開（外周壁タイルを CORRIDOR に変換して出入り口を作る）
 	var corridors: Array = floor_data.get("corridors", [])
 	var room_map := _build_room_map(rooms)
 	for corridor: Variant in corridors:
@@ -62,6 +62,12 @@ static func build_floor(floor_data: Dictionary) -> MapData:
 				data.set_area_name(corr_area_id, corr_name)
 			_carve_corridor(data, room_map[from_id] as Dictionary, room_map[to_id] as Dictionary, offset)
 
+	# Step3: 通路掘削後に wall_tiles / obstacle_tiles を適用
+	# （通路が先に開通しているため CORRIDOR タイルは上書きしない。部屋形状の壁と障害物のみ設定）
+	for room: Variant in rooms:
+		var r := room as Dictionary
+		_apply_room_overlays(data, r, offset)
+
 	# 階段タイルを配置
 	var stairs: Array = floor_data.get("stairs", [])
 	_place_stairs(data, stairs, offset)
@@ -73,7 +79,7 @@ static func build_floor(floor_data: Dictionary) -> MapData:
 	return data
 
 
-## 部屋を床タイルに展開する（内部のみ、外周はWALL）
+## 部屋を床タイルに展開する（内部のみ・外周はWALL・wall_tiles/obstacle_tilesは適用しない）
 static func _carve_room(data: MapData, room: Dictionary, offset: Vector2i) -> void:
 	var rx: int = int(room.get("x",      0)) + offset.x
 	var ry: int = int(room.get("y",      0)) + offset.y
@@ -90,6 +96,41 @@ static func _carve_room(data: MapData, room: Dictionary, offset: Vector2i) -> vo
 	var room_name := room.get("name", "") as String
 	if not room_name.is_empty():
 		data.set_area_name(area_id, room_name)
+
+
+## 通路掘削後に部屋のオーバーレイ（wall_tiles / obstacle_tiles）を適用する
+## CORRIDOR タイルは上書きしない（通路として確保された出入り口を塞がない）
+## wall_tiles: 内部をWALLに戻すタイル [{"rx": 相対x, "ry": 相対y}, ...]
+## obstacle_tiles: OBSTACLEタイルを配置 [{"rx": 相対x, "ry": 相対y}, ...]
+## rx/ry は部屋の左上隅からの相対座標
+static func _apply_room_overlays(data: MapData, room: Dictionary, offset: Vector2i) -> void:
+	var rx: int = int(room.get("x", 0)) + offset.x
+	var ry: int = int(room.get("y", 0)) + offset.y
+	var area_id := room.get("id", "") as String
+
+	# wall_tiles: 内部の指定タイルをWALLに戻す（L字・T字など非矩形形状用）
+	var wall_tiles: Array = room.get("wall_tiles", [])
+	for wt: Variant in wall_tiles:
+		var wtd := wt as Dictionary
+		var wx: int = rx + int(wtd.get("rx", 0))
+		var wy: int = ry + int(wtd.get("ry", 0))
+		var wpos := Vector2i(wx, wy)
+		# CORRIDOR（通路として開通済み）は上書きしない
+		if data.get_tile(wpos) != MapData.TileType.CORRIDOR:
+			data.set_tile(wpos, MapData.TileType.WALL)
+			data.set_tile_area(wpos, "")
+
+	# obstacle_tiles: 内部の指定タイルをOBSTACLEに設定
+	var obstacle_tiles: Array = room.get("obstacle_tiles", [])
+	for ot: Variant in obstacle_tiles:
+		var otd := ot as Dictionary
+		var ox: int = rx + int(otd.get("rx", 0))
+		var oy: int = ry + int(otd.get("ry", 0))
+		var opos := Vector2i(ox, oy)
+		# CORRIDOR（通路として開通済み）は上書きしない
+		if data.get_tile(opos) != MapData.TileType.CORRIDOR:
+			data.set_tile(opos, MapData.TileType.OBSTACLE)
+			data.set_tile_area(opos, area_id)
 
 
 ## 2部屋間をL字通路で接続する
