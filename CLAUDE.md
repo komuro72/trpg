@@ -1597,6 +1597,21 @@ rank値: C=0, B=1, A=2, S=3
       - 各列は独立したサブ列（ラベル 50% / 素値 17% / 補正値 16% / 最終値 17%）
     - `_draw_one_stat_row()` ヘルパーメソッドを追加（行描画を共通化）
     - `_on_draw()` の `n_stat` 計算を `maxi(left.size(), right.size())` に更新
+- [x] Phase 13-9（戦闘方針・集結隊形）: 全体方針に `battle_policy` 追加・`gather` 隊形実装
+  - **`global_constants.gd`**：`MEMBER_FORMATION` に `"gather"` を追加（surround/rush/rear/gather の4択）
+  - **`party.gd`**：`global_orders` に `"battle_policy": "attack"` を追加（attack/defense/retreat の3択）
+  - **`order_window.gd`**
+    - `GLOBAL_ROWS` に `battle_policy`（戦闘方針）行を追加（move の直後）
+    - `MEMBER_COLS` / `HEALER_COLS` の `battle_formation` オプションに `"gather"` を追加
+    - `BATTLE_POLICY_PRESET` 定数を追加：クラスID × 戦闘方針 → {battle_formation, combat} のプリセットテーブル（7クラス × 3方針）
+    - `_apply_battle_policy_preset(policy)` メソッド追加：戦闘方針変更時に全メンバーへプリセット一括適用
+    - `_sync_global_to_members()` に `battle_policy` 変更時のプリセット適用分岐を追加
+  - **`unit_ai.gd`**
+    - `_calc_party_centroid()` ヘルパー追加（`_party_peers` の全メンバーの `grid_pos` 平均を返す）
+    - `_formation_satisfied()` に `"gather"` ケース追加（重心から2タイル以内なら満足）
+    - `_target_in_formation_zone()` に `"gather"` ケース追加（重心から4タイル以内の敵を攻撃）
+    - `_formation_move_goal()` に `"gather"` ケース追加（重心を目標タイルとして返す）
+    - `_generate_queue()` Strategy.ATTACK ブランチに後衛距離制限を追加（`attack_range × 0.8` を超えたら待機 or 射程内なら攻撃）
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム

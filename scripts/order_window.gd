@@ -18,10 +18,13 @@ signal switch_requested(new_character: Character)
 
 ## 全体方針の行定義（key: Party.global_orders のキー）
 const GLOBAL_ROWS: Array = [
-	{"key": "move",         "label": "移動方針",
+	{"key": "move",          "label": "移動方針",
 	 "options": ["follow", "cluster", "same_room", "standby", "explore"],
 	 "labels":  ["追従", "密集", "同じ部屋", "待機", "探索"]},
-	{"key": "target",       "label": "ターゲット方針",
+	{"key": "battle_policy", "label": "戦闘方針",
+	 "options": ["attack", "defense", "retreat"],
+	 "labels":  ["攻撃", "防衛", "撤退"]},
+	{"key": "target",        "label": "ターゲット方針",
 	 "options": ["nearest", "weakest", "same_as_leader", "support"],
 	 "labels":  ["最近傍", "最弱優先", "リーダーと同じ", "援護"]},
 	{"key": "on_low_hp",    "label": "低HP時の行動",
@@ -44,8 +47,8 @@ const MEMBER_COLS: Array = [
 	 "options": ["nearest", "weakest", "same_as_leader", "support"],
 	 "labels":  ["最近傍", "最弱優先", "リーダーと同じ", "援護"]},
 	{"key": "battle_formation", "header": "隊形",
-	 "options": ["surround", "rush", "rear"],
-	 "labels":  ["包囲", "突進", "後衛"]},
+	 "options": ["surround", "rush", "rear", "gather"],
+	 "labels":  ["包囲", "突進", "後衛", "集結"]},
 	{"key": "combat",           "header": "戦闘",
 	 "options": ["attack", "defense", "flee"],
 	 "labels":  ["攻撃", "防御", "逃走"]},
@@ -57,8 +60,8 @@ const MEMBER_COLS: Array = [
 ## 個別指示列（ヒーラー専用）
 const HEALER_COLS: Array = [
 	{"key": "battle_formation", "header": "隊形",
-	 "options": ["surround", "rush", "rear"],
-	 "labels":  ["包囲", "突進", "後衛"]},
+	 "options": ["surround", "rush", "rear", "gather"],
+	 "labels":  ["包囲", "突進", "後衛", "集結"]},
 	{"key": "combat",           "header": "戦闘",
 	 "options": ["attack", "defense", "flee"],
 	 "labels":  ["攻撃", "防御", "逃走"]},
@@ -534,9 +537,53 @@ func _cycle_global_row(dir: int) -> void:
 	_sync_global_to_members(key, new_val)
 
 
+## 戦闘方針プリセット：class_id → battle_policy → {battle_formation, combat}
+const BATTLE_POLICY_PRESET: Dictionary = {
+	"fighter-sword":  {
+		"attack":  {"battle_formation": "surround", "combat": "attack"},
+		"defense": {"battle_formation": "gather",   "combat": "defense"},
+		"retreat": {"battle_formation": "gather",   "combat": "flee"},
+	},
+	"fighter-axe":    {
+		"attack":  {"battle_formation": "rush",   "combat": "attack"},
+		"defense": {"battle_formation": "gather", "combat": "defense"},
+		"retreat": {"battle_formation": "gather", "combat": "flee"},
+	},
+	"archer":         {
+		"attack":  {"battle_formation": "rear", "combat": "attack"},
+		"defense": {"battle_formation": "rear", "combat": "defense"},
+		"retreat": {"battle_formation": "rear", "combat": "flee"},
+	},
+	"scout":          {
+		"attack":  {"battle_formation": "surround", "combat": "attack"},
+		"defense": {"battle_formation": "gather",   "combat": "defense"},
+		"retreat": {"battle_formation": "gather",   "combat": "flee"},
+	},
+	"magician-fire":  {
+		"attack":  {"battle_formation": "rear", "combat": "attack"},
+		"defense": {"battle_formation": "rear", "combat": "defense"},
+		"retreat": {"battle_formation": "rear", "combat": "flee"},
+	},
+	"magician-water": {
+		"attack":  {"battle_formation": "rear", "combat": "attack"},
+		"defense": {"battle_formation": "rear", "combat": "defense"},
+		"retreat": {"battle_formation": "rear", "combat": "flee"},
+	},
+	"healer":         {
+		"attack":  {"battle_formation": "rear", "combat": "attack"},
+		"defense": {"battle_formation": "rear", "combat": "defense"},
+		"retreat": {"battle_formation": "rear", "combat": "flee"},
+	},
+}
+
+
 ## global_orders の変更を全メンバーの current_order に反映する（AI 互換キーのみ）
 func _sync_global_to_members(key: String, val: String) -> void:
 	if _party == null:
+		return
+	# battle_policy 変更時はクラス別プリセットを適用
+	if key == "battle_policy":
+		_apply_battle_policy_preset(val)
 		return
 	# current_order に存在するキー（move/target/on_low_hp/item_pickup）のみ同期
 	# move: 移動方針（move_policy）→ party_leader_ai が member.current_order.move として読む
@@ -548,6 +595,23 @@ func _sync_global_to_members(key: String, val: String) -> void:
 		if not is_instance_valid(ch):
 			continue
 		ch.current_order[key] = val
+
+
+## 戦闘方針プリセットを全メンバーに適用する
+func _apply_battle_policy_preset(policy: String) -> void:
+	if _party == null:
+		return
+	for m_v: Variant in _party.members:
+		var ch := m_v as Character
+		if not is_instance_valid(ch) or ch.character_data == null:
+			continue
+		var cid: String = ch.character_data.class_id
+		var class_presets: Dictionary = BATTLE_POLICY_PRESET.get(cid, {}) as Dictionary
+		if class_presets.is_empty():
+			continue
+		var preset: Dictionary = class_presets.get(policy, {}) as Dictionary
+		for pkey: String in preset:
+			ch.current_order[pkey] = preset.get(pkey, "") as String
 
 
 ## キャラクターの個別指示列定義を返す（ヒーラーは専用列、それ以外は共通列）

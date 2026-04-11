@@ -116,7 +116,7 @@ const GLOBAL_HP_POTION:   Array[String] = ["use", "never"]
 const GLOBAL_SP_MP_POTION: Array[String] = ["use", "never"]
 
 ## OrderWindow 個別指示オプション値（非ヒーラー）
-const MEMBER_FORMATION:    Array[String] = ["surround", "rush", "rear"]
+const MEMBER_FORMATION:    Array[String] = ["surround", "rush", "rear", "gather"]
 const MEMBER_COMBAT:       Array[String] = ["attack", "defense", "flee"]
 const MEMBER_ATTACK_TARGET: Array[String] = ["nearest", "weakest", "same_as_leader", "support"]
 const MEMBER_SPECIAL:      Array[String] = ["aggressive", "strong_enemy", "disadvantage", "never"]

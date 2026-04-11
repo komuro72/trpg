@@ -18,12 +18,13 @@ var _next_join_index: int = 0
 ## hp_potion:    HPポーション自動使用（use=瀕死時に自動使用/never=使わない）
 ## sp_mp_potion: SP/MPポーション自動使用（use=特殊攻撃前に自動使用/never=使わない）
 var global_orders: Dictionary = {
-	"move":         "follow",
-	"target":       "same_as_leader",
-	"on_low_hp":    "retreat",
-	"item_pickup":  "passive",
-	"hp_potion":    "use",
-	"sp_mp_potion": "use",
+	"move":          "follow",
+	"battle_policy": "attack",
+	"target":        "same_as_leader",
+	"on_low_hp":     "retreat",
+	"item_pickup":   "passive",
+	"hp_potion":     "use",
+	"sp_mp_potion":  "use",
 }
 
 

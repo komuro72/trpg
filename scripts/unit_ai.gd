@@ -566,6 +566,15 @@ func _generate_queue(strategy: Strategy, target: Character) -> Array:
 			# ターゲットが隊形ゾーン外にいる場合は追わない
 			if not _target_in_formation_zone(target):
 				return [{"action": "wait"}]
+			# 後衛：リーダーから離れすぎない（attack_range × 0.8 以内に留まる）
+			if _battle_formation == "rear" and _leader_ref != null and is_instance_valid(_leader_ref) and _leader_ref != _member:
+				var ar := float(_member.attack_range) if _member.character_data else 1.0
+				var dist_to_leader := _manhattan(_member.grid_pos, _leader_ref.grid_pos)
+				if float(dist_to_leader) > ar * 0.8:
+					# 上限超過：射程内なら攻撃、それ以外は待機
+					if _can_attack_target(target, _get_attack_type()):
+						return [{"action": "attack"}]
+					return [{"action": "wait"}]
 			# explore/spread は長いキューで頻繁な再評価を抑制
 			var repeat := 4 if (_move_policy == "spread" or _move_policy == "explore") else 1
 			var q: Array = []
@@ -996,6 +1005,10 @@ func _formation_satisfied() -> bool:
 				# 遠い場合は未満足 → リーダーに向かって移動する
 				return _manhattan(_member.grid_pos, _leader_ref.grid_pos) <= 3
 			return my_area == leader_area
+		"gather":
+			# パーティー重心から2タイル以内なら満足
+			var centroid_sat := _calc_party_centroid()
+			return _manhattan(_member.grid_pos, centroid_sat) <= 2
 		"guard_room":
 			if _guard_room_area.is_empty() or _map_data == null:
 				return true
@@ -1036,6 +1049,10 @@ func _target_in_formation_zone(target: Character) -> bool:
 				# 通路にいる場合は近距離チェックで代替
 				return _manhattan(_member.grid_pos, _leader_ref.grid_pos) <= 3
 			return target_area == leader_area
+		"gather":
+			# 重心から4タイル以内の敵を攻撃
+			var centroid_zone := _calc_party_centroid()
+			return _manhattan(target.grid_pos, centroid_zone) <= 4
 		"guard_room":
 			if _guard_room_area.is_empty() or _map_data == null:
 				return true
@@ -1072,12 +1089,34 @@ func _formation_move_goal() -> Vector2i:
 				return behind
 			# behind が通れない場合は隣接タイルにフォールバック
 			return _find_adjacent_goal(_leader_ref)
+		"gather":
+			# パーティー全メンバーの重心へ向かう
+			return _calc_party_centroid()
 		_:
 			# cluster / same_room → リーダーの隣接タイルへ
 			if _leader_ref == null or not is_instance_valid(_leader_ref) \
 					or _leader_ref == _member:
 				return _member.grid_pos
 			return _find_adjacent_goal(_leader_ref)
+
+
+## パーティー全メンバーのグリッド座標重心を返す
+func _calc_party_centroid() -> Vector2i:
+	if _party_peers.is_empty():
+		return _member.grid_pos if (_member != null and is_instance_valid(_member)) else Vector2i.ZERO
+	var sx := 0
+	var sy := 0
+	var cnt := 0
+	for peer_v: Variant in _party_peers:
+		var peer := peer_v as Character
+		if not is_instance_valid(peer):
+			continue
+		sx += peer.grid_pos.x
+		sy += peer.grid_pos.y
+		cnt += 1
+	if cnt == 0:
+		return _member.grid_pos if (_member != null and is_instance_valid(_member)) else Vector2i.ZERO
+	return Vector2i(sx / cnt, sy / cnt)
 
 
 # --------------------------------------------------------------------------
