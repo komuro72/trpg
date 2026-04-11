@@ -10,14 +10,20 @@ var active_character: Character = null
 ## 加入順インデックスカウンター（add_member() 呼び出しごとに増加）
 var _next_join_index: int = 0
 
-## パーティー全体の方針（OrderWindow の全体方針行が管理。将来 AI が参照予定）
+## パーティー全体の方針（OrderWindow の全体方針行が管理。AI の move_policy・各種行動条件に反映）
+## move:         全員の移動方針（move_policy と対応。follow/same_room/cluster/explore/standby）
+## target:       全員のデフォルトターゲット方針（nearest/weakest/same_as_leader/support）
+## on_low_hp:    低HP時の行動（keep_fighting/retreat/flee。NEAR_DEATH_THRESHOLD で判定）
+## item_pickup:  アイテム取得方針（aggressive=積極/passive=近くなら(ITEM_PICKUP_RANGE)/avoid=拾わない）
+## hp_potion:    HPポーション自動使用（use=瀕死時に自動使用/never=使わない）
+## sp_mp_potion: SP/MPポーション自動使用（use=特殊攻撃前に自動使用/never=使わない）
 var global_orders: Dictionary = {
-	"combat":       "aggressive",
+	"move":         "follow",
 	"target":       "nearest",
 	"on_low_hp":    "keep_fighting",
-	"item_pickup":  "aggressive",
-	"hp_potion":    "50pct",
-	"sp_mp_potion": "save",
+	"item_pickup":  "passive",
+	"hp_potion":    "use",
+	"sp_mp_potion": "never",
 }
 
 

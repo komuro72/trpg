@@ -3052,7 +3052,7 @@ Godot 4 では Tab・Esc キーが UI フォーカスナビゲーション / ui_
 | `sp_mp_potion` | use / never | 使う / 使わない | never |
 
 - 変更時に move/target/on_low_hp/item_pickup は全メンバーの `current_order` にも同期（AI 互換）
-- hp_potion / sp_mp_potion は `global_orders` のみ（AI 未接続。将来実装）
+- hp_potion / sp_mp_potion は `global_orders` に加え `PartyLeaderAI._global_orders` 経由で UnitAI にも渡す（Phase 13-6 で実装済み）
 
 **全体共通設定の選択肢定義**
 
@@ -3074,10 +3074,10 @@ Godot 4 では Tab・Esc キーが UI フォーカスナビゲーション / ui_
 - 使う（use）：特殊攻撃指示の条件を満たす状況でSP/MPが不足していたら使用。特殊攻撃指示が「使わない」の場合は使用しない
 - 使わない（never）：ポーションは使用しない（自動回復を待つ）
 
-**GlobalConstants に追加予定の定数**（次フェーズで実装）
-- `ITEM_PICKUP_RANGE`：近くなら拾うの距離閾値（暫定2マス）
-- `NEAR_DEATH_THRESHOLD`：瀕死判定のHP割合閾値（暫定25%）。HPポーション使用・ヒーラー回復判定・低HP時行動の閾値で共有
-- `DISADVANTAGE_THRESHOLD`：劣勢判定の味方平均HP割合閾値。特殊攻撃「劣勢なら使う」・深層移動判定で共有
+**GlobalConstants 定数**（Phase 13-6 で実装済み）
+- `ITEM_PICKUP_RANGE = 2`：近くなら拾うの距離閾値（マンハッタン距離2マス）
+- `NEAR_DEATH_THRESHOLD = 0.25`：瀕死判定のHP割合閾値（25%）。HPポーション使用・ヒーラー回復判定・low_hp行動の閾値で共有
+- `DISADVANTAGE_THRESHOLD = 0.6`：劣勢判定の味方平均HP割合閾値（60%）。特殊攻撃「劣勢なら使う」・深層移動判定で共有
 
 #### 個別設定（`character.current_order`）
 
@@ -3102,7 +3102,7 @@ Godot 4 では Tab・Esc キーが UI フォーカスナビゲーション / ui_
 #### 各指示の定義
 
 **移動**
-- 追従（follow）：操作キャラの1マス後ろに位置取る
+- 追従（follow）：リーダーの真後ろ1マスに位置取る（ブロック時は隣接フォールバック。マンハッタン距離2以内で満足）
 - 密集（cluster）：操作キャラの周囲1マスに位置取る
 - 同じ部屋（same_room）：同じ部屋にいれば自由に動く
 - 待機（standby）：その場から動かない
@@ -3126,11 +3126,11 @@ Godot 4 では Tab・Esc キーが UI フォーカスナビゲーション / ui_
 - 防御（defense）：ガードしながら反撃のみ
 - 逃走（flee）：戦闘を避けて離脱する
 
-**回復**（ヒーラー専用・heal_mode + heal_target を統合）
-- 積極回復（aggressive）：MPに余裕があれば積極的に回復する
-- リーダー優先（leader_first）：瀕死の味方がいたらリーダーを優先
-- 瀕死度優先（lowest_hp_first）：HP割合が最も低い味方を優先
-- 回復しない（none）：回復行動を取らない
+**回復**（ヒーラー専用・`heal_mode` キーで管理）
+- 積極回復（aggressive）：`NEAR_DEATH_THRESHOLD` 以下の味方がいれば回復する
+- リーダー優先（leader_first）：リーダーが瀕死なら最優先・それ以外は最低HP率の味方を回復
+- 瀕死度優先（lowest_hp_first）：HP割合が最も低い味方を優先（閾値なし・常時回復）
+- 回復しない（none）：回復行動を取らない（ヒーラーが戦闘に集中する）
 - 自分優先は選択肢に含めない（ヒーラーは他者優先のキャラクター設定）
 
 **特殊攻撃**

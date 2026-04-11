@@ -1519,6 +1519,47 @@ rank値: C=0, B=1, A=2, S=3
       - 援護：HP割合が最も低い味方に最も近い敵を狙う
       - 劣勢判定閾値（`GlobalConstants` 定数として定義予定）：味方パーティーの平均HP割合がこれを下回ると「劣勢」。深層移動判定など他ロジックと共有
   - **AI 変更なし（今フェーズ）**：character.current_order の既存キーは保持。battle_formation/combat/target は引き続き AI が参照
+- [x] Phase 13-6: Phase 13-5 確定仕様を AI ロジックに反映
+  - **`GlobalConstants.gd`：定数追加・定数配列更新**
+    - `ITEM_PICKUP_RANGE = 2`・`NEAR_DEATH_THRESHOLD = 0.25`・`DISADVANTAGE_THRESHOLD = 0.6` を追加
+    - `GLOBAL_MOVE`（旧 `GLOBAL_COMBAT` の後方互換エイリアス追加）・`GLOBAL_TARGET`・`GLOBAL_HP_POTION`・`GLOBAL_SP_MP_POTION` を更新
+    - `MEMBER_FORMATION`（surround/rush/rear）・`MEMBER_COMBAT`（attack/defense/flee）・`MEMBER_ATTACK_TARGET`・`MEMBER_SPECIAL`・`MEMBER_HEAL`・`MEMBER_HEAL_TARGET` を新規追加
+  - **`Party.gd`：`global_orders` キー・デフォルト値を更新**
+    - `"combat"` → `"move"`（移動方針）にキー名変更。デフォルト `"follow"`
+    - `"item_pickup"` デフォルトを `"aggressive"` → `"passive"` に変更
+    - `"hp_potion"` デフォルトを `"50pct"` → `"use"` に変更
+    - `"sp_mp_potion"` デフォルトを `"save"` → `"never"` に変更
+  - **`OrderWindow.gd`：GLOBAL_ROWS・MEMBER_COLS・HEALER_COLS を更新**
+    - `GLOBAL_ROWS`：`move` キーを `combat` キーから差し替え。`hp_potion`/`sp_mp_potion` 行を追加
+    - `MEMBER_COLS`：`battle_formation`（surround/rush/rear）・`combat`（attack/defense/flee）・`target`・`special_skill`（4択）
+    - `HEALER_COLS`：`battle_formation`・`combat`・`heal_mode`（aggressive/leader_first/lowest_hp_first/none）・`special_skill`
+    - `_sync_global_to_members()`：sync_keys を `["move","target","on_low_hp","item_pickup"]` に更新
+    - `CLASS_EQUIP_TYPES` に `"magician-water"` を追加
+  - **`PartyLeaderAI.gd`：global_orders 参照・AI ロジック更新**
+    - `_global_orders: Dictionary` フィールド追加。`set_global_orders(orders)` メソッドで Party.global_orders への参照を受け取る
+    - `on_low_hp` 判定閾値を `GlobalConstants.NEAR_DEATH_THRESHOLD` に統一
+    - `combat` match に後方互換値（aggressive/support/standby）を追加
+    - ターゲット `"support"` 方針を実装（`_select_support_target()`：HP割合最低の味方に最も近い敵を選択）
+    - `receive_order()` 呼び出しに `hp_potion`・`sp_mp_potion` フィールドを追加
+  - **`UnitAI.gd`：formation/heal/potion ロジック更新**
+    - `_hp_potion`・`_sp_mp_potion` フィールド追加。`receive_order()` でセット
+    - `follow` move_policy を実装（leader の真後ろ1マスをターゲット。ブロック時は隣接に落ちる）
+    - `_get_path_method()`：`rear`→ASTAR_FLANK、`rush`/その他→ASTAR
+    - `_find_heal_target()` を `heal_mode` 対応に拡張（`_find_heal_target_by_ratio()` ヘルパー追加）
+      - `leader_first`：リーダーが瀕死なら最優先・それ以外は最低 HP 率メンバー
+      - `lowest_hp_first`：HP 率が最低のメンバー（閾値なし・常時回復）
+      - `aggressive`（デフォルト）：`NEAR_DEATH_THRESHOLD` 以下のメンバー
+      - `none`：回復しない（null を返す）
+    - `_generate_potion_queue()` 追加：HP/SP/MP ポーション自動使用ロジック
+      - HPポーション：`hp_potion=="use"` かつ HP率 < `NEAR_DEATH_THRESHOLD` のとき inventory から検索して使用
+      - SP/MPポーション：`sp_mp_potion=="use"` かつ SP/MP率 < 50% のとき使用
+    - `_find_potion_in_inventory()` ヘルパー追加（category=="consumable" + effect キーで検索）
+    - `_generate_queue()` 内で heal/buff より前にポーション使用を優先
+    - `_start_action()` に `"use_potion"` アクション処理を追加（`character.use_consumable(item)` 呼び出し）
+  - **`PartyManager.gd`：`set_global_orders()` メソッド追加**（LeaderAI に参照を転送）
+  - **`game_map.gd`：`set_global_orders()` 呼び出し追加**
+    - `_setup_hero()` で `_hero_manager.set_global_orders(party.global_orders)` を呼ぶ
+    - `_merge_npc_into_player_party()` / `_merge_player_into_npc_party()` で合流 NPC に渡す
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム

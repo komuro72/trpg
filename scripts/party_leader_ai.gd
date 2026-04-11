@@ -27,6 +27,9 @@ var _reeval_timer:   float = 0.0
 var _initial_count:  int   = 0  ## 初期メンバー数（逃走判定の基準）
 var _friendly_list:  Array[Character] = []  ## 攻撃対象の友好キャラ一覧（敵 AI 用）
 var _visited_areas:  Dictionary = {}  ## 訪問済みエリアID集合（全 UnitAI で共有）
+## パーティー全体方針（Party.global_orders の参照。hp_potion/sp_mp_potion 等を UnitAI に伝達）
+## set_global_orders() で Party.global_orders dict への参照を受け取る（参照共有なので変更が反映される）
+var _global_orders:  Dictionary = {}
 
 
 ## メンバー・プレイヤー・マップデータをセットアップし、各メンバーの UnitAI を生成する
@@ -55,6 +58,12 @@ func setup(members: Array[Character], player: Character, map_data: MapData,
 ## 攻撃対象となる友好キャラ一覧を設定する（敵 AI のターゲット選択に使用）
 func set_friendly_list(friendlies: Array[Character]) -> void:
 	_friendly_list = friendlies
+
+
+## Party.global_orders への参照を受け取る（GDScript では Dictionary は参照型のため変更が自動反映）
+## game_map が NpcManager / hero_manager セットアップ時に呼ぶ
+func set_global_orders(orders: Dictionary) -> void:
+	_global_orders = orders
 
 
 ## 生存している友好キャラが1体以上いるか判定する
@@ -222,10 +231,16 @@ func _assign_orders() -> void:
 				effective_strat = int(Strategy.WAIT)
 			else:
 				# 個別の戦闘指示から変換
+				# combat: "attack" → ATTACK（旧 "aggressive" も互換）
+				#         "defense" / "standby" / "support" → WAIT（旧値も互換）
+				#         "flee" → FLEE
 				match combat:
-					"aggressive": effective_strat = int(Strategy.ATTACK)
-					"support":    effective_strat = int(Strategy.WAIT)
-					"standby":    effective_strat = int(Strategy.WAIT)
+					"attack", "aggressive":
+						effective_strat = int(Strategy.ATTACK)
+					"flee":
+						effective_strat = int(Strategy.FLEE)
+					"defense", "support", "standby":
+						effective_strat = int(Strategy.WAIT)
 					_:
 						# DEFEND 等のパーティー専用戦略は WAIT に変換
 						if int(_party_strategy) > int(Strategy.WAIT):
@@ -233,8 +248,9 @@ func _assign_orders() -> void:
 						else:
 							effective_strat = int(_party_strategy)
 
-		# 2. 個別低HP条件（on_low_hp）：HP50%未満で処理
-		if member.max_hp > 0 and float(member.hp) / float(member.max_hp) < 0.5:
+		# 2. 個別低HP条件（on_low_hp）：NEAR_DEATH_THRESHOLD 未満で発動
+		if member.max_hp > 0 \
+				and float(member.hp) / float(member.max_hp) < GlobalConstants.NEAR_DEATH_THRESHOLD:
 			match on_low_hp:
 				"flee":
 					effective_strat = int(Strategy.FLEE)
@@ -255,6 +271,9 @@ func _assign_orders() -> void:
 			"same_as_leader":
 				target = leader_target if leader_target != null \
 					else _select_target_for(member)
+			"support":
+				# 援護優先：最もHPが低いパーティーメンバーの近くの敵を狙う
+				target = _select_support_target(member)
 			_:
 				target = _select_target_for(member)
 
@@ -270,6 +289,8 @@ func _assign_orders() -> void:
 			"move":             move_policy,
 			"battle_formation": battle_form,
 			"leader":           formation_ref,
+			"hp_potion":        _global_orders.get("hp_potion",    "never") as String,
+			"sp_mp_potion":     _global_orders.get("sp_mp_potion", "never") as String,
 		})
 
 
@@ -408,4 +429,25 @@ func _select_target_for(_member: Character) -> Character:
 ## サブクラスがオーバーライドして複数候補から選択できる。
 ## デフォルトは _select_target_for() と同一（ターゲットが1体のみの場合など）
 func _select_weakest_target(member: Character) -> Character:
+	return _select_target_for(member)
+
+
+## 援護優先ターゲット選択：最もHPが低いパーティーメンバーに最も近い脅威（敵）を返す
+## パーティーメンバーが1人なら通常のターゲット選択にフォールバック
+func _select_support_target(member: Character) -> Character:
+	# 最もHPが低いパーティーメンバーを探す（自分以外）
+	var weakest_ally: Character = null
+	var min_ratio := 2.0
+	for ally: Character in _party_members:
+		if not is_instance_valid(ally) or ally.hp <= 0:
+			continue
+		if ally == member:
+			continue
+		var ratio := float(ally.hp) / float(maxi(ally.max_hp, 1))
+		if ratio < min_ratio:
+			min_ratio = ratio
+			weakest_ally = ally
+	# その味方への脅威（最も近い敵）を選ぶ
+	if weakest_ally != null:
+		return _select_target_for(weakest_ally)
 	return _select_target_for(member)

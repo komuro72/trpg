@@ -18,70 +18,70 @@ signal switch_requested(new_character: Character)
 
 ## 全体方針の行定義（key: Party.global_orders のキー）
 const GLOBAL_ROWS: Array = [
-	{"key": "combat",       "label": "戦闘方針",
-	 "options": ["aggressive", "defensive", "standby", "follow", "retreat"],
-	 "labels":  ["積極攻撃", "防衛", "待機", "追従", "撤退"],
-	 "short_labels": ["積極", "防衛", "待機", "追従", "撤退"]},
+	{"key": "move",         "label": "移動方針",
+	 "options": ["follow", "same_room", "cluster", "explore", "standby"],
+	 "labels":  ["追従", "同じ部屋", "密集", "探索", "待機"],
+	 "short_labels": ["追従", "同室", "密集", "探索", "待機"]},
 	{"key": "target",       "label": "ターゲット方針",
-	 "options": ["nearest", "weakest", "focus"],
-	 "labels":  ["最近傍", "最弱", "集中"],
-	 "short_labels": ["近傍", "最弱", "集中"]},
+	 "options": ["nearest", "weakest", "same_as_leader", "support"],
+	 "labels":  ["最近傍", "最弱", "リーダーと同じ", "援護優先"],
+	 "short_labels": ["近傍", "最弱", "同じ", "援護"]},
 	{"key": "on_low_hp",    "label": "低HP時の行動",
 	 "options": ["keep_fighting", "retreat", "flee"],
 	 "labels":  ["戦い続ける", "後退", "逃走"],
 	 "short_labels": ["継続", "後退", "逃走"]},
 	{"key": "item_pickup",  "label": "アイテム取得",
 	 "options": ["aggressive", "passive", "avoid"],
-	 "labels":  ["積極的に拾う", "近くのみ", "拾わない"],
-	 "short_labels": ["積極", "近くのみ", "拾わない"]},
+	 "labels":  ["積極的に拾う", "近くなら", "拾わない"],
+	 "short_labels": ["積極", "近くなら", "拾わない"]},
 	{"key": "hp_potion",    "label": "HPポーション",
-	 "options": ["50pct", "25pct", "never"],
-	 "labels":  ["HP50%以下", "HP25%以下", "使わない"],
-	 "short_labels": ["HP50%", "HP25%", "使わない"]},
+	 "options": ["use", "never"],
+	 "labels":  ["瀕死なら使う", "使わない"],
+	 "short_labels": ["瀕死時", "使わない"]},
 	{"key": "sp_mp_potion", "label": "SP/MPポーション",
-	 "options": ["save", "aggressive"],
-	 "labels":  ["節約", "積極使用"],
-	 "short_labels": ["節約", "積極"]},
+	 "options": ["use", "never"],
+	 "labels":  ["使う", "使わない"],
+	 "short_labels": ["使う", "使わない"]},
 ]
 
 ## 個別指示列（非ヒーラー）: 名前列を除く4列
 const MEMBER_COLS: Array = [
 	{"key": "battle_formation", "header": "隊形",
-	 "options": ["surround", "front", "rear", "same_as_leader"],
-	 "labels":  ["包囲", "前衛", "後衛", "リーダーと同じ"],
-	 "short_labels": ["包囲", "前衛", "後衛", "同じ"]},
+	 "options": ["surround", "rush", "rear"],
+	 "labels":  ["包囲", "突撃", "後衛"],
+	 "short_labels": ["包囲", "突撃", "後衛"]},
 	{"key": "combat",           "header": "戦闘",
-	 "options": ["aggressive", "support", "standby"],
-	 "labels":  ["積極攻撃", "援護", "待機"],
-	 "short_labels": ["積極", "援護", "待機"]},
+	 "options": ["attack", "defense", "flee"],
+	 "labels":  ["攻撃", "防御", "逃走"],
+	 "short_labels": ["攻撃", "防御", "逃走"]},
 	{"key": "target",           "header": "ターゲット",
-	 "options": ["nearest", "weakest", "same_as_leader"],
-	 "labels":  ["最近傍", "最弱", "リーダーと同じ"],
-	 "short_labels": ["近傍", "最弱", "同じ"]},
+	 "options": ["nearest", "weakest", "same_as_leader", "support"],
+	 "labels":  ["最近傍", "最弱", "リーダーと同じ", "援護優先"],
+	 "short_labels": ["近傍", "最弱", "同じ", "援護"]},
 	{"key": "special_skill",    "header": "特殊攻撃",
-	 "options": ["auto", "manual"],
-	 "labels":  ["自動", "手動"],
-	 "short_labels": ["自動", "手動"]},
+	 "options": ["aggressive", "strong_enemy", "disadvantage", "never"],
+	 "labels":  ["積極使用", "強敵時", "劣勢時", "使わない"],
+	 "short_labels": ["積極", "強敵", "劣勢", "無効"]},
 ]
 
 ## 個別指示列（ヒーラー専用）
 const HEALER_COLS: Array = [
 	{"key": "battle_formation", "header": "隊形",
-	 "options": ["surround", "front", "rear", "same_as_leader"],
-	 "labels":  ["包囲", "前衛", "後衛", "リーダーと同じ"],
-	 "short_labels": ["包囲", "前衛", "後衛", "同じ"]},
+	 "options": ["surround", "rush", "rear"],
+	 "labels":  ["包囲", "突撃", "後衛"],
+	 "short_labels": ["包囲", "突撃", "後衛"]},
+	{"key": "combat",           "header": "戦闘",
+	 "options": ["attack", "defense", "flee"],
+	 "labels":  ["攻撃", "防御", "逃走"],
+	 "short_labels": ["攻撃", "防御", "逃走"]},
 	{"key": "heal_mode",        "header": "回復",
-	 "options": ["aggressive", "support", "standby"],
-	 "labels":  ["積極回復", "援護", "待機"],
-	 "short_labels": ["積極", "援護", "待機"]},
-	{"key": "heal_target",      "header": "回復対象",
-	 "options": ["lowest_hp", "nearest", "same_as_leader"],
-	 "labels":  ["HP最低", "最近傍", "リーダーと同じ"],
-	 "short_labels": ["HP低", "近傍", "同じ"]},
+	 "options": ["aggressive", "leader_first", "lowest_hp_first", "none"],
+	 "labels":  ["積極回復", "リーダー優先", "HP最低優先", "回復しない"],
+	 "short_labels": ["積極", "リーダー", "HP低", "なし"]},
 	{"key": "special_skill",    "header": "特殊攻撃",
-	 "options": ["auto", "manual"],
-	 "labels":  ["自動", "手動"],
-	 "short_labels": ["自動", "手動"]},
+	 "options": ["aggressive", "strong_enemy", "disadvantage", "never"],
+	 "labels":  ["積極使用", "強敵時", "劣勢時", "使わない"],
+	 "short_labels": ["積極", "強敵", "劣勢", "無効"]},
 ]
 
 const TOTAL_COLS := 5  ## 名前列1 + 個別指示列4
@@ -100,12 +100,13 @@ const SUBMENU_ITEMS: Array[String] = ["操作切替", "アイテム"]
 
 ## クラスID → 装備可能アイテムタイプ一覧
 const CLASS_EQUIP_TYPES: Dictionary = {
-	"fighter-sword": ["sword",  "armor_plate", "shield"],
-	"fighter-axe":   ["axe",    "armor_plate", "shield"],
-	"archer":        ["bow",    "armor_cloth"],
-	"scout":         ["dagger", "armor_cloth"],
-	"magician-fire": ["staff",  "armor_robe"],
-	"healer":        ["staff",  "armor_robe"],
+	"fighter-sword":   ["sword",  "armor_plate", "shield"],
+	"fighter-axe":     ["axe",    "armor_plate", "shield"],
+	"archer":          ["bow",    "armor_cloth"],
+	"scout":           ["dagger", "armor_cloth"],
+	"magician-fire":   ["staff",  "armor_robe"],
+	"magician-water":  ["staff",  "armor_robe"],
+	"healer":          ["staff",  "armor_robe"],
 }
 
 var _party:          Party
@@ -551,8 +552,9 @@ func _cycle_global_row(dir: int) -> void:
 func _sync_global_to_members(key: String, val: String) -> void:
 	if _party == null:
 		return
-	# current_order に存在するキー（combat/target/on_low_hp/item_pickup）のみ同期
-	var sync_keys: Array[String] = ["combat", "target", "on_low_hp", "item_pickup"]
+	# current_order に存在するキー（move/target/on_low_hp/item_pickup）のみ同期
+	# move: 移動方針（move_policy）→ party_leader_ai が member.current_order.move として読む
+	var sync_keys: Array[String] = ["move", "target", "on_low_hp", "item_pickup"]
 	if not sync_keys.has(key):
 		return
 	for m_v: Variant in _party.members:

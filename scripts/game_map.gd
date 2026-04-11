@@ -264,6 +264,8 @@ func _setup_hero() -> void:
 	_hero_manager.set_vision_controlled(true)  # VisionSystem には登録しない
 	_hero_manager.suppress_ai_log = true  # プレイヤー操作中はログ不要
 	_hero_manager.activate()
+	# Party.global_orders への参照を渡す（hp_potion / sp_mp_potion 設定を AI に反映）
+	_hero_manager.set_global_orders(party.global_orders)
 	# hero パーティーはプレイヤーが手動で階段を操作するため、
 	# フロア遷移スコア判断を無効化して "explore" のみ返すようにする
 	if _hero_manager.enemy_ai is NpcLeaderAI:
@@ -818,6 +820,8 @@ func _merge_npc_into_player_party(nm: NpcManager) -> void:
 			_member_to_npc_manager[member] = nm
 	# 合流済みフラグを立てる（NPC が hero を隊形基準として追従するようになる）
 	nm.set_joined_to_player(true)
+	# Party.global_orders を合流済み NPC パーティー AI に反映する
+	nm.set_global_orders(party.global_orders)
 	# VisionSystem の管理から外す（常に表示）
 	if vision_system != null:
 		vision_system.remove_npc_manager(nm)
@@ -859,6 +863,8 @@ func _merge_player_into_npc_party(nm: NpcManager) -> void:
 		player_controller.player_is_leader = false  # NPC がリーダー：LB/RB 切り替えを無効化
 	# 合流済みフラグを立てる（NPC メンバーが hero を隊形基準として追従するようになる）
 	nm.set_joined_to_player(true)
+	# Party.global_orders を合流済み NPC パーティー AI に反映する
+	nm.set_global_orders(party.global_orders)
 	# 左パネルのハイライトは操作キャラ（hero）のまま維持する
 	if left_panel != null and player_controller != null:
 		left_panel.set_active_character(player_controller.character)
@@ -1755,15 +1761,8 @@ func _load_tile_textures() -> void:
 ## 1/4領域を切り出すことで1セルに対して適切な密度で表示する
 ## 512px以下の画像はそのまま返す
 func _crop_single_tile(tex: Texture2D) -> Texture2D:
-	var size := tex.get_size()
-	var tile_size := mini(int(size.x), int(size.y)) / 2
-	# 512px以下の画像は1タイル分とみなしてそのまま返す
-	if tile_size <= 256:
-		return tex
-	var atlas := AtlasTexture.new()
-	atlas.atlas = tex
-	atlas.region = Rect2(0, 0, tile_size, tile_size)
-	return atlas
+	# 画像全体を1タイルとして使用する
+	return tex
 
 
 func _draw() -> void:

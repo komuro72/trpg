@@ -86,6 +86,12 @@ func set_friendly_list(friendlies: Array[Character]) -> void:
 		_leader_ai.set_friendly_list(friendlies)
 
 
+## Party.global_orders dict への参照を LeaderAI に渡す（hp_potion / sp_mp_potion 設定の反映に使用）
+func set_global_orders(orders: Dictionary) -> void:
+	if _leader_ai != null:
+		_leader_ai.set_global_orders(orders)
+
+
 ## 後方互換エイリアス（game_map が set_all_enemies() を呼んでいるため）
 func set_all_enemies(all_enemies: Array[Character]) -> void:
 	set_all_members(all_enemies)
