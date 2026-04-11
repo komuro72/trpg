@@ -977,7 +977,7 @@ func _formation_satisfied() -> bool:
 			if _leader_ref == null or not is_instance_valid(_leader_ref) \
 					or _leader_ref == _member:
 				return true
-			return _manhattan(_member.grid_pos, _leader_ref.grid_pos) <= 2
+			return _manhattan(_member.grid_pos, _leader_ref.grid_pos) <= 1
 		"cluster":
 			if _leader_ref == null or not is_instance_valid(_leader_ref) \
 					or _leader_ref == _member:
