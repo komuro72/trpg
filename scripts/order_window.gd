@@ -1084,6 +1084,9 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 	var c_lbl   := Color(0.65, 0.65, 0.80)
 	var c_val   := Color(0.90, 0.90, 0.95)
 	var c_bonus := Color(0.50, 0.55, 0.70)
+	var c_dim   := Color(0.42, 0.42, 0.58)
+	# 装備・アイテムセクションで使うベースX（左ステータス列の先頭と同じ位置）
+	var lbl_x   := lbl_l
 
 	# ── ステータス区切り ──────────────────────────────────────────────────────
 	_draw_sep(px, y, panel_w, pad)
