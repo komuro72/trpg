@@ -185,11 +185,12 @@ func _assign_orders() -> void:
 		var battle_form    : String = order.get("battle_formation", "surround")
 
 		# ── 移動方針設定 ──────────────────────────────────────────────────
-		# 敵は move 制約なし（spread）。味方は current_order.move を使用
+		# 敵は move 制約なし（spread）。味方は global_orders.move を優先使用（OrderWindow の全体方針）
 		var move_policy  : String    = "spread"
 		var formation_ref: Character = null
 		if member.is_friendly:
-			move_policy = order.get("move", "same_room") as String
+			# "move" は GLOBAL_ROWS 専用キーのため global_orders から読む（未設定時は current_order にフォールバック）
+			move_policy = _global_orders.get("move", order.get("move", "same_room")) as String
 			if leader_char == null or leader_char == member:
 				# この member がリーダー（または1人パーティー）の場合：
 				# ① hero がこのパーティーのリーダー（hero パーティー）
