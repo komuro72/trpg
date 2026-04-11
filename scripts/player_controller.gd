@@ -76,8 +76,10 @@ var _move_buffer: Vector2i = Vector2i.ZERO
 var _attack_buffer: bool = false
 
 ## 向き変更ディレイ
-var _is_turning: bool  = false
-var _turn_timer: float = 0.0
+var _is_turning:       bool     = false
+var _turn_timer:       float    = 0.0
+## 回転中に保留している移動方向（回転完了後にキーが押されていれば移動を実行）
+var _pending_move_dir: Vector2i = Vector2i.ZERO
 
 ## 直前に攻撃した敵（ターゲット選択のデフォルトフォーカス優先候補）
 var _last_attacked_target: Character = null
@@ -397,7 +399,8 @@ func _process_normal(_delta: float) -> void:
 			# 会話ウィンドウが開いた（is_blocked が立った）場合は攻撃しない
 			if is_blocked:
 				return
-		_using_v_slot = false
+		_using_v_slot     = false
+		_pending_move_dir = Vector2i.ZERO
 		if character.is_guarding:
 			character.is_guarding = false
 		_move_buffer = Vector2i.ZERO
@@ -421,6 +424,12 @@ func _process_guard_and_move(_delta: float) -> void:
 			_is_turning = false
 			if is_instance_valid(character):
 				character.complete_turn()
+			# 回転完了：キーがまだ押されていれば移動を実行
+			var cur_dir := _get_input_direction()
+			var move_dir := cur_dir if cur_dir != Vector2i.ZERO else _pending_move_dir
+			_pending_move_dir = Vector2i.ZERO
+			if move_dir != Vector2i.ZERO:
+				_try_move(move_dir)
 		return
 
 	var dir := _get_input_direction()
@@ -550,6 +559,7 @@ func _enter_pre_delay() -> void:
 		return
 
 	_attack_buffer       = false
+	_pending_move_dir    = Vector2i.ZERO
 	_mode                = Mode.PRE_DELAY
 	_move_buffer         = Vector2i.ZERO
 	_pre_delay_remaining = float(sd.get("pre_delay", 0.0))
@@ -1220,21 +1230,26 @@ func _compute_facing_for(dir: Vector2i) -> Character.Direction:
 
 func _try_move(dir: Vector2i) -> void:
 	var new_pos := character.grid_pos + dir
+	# ガード中は向き固定
+	if not character.is_guarding:
+		var target_facing := _compute_facing_for(new_pos - character.grid_pos)
+		if target_facing != character.facing:
+			# 向きが異なる → まず回転だけ行い移動しない
+			# 回転完了時にキーが押し続けられていれば _pending_move_dir から移動を再試行する
+			_is_turning = true
+			_turn_timer = TURN_DELAY / GlobalConstants.game_speed
+			_pending_move_dir = dir
+			character.start_turn_animation(target_facing, _turn_timer, new_pos - character.grid_pos)
+			return
+	# 向きが一致している（またはガード中）→ 直接移動
 	if _can_move_to(new_pos):
 		# ガード中は移動速度50%（duration を2倍にする）
 		var duration := MOVE_INTERVAL / GlobalConstants.game_speed
 		if character.is_guarding:
 			duration *= 2.0
 		character.move_to(new_pos, duration)
-	else:
-		# 移動できなくてもその方向を向く（ガード中は向き固定）
-		if not character.is_guarding:
-			var target_facing := _compute_facing_for(new_pos - character.grid_pos)
-			if target_facing != character.facing:
-				_is_turning = true
-				_turn_timer = TURN_DELAY / GlobalConstants.game_speed
-				character.start_turn_animation(target_facing, _turn_timer, new_pos - character.grid_pos)
-		# NPC との会話は Aボタン押下で起動（バンプ検出は廃止）
+	# 移動できない場合（ガード中 or 向き一致で壁など）は何もしない
+	# NPC との会話は Aボタン押下で起動（バンプ検出は廃止）
 
 
 ## マンハッタン距離1の未加入NPCキャラクターを返す（いなければ null）

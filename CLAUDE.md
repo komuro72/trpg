@@ -1562,6 +1562,19 @@ rank値: C=0, B=1, A=2, S=3
   - **`game_map.gd`：`set_global_orders()` 呼び出し追加**
     - `_setup_hero()` で `_hero_manager.set_global_orders(party.global_orders)` を呼ぶ
     - `_merge_npc_into_player_party()` / `_merge_player_into_npc_party()` で合流 NPC に渡す
+- [x] Phase 13-7: 移動前回転実装（向きだけ変える操作）
+  - **`player_controller.gd`**
+    - `_pending_move_dir: Vector2i` フィールド追加（回転中に保留する移動方向）
+    - `_try_move()` を変更：入力方向が現在の向きと異なる場合、まず回転のみ行い移動しない
+      - 旧：移動可能なら `move_to()` を即時呼ぶ。ブロック時のみ向き変更ディレイを使用
+      - 新：向きが異なれば常に `TURN_DELAY` の回転を先行し `_pending_move_dir` に方向を保存して `return`
+      - 向きが一致している場合（または同方向連続移動）は従来通り即時移動
+      - ガード中は向き固定のため回転スキップ
+    - `_process_guard_and_move()` の回転完了処理を変更：
+      - 回転完了時にキーがまだ押されていれば移動を実行
+      - キーが離されていれば向きだけ変わって停止（`_pending_move_dir` をクリア）
+    - `_enter_pre_delay()` と攻撃入力時に `_pending_move_dir` をクリア
+  - **AI（`unit_ai.gd`）は変更なし**：AI は `move_to()` を直接呼ぶため影響なし
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム
