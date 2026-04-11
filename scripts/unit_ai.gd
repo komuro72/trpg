@@ -1287,7 +1287,7 @@ func _generate_potion_queue() -> Array:
 	if _hp_potion == "use" and _member.max_hp > 0:
 		var hp_ratio := float(_member.hp) / float(_member.max_hp)
 		if hp_ratio < GlobalConstants.NEAR_DEATH_THRESHOLD:
-			var potion := _find_potion_in_inventory(cd, "hp")
+			var potion: Variant = _find_potion_in_inventory(cd, "hp")
 			if potion != null:
 				return [{"action": "use_potion", "item": potion}]
 
@@ -1295,11 +1295,11 @@ func _generate_potion_queue() -> Array:
 	if _sp_mp_potion == "use":
 		var is_magic := cd.class_id in ["magician-fire", "magician-water", "healer"]
 		if is_magic and _member.max_mp > 0 and float(_member.mp) / float(_member.max_mp) < 0.5:
-			var potion := _find_potion_in_inventory(cd, "mp")
+			var potion: Variant = _find_potion_in_inventory(cd, "mp")
 			if potion != null:
 				return [{"action": "use_potion", "item": potion}]
 		elif not is_magic and _member.max_sp > 0 and float(_member.sp) / float(_member.max_sp) < 0.5:
-			var potion := _find_potion_in_inventory(cd, "sp")
+			var potion: Variant = _find_potion_in_inventory(cd, "sp")
 			if potion != null:
 				return [{"action": "use_potion", "item": potion}]
 
