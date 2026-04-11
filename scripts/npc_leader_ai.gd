@@ -354,7 +354,7 @@ func _auto_share_potions() -> void:
 		var hp_ratio := float(needer.hp) / float(needer.max_hp) if needer.max_hp > 0 else 1.0
 		if hp_ratio < GlobalConstants.NEAR_DEATH_THRESHOLD:
 			if _find_potion_in_cd(cd, "hp") == null:
-				var pot := _take_potion_from_party(needer, "hp")
+				var pot: Variant = _take_potion_from_party(needer, "hp")
 				if pot != null:
 					cd.inventory.append(pot)
 		# SP/MP ポーション受け渡し
@@ -362,13 +362,13 @@ func _auto_share_potions() -> void:
 		if use_mp:
 			var mp_ratio := float(needer.mp) / float(needer.max_mp) if needer.max_mp > 0 else 1.0
 			if mp_ratio < 0.5 and _find_potion_in_cd(cd, "mp") == null:
-				var pot := _take_potion_from_party(needer, "mp")
+				var pot: Variant = _take_potion_from_party(needer, "mp")
 				if pot != null:
 					cd.inventory.append(pot)
 		elif needer.max_sp > 0:
 			var sp_ratio := float(needer.sp) / float(needer.max_sp)
 			if sp_ratio < 0.5 and _find_potion_in_cd(cd, "sp") == null:
-				var pot := _take_potion_from_party(needer, "sp")
+				var pot: Variant = _take_potion_from_party(needer, "sp")
 				if pot != null:
 					cd.inventory.append(pot)
 
