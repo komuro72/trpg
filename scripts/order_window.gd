@@ -599,52 +599,63 @@ func _get_col_label(ch: Character, col_param_index: int) -> String:
 
 # ── ステータスデータ ──────────────────────────────────────────────────────────
 
-## ステータス表示用の行データを生成する
-## 各要素: { "label", "type": "num"|"float"|"str"|"hp_mp"|"pct", ... }
-func _get_stat_rows(ch: Character) -> Array:
-	var rows: Array = []
+## ステータス表示用の行データを生成する（2列レイアウト用）
+## 戻り値: { "left": Array, "right": Array }
+## 各要素: { "label", "type": "num"|"str"|"hp_mp", ... }
+func _get_stat_rows(ch: Character) -> Dictionary:
+	var left:  Array = []
+	var right: Array = []
 	if ch == null or ch.character_data == null:
-		return rows
+		return {"left": left, "right": right}
 	var cd: CharacterData = ch.character_data
-
-	rows.append({"label": "HP",           "type": "hp_mp",  "current": ch.hp,   "max": ch.max_hp})
 	var _magic_classes: Array = ["magician-fire", "magician-water", "healer"]
-	if cd.class_id in _magic_classes:
-		rows.append({"label": "MP",       "type": "hp_mp",  "current": ch.mp,   "max": ch.max_mp})
-	else:
-		rows.append({"label": "SP",       "type": "hp_mp",  "current": ch.sp,   "max": ch.max_sp})
 	var _is_magic_cls := cd.class_id in _magic_classes
+
+	# ── 左列 ──────────────────────────────────────────────────────────────────
+	left.append({"label": "HP", "type": "hp_mp", "current": ch.hp, "max": ch.max_hp})
+	if _is_magic_cls:
+		left.append({"label": "MP", "type": "hp_mp", "current": ch.mp, "max": ch.max_mp})
+	else:
+		left.append({"label": "SP", "type": "hp_mp", "current": ch.sp, "max": ch.max_sp})
 	var power_label := "魔法威力" if _is_magic_cls else "物理威力"
-	rows.append({"label": power_label,    "type": "num",    "base": cd.power,
-		"bonus": cd.get_weapon_power_bonus()})
-	var skill_label := "魔法技量" if _is_magic_cls else "物理技量"
-	rows.append({"label": skill_label, "type": "num",
-		"base": cd.skill, "bonus": 0})
-	# 防御強度（クラス固有値＋装備補正。保有または装備補正がある場合のみ表示）
+	left.append({"label": power_label, "type": "num",
+		"base": cd.power, "bonus": cd.get_weapon_power_bonus()})
+	# 技量（ヒーラーは必ず命中のため非表示）
+	if cd.attack_type != "heal":
+		var skill_label := "魔法技量" if _is_magic_cls else "物理技量"
+		left.append({"label": skill_label, "type": "num", "base": cd.skill, "bonus": 0})
+	# 防御強度（保有または装備補正がある場合のみ）
 	var brf_bonus := cd.get_weapon_block_right_bonus()
 	if cd.block_right_front > 0 or brf_bonus > 0:
-		rows.append({"label": "右手防御強度", "type": "num", "base": cd.block_right_front, "bonus": brf_bonus})
+		left.append({"label": "右手防御強度", "type": "num",
+			"base": cd.block_right_front, "bonus": brf_bonus})
 	var blf_bonus := cd.get_shield_block_left_bonus()
 	if cd.block_left_front > 0 or blf_bonus > 0:
-		rows.append({"label": "左手防御強度", "type": "num", "base": cd.block_left_front,  "bonus": blf_bonus})
+		left.append({"label": "左手防御強度", "type": "num",
+			"base": cd.block_left_front, "bonus": blf_bonus})
 	var bf_bonus := cd.get_weapon_block_front_bonus()
 	if cd.block_front > 0 or bf_bonus > 0:
-		rows.append({"label": "両手防御強度", "type": "num", "base": cd.block_front,        "bonus": bf_bonus})
-	rows.append({"label": "防御技量",      "type": "num",
-		"base": cd.defense_accuracy, "bonus": 0})
+		left.append({"label": "両手防御強度", "type": "num",
+			"base": cd.block_front, "bonus": bf_bonus})
+
+	# ── 右列 ──────────────────────────────────────────────────────────────────
 	var phys_equip := cd.get_total_physical_resistance_score() - cd.physical_resistance
-	rows.append({"label": "物理耐性",      "type": "num",
+	right.append({"label": "物理耐性", "type": "num",
 		"base": cd.physical_resistance, "bonus": phys_equip})
 	var mag_equip := cd.get_total_magic_resistance_score() - cd.magic_resistance
-	rows.append({"label": "魔法耐性",      "type": "num",
+	right.append({"label": "魔法耐性", "type": "num",
 		"base": cd.magic_resistance, "bonus": mag_equip})
-	rows.append({"label": "攻撃タイプ",    "type": "str",
+	right.append({"label": "防御技量", "type": "num", "base": cd.defense_accuracy, "bonus": 0})
+	right.append({"label": "攻撃タイプ", "type": "str",
 		"value": ATTACK_TYPE_LABELS.get(cd.attack_type, cd.attack_type) as String})
-	rows.append({"label": "射程(タイル)",  "type": "num",    "base": cd.attack_range, "bonus": cd.get_weapon_range_bonus()})
-	rows.append({"label": "ランク",        "type": "str",    "value": cd.rank})
-	rows.append({"label": "統率力",        "type": "num",    "base": cd.leadership, "bonus": 0})
-	rows.append({"label": "従順度",        "type": "num",    "base": roundi(cd.obedience * 100.0), "bonus": 0})
-	return rows
+	# 射程：最終値のみ表示
+	var final_range := cd.attack_range + cd.get_weapon_range_bonus()
+	right.append({"label": "射程(タイル)", "type": "str", "value": str(final_range)})
+	right.append({"label": "統率力", "type": "num", "base": cd.leadership, "bonus": 0})
+	right.append({"label": "従順度", "type": "num",
+		"base": roundi(cd.obedience * 100.0), "bonus": 0})
+
+	return {"left": left, "right": right}
 
 
 ## front.png → face.png の順で画像テクスチャを返す（キャッシュ付き）
@@ -711,8 +722,10 @@ func _on_draw() -> void:
 
 	# ステータスセクションの事前計算
 	var sel_ch    := _get_selected_char()
-	var stat_rows := _get_stat_rows(sel_ch)
-	var n_stat    := stat_rows.size()
+	var stat_rows  := _get_stat_rows(sel_ch)
+	var _left_rows : Array = stat_rows.get("left",  []) as Array
+	var _right_rows: Array = stat_rows.get("right", []) as Array
+	var n_stat     := maxi(_left_rows.size(), _right_rows.size())
 
 	# ステータスセクション合計高さ
 	var status_section_h := 0.0
@@ -1000,31 +1013,77 @@ func _draw_log_section(px: float, y_start: float, panel_w: float, pad: float,
 		y += stat_h
 
 
-## ステータス詳細・装備・アイテムセクションを描画する（左：front画像 / 右：ステータス数値）
+## 1行分のステータスデータを指定 X 座標に描画するヘルパー
+func _draw_one_stat_row(row: Dictionary,
+		lbl_x: float, base_x: float, bonus_x: float, final_x: float,
+		ry: float, stat_h: float, fs_stat: int,
+		c_lbl: Color, c_val: Color, c_bonus: Color) -> void:
+	var label: String = row.get("label", "") as String
+	var rtype: String = row.get("type",  "str") as String
+	_control.draw_string(_font, Vector2(lbl_x, ry + stat_h * 0.75),
+		label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_lbl)
+	match rtype:
+		"hp_mp":
+			var cur: int = row.get("current", 0) as int
+			var mx:  int = row.get("max",     0) as int
+			var ratio := float(cur) / float(mx) if mx > 0 else 1.0
+			var vc := Color(1.0, 0.25, 0.25)
+			if   ratio > 0.6: vc = c_val
+			elif ratio > 0.3: vc = Color(1.0, 0.95, 0.30)
+			elif ratio > 0.1: vc = Color(1.0, 0.60, 0.20)
+			_control.draw_string(_font, Vector2(base_x, ry + stat_h * 0.75),
+				"%d / %d" % [cur, mx], HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, vc)
+		"num":
+			var base:  int = row.get("base",  0) as int
+			var bonus: int = row.get("bonus", 0) as int
+			var final_v := base + bonus
+			var fc := Color(1.0, 1.0, 0.55) if bonus != 0 else c_val
+			_control.draw_string(_font, Vector2(base_x,  ry + stat_h * 0.75),
+				str(base),            HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_val)
+			_control.draw_string(_font, Vector2(bonus_x, ry + stat_h * 0.75),
+				"%+d" % bonus,        HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_bonus)
+			_control.draw_string(_font, Vector2(final_x, ry + stat_h * 0.75),
+				"→" + str(final_v),  HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, fc)
+		"str":
+			var val: String = row.get("value", "") as String
+			_control.draw_string(_font, Vector2(base_x, ry + stat_h * 0.75),
+				val, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_val)
+
+
+## ステータス詳細・装備・アイテムセクションを描画する（左：front画像 / 右：2列ステータス）
 func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
-		ch: Character, stat_rows: Array, stat_h: float, fs_stat: int) -> void:
+		ch: Character, stat_rows: Dictionary, stat_h: float, fs_stat: int) -> void:
 	var y     := y_start
 	var avail := panel_w - pad * 2.0
 
-	# ── 左右分割レイアウト ────────────────────────────────────────────────────
-	# 左列: front画像（最大 180px 正方形）
-	# 右列: ステータス数値テーブル
+	# ── レイアウト計算 ────────────────────────────────────────────────────────
+	# 左端: front画像（最大 180px 正方形）
+	# 右側: ステータス2列
 	var img_col_w: float = minf(avail * 0.22, 180.0)
 	var col_gap   := pad
 	var stats_x0  := px + pad + img_col_w + col_gap
 	var stats_avail := px + panel_w - pad - stats_x0
 
-	# ステータス列 X 座標（ラベル 48%、素値 17%、補正値 17%、最終値 18%）
-	var lbl_x   := stats_x0
-	var base_x  := stats_x0 + stats_avail * 0.48
-	var bonus_x := stats_x0 + stats_avail * 0.65
-	var final_x := stats_x0 + stats_avail * 0.82
+	# ステータス2列の分割（列間 8px）
+	var half_gap := 8.0
+	var half_w   := (stats_avail - half_gap) * 0.5
+
+	# 左ステータス列のサブ列 X 座標（ラベル 50%、素値 17%、補正値 16%、最終値 17%）
+	var lbl_l   := stats_x0
+	var base_l  := stats_x0 + half_w * 0.50
+	var bonus_l := stats_x0 + half_w * 0.67
+	var final_l := stats_x0 + half_w * 0.83
+	# 右ステータス列のサブ列 X 座標
+	var rx0     := stats_x0 + half_w + half_gap
+	var lbl_r   := rx0
+	var base_r  := rx0 + half_w * 0.50
+	var bonus_r := rx0 + half_w * 0.67
+	var final_r := rx0 + half_w * 0.83
 
 	var c_head  := Color(0.80, 0.80, 1.00)
 	var c_lbl   := Color(0.65, 0.65, 0.80)
 	var c_val   := Color(0.90, 0.90, 0.95)
 	var c_bonus := Color(0.50, 0.55, 0.70)
-	var c_dim   := Color(0.42, 0.42, 0.58)
 
 	# ── ステータス区切り ──────────────────────────────────────────────────────
 	_draw_sep(px, y, panel_w, pad)
@@ -1041,86 +1100,34 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 		_control.draw_texture_rect(tex,
 			Rect2(px + pad, y, img_col_w, img_col_w), false)
 	else:
-		# プレースホルダー（キャラカラーを暗くして表示）
 		var ph_col := ch.placeholder_color \
 			if (is_instance_valid(ch) and ch.placeholder_color != Color.BLACK) \
 			else Color(0.30, 0.30, 0.45)
 		_control.draw_rect(Rect2(px + pad, y, img_col_w, img_col_w),
 			Color(ph_col.r * 0.5, ph_col.g * 0.5, ph_col.b * 0.5, 0.85))
 
-	# ── 右側: タイトル + 列ヘッダー ───────────────────────────────────────────
-	_control.draw_string(_font, Vector2(lbl_x, y + float(fs_stat)),
-		"ステータス：" + cname,
-		HORIZONTAL_ALIGNMENT_LEFT, stats_avail, fs_stat, c_head)
-	_control.draw_string(_font, Vector2(base_x,  y + float(fs_stat)),
-		"素値",  HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_dim)
-	_control.draw_string(_font, Vector2(bonus_x, y + float(fs_stat)),
-		"補正値", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_dim)
-	_control.draw_string(_font, Vector2(final_x, y + float(fs_stat)),
-		"最終値", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_dim)
+	# ── ヘッダー（名前 クラス ランク） ────────────────────────────────────────
+	var class_jp: String = GlobalConstants.CLASS_NAME_JP.get(cd.class_id, cd.class_id) as String
+	var header_str := cname + "  " + class_jp + "  " + cd.rank
+	_control.draw_string(_font, Vector2(lbl_l, y + float(fs_stat)),
+		header_str, HORIZONTAL_ALIGNMENT_LEFT, stats_avail, fs_stat, c_head)
 	y += float(fs_stat) + stat_h
 
-	# ── 右側: ステータス行 ────────────────────────────────────────────────────
-	for row_v: Variant in stat_rows:
-		var row   := row_v as Dictionary
-		var label : String = row.get("label", "") as String
-		var rtype : String = row.get("type",  "str") as String
-
-		_control.draw_string(_font, Vector2(lbl_x, y + stat_h * 0.75),
-			label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_lbl)
-
-		match rtype:
-			"hp_mp":
-				var cur : int = row.get("current", 0) as int
-				var mx  : int = row.get("max",     0) as int
-				var ratio := float(cur) / float(mx) if mx > 0 else 1.0
-				var vc := Color(1.0, 0.25, 0.25)
-				if   ratio > 0.6: vc = c_val
-				elif ratio > 0.3: vc = Color(1.0, 0.95, 0.30)
-				elif ratio > 0.1: vc = Color(1.0, 0.60, 0.20)
-				_control.draw_string(_font, Vector2(base_x, y + stat_h * 0.75),
-					"%d / %d" % [cur, mx],
-					HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, vc)
-			"num":
-				var base  : int = row.get("base",  0) as int
-				var bonus : int = row.get("bonus", 0) as int
-				var final_v := base + bonus
-				var fc := Color(1.0, 1.0, 0.55) if bonus != 0 else c_val
-				_control.draw_string(_font, Vector2(base_x,  y + stat_h * 0.75),
-					str(base),           HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_val)
-				_control.draw_string(_font, Vector2(bonus_x, y + stat_h * 0.75),
-					"%+d" % bonus,       HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_bonus)
-				_control.draw_string(_font, Vector2(final_x, y + stat_h * 0.75),
-					"→ " + str(final_v), HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, fc)
-			"float":
-				var base  : float = row.get("base",  0.0) as float
-				var bonus : float = row.get("bonus", 0.0) as float
-				var final_v := base + bonus
-				var fc := Color(1.0, 1.0, 0.55) if bonus != 0.0 else c_val
-				_control.draw_string(_font, Vector2(base_x,  y + stat_h * 0.75),
-					"%.2f" % base,       HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_val)
-				_control.draw_string(_font, Vector2(bonus_x, y + stat_h * 0.75),
-					"%+.2f" % bonus,     HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_bonus)
-				_control.draw_string(_font, Vector2(final_x, y + stat_h * 0.75),
-					"→ %.2f" % final_v, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, fc)
-			"pct":
-				# 耐性(0.0〜1.0)をパーセント表示（base + bonus → total%）
-				var base  : float = row.get("base",  0.0) as float
-				var bonus : float = row.get("bonus", 0.0) as float
-				var final_v := base + bonus
-				var fc := Color(1.0, 1.0, 0.55) if bonus != 0.0 else c_val
-				_control.draw_string(_font, Vector2(base_x,  y + stat_h * 0.75),
-					"%d%%" % int(base * 100.0),        HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_val)
-				_control.draw_string(_font, Vector2(bonus_x, y + stat_h * 0.75),
-					"%+d%%" % int(bonus * 100.0),      HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_bonus)
-				_control.draw_string(_font, Vector2(final_x, y + stat_h * 0.75),
-					"→ %d%%" % int(final_v * 100.0),  HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, fc)
-			"str":
-				var val: String = row.get("value", "") as String
-				_control.draw_string(_font, Vector2(base_x, y + stat_h * 0.75),
-					val, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_val)
-
-		y += stat_h
+	# ── 2列ステータス行 ───────────────────────────────────────────────────────
+	var left_rows:  Array = stat_rows.get("left",  []) as Array
+	var right_rows: Array = stat_rows.get("right", []) as Array
+	var n_rows := maxi(left_rows.size(), right_rows.size())
+	for i: int in range(n_rows):
+		var ry := y + float(i) * stat_h
+		if i < left_rows.size():
+			_draw_one_stat_row(left_rows[i] as Dictionary,
+				lbl_l, base_l, bonus_l, final_l, ry, stat_h, fs_stat,
+				c_lbl, c_val, c_bonus)
+		if i < right_rows.size():
+			_draw_one_stat_row(right_rows[i] as Dictionary,
+				lbl_r, base_r, bonus_r, final_r, ry, stat_h, fs_stat,
+				c_lbl, c_val, c_bonus)
+	y += float(n_rows) * stat_h
 
 	# 画像の下端まで y を進める（画像がステータス行より長い場合）
 	var img_bottom := y_start + 13.0 + img_col_w

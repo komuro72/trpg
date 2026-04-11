@@ -1584,6 +1584,19 @@ rank値: C=0, B=1, A=2, S=3
     - `_auto_equip_members()`：パーティー全体の未装備品を item_type ごとにプール → 現装備が最弱のメンバーから順に最良アイテムを装備。旧装備はインベントリに戻す。`CharacterData._equip_item()` + `refresh_stats_from_equipment()` で反映
     - `_auto_share_potions()`：HP が NEAR_DEATH_THRESHOLD 未満のメンバーが HP ポーションを持っていない場合、他メンバーから1個受け取る。SP/MP 50%未満も同様（kind="sp"/"mp"）
     - ヘルパーメソッド：`_item_stats_sum()` / `_get_equipped_for_type()` / `_find_potion_in_cd()` / `_take_potion_from_party()`
+- [x] Phase 13-9: OrderWindow ステータス表示改善（ヘッダー刷新・2列化）
+  - **`order_window.gd`**
+    - `_get_stat_rows()` の戻り値を `Array` → `Dictionary {"left": Array, "right": Array}` に変更
+    - 「ランク」行を廃止（ヘッダー行に統合）
+    - ヒーラーの「魔法技量」行を非表示（`attack_type=="heal"` 時スキップ）
+    - 射程を「str」型で最終値のみ表示（素値・補正値列を省略）
+    - **ヘッダー行を刷新**：`"ステータス：名前"` → `"名前  クラス名(日本語)  ランク"` の1行に変更
+    - **ステータスを2列化**：
+      - 左列：HP / SP・MP / 物理・魔法威力 / 物理・魔法技量 / 右手・左手・両手防御強度（保有時のみ）
+      - 右列：物理耐性 / 魔法耐性 / 防御技量 / 攻撃タイプ / 射程 / 統率力 / 従順度
+      - 各列は独立したサブ列（ラベル 50% / 素値 17% / 補正値 16% / 最終値 17%）
+    - `_draw_one_stat_row()` ヘルパーメソッドを追加（行描画を共通化）
+    - `_on_draw()` の `n_stat` 計算を `maxi(left.size(), right.size())` に更新
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム
