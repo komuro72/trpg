@@ -3371,6 +3371,68 @@ OrderWindow の `GLOBAL_ROWS` に表示行として追加（move 行の直後）
 
 ---
 
+## DebugWindow（F1 デバッグウィンドウ）✅ 完了
+
+### 概要
+F1 キーで画面中央に表示/非表示トグル。ゲームは進行継続。
+- CanvasLayer（layer=15）・`process_mode = PROCESS_MODE_ALWAYS`
+- 画面幅 70%・高さ 80% の半透明パネル（`scripts/debug_window.gd`）
+
+### レイアウト
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ■ DEBUG WINDOW  [F1で閉じる]  Floor: N                       │
+├─────────────────────────────────────────────────────────────┤
+│  上半分（55%）：パーティー状態（0.2秒ごとに更新）              │
+│                                                             │
+│  [敵] ゴブリン(斧戦士)  生存:2/3  戦略:攻撃                  │
+│    ゴブリン(斧戦士)[C]  HP:30/55                             │
+│      form=surround  cbt=attack  tgt=nearest                 │
+│                                                             │
+│  [NPC] アリス(弓使い)  生存:2/2  戦略:探索                   │
+│    ★アリス(弓使い)[B]  HP:80/80 [操作中]                    │
+│                                                             │
+│  [プレイヤー]                                                │
+│    ★ノエル(剣士)[A]  HP:72/80                               │
+├─────────────────────────────────────────────────────────────┤
+│  下半分（45%）：combat/ai ログ（最新50件）                    │
+│  [AI] ゴブリン: 待機→攻撃（敵発見）                          │
+│  ゴブリン の攻撃：ノエル へ中ダメージ（HP 72/80）             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 実装詳細
+
+#### `scripts/debug_window.gd`
+| 定数 | 値 | 説明 |
+|------|-----|------|
+| LOG_MAX | 50 | ログ最大件数 |
+| FS | 12 | フォントサイズ |
+| LINE_H | 15.0 | 1行の高さ（px） |
+| REDRAW_INTERVAL | 0.20s | パーティー状態の再描画間隔 |
+
+- `setup(party, get_enemy_managers, get_npc_managers, get_floor, hero)` — Callable で参照渡し（フロア遷移後も常に最新データを参照）
+- `MessageLog.debug_log_added` シグナルを購読し、combat/ai メッセージをリアルタイムで受信
+
+#### `party_leader_ai.gd` 追加メソッド
+- `get_current_strategy_name() -> String` — 現在の戦略を日本語名で返す
+
+#### `party_manager.gd` 追加メソッド
+- `get_strategy_name() -> String` — leader_ai の `get_current_strategy_name()` を委譲
+
+### `MessageLog` の変更点
+| 変更点 | 内容 |
+|--------|------|
+| `debug_log_added` シグナル追加 | `(text: String, color: Color)` — DebugWindow が購読 |
+| `add_combat()` / `add_ai()` | `entries` に追加しない。`debug_log_added` のみ emit |
+| `get_visible_entries()` | `entries`（system / battle のみ）をそのまま返す |
+| `debug_visible` / `toggle_debug()` | 削除 |
+
+MessageWindow は `get_visible_entries()` を使うため、system / battle メッセージのみ表示される。
+OrderWindow のログ行も同様（`entries` には combat/ai が格納されなくなった）。
+
+---
+
 ## Git / GitHub
 - リポジトリ: https://github.com/komuro72/trpg
 - ブランチ: master

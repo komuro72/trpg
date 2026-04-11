@@ -80,6 +80,7 @@ var _dialogue_npc_manager: NpcManager  ## 現在会話中の NpcManager
 var _dialogue_npc_initiates: bool = false
 var npc_dialogue_window: NpcDialogueWindow  ## NPC会話専用ウィンドウ
 var pause_menu: PauseMenu  ## ポーズメニュー
+var debug_window: DebugWindow  ## F1 デバッグウィンドウ
 
 
 func _ready() -> void:
@@ -106,8 +107,8 @@ func _input(event: InputEvent) -> void:
 			KEY_TAB:
 				_toggle_order_window()
 			KEY_F1:
-				if MessageLog != null:
-					MessageLog.toggle_debug()
+				if debug_window != null:
+					debug_window.visible = not debug_window.visible
 			KEY_F2:
 				_print_debug_floor_info()
 			KEY_F5:
@@ -555,6 +556,18 @@ func _setup_panels() -> void:
 	consumable_bar.update_character(hero)
 	if player_controller != null:
 		player_controller.consumable_bar = consumable_bar
+
+	# デバッグウィンドウ（F1 で表示/非表示トグル）
+	debug_window = DebugWindow.new()
+	debug_window.name = "DebugWindow"
+	add_child(debug_window)
+	debug_window.setup(
+		party,
+		func() -> Array: return enemy_managers,
+		func() -> Array: return npc_managers,
+		func() -> int: return _current_floor_index,
+		hero
+	)
 
 	# 起動時の初期フロア・エリア名を表示
 	if area_name_display != null:

@@ -58,6 +58,13 @@ func set_vision_system(vs: VisionSystem) -> void:
 		_leader_ai.set_vision_system(vs)
 
 
+## 現在の戦略名を返す（DebugWindow 表示用）
+func get_strategy_name() -> String:
+	if _leader_ai != null:
+		return _leader_ai.get_current_strategy_name()
+	return "-"
+
+
 ## 現在の探索移動方針を返す（game_map が NPC の階段使用意図を判定するために使用）
 func get_explore_move_policy() -> String:
 	if _leader_ai != null:

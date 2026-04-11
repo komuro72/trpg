@@ -1,27 +1,33 @@
 ## メッセージログ管理（Autoload: MessageLog）
 ## MessageWindow と OrderWindow が共有するログバッファを管理する
-## メッセージの種類（system / combat / ai）と色分け、デバッグ表示フィルタを提供する
+## メッセージの種類（system / combat / ai / battle）と色分けを提供する
+##
+## 表示先の分離：
+##   system / battle → MessageWindow（常時表示）
+##   combat / ai     → DebugWindow のみ（debug_log_added シグナル経由）
 
 extends Node
 
 ## メッセージ種別
 enum MsgType { SYSTEM, COMBAT, AI, BATTLE }
 
-## デバッグメッセージ（COMBAT / AI）の表示切替。F1 キーでトグル
-var debug_visible: bool = false
-
 const LOG_MAX: int = 50
 
 ## ログエントリ: { "text": String, "type": MsgType, "color": Color }
+## system / battle のみ格納する（combat / ai は entries に追加しない）
 var entries: Array[Dictionary] = []
 
-## 新しいエントリが追加されたとき発火するシグナル
+## 新しいエントリが追加されたとき発火するシグナル（system / battle 用）
 signal entry_added()
 
 ## バトルメッセージが追加されたとき発火するシグナル
 ## MessageWindow がバスト画像とテキストを更新するために購読する
 ## attacker / defender は Character 実体（null 可）。死亡判定に使用
 signal battle_message_added(attacker_data: CharacterData, defender_data: CharacterData, message: String, attacker: Character, defender: Character)
+
+## combat / ai メッセージが追加されたとき発火するシグナル（DebugWindow 用）
+## エリアフィルタを無視して全メッセージを発火する
+signal debug_log_added(text: String, color: Color)
 
 ## エリアフィルタ用（setup_area_filter で設定）
 var _map_data: MapData = null
@@ -40,19 +46,16 @@ func add_system(text: String) -> void:
 	_add(text, MsgType.SYSTEM, Color(1.0, 1.0, 1.0))
 
 
-## 戦闘計算メッセージ（黄）— grid_pos でエリアフィルタ
+## 戦闘計算メッセージ（黄）— entries には追加しない。debug_log_added シグナルのみ発火
 func add_combat(text: String, grid_pos: Vector2i = Vector2i(-1, -1)) -> void:
-	# デバッグモード中はエリア外の戦闘ログも表示する
-	if not debug_visible and not _is_in_player_area(grid_pos):
-		return
-	_add(text, MsgType.COMBAT, Color(1.0, 1.0, 0.3))
+	var color := Color(1.0, 1.0, 0.3)
+	debug_log_added.emit(text, color)
 
 
-## AI戦略変更メッセージ（水色）— grid_pos でエリアフィルタ
+## AI戦略変更メッセージ（水色）— entries には追加しない。debug_log_added シグナルのみ発火
 func add_ai(text: String, grid_pos: Vector2i = Vector2i(-1, -1)) -> void:
-	if not _is_in_player_area(grid_pos):
-		return
-	_add(text, MsgType.AI, Color(0.4, 0.9, 1.0))
+	var color := Color(0.4, 0.9, 1.0)
+	debug_log_added.emit(text, color)
 
 
 ## バトルメッセージ（オレンジ）— エリアフィルタなし・battle_message_added シグナルも発火
@@ -74,23 +77,10 @@ func add_battle(attacker_data: CharacterData, defender_data: CharacterData,
 	battle_message_added.emit(attacker_data, defender_data, message, attacker, defender)
 
 
-## デバッグ表示トグル
-func toggle_debug() -> void:
-	debug_visible = not debug_visible
-	entry_added.emit()
-
-
-## 現在の表示フィルタに合致するエントリのみ返す
-## デバッグOFF時は SYSTEM と BATTLE のみ表示（COMBAT/AI は非表示）
+## 現在の表示フィルタに合致するエントリのみ返す（system / battle のみ）
+## ※ combat / ai は entries に格納されないため常に SYSTEM と BATTLE のみ返す
 func get_visible_entries() -> Array[Dictionary]:
-	if debug_visible:
-		return entries
-	var result: Array[Dictionary] = []
-	for e: Dictionary in entries:
-		var t: int = int(e.get("type", 0))
-		if t == int(MsgType.SYSTEM) or t == int(MsgType.BATTLE):
-			result.append(e)
-	return result
+	return entries
 
 
 ## grid_pos のエリアがプレイヤーエリアと一致するか判定する

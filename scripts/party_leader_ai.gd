@@ -395,6 +395,11 @@ func _strategy_to_preset_name(strat: Strategy) -> String:
 	return "不明"
 
 
+## 現在の戦略名を返す（DebugWindow から参照する用途）
+func get_current_strategy_name() -> String:
+	return _strategy_to_preset_name(_party_strategy)
+
+
 ## 戦略変更の理由を返す（サブクラスがオーバーライド可能）
 func _get_strategy_change_reason() -> String:
 	match _party_strategy:

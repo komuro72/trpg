@@ -171,7 +171,7 @@ assets/images/tiles/
 | ターゲット循環（TARGETING中） | 矢印キー | LB / RB | ターゲット選択中のみ有効 |
 | 指示／ステータスウィンドウ | Tab | Select / Back | |
 | ポーズメニュー開閉 | Esc | Start | |
-| AIデバッグパネル ON/OFF | F1 | — | |
+| DebugWindowの表示/非表示 | F1 | — | 画面中央にデバッグウィンドウをトグル表示（ゲーム進行継続） |
 | デバッグ情報コンソール出力 | F2 | — | キャラ・フロア・占有タイル情報を user://debug_floor_info.txt に書き出し |
 | シーン再スタート | F5 | — | |
 
@@ -188,6 +188,20 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 - 全階層で左右キーが使える（右=決定、左=戻る）
 - OrderWindowトップレベルで「戻る」を押すとウィンドウを閉じる（Tab/Selectと同じ）
 - テーブル内の指示値切替（移動/隊形/戦闘/ターゲット/低HP/アイテム取得の各列）は左右キーで値を切替。「決定/戻る」は名前列・全体方針行・ログ行でのみ適用
+
+### デバッグウィンドウ（DebugWindow）
+- F1 キーで画面中央に表示/非表示トグル。ゲームは進行継続
+- 画面幅70%・高さ80%の半透明パネル（CanvasLayer layer=15）
+- **上半分（55%）**：現在フロアの全パーティー状態をリアルタイム表示（0.2秒ごとに更新）
+  - 表示対象：敵パーティー（赤系）・NPCパーティー（緑系）・プレイヤーパーティー（青系）
+  - 各パーティー：[種別] リーダー名(クラス)  生存:x/y  戦略:xxx
+  - 各メンバー：★操作中  名前(クラス)[ランク]  HP:x/y  [スタン][ガード]
+  - メンバー個別指示概要（battle_formation/combat/target または heal）
+  - HP比率で色分け：50%超=白、25-50%=黄、25%以下=赤
+- **下半分（45%）**：combat/ai ログ（最新50件・新着が下に追加）
+  - combat=黄色、ai=水色（MessageWindow と同じ色分け）
+  - `MessageLog.debug_log_added` シグナル経由で受信（エリアフィルタなし・全メッセージ表示）
+- MessageWindow には combat/ai メッセージは流れない（system/battle のみ表示）
 
 ### 指示／ステータスウィンドウ（OrderWindow）
 - 専用ボタンでいつでも開閉可能（ポーズなし・時間進行継続）
@@ -469,8 +483,8 @@ rank値: C=0, B=1, A=2, S=3
     - [x] 左パネル（LeftPanel.gd）：フェイスアイコン・名前・HPバー・MPバー・状態
       - フェイスアイコンは face.png（なければ front.png）を TextureRect ノードで表示
     - [x] 右パネル（RightPanel.gd）：可視敵の種類・数・ランク（ランク色分け）
-    - [x] ~~AIデバッグパネル（RightPanel下半分）~~：Phase 10-2準備で廃止。代わりにMessageWindowのデバッグメッセージ（F1でON/OFF）に移行
-    - [x] メッセージウィンドウ（MessageWindow.gd）：フィールド画面下部に5行固定表示。MessageLog（Autoload）で共有バッファ管理。メッセージ種別（system=白/combat=黄/ai=水色）で色分け。F1でデバッグメッセージ（combat/ai）のON/OFF切替。**デバッグモード中（F1 ON）はエリア外（他部屋・他フロア）の戦闘ログもエリアフィルターを無視して表示**（通常時は非表示のまま）
+    - [x] ~~AIデバッグパネル（RightPanel下半分）~~：Phase 10-2準備で廃止。代わりにDebugWindowへ移行（F1でトグル）
+    - [x] メッセージウィンドウ（MessageWindow.gd）：フィールド画面下部に5行固定表示。MessageLog（Autoload）で共有バッファ管理。メッセージ種別（system=白/battle=オレンジ）のみ表示。combat/aiメッセージはDebugWindowのみに表示
     - [x] エリア名表示（AreaNameDisplay.gd）：エリア入室時にフィールド上部中央にエリア名を常時表示（名前なしエリアは非表示）
 - [ ] Phase 6: 仲間AI・操作切替
   - [x] Phase 6-0: 準備（クラス・ステータス・グラフィック仕様の反映＋AIリファクタリング）
@@ -739,7 +753,7 @@ rank値: C=0, B=1, A=2, S=3
       - MessageLog（Autoload）を新設。メッセージ種別（system=白/combat=黄/ai=水色）と色分け、デバッグフィルタ
       - MessageWindow をフィールド画面下部5行固定表示にリファクタリング。自動スクロール
       - OrderWindow のログ行が MessageLog の共有バッファを参照するよう統合
-      - F1キーを MessageLog のデバッグメッセージ表示トグルに転用（デフォルトON）
+      - F1キーを DebugWindow の表示/非表示トグルに転用（旧：MessageLog.debug_visibleトグル）
       - 各リーダーAI（Goblin/Wolf/Hobgoblin/Default/NPC）に戦略変更時のログ出力を追加
         - ログフォーマット：`[AI] {名前}: {旧}→{新}（{理由}）`（例：`[AI] ゴブリン: 待機→攻撃（敵発見）`）
         - プレイヤー操作中のメンバーがいるパーティーはログ抑制
@@ -1428,7 +1442,7 @@ rank値: C=0, B=1, A=2, S=3
   - 既存エントリが上に流れ、最新エントリがウィンドウ下端から滑り込む視覚効果
   - **時間停止なし**：スクロール中も `world_time_running` は変更しない
   - スクロール中にウィンドウ下端を超えるエントリは描画をスキップ（正常な見切れ）
-  - F1 デバッグ表示のデフォルトを ON → OFF に変更（`MessageLog.debug_visible = false`）
+  - F1 デバッグ表示のデフォルトを ON → OFF に変更（後に DebugWindow 方式へ移行）
   - 上端パディングを 4px → 8px に拡大（`avail_h = box_h - 12.0`・`entry_y` の最低値を `by + 8.0` に変更）。スクロール後に最上段エントリが上端に食い込む問題を修正
   - **上端クリッピング修正**：エントリ描画を `SubViewportContainer`（`_svc`）+ `SubViewport`（`_svp`）+ 内部 Control（`_scroll_content`）構成に変更。`_on_scroll_draw()` でローカル座標描画。SubViewport のサイズ境界がピクセル単位のクリップ領域になる。スクロール中に `start_g - 1`（退場中グループ）も y<0 に描画し、上端から滑らかに消えるように修正
 - [x] Phase 13-4: ダンジョン部屋形状・障害物改修
