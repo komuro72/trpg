@@ -605,13 +605,20 @@ func _apply_battle_policy_preset(policy: String) -> void:
 		var ch := m_v as Character
 		if not is_instance_valid(ch) or ch.character_data == null:
 			continue
-		var cid: String = ch.character_data.class_id
-		var class_presets: Dictionary = BATTLE_POLICY_PRESET.get(cid, {}) as Dictionary
-		if class_presets.is_empty():
-			continue
-		var preset: Dictionary = class_presets.get(policy, {}) as Dictionary
-		for pkey: String in preset:
-			ch.current_order[pkey] = preset.get(pkey, "") as String
+		if _is_healer(ch):
+			# ヒーラー専用プリセット：隊形=rear、戦闘=方針に対応、回復=lowest_hp_first
+			var healer_combat: String = {"attack": "attack", "defense": "defense", "retreat": "flee"}.get(policy, "attack") as String
+			ch.current_order["battle_formation"] = "rear"
+			ch.current_order["combat"]           = healer_combat
+			ch.current_order["heal_mode"]        = "lowest_hp_first"
+		else:
+			var cid: String = ch.character_data.class_id
+			var class_presets: Dictionary = BATTLE_POLICY_PRESET.get(cid, {}) as Dictionary
+			if class_presets.is_empty():
+				continue
+			var preset: Dictionary = class_presets.get(policy, {}) as Dictionary
+			for pkey: String in preset:
+				ch.current_order[pkey] = preset.get(pkey, "") as String
 
 
 ## キャラクターの個別指示列定義を返す（ヒーラーは専用列、それ以外は共通列）

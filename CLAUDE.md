@@ -1604,7 +1604,7 @@ rank値: C=0, B=1, A=2, S=3
     - `GLOBAL_ROWS` に `battle_policy`（戦闘方針）行を追加（move の直後）
     - `MEMBER_COLS` / `HEALER_COLS` の `battle_formation` オプションに `"gather"` を追加
     - `BATTLE_POLICY_PRESET` 定数を追加：クラスID × 戦闘方針 → {battle_formation, combat} のプリセットテーブル（7クラス × 3方針）
-    - `_apply_battle_policy_preset(policy)` メソッド追加：戦闘方針変更時に全メンバーへプリセット一括適用
+    - `_apply_battle_policy_preset(policy)` メソッド追加：戦闘方針変更時に全メンバーへプリセット一括適用。ヒーラーは専用プリセット（rear/各combat/lowest_hp_first）を適用、非ヒーラーは BATTLE_POLICY_PRESET テーブルを参照
     - `_sync_global_to_members()` に `battle_policy` 変更時のプリセット適用分岐を追加
   - **`unit_ai.gd`**
     - `_calc_party_centroid()` ヘルパー追加（`_party_peers` の全メンバーの `grid_pos` 平均を返す）
