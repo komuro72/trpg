@@ -424,12 +424,11 @@ func _process_guard_and_move(_delta: float) -> void:
 			_is_turning = false
 			if is_instance_valid(character):
 				character.complete_turn()
-			# 回転完了：キーがまだ押されていれば移動を実行
+			# 回転完了：キーがまだ押されていれば移動を実行（離されていれば停止）
 			var cur_dir := _get_input_direction()
-			var move_dir := cur_dir if cur_dir != Vector2i.ZERO else _pending_move_dir
 			_pending_move_dir = Vector2i.ZERO
-			if move_dir != Vector2i.ZERO:
-				_try_move(move_dir)
+			if cur_dir != Vector2i.ZERO:
+				_try_move(cur_dir)
 		return
 
 	var dir := _get_input_direction()
