@@ -19,69 +19,55 @@ signal switch_requested(new_character: Character)
 ## 全体方針の行定義（key: Party.global_orders のキー）
 const GLOBAL_ROWS: Array = [
 	{"key": "move",         "label": "移動方針",
-	 "options": ["follow", "same_room", "cluster", "explore", "standby"],
-	 "labels":  ["追従", "同じ部屋", "密集", "探索", "待機"],
-	 "short_labels": ["追従", "同室", "密集", "探索", "待機"]},
+	 "options": ["follow", "cluster", "same_room", "standby", "explore"],
+	 "labels":  ["追従", "密集", "同じ部屋", "待機", "探索"]},
 	{"key": "target",       "label": "ターゲット方針",
 	 "options": ["nearest", "weakest", "same_as_leader", "support"],
-	 "labels":  ["最近傍", "最弱", "リーダーと同じ", "援護優先"],
-	 "short_labels": ["近傍", "最弱", "同じ", "援護"]},
+	 "labels":  ["最近傍", "最弱優先", "リーダーと同じ", "援護"]},
 	{"key": "on_low_hp",    "label": "低HP時の行動",
 	 "options": ["keep_fighting", "retreat", "flee"],
-	 "labels":  ["戦い続ける", "後退", "逃走"],
-	 "short_labels": ["継続", "後退", "逃走"]},
+	 "labels":  ["戦闘継続", "後退", "逃走"]},
 	{"key": "item_pickup",  "label": "アイテム取得",
 	 "options": ["aggressive", "passive", "avoid"],
-	 "labels":  ["積極的に拾う", "近くなら", "拾わない"],
-	 "short_labels": ["積極", "近くなら", "拾わない"]},
+	 "labels":  ["積極的に拾う", "近くなら拾う", "拾わない"]},
 	{"key": "hp_potion",    "label": "HPポーション",
 	 "options": ["use", "never"],
-	 "labels":  ["瀕死なら使う", "使わない"],
-	 "short_labels": ["瀕死時", "使わない"]},
+	 "labels":  ["瀕死なら使う", "使わない"]},
 	{"key": "sp_mp_potion", "label": "SP/MPポーション",
 	 "options": ["use", "never"],
-	 "labels":  ["使う", "使わない"],
-	 "short_labels": ["使う", "使わない"]},
+	 "labels":  ["使う", "使わない"]},
 ]
 
 ## 個別指示列（非ヒーラー）: 名前列を除く4列
 const MEMBER_COLS: Array = [
-	{"key": "battle_formation", "header": "隊形",
-	 "options": ["surround", "rush", "rear"],
-	 "labels":  ["包囲", "突撃", "後衛"],
-	 "short_labels": ["包囲", "突撃", "後衛"]},
-	{"key": "combat",           "header": "戦闘",
-	 "options": ["attack", "defense", "flee"],
-	 "labels":  ["攻撃", "防御", "逃走"],
-	 "short_labels": ["攻撃", "防御", "逃走"]},
 	{"key": "target",           "header": "ターゲット",
 	 "options": ["nearest", "weakest", "same_as_leader", "support"],
-	 "labels":  ["最近傍", "最弱", "リーダーと同じ", "援護優先"],
-	 "short_labels": ["近傍", "最弱", "同じ", "援護"]},
+	 "labels":  ["最近傍", "最弱優先", "リーダーと同じ", "援護"]},
+	{"key": "battle_formation", "header": "隊形",
+	 "options": ["surround", "rush", "rear"],
+	 "labels":  ["包囲", "突進", "後衛"]},
+	{"key": "combat",           "header": "戦闘",
+	 "options": ["attack", "defense", "flee"],
+	 "labels":  ["攻撃", "防御", "逃走"]},
 	{"key": "special_skill",    "header": "特殊攻撃",
 	 "options": ["aggressive", "strong_enemy", "disadvantage", "never"],
-	 "labels":  ["積極使用", "強敵時", "劣勢時", "使わない"],
-	 "short_labels": ["積極", "強敵", "劣勢", "無効"]},
+	 "labels":  ["積極的に使う", "強敵なら使う", "劣勢なら使う", "使わない"]},
 ]
 
 ## 個別指示列（ヒーラー専用）
 const HEALER_COLS: Array = [
 	{"key": "battle_formation", "header": "隊形",
 	 "options": ["surround", "rush", "rear"],
-	 "labels":  ["包囲", "突撃", "後衛"],
-	 "short_labels": ["包囲", "突撃", "後衛"]},
+	 "labels":  ["包囲", "突進", "後衛"]},
 	{"key": "combat",           "header": "戦闘",
 	 "options": ["attack", "defense", "flee"],
-	 "labels":  ["攻撃", "防御", "逃走"],
-	 "short_labels": ["攻撃", "防御", "逃走"]},
+	 "labels":  ["攻撃", "防御", "逃走"]},
 	{"key": "heal_mode",        "header": "回復",
 	 "options": ["aggressive", "leader_first", "lowest_hp_first", "none"],
-	 "labels":  ["積極回復", "リーダー優先", "HP最低優先", "回復しない"],
-	 "short_labels": ["積極", "リーダー", "HP低", "なし"]},
+	 "labels":  ["積極回復", "リーダー優先", "瀕死度優先", "回復しない"]},
 	{"key": "special_skill",    "header": "特殊攻撃",
 	 "options": ["aggressive", "strong_enemy", "disadvantage", "never"],
-	 "labels":  ["積極使用", "強敵時", "劣勢時", "使わない"],
-	 "short_labels": ["積極", "強敵", "劣勢", "無効"]},
+	 "labels":  ["積極的に使う", "強敵なら使う", "劣勢なら使う", "使わない"]},
 ]
 
 const TOTAL_COLS := 5  ## 名前列1 + 個別指示列4
@@ -814,11 +800,10 @@ func _on_draw() -> void:
 		var val_idx  : int = g_opts.find(cur_val)
 		if val_idx < 0:
 			val_idx = 0
-		var g_slbls : Array = grd.get("short_labels", g_lbls) as Array
 		var chip_x := px + pad + glbl_w + 12.0
 		var chip_w := panel_w - pad * 2.0 - glbl_w - 12.0
 		_draw_option_chips(chip_x, y, chip_w, global_row_h2,
-			g_slbls, val_idx, is_cur_row, _is_editable(), fs_body)
+			g_lbls, val_idx, is_cur_row, _is_editable(), fs_body)
 		y += global_row_h2
 	y += 8.0
 
@@ -884,7 +869,7 @@ func _on_draw() -> void:
 			var col_def   := cols_for_ch[ci] as Dictionary
 			var c_key     : String = col_def["key"] as String
 			var c_opts    : Array  = col_def["options"] as Array
-			var c_slbls   : Array  = col_def.get("short_labels", col_def["labels"]) as Array
+			var c_lbls    : Array  = col_def["labels"] as Array
 			var cur_val_c : String = ch.current_order.get(c_key, c_opts[0] as String) as String
 			var sel_idx_c : int    = c_opts.find(cur_val_c)
 			if sel_idx_c < 0:
@@ -896,7 +881,7 @@ func _on_draw() -> void:
 			else:
 				col_w = px + panel_w - pad - col_xs[ci + 1]
 			_draw_option_chips(col_xs[ci + 1], y, col_w, row_h,
-				c_slbls, sel_idx_c, focused, _is_editable(), fs_hint)
+				c_lbls, sel_idx_c, focused, _is_editable(), fs_hint)
 
 		y += row_h
 	y += 8.0
