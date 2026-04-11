@@ -86,6 +86,11 @@ var friendly_fire: bool = false
 ## 飛翔体種別（"" = 攻撃タイプから自動判定 / "thunder_bullet" = 雷弾。Phase 12-12〜）
 var projectile_type: String = ""
 
+## 追跡射程：この距離以内に目標がいると追跡を継続する（敵専用。距離はタイル数）
+var chase_range: int = 10
+## 縄張り射程：スポーン地点からこの距離を超えると帰還を開始する（敵専用）
+var territory_range: int = 50
+
 ## LLM行動生成用：自然言語でキャラクターの行動傾向を記述する
 var behavior_description: String = ""
 
@@ -149,6 +154,8 @@ static func load_from_json(path: String) -> CharacterData:
 	data.attack_range         = int(d.get("attack_range", 1))
 	data.heal_mp_cost         = int(d.get("heal_mp_cost", 0))
 	data.buff_mp_cost         = int(d.get("buff_mp_cost", 0))
+	data.chase_range          = int(d.get("chase_range", 10))
+	data.territory_range      = int(d.get("territory_range", 50))
 	data.is_flying            = bool(d.get("is_flying", false))
 	data.is_undead            = bool(d.get("is_undead", false))
 	data.instant_death_immune = bool(d.get("instant_death_immune", false))

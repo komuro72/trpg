@@ -14,6 +14,8 @@
   "rank": "C",
   "pre_delay": 0.6,
   "post_delay": 0.5,
+  "chase_range": 10,
+  "territory_range": 50,
   "behavior_description": "骸骨の弓使い。遠距離から矢を放ち、後方に留まりながら攻撃し続ける。回復魔法が逆ダメージになる。絶対に逃げない。",
   "sprites": {
     "top": "res://assets/images/enemies/skeleton-archer_top.png",

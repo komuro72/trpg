@@ -14,6 +14,8 @@
   "rank": "C",
   "pre_delay": 0.5,
   "post_delay": 0.6,
+  "chase_range": 10,
+  "territory_range": 50,
   "behavior_description": "魔法を操るゴブリン。遠距離から魔法弾を放つ。MPが尽きると攻撃できなくなる。臆病でHPが減ると逃げる。",
   "sprites": {
     "top": "res://assets/images/enemies/goblin-mage_top.png",

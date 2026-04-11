@@ -15,6 +15,8 @@
   "instant_death_immune": true,
   "pre_delay": 0.6,
   "post_delay": 0.7,
+  "chase_range": 6,
+  "territory_range": 10,
   "behavior_description": "闇魔法を操る人型の魔法使い。後方に留まり遠距離から強力な魔法を放つ。MPが尽きると待機する。絶対に逃げない。",
   "sprites": {
     "top": "res://assets/images/enemies/dark-mage_top.png",

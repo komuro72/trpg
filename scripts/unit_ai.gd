@@ -60,15 +60,21 @@ var _hp_potion:        String    = "never"  ## "use" = 瀕死時に自動使用
 var _sp_mp_potion:     String    = "never"  ## "use" = 特殊攻撃前に自動使用
 var _leader_ref:       Character = null  ## 隊形計算の基準となるリーダーキャラ
 var _guard_room_area:  String    = ""    ## guard_room 時の記憶部屋ID（初回設定後不変）
+var _home_position:    Vector2i  = Vector2i.ZERO  ## スポーン地点（帰還の基点。setup() で初期化）
 
 
 func setup(member: Character, player: Character, map_data: MapData,
 		all_members: Array[Character]) -> void:
-	_member      = member
-	_player      = player
-	_map_data    = map_data
-	_all_members = all_members
-	_goal        = member.grid_pos
+	_member        = member
+	_player        = player
+	_map_data      = map_data
+	_all_members   = all_members
+	_goal          = member.grid_pos
+	_home_position = member.grid_pos
+
+
+func get_home_position() -> Vector2i:
+	return _home_position
 
 
 func set_all_members(all_members: Array[Character]) -> void:
@@ -309,6 +315,14 @@ func _start_action(action: Dictionary) -> void:
 				_complete_action()
 				return
 			_goal  = goal
+			_state = _State.MOVING
+			_timer = 0.0  ## 最初の1歩は即時開始
+
+		"move_to_home":
+			if _home_position == _member.grid_pos:
+				_complete_action()
+				return
+			_goal  = _home_position
 			_state = _State.MOVING
 			_timer = 0.0  ## 最初の1歩は即時開始
 
@@ -601,6 +615,8 @@ func _generate_queue(strategy: Strategy, target: Character) -> Array:
 					return _generate_stair_queue(-1)
 				"standby":
 					return [{"action": "wait"}]
+				"guard_room":
+					return _generate_guard_room_queue()
 				_:
 					if not _formation_satisfied():
 						var q: Array = []
@@ -681,6 +697,16 @@ func _generate_stair_queue(direction: int) -> Array:
 	if best == _member.grid_pos:
 		return [{"action": "wait"}]  # game_map が遷移を処理する
 	return [{"action": "move_to_explore", "goal": best}]
+
+
+## 帰還キューを生成する（move_policy == "guard_room" 時に使用）
+## スポーン地点から2タイル以内なら待機。それ以外はスポーン地点へ移動する
+func _generate_guard_room_queue() -> Array:
+	if _member == null or not is_instance_valid(_member):
+		return [{"action": "wait"}]
+	if _manhattan(_member.grid_pos, _home_position) <= 2:
+		return [{"action": "wait"}]
+	return [{"action": "move_to_home"}]
 
 
 ## 探索目標タイルを選ぶ

@@ -17,6 +17,8 @@
   "instant_death_immune": true,
   "pre_delay": 0.5,
   "post_delay": 0.7,
+  "chase_range": 6,
+  "territory_range": 10,
   "behavior_description": "後方で仲間のHPを回復し、防御力バフを付与する。HP50%以下の仲間を優先して回復する。MP切れの場合は回復・バフ不可。",
   "sprites": {
     "top": "res://assets/images/enemies/dark_priest_top.png",

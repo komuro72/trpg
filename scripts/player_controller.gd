@@ -1241,7 +1241,20 @@ func _try_move(dir: Vector2i) -> void:
 			character.start_turn_animation(target_facing, _turn_timer, new_pos - character.grid_pos)
 			return
 	# 向きが一致している（またはガード中）→ 直接移動
-	if _can_move_to(new_pos):
+	# 移動先に押し出し可能なパーティーメンバーがいれば先に確認する
+	# （party メンバーは blocking_characters に含まれるため _can_move_to より先にチェック）
+	var ally := _find_pushable_ally(new_pos)
+	if ally != null:
+		# 味方を除いた移動可否チェック（壁・敵・未加入 NPC など）
+		if _can_move_to_excluding(new_pos, ally):
+			if not _try_push(ally, dir, 0):
+				return  # 押し出し失敗 → 移動しない
+			var duration := MOVE_INTERVAL / GlobalConstants.game_speed
+			if character.is_guarding:
+				duration *= 2.0
+			character.move_to(new_pos, duration)
+		return  # ally はいるが壁などで押し出せない場合も移動しない
+	elif _can_move_to(new_pos):
 		# ガード中は移動速度50%（duration を2倍にする）
 		var duration := MOVE_INTERVAL / GlobalConstants.game_speed
 		if character.is_guarding:
@@ -1288,6 +1301,106 @@ func _can_move_to(pos: Vector2i) -> bool:
 		if pos == blocker.grid_pos:
 			return false
 	return true
+
+
+## 指定座標にいる押し出し可能なパーティーメンバーを返す（いなければ null）
+## _party_sorted_members（加入済みメンバー）を対象にする。is_flying=true は除外
+func _find_pushable_ally(pos: Vector2i) -> Character:
+	for ch: Character in _party_sorted_members:
+		if not is_instance_valid(ch) or ch == character:
+			continue
+		if ch.current_floor != character.current_floor:
+			continue
+		if ch.grid_pos != pos:
+			continue
+		if ch.is_flying:
+			continue
+		return ch
+	return null
+
+
+## 指定座標にいる押し出し可能なパーティーメンバーを返す（target_char・character を除く）
+func _find_pushable_ally_at(pos: Vector2i, exclude: Character) -> Character:
+	for ch: Character in _party_sorted_members:
+		if not is_instance_valid(ch) or ch == character or ch == exclude:
+			continue
+		if ch.current_floor != exclude.current_floor:
+			continue
+		if ch.grid_pos != pos:
+			continue
+		if ch.is_flying:
+			continue
+		return ch
+	return null
+
+
+## 押し出し先のタイルが有効かチェック（壁・範囲外・敵/未加入 NPC のブロッカーを確認）
+## target_char 自身は除外する（自分の元いた位置を誤ブロックしない）
+func _can_push_to(pos: Vector2i, target_char: Character) -> bool:
+	if map_data != null:
+		if not map_data.is_walkable_for(pos, target_char.is_flying):
+			return false
+	else:
+		if not (pos.x >= 0 and pos.x < MapData.MAP_WIDTH \
+				and pos.y >= 0 and pos.y < MapData.MAP_HEIGHT):
+			return false
+	for blocker: Character in blocking_characters:
+		if not is_instance_valid(blocker) or blocker == target_char:
+			continue
+		if blocker.current_floor != target_char.current_floor:
+			continue
+		if blocker.grid_pos == pos:
+			return false
+	return true
+
+
+## _can_move_to の味方除外版（指定キャラクターをブロッカーとして扱わない）
+func _can_move_to_excluding(pos: Vector2i, exclude: Character) -> bool:
+	if map_data != null:
+		if not map_data.is_walkable_for(pos, character.is_flying):
+			return false
+	else:
+		if not (pos.x >= 0 and pos.x < MapData.MAP_WIDTH \
+				and pos.y >= 0 and pos.y < MapData.MAP_HEIGHT):
+			return false
+	for blocker: Character in blocking_characters:
+		if not is_instance_valid(blocker) or blocker == exclude:
+			continue
+		if blocker.current_floor != character.current_floor:
+			continue
+		if blocker.is_flying != character.is_flying:
+			continue
+		if pos == blocker.grid_pos:
+			return false
+	return true
+
+
+## パーティーメンバーの押し出しを試みる（depth: 再帰深度・最大3）
+## push_dir: 押し出し方向（プレイヤーの移動方向と同じ）
+## 戻り値：押し出し成功なら true
+func _try_push(target_char: Character, push_dir: Vector2i, depth: int) -> bool:
+	if depth >= 3:
+		return false
+
+	# 押し出し候補方向：前方・左90°・右90°の順
+	var left_dir  := Vector2i(-push_dir.y,  push_dir.x)
+	var right_dir := Vector2i( push_dir.y, -push_dir.x)
+
+	for cand_dir: Vector2i in [push_dir, left_dir, right_dir]:
+		var dest := target_char.grid_pos + cand_dir
+		if not _can_push_to(dest, target_char):
+			continue
+		# 押し出し先に別のパーティーメンバーがいる場合は再帰的に押し出す
+		var next_ally := _find_pushable_ally_at(dest, target_char)
+		if next_ally != null:
+			if not _try_push(next_ally, cand_dir, depth + 1):
+				continue  # 再帰押し出し失敗 → 別方向を試す
+		# 押し出し実行（プレイヤーと同じ速度で同時アニメーション）
+		var duration := MOVE_INTERVAL / GlobalConstants.game_speed
+		target_char.move_to(dest, duration)
+		return true
+
+	return false
 
 
 # --------------------------------------------------------------------------

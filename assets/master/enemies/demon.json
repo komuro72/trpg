@@ -17,6 +17,8 @@
   "instant_death_immune": true,
   "pre_delay": 0.6,
   "post_delay": 0.8,
+  "chase_range": 10,
+  "territory_range": 20,
   "behavior_description": "悪魔族の強者。雷魔法を放つ。物理・魔法両方の耐性を持ち、絶対に逃げない。MPが尽きると待機する。",
   "sprites": {
     "top": "res://assets/images/enemies/demon_top.png",

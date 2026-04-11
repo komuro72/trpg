@@ -9,6 +9,8 @@
   "defense": 2,
   "is_flying": false,
   "rank": "C",
+  "chase_range": 10,
+  "territory_range": 50,
   "behavior_description": "集団で行動する。臆病な性格で強いと思った相手からはすぐ逃げる。",
   "pre_delay": 0.3,
   "post_delay": 0.5,

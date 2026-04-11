@@ -13,6 +13,8 @@
   "rank": "C",
   "pre_delay": 0.7,
   "post_delay": 0.8,
+  "chase_range": 10,
+  "territory_range": 50,
   "behavior_description": "死者が蘇った不死の怪物。低速だが止まらない。近くの人間に向かって直進する。絶対に逃げない。",
   "sprites": {
     "top": "res://assets/images/enemies/zombie_top.png",

@@ -575,42 +575,46 @@ rank値: C=0, B=1, A=2, S=3
     - リーダーは変わらない（指示ウィンドウは Tab でいつでも開閉可。非リーダー操作中は閲覧のみ）
 - [x] Phase 7: 指示システム（刷新済み）
   - Tab キーで指示ウィンドウ開閉（いつでも開閉可。非リーダー操作中は閲覧のみ）
-  - 指示データ構造（Character.current_order: Dictionary）
-    - move:             explore=探索 / same_room=同室追従 / cluster=密集 / guard_room=部屋を守る / standby=待機
-    - battle_formation: surround=包囲 / front=前衛 / rear=後衛 / same_as_leader=リーダーと同じ
-    - combat:           aggressive=積極攻撃 / support=援護 / standby=待機
-    - target:           nearest=最近傍 / weakest=最弱 / same_as_leader=リーダーと同じ
-    - on_low_hp:        keep_fighting=戦い続ける / retreat=後退 / flee=逃走
-    - item_pickup:      aggressive=積極取得 / passive=経路上なら取得 / avoid=全アイテムを避ける
+  - 指示データ構造
+    - **全体指示**（`party.global_orders: Dictionary`）— パーティー全体に適用
+      - `move`:          follow=追従 / cluster=密集 / same_room=同じ部屋 / standby=待機 / explore=探索
+      - `battle_policy`: attack=攻撃 / defense=防衛 / retreat=撤退
+      - `target`:        nearest=最近傍 / weakest=最弱優先 / same_as_leader=リーダーと同じ / support=援護
+      - `on_low_hp`:     keep_fighting=戦闘継続 / retreat=後退 / flee=逃走
+      - `item_pickup`:   aggressive=積極的に拾う / passive=近くなら拾う / avoid=拾わない
+      - `hp_potion`:     use=瀕死なら使う / never=使わない
+      - `sp_mp_potion`:  use=使う / never=使わない
+    - **個別指示**（`character.current_order: Dictionary`）— キャラクターごとに設定（非ヒーラー4列）
+      - `target`:           nearest=最近傍 / weakest=最弱優先 / same_as_leader=リーダーと同じ / support=援護
+      - `battle_formation`: surround=包囲 / rush=突進 / rear=後衛 / gather=集結
+      - `combat`:           attack=攻撃 / defense=防御 / flee=逃走
+      - `special_skill`:    aggressive=積極的に使う / strong_enemy=強敵なら使う / disadvantage=劣勢なら使う / never=使わない
+    - **個別指示（ヒーラー）**（5列。上記に加え `heal` 列）
+      - `heal`:             aggressive=積極回復 / leader_first=リーダー優先 / lowest_hp_first=瀕死度優先 / none=回復しない
   - item_pickup の詳細
     - aggressive: 周囲に敵がいなければ積極的に拾いに行く。対象は「自クラスで装備可能な武器・防具・盾」「HPポーション（全クラス）」「MPポーション（魔法使い・ヒーラーのみ）」に限定。それ以外は passive 扱い（経路上なら拾う）
     - passive: 移動経路上にあれば拾う（寄り道しない）。フィルタなし
     - avoid: 全アイテムを避ける（拾わない。アイテムのあるマスを避けて移動）
-  - 全体方針プリセット（6種）→ 6項目を一括設定
-    - 攻撃: cluster / surround / aggressive / nearest / keep_fighting / aggressive
-    - 防衛: cluster / surround / support / same_as_leader / retreat / passive
-    - 待機: cluster / surround / standby / nearest / retreat / avoid
-    - 追従: cluster / surround / support / same_as_leader / retreat / passive
-    - 撤退: cluster / surround / standby / nearest / flee / avoid
-    - 探索: explore(リーダー)・same_room(他) / surround / aggressive / nearest / retreat / aggressive
   - 指示ウィンドウ（OrderWindow）
-    - 全体方針行: ←→ でプリセット選択、Z で全メンバーに一括適用
-    - メンバーテーブル: ↑↓ で行移動、←→ で列移動、Z で値を切替
-    - 左パネルに6項目略称を2行で常時表示（行1: 移動+戦闘+標的 / 行2: 隊形+低HP+取得）
+    - 全体方針セクション: 6行（move/battle_policy/target/on_low_hp/item_pickup/hp_potion/sp_mp_potion）をチップ形式で表示
+    - メンバーテーブル: ↑↓ で行移動、←→ で列移動。値はチップ形式で横並び表示
+    - battle_policy 変更時は BATTLE_POLICY_PRESET テーブルで全メンバーに一括適用
   - UnitAI への反映
-    - combat=aggressive → Strategy.ATTACK（積極的に追従・攻撃）
-    - combat=support/standby → Strategy.WAIT（待機、隊形維持）
+    - combat=attack → Strategy.ATTACK（積極的に追従・攻撃）
+    - combat=defense/flee → Strategy.WAIT（待機・隊形維持）
     - on_low_hp=flee かつ HP50%未満 → Strategy.FLEE（逃走優先）
     - on_low_hp=retreat かつ HP50%未満 → Strategy.WAIT + move=cluster（リーダー周辺に退避）
     - パーティーレベルの FLEE（GoblinLeaderAI 等）は常に最優先
     - move: 隊形制約を満たしていなければ move_to_formation / move_to_explore でリーダーへ移動
+      - follow: リーダーの真後ろ1マスを維持
       - explore: VisionSystem で未訪問エリアを検出して移動（全訪問済みならランダム巡回）
       - same_room: MapData.get_area() でリーダーと同じ部屋IDを維持
       - cluster: マンハッタン距離5以内を維持
-      - guard_room: 初回設定時の部屋を記憶して守る
       - standby: その場待機（隣接の敵のみ攻撃）
     - battle_formation=rear: A*で背後に回り込む（ASTAR_FLANK）
+    - battle_formation=gather: パーティー重心から2タイル以内を維持
     - target=same_as_leader: リーダーと同じターゲットを攻撃
+    - target=support: HP割合が最低の味方に最も近い敵を攻撃
   - 統率力・従順度パラメータを CharacterData に追加（当面は値のみ保持）
   - 操作キャラ切替（Phase 6-3）との連携済み：切替後の新操作キャラには current_order が適用される
   - hero 自律行動対応：`_hero_manager`（NpcManager）を game_map で生成し、操作外れ時に UnitAI が current_order を反映して動作する
@@ -711,6 +715,16 @@ rank値: C=0, B=1, A=2, S=3
       - Tween で最短経路の回転アニメーション。180°は `last_dir.x` で時計回り/反時計回りを決定
       - `_turn_target_facing: Direction` / `_turn_tween: Tween` フィールド追加
       - **通常移動時も適用**：`move_to()` が `_apply_direction_rotation()` の代わりに `start_turn_animation()` を呼ぶ。移動時間と同じ duration で回転アニメーション
+    - **パーティーメンバー押し出しシステム**（`player_controller.gd`）
+      - `_try_move()` で移動先に加入済み味方（`is_friendly=true` かつ `blocking_characters` 非登録）がいるとき押し出しを試みる
+      - `_find_pushable_ally(pos)`: 指定座標にいる押し出し可能な味方を返す。`is_flying=true` は対象外
+      - `_try_push(target_char, push_dir, depth)`: 押し出し実行。戻り値は bool（成功/失敗）
+        - 候補方向：前方（移動方向）→ 左90° → 右90° の順で試みる
+        - 押し出し先に別の味方がいる場合は再帰的に押し出す（最大深度3）
+        - 押し出し先が壁・OBSTACLE・敵/未加入NPCのブロッカーの場合はその方向をスキップ
+        - 押し出し成功時はプレイヤーと同じ duration で `move_to()` アニメーション（同時移動）
+      - `_can_push_to(pos, ch)`: 押し出し先の走行可否チェック（タイル＋ブロッカー確認）
+      - 押し出し失敗（全方向塞がれ）時はプレイヤーも移動しない
 - [ ] Phase 10: アイテム・装備システム
   - [x] Phase 10-1: アイテムデータ基盤
     - **ステータス統合（フィールドリネーム）**
@@ -1629,6 +1643,25 @@ rank値: C=0, B=1, A=2, S=3
     - `_target_in_formation_zone()` に `"gather"` ケース追加（重心から4タイル以内の敵を攻撃）
     - `_formation_move_goal()` に `"gather"` ケース追加（重心を目標タイルとして返す）
     - `_generate_queue()` Strategy.ATTACK ブランチに後衛距離制限を追加（`attack_range × 0.8` を超えたら待機 or 射程内なら攻撃）
+- [x] Phase 13-10: 敵縄張り・追跡システム実装
+  - **`CharacterData`** に `chase_range: int = 10`・`territory_range: int = 50` を追加（`load_from_json()` でロード）
+  - **全16敵種 JSON** に `chase_range` / `territory_range` を追加（種族特性に応じた値）
+    - ゴブリン系・ゾンビ・スケルトン系：chase=10・territory=50（広域追跡タイプ）
+    - ウルフ・ホブゴブリン・サラマンダー：chase=6〜8・territory=8（縄張り守備タイプ）
+    - ハーピー：chase=10・territory=12、ダークナイト：chase=10・territory=18
+    - リッチ：chase=8・territory=15、デーモン：chase=10・territory=20
+    - ダークロード：chase=10・territory=50
+  - **`UnitAI`** に `_home_position: Vector2i`（`setup()` で初期化）・`get_home_position()` 追加
+  - **`UnitAI`** に `move_to_home` アクションを追加（`_start_action()` で処理）
+  - **`UnitAI`** に `_generate_guard_room_queue()` 追加（2タイル以内なら待機、それ以外は `move_to_home`）
+  - **`UnitAI._generate_queue()`** の WAIT ブランチに `"guard_room"` ケースを追加（`_generate_guard_room_queue()` 呼び出し）
+  - **`PartyLeaderAI.Strategy`** に `GUARD_ROOM = 5` を追加
+  - **`PartyLeaderAI`** に `_apply_range_check(base_strat)` を追加（`_evaluate_party_strategy()` の結果をラップ）
+    - ATTACK→GUARD_ROOM：全員が縄張り外（dist_home > territory_range）かつ目標が遠い（dist_target > chase_range）
+    - GUARD_ROOM→ATTACK：1体でも縄張り内かつ射程内の目標あり
+    - GUARD_ROOM→WAIT：全員がスポーン地点2タイル以内に帰還完了
+  - **`PartyLeaderAI._assign_orders()`** の effective_strat 決定に GUARD_ROOM ブランチを追加（WAIT + move_policy="guard_room"）
+  - `_strategy_to_preset_name()` / `get_global_orders_hint()` / `_get_strategy_change_reason()` に GUARD_ROOM ケースを追加
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム
@@ -1999,7 +2032,7 @@ rank値: C=0, B=1, A=2, S=3
 - 巻き添え（`friendly_fire`）：範囲攻撃（炎陣など）が味方・他パーティーにも当たる仕様。`CharacterData.friendly_fire: bool`（当面 false 固定）で管理し、将来切り替え可能にする
 - 大型ボスの即死耐性設計：`instant_death_immune: bool`（ボス級は true）。ヘッドショット無効・無力化水魔法持続短縮。敵 JSON でフラグを設定できる設計にする
 - ログ参照の改善（OrderWindowのログをより使いやすく）：現在は最新50件をそのまま表示するだけ。フィルタリング・検索・スクロール操作の改善を検討
-- 移動せずに向きだけ変える操作の追加：ガード中の向き変更は実装済みだが、通常状態で「移動せずに向きだけ変える」ための専用操作（ボタン長押し中にスティック/矢印で向き変更など）が未実装
+- 移動せずに向きだけ変える操作の追加（専用操作）：通常移動で向きが異なる場合に先に回転する挙動は Phase 13-7 で実装済み。「移動なし・向きだけ変える」専用操作（ボタン長押し中にスティック/矢印で向き変更など）は未実装
 
 ## 参照ファイル
 - docs/spec.md：詳細仕様書（実装前に参照すること）

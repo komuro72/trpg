@@ -13,6 +13,8 @@
   "rank": "C",
   "pre_delay": 0.4,
   "post_delay": 0.5,
+  "chase_range": 10,
+  "territory_range": 50,
   "behavior_description": "弓を持つゴブリン。後方から遠距離攻撃する。敵が近づきすぎると後退して射程を確保する。",
   "sprites": {
     "top": "res://assets/images/enemies/goblin-archer_top.png",

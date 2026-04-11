@@ -10,8 +10,8 @@ extends Node
 ##   _select_weakest_target()  : 最弱ターゲット選択（複数候補がある場合）
 
 ## パーティー戦略（ATTACK=0, FLEE=1, WAIT=2 は UnitAI.Strategy と int 値一致）
-## DEFEND=3, EXPLORE=4 はパーティーレベル専用（UnitAI へは WAIT/ATTACK に変換して渡す）
-enum Strategy { ATTACK, FLEE, WAIT, DEFEND, EXPLORE }
+## DEFEND=3, EXPLORE=4, GUARD_ROOM=5 はパーティーレベル専用（UnitAI へは WAIT/ATTACK に変換して渡す）
+enum Strategy { ATTACK, FLEE, WAIT, DEFEND, EXPLORE, GUARD_ROOM }
 
 const REEVAL_INTERVAL := 1.5  ## 定期再評価の間隔（秒）
 
@@ -141,7 +141,7 @@ func _process(delta: float) -> void:
 ## 戦略を評価して各メンバーにオーダーを発行する
 ## current_order の各項目をパーティー戦略とマージして UnitAI に渡す
 func _assign_orders() -> void:
-	_party_strategy = _evaluate_party_strategy()
+	_party_strategy = _apply_range_check(_evaluate_party_strategy())
 
 	# 戦略変更時にログ出力
 	# - プレイヤー操作中のメンバーがいる場合はスキップ（プレイヤーが指示を出す側）
@@ -232,6 +232,10 @@ func _assign_orders() -> void:
 					# 目標フロア到達後は全メンバーが探索行動に移る
 					# （通路で同士が固まって待機する問題を防ぐ）
 					move_policy = "explore"
+		elif _party_strategy == Strategy.GUARD_ROOM:
+			# 帰還中：全員を WAIT + guard_room ポリシーで動かす
+			effective_strat = int(Strategy.WAIT)
+			move_policy = "guard_room"
 		else:
 			# 回復・バフ専用キャラ（heal_mp_cost > 0 または buff_mp_cost > 0）は常に WAIT を渡す
 			# UnitAI._generate_queue() の先頭で heal/buff キューが自動生成される
@@ -387,11 +391,12 @@ func _get_leader_name() -> String:
 ## Strategy を日本語プリセット名に変換する
 func _strategy_to_preset_name(strat: Strategy) -> String:
 	match strat:
-		Strategy.ATTACK:  return "攻撃"
-		Strategy.FLEE:    return "撤退"
-		Strategy.WAIT:    return "待機"
-		Strategy.DEFEND:  return "防衛"
-		Strategy.EXPLORE: return "探索"
+		Strategy.ATTACK:     return "攻撃"
+		Strategy.FLEE:       return "撤退"
+		Strategy.WAIT:       return "待機"
+		Strategy.DEFEND:     return "防衛"
+		Strategy.EXPLORE:    return "探索"
+		Strategy.GUARD_ROOM: return "帰還"
 	return "不明"
 
 
@@ -400,15 +405,142 @@ func get_current_strategy_name() -> String:
 	return _strategy_to_preset_name(_party_strategy)
 
 
+## 全体指示のヒントを返す（DebugWindow 表示用）
+## _global_orders が設定されていればそれを返す。なければ _party_strategy から合成する
+func get_global_orders_hint() -> Dictionary:
+	if not _global_orders.is_empty():
+		return _global_orders
+	# _global_orders 未設定（敵パーティー等）→ 戦略から合成
+	var hint: Dictionary = {}
+	match _party_strategy:
+		Strategy.ATTACK:
+			hint = {"move": "cluster", "battle_policy": "attack",   "target": "nearest", "hp_potion": "never", "on_low_hp": "keep_fighting", "item_pickup": "avoid"}
+		Strategy.FLEE:
+			hint = {"move": "cluster", "battle_policy": "retreat",  "target": "nearest", "hp_potion": "never", "on_low_hp": "flee",          "item_pickup": "avoid"}
+		Strategy.WAIT:
+			hint = {"move": "standby", "battle_policy": "defense",  "target": "nearest", "hp_potion": "never", "on_low_hp": "keep_fighting", "item_pickup": "avoid"}
+		Strategy.DEFEND:
+			hint = {"move": "same_room", "battle_policy": "defense","target": "nearest", "hp_potion": "never", "on_low_hp": "keep_fighting", "item_pickup": "avoid"}
+		Strategy.EXPLORE:
+			hint = {"move": "explore",     "battle_policy": "attack",   "target": "nearest", "hp_potion": "never", "on_low_hp": "keep_fighting", "item_pickup": "avoid"}
+		Strategy.GUARD_ROOM:
+			hint = {"move": "guard_room",  "battle_policy": "retreat",  "target": "nearest", "hp_potion": "never", "on_low_hp": "keep_fighting", "item_pickup": "avoid"}
+		_:
+			hint = {"move": "-", "battle_policy": "-", "target": "-", "hp_potion": "-", "on_low_hp": "-", "item_pickup": "-"}
+	return hint
+
+
 ## 戦略変更の理由を返す（サブクラスがオーバーライド可能）
 func _get_strategy_change_reason() -> String:
 	match _party_strategy:
-		Strategy.ATTACK:  return "敵発見"
-		Strategy.FLEE:    return "撤退判断"
-		Strategy.WAIT:    return "待機"
-		Strategy.DEFEND:  return "防衛"
-		Strategy.EXPLORE: return "探索開始"
+		Strategy.ATTACK:     return "敵発見"
+		Strategy.FLEE:       return "撤退判断"
+		Strategy.WAIT:       return "待機"
+		Strategy.DEFEND:     return "防衛"
+		Strategy.EXPLORE:    return "探索開始"
+		Strategy.GUARD_ROOM: return "縄張り外・帰還"
 	return ""
+
+
+# --------------------------------------------------------------------------
+# 縄張り・追跡範囲チェック（敵パーティー専用）
+# --------------------------------------------------------------------------
+
+## _evaluate_party_strategy() の結果を縄張り・追跡ルールでラップする
+## 敵パーティーのみ適用。友好パーティーはそのまま返す
+func _apply_range_check(base_strat: Strategy) -> Strategy:
+	# 友好パーティーには適用しない
+	var first_member: Character = null
+	for m: Character in _party_members:
+		if is_instance_valid(m):
+			first_member = m
+			break
+	if first_member == null or first_member.is_friendly:
+		return base_strat
+
+	# 現在 GUARD_ROOM（帰還中）の場合：再交戦 or 帰還完了を判定
+	if _party_strategy == Strategy.GUARD_ROOM:
+		if base_strat == Strategy.FLEE:
+			return Strategy.FLEE
+		if _any_member_can_engage():
+			return Strategy.ATTACK
+		if _all_members_at_home():
+			return Strategy.WAIT
+		return Strategy.GUARD_ROOM
+
+	# 現在 ATTACK の場合：縄張り外に追い出されたら帰還へ
+	if _party_strategy == Strategy.ATTACK and base_strat == Strategy.ATTACK:
+		if _all_members_out_of_range():
+			return Strategy.GUARD_ROOM
+
+	return base_strat
+
+
+## 全メンバーが縄張り外かつ目標から離れているか判定する
+## true → ATTACK→GUARD_ROOM 遷移トリガー
+func _all_members_out_of_range() -> bool:
+	for member: Character in _party_members:
+		if not is_instance_valid(member):
+			continue
+		var unit_ai := _unit_ais.get(member.name) as UnitAI
+		if unit_ai == null:
+			continue
+		var cd := member.character_data
+		if cd == null:
+			continue
+		var home := unit_ai.get_home_position()
+		var dist_home := (member.grid_pos - home).length()
+		# まだ縄張り内にいる → このメンバーは「範囲内」→ false を返す
+		if dist_home <= float(cd.territory_range):
+			return false
+		# 縄張り外：目標が近ければ追跡を継続する
+		var target := _find_nearest_friendly(member)
+		if target != null and is_instance_valid(target):
+			var dist_target := (member.grid_pos - target.grid_pos).length()
+			if dist_target <= float(cd.chase_range):
+				return false
+	return true
+
+
+## 少なくとも1体が縄張り内かつ目標射程内にいるか判定する
+## true → GUARD_ROOM→ATTACK 再交戦トリガー
+func _any_member_can_engage() -> bool:
+	for member: Character in _party_members:
+		if not is_instance_valid(member):
+			continue
+		var unit_ai := _unit_ais.get(member.name) as UnitAI
+		if unit_ai == null:
+			continue
+		var cd := member.character_data
+		if cd == null:
+			continue
+		var home := unit_ai.get_home_position()
+		var dist_home := (member.grid_pos - home).length()
+		if dist_home > float(cd.territory_range):
+			continue  # まだ縄張り外なので再交戦不可
+		var target := _find_nearest_friendly(member)
+		if target != null and is_instance_valid(target):
+			var dist_target := (member.grid_pos - target.grid_pos).length()
+			if dist_target <= float(cd.chase_range):
+				return true
+	return false
+
+
+## 全メンバーがスポーン地点の近くに戻っているか判定する（マンハッタン距離2以内）
+## true → GUARD_ROOM→WAIT 帰還完了トリガー
+func _all_members_at_home() -> bool:
+	for member: Character in _party_members:
+		if not is_instance_valid(member):
+			continue
+		var unit_ai := _unit_ais.get(member.name) as UnitAI
+		if unit_ai == null:
+			continue
+		var home := unit_ai.get_home_position()
+		var dx := abs(member.grid_pos.x - home.x)
+		var dy := abs(member.grid_pos.y - home.y)
+		if dx + dy > 2:
+			return false
+	return true
 
 
 # --------------------------------------------------------------------------

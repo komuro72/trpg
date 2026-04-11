@@ -13,6 +13,8 @@
   "rank": "C",
   "pre_delay": 0.4,
   "post_delay": 0.6,
+  "chase_range": 10,
+  "territory_range": 12,
   "behavior_description": "飛行して障害物を無視して移動する。地上の敵に降下攻撃を仕掛ける。飛行中は地上からの近接攻撃を受けない。",
   "sprites": {
     "top": "res://assets/images/enemies/harpy_top.png",
