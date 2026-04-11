@@ -3011,10 +3011,10 @@ Godot 4 では Tab・Esc キーが UI フォーカスナビゲーション / ui_
 │  [全体共通設定: 6行]                                          │
 │    移動：         追従  密集  同じ部屋  待機  探索           │
 │    攻撃ターゲット：近傍  最弱  同じ  援護                    │
-│    低HP時の行動： 戦い続ける  撤退する                       │
-│    アイテム取得： 積極  必要なら  拾わない                   │
-│    HPポーション： HP50%  HP25%  使わない                    │
-│    MP/SPポーション：温存  積極的に使う                       │
+│    低HP時の行動： 戦闘継続  後退  逃走                       │
+│    アイテム取得： 積極  近くなら  拾わない                   │
+│    HPポーション： 瀕死なら使う  使わない                     │
+│    MP/SPポーション：使う  使わない                           │
 │    ↑↓:行選択  ←→:選択肢切替  ↓(最終行)→メンバー表        │
 ├──────────────────────────────────────────────────────────────┤
 │  [個別設定テーブル: 名前+4列]                                 │
@@ -3042,17 +3042,42 @@ Godot 4 では Tab・Esc キーが UI フォーカスナビゲーション / ui_
 
 #### 全体共通設定（`Party.global_orders`）
 
-| キー | 選択肢 | 説明 |
-|------|--------|------|
-| `move` | follow / cluster / same_room / standby / explore | 追従 / 密集 / 同じ部屋 / 待機 / 探索 |
-| `target` | nearest / weakest / same_as_leader / support | 最近傍 / 最弱優先 / リーダーと同じ / 援護 |
-| `on_low_hp` | keep_fighting / retreat | 戦い続ける / 撤退する |
-| `item_pickup` | aggressive / passive / avoid | 積極的に拾う / 必要なら拾う / 拾わない |
-| `hp_potion` | 50pct / 25pct / never | HP50%以下で使用 / HP25%以下で使用 / 使わない |
-| `sp_mp_potion` | save / aggressive | 温存 / 積極的に使う |
+| キー | 選択肢（値） | 表示ラベル | デフォルト |
+|------|------------|----------|----------|
+| `move` | follow / cluster / same_room / standby / explore | 追従 / 密集 / 同じ部屋 / 待機 / 探索 | — |
+| `target` | nearest / weakest / same_as_leader / support | 最近傍 / 最弱優先 / リーダーと同じ / 援護 | nearest |
+| `on_low_hp` | keep_fighting / retreat / flee | 戦闘継続 / 後退 / 逃走 | keep_fighting |
+| `item_pickup` | aggressive / passive / avoid | 積極的に拾う / 近くなら拾う / 拾わない | passive |
+| `hp_potion` | use / never | 瀕死なら使う / 使わない | use |
+| `sp_mp_potion` | use / never | 使う / 使わない | never |
 
 - 変更時に move/target/on_low_hp/item_pickup は全メンバーの `current_order` にも同期（AI 互換）
 - hp_potion / sp_mp_potion は `global_orders` のみ（AI 未接続。将来実装）
+
+**全体共通設定の選択肢定義**
+
+`on_low_hp`（低HP時の行動）
+- 戦闘継続（keep_fighting）：HPが低くても行動を変えない
+- 後退（retreat）：敵の射程外まで下がる（後衛ポジション）。移動できない場合は防御
+- 逃走（flee）：部屋から出て離脱する。移動できない場合は防御
+
+`item_pickup`（アイテム取得）
+- 積極的に拾う（aggressive）：同じ部屋にアイテムがあれば拾いに行く
+- 近くなら拾う（passive）：現在地から `GlobalConstants.ITEM_PICKUP_RANGE` マス以内なら拾いに行く（デフォルト）
+- 拾わない（avoid）：拾わない
+
+`hp_potion`（HPポーション）
+- 瀕死なら使う（use）：HP割合が `GlobalConstants.NEAR_DEATH_THRESHOLD` 以下で使用（デフォルト）。ヒーラーの回復判定・低HP時行動の閾値と共有
+- 使わない（never）：使用しない
+
+`sp_mp_potion`（MP/SPポーション）
+- 使う（use）：特殊攻撃指示の条件を満たす状況でSP/MPが不足していたら使用。特殊攻撃指示が「使わない」の場合は使用しない
+- 使わない（never）：ポーションは使用しない（自動回復を待つ）
+
+**GlobalConstants に追加予定の定数**（次フェーズで実装）
+- `ITEM_PICKUP_RANGE`：近くなら拾うの距離閾値（暫定2マス）
+- `NEAR_DEATH_THRESHOLD`：瀕死判定のHP割合閾値（暫定25%）。HPポーション使用・ヒーラー回復判定・低HP時行動の閾値で共有
+- `DISADVANTAGE_THRESHOLD`：劣勢判定の味方平均HP割合閾値。特殊攻撃「劣勢なら使う」・深層移動判定で共有
 
 #### 個別設定（`character.current_order`）
 

@@ -1482,10 +1482,24 @@ rank値: C=0, B=1, A=2, S=3
         - 現在コードは `combat`（戦闘方針）キーだが、次フェーズで `move` に差し替える
       - `target`（攻撃ターゲット）: nearest=最近傍 / weakest=最弱優先 / same_as_leader=リーダーと同じ / support=援護
         - 「援護」= HP割合が最も低い味方に最も近い敵を狙う。次フェーズで選択肢を追加
-      - `on_low_hp`（低HP時の行動）: keep_fighting=戦い続ける / retreat=撤退する（2択に削減。flee は廃止）
-      - `item_pickup`（アイテム取得）: aggressive=積極的に拾う / passive=必要なら拾う / avoid=拾わない（変更なし）
-      - `hp_potion`（HPポーション）: 50pct / 25pct / never（変更なし）
-      - `sp_mp_potion`（MP/SPポーション）: save=温存 / aggressive=積極的に使う（変更なし）
+      - `on_low_hp`（低HP時の行動）: keep_fighting=戦闘継続 / retreat=後退 / flee=逃走（3択）
+        - 戦闘継続：HPが低くても行動を変えない
+        - 後退：敵の射程外まで下がる（後衛ポジション）。移動できない場合は防御
+        - 逃走：部屋から出て離脱する。移動できない場合は防御
+      - `item_pickup`（アイテム取得）: aggressive=積極的に拾う / passive=近くなら拾う / avoid=拾わない（3択）
+        - 積極：同じ部屋にアイテムがあれば拾いに行く
+        - 近くなら：現在地から `GlobalConstants.ITEM_PICKUP_RANGE` マス以内なら拾いに行く（デフォルト）
+        - 拾わない：拾わない
+      - `hp_potion`（HPポーション）: use=瀕死なら使う / never=使わない（2択）
+        - 瀕死なら使う：HP割合が `GlobalConstants.NEAR_DEATH_THRESHOLD` 以下で使用（デフォルト）。ヒーラーの回復判定・低HP時行動と閾値を共有
+        - 使わない：使用しない
+      - `sp_mp_potion`（MP/SPポーション）: use=使う / never=使わない（2択）
+        - 使う：特殊攻撃指示の条件を満たす状況でSP/MPが不足していたら使用。特殊攻撃指示が「使わない」の場合は使用しない
+        - 使わない：ポーションは使用しない（自動回復を待つ）
+      - **GlobalConstants に追加予定の定数**（次フェーズで実装）
+        - `ITEM_PICKUP_RANGE`：近くなら拾うの距離閾値（暫定2マス）
+        - `NEAR_DEATH_THRESHOLD`：瀕死判定のHP割合閾値（暫定25%）。HPポーション使用・ヒーラー回復判定・低HP時行動で共有
+        - `DISADVANTAGE_THRESHOLD`：劣勢判定の味方平均HP割合閾値。特殊攻撃「劣勢なら使う」・深層移動判定で共有
     - **個別設定**（`character.current_order`）
       - 非ヒーラー 4列（列順変更）：ターゲット / 隊形 / 戦闘 / 特殊攻撃
         - `target`（ターゲット）: nearest / weakest / same_as_leader / support（全体方針と同値セット）
