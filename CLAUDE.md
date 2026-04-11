@@ -1454,20 +1454,28 @@ rank値: C=0, B=1, A=2, S=3
     - 各部屋に1〜2個のOBSTACLEタイル（岩の列・瓦礫・崩れた柱など）を配置
     - ボス部屋（r5_1 / 30×22）：4角3×3カット＋4本の2×2障害物柱（戦術的カバーポイント）
     - キャラクタースポーン・階段タイルとの位置確認済み（衝突なし）
-- [x] Phase 13-5: OrderWindow 全体方針セクション刷新・個別指示テーブル4列化
+- [x] Phase 13-5: OrderWindow 全体方針セクション刷新・個別指示テーブル4列化・選択肢横並び表示
   - **全体方針を 1 行プリセット選択 → 6 行個別設定に刷新**
     - `GlobalConstants.gd`：12 の新定数を追加（GLOBAL_COMBAT/TARGET/LOW_HP/ITEM_PICKUP/HP_POTION/SP_MP_POTION・MEMBER_FORMATION/COMBAT/ATTACK_TARGET/SPECIAL/HEAL/HEAL_TARGET）
     - `Party.gd`：`var global_orders: Dictionary` を追加（6 キーのデフォルト値付き）
-    - `OrderWindow.GLOBAL_ROWS`：6 行定義（key/label/options/labels を持つ配列）
-    - 全体方針行で ←→/Z で値切替。変更時は combat/target/on_low_hp/item_pickup を全メンバーの current_order にも同期（AI 互換）
+    - `OrderWindow.GLOBAL_ROWS`：6 行定義（key/label/options/labels/short_labels を持つ配列）
+    - 全体方針行で ←→ で値切替。変更時は combat/target/on_low_hp/item_pickup を全メンバーの current_order にも同期（AI 互換）
     - hp_potion / sp_mp_potion は global_orders のみ（AI 未接続・将来実装）
   - **個別指示テーブルを 6 列 → 4 列に変更**（`TOTAL_COLS: 7 → 5`）
     - 旧 `COL_OPTIONS/COL_LABELS/COL_HEADERS/COL_KEYS/PRESETS/PRESET_TABLE` を削除
-    - 新 `MEMBER_COLS`（非ヒーラー）：隊形/戦闘/ターゲット/特殊攻撃
-    - 新 `HEALER_COLS`（ヒーラー専用）：隊形/回復/回復対象/特殊攻撃
+    - 新 `MEMBER_COLS`（非ヒーラー）：隊形/戦闘/ターゲット/特殊攻撃（各列に short_labels を追加）
+    - 新 `HEALER_COLS`（ヒーラー専用）：隊形/回復/回復対象/特殊攻撃（各列に short_labels を追加）
     - `_get_cols_for(ch)` でキャラクター別に列定義を切り替え
     - `_is_healer(ch)` ヘルパー追加
     - 移動/低HP/取得列は全体方針に移動（per-member 表からは削除）
+  - **選択肢横並び（チップ形式）表示**
+    - `_draw_option_chips()` ヘルパー追加：全選択肢を横並びで描画し、選択中をハイライト
+    - 全体方針・個別指示ともに `◀ val ▶` 単独表示を廃止しチップ形式に変更
+    - フォーカスあり＋編集可：選択中チップを青背景＋黄文字で強調
+    - フォーカスあり＋閲覧のみ：選択中チップを薄い背景で表示
+    - フォーカスなし：選択中チップを薄い背景・暗めの文字で表示
+    - 幅が足りない場合はチップを均等縮小（省略せず全選択肢を表示）
+    - 全体方針は `fs_body`・個別指示列は `fs_hint` で描画
   - **AI 変更なし**：character.current_order の既存キーは保持。battle_formation/combat/target は引き続き AI が参照
 - [ ] Phase 14: Steam配布準備
 

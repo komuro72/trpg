@@ -20,54 +20,68 @@ signal switch_requested(new_character: Character)
 const GLOBAL_ROWS: Array = [
 	{"key": "combat",       "label": "戦闘方針",
 	 "options": ["aggressive", "defensive", "standby", "follow", "retreat"],
-	 "labels":  ["積極攻撃", "防衛", "待機", "追従", "撤退"]},
+	 "labels":  ["積極攻撃", "防衛", "待機", "追従", "撤退"],
+	 "short_labels": ["積極", "防衛", "待機", "追従", "撤退"]},
 	{"key": "target",       "label": "ターゲット方針",
 	 "options": ["nearest", "weakest", "focus"],
-	 "labels":  ["最近傍", "最弱", "集中"]},
+	 "labels":  ["最近傍", "最弱", "集中"],
+	 "short_labels": ["近傍", "最弱", "集中"]},
 	{"key": "on_low_hp",    "label": "低HP時の行動",
 	 "options": ["keep_fighting", "retreat", "flee"],
-	 "labels":  ["戦い続ける", "後退", "逃走"]},
+	 "labels":  ["戦い続ける", "後退", "逃走"],
+	 "short_labels": ["継続", "後退", "逃走"]},
 	{"key": "item_pickup",  "label": "アイテム取得",
 	 "options": ["aggressive", "passive", "avoid"],
-	 "labels":  ["積極的に拾う", "近くのみ", "拾わない"]},
+	 "labels":  ["積極的に拾う", "近くのみ", "拾わない"],
+	 "short_labels": ["積極", "近くのみ", "拾わない"]},
 	{"key": "hp_potion",    "label": "HPポーション",
 	 "options": ["50pct", "25pct", "never"],
-	 "labels":  ["HP50%以下", "HP25%以下", "使わない"]},
+	 "labels":  ["HP50%以下", "HP25%以下", "使わない"],
+	 "short_labels": ["HP50%", "HP25%", "使わない"]},
 	{"key": "sp_mp_potion", "label": "SP/MPポーション",
 	 "options": ["save", "aggressive"],
-	 "labels":  ["節約", "積極使用"]},
+	 "labels":  ["節約", "積極使用"],
+	 "short_labels": ["節約", "積極"]},
 ]
 
 ## 個別指示列（非ヒーラー）: 名前列を除く4列
 const MEMBER_COLS: Array = [
 	{"key": "battle_formation", "header": "隊形",
 	 "options": ["surround", "front", "rear", "same_as_leader"],
-	 "labels":  ["包囲", "前衛", "後衛", "リーダーと同じ"]},
+	 "labels":  ["包囲", "前衛", "後衛", "リーダーと同じ"],
+	 "short_labels": ["包囲", "前衛", "後衛", "同じ"]},
 	{"key": "combat",           "header": "戦闘",
 	 "options": ["aggressive", "support", "standby"],
-	 "labels":  ["積極攻撃", "援護", "待機"]},
+	 "labels":  ["積極攻撃", "援護", "待機"],
+	 "short_labels": ["積極", "援護", "待機"]},
 	{"key": "target",           "header": "ターゲット",
 	 "options": ["nearest", "weakest", "same_as_leader"],
-	 "labels":  ["最近傍", "最弱", "リーダーと同じ"]},
+	 "labels":  ["最近傍", "最弱", "リーダーと同じ"],
+	 "short_labels": ["近傍", "最弱", "同じ"]},
 	{"key": "special_skill",    "header": "特殊攻撃",
 	 "options": ["auto", "manual"],
-	 "labels":  ["自動", "手動"]},
+	 "labels":  ["自動", "手動"],
+	 "short_labels": ["自動", "手動"]},
 ]
 
 ## 個別指示列（ヒーラー専用）
 const HEALER_COLS: Array = [
 	{"key": "battle_formation", "header": "隊形",
 	 "options": ["surround", "front", "rear", "same_as_leader"],
-	 "labels":  ["包囲", "前衛", "後衛", "リーダーと同じ"]},
+	 "labels":  ["包囲", "前衛", "後衛", "リーダーと同じ"],
+	 "short_labels": ["包囲", "前衛", "後衛", "同じ"]},
 	{"key": "heal_mode",        "header": "回復",
 	 "options": ["aggressive", "support", "standby"],
-	 "labels":  ["積極回復", "援護", "待機"]},
+	 "labels":  ["積極回復", "援護", "待機"],
+	 "short_labels": ["積極", "援護", "待機"]},
 	{"key": "heal_target",      "header": "回復対象",
 	 "options": ["lowest_hp", "nearest", "same_as_leader"],
-	 "labels":  ["HP最低", "最近傍", "リーダーと同じ"]},
+	 "labels":  ["HP最低", "最近傍", "リーダーと同じ"],
+	 "short_labels": ["HP低", "近傍", "同じ"]},
 	{"key": "special_skill",    "header": "特殊攻撃",
 	 "options": ["auto", "manual"],
-	 "labels":  ["自動", "手動"]},
+	 "labels":  ["自動", "手動"],
+	 "short_labels": ["自動", "手動"]},
 ]
 
 const TOTAL_COLS := 5  ## 名前列1 + 個別指示列4
@@ -791,18 +805,18 @@ func _on_draw() -> void:
 			Vector2(px + pad, y + global_row_h2 * 0.72),
 			g_label + "：",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label, lbl_col)
-		# 現在値
+		# 現在値（チップ形式で横並び表示）
 		var cur_val : String = ""
 		if _party != null:
 			cur_val = _party.global_orders.get(g_key, g_opts[0] as String) as String
-		var val_idx  : int    = g_opts.find(cur_val)
-		var val_lbl  : String = (g_lbls[val_idx] as String) if val_idx >= 0 else cur_val
-		var val_str  := ("◀ %s ▶" % val_lbl) if (is_cur_row and _is_editable()) else val_lbl
-		var val_col  := Color(1.0, 1.0, 0.3) if is_cur_row else Color(0.85, 0.95, 0.80)
-		_control.draw_string(_font,
-			Vector2(px + pad + glbl_w + 12.0, y + global_row_h2 * 0.72),
-			val_str,
-			HORIZONTAL_ALIGNMENT_LEFT, panel_w - pad * 2.0 - glbl_w - 12.0, fs_body, val_col)
+		var val_idx  : int = g_opts.find(cur_val)
+		if val_idx < 0:
+			val_idx = 0
+		var g_slbls : Array = grd.get("short_labels", g_lbls) as Array
+		var chip_x := px + pad + glbl_w + 12.0
+		var chip_w := panel_w - pad * 2.0 - glbl_w - 12.0
+		_draw_option_chips(chip_x, y, chip_w, global_row_h2,
+			g_slbls, val_idx, is_cur_row, _is_editable(), fs_body)
 		y += global_row_h2
 	y += 8.0
 
@@ -865,17 +879,22 @@ func _on_draw() -> void:
 
 		var cols_for_ch := _get_cols_for(ch)
 		for ci: int in range(cols_for_ch.size()):
-			var lbl     := _get_col_label(ch, ci)
+			var col_def   := cols_for_ch[ci] as Dictionary
+			var c_key     : String = col_def["key"] as String
+			var c_opts    : Array  = col_def["options"] as Array
+			var c_slbls   : Array  = col_def.get("short_labels", col_def["labels"]) as Array
+			var cur_val_c : String = ch.current_order.get(c_key, c_opts[0] as String) as String
+			var sel_idx_c : int    = c_opts.find(cur_val_c)
+			if sel_idx_c < 0:
+				sel_idx_c = 0
 			var focused := is_mem and (ci + 1 == _col_cursor)
-			var c_col: Color = Color(1.0, 1.0, 0.3) if focused else Color(0.80, 0.80, 0.80)
-			var txt2    := "◀%s▶" % lbl if focused else lbl
 			var col_w: float
 			if ci + 2 < col_xs.size():
 				col_w = col_xs[ci + 2] - col_xs[ci + 1] - 4.0
 			else:
 				col_w = px + panel_w - pad - col_xs[ci + 1]
-			_control.draw_string(_font, Vector2(col_xs[ci + 1], y + row_h * 0.67),
-				txt2, HORIZONTAL_ALIGNMENT_LEFT, col_w, fs_body, c_col)
+			_draw_option_chips(col_xs[ci + 1], y, col_w, row_h,
+				c_slbls, sel_idx_c, focused, _is_editable(), fs_hint)
 
 		y += row_h
 	y += 8.0
@@ -951,11 +970,11 @@ func _on_draw() -> void:
 		hint_str = "↑↓:選択  Z/Enter:決定  Esc:キャンセル"
 	elif _focus_area == _FocusArea.GLOBAL_POLICY:
 		if _is_editable():
-			hint_str = "↑↓:行選択  ←→/Z:値変更  ↓(最終行):メンバー表へ  Esc:閉じる"
+			hint_str = "↑↓:行選択  ←→:選択肢を切替  ↓(最終行):メンバー表へ  Esc:閉じる"
 		else:
 			hint_str = "↑↓:行選択  ↓(最終行):メンバー表へ  Esc:閉じる（閲覧のみ）"
 	elif _is_editable():
-		hint_str = "↑↓:行移動  ←→:列移動  Z:値切替（名前列はサブメニュー）  Esc:閉じる"
+		hint_str = "↑↓:行移動  ←→:列移動/選択肢切替  Z:名前列でサブメニュー  Esc:閉じる"
 	else:
 		hint_str = "↑↓:行移動  ←→:列移動  Z:名前列でサブメニュー  Esc:閉じる（閲覧のみ）"
 	_control.draw_string(_font,
@@ -1241,6 +1260,82 @@ func _load_item_tex(item: Dictionary) -> Texture2D:
 		tex = ResourceLoader.load(res_path, "Texture2D") as Texture2D
 	_item_tex_cache[img_path] = tex
 	return tex
+
+
+## 選択肢をチップ形式で横並び表示する
+## x, y: 描画開始座標（y は行の上端）
+## avail_w: 利用可能な横幅
+## row_h: 行の高さ
+## option_labels: 表示ラベル配列（short_labels を優先して渡すこと）
+## selected_idx: 現在選択中のインデックス（< 0 の場合は 0 扱い）
+## is_focused: この行／列にフォーカスがあるか
+## is_editable_flag: 現在編集可能かどうか
+## fs: フォントサイズ
+func _draw_option_chips(x: float, y: float, avail_w: float, row_h: float,
+		option_labels: Array, selected_idx: int,
+		is_focused: bool, is_editable_flag: bool, fs: int) -> void:
+	if option_labels.is_empty():
+		return
+	var sel_idx := maxi(0, selected_idx)
+
+	var chip_pad_x := 5.0   # チップ内の左右パディング
+	var chip_gap   := 3.0   # チップ間の隙間
+	var chip_h     := row_h * 0.68
+	var chip_y     := y + (row_h - chip_h) * 0.5
+
+	# 各チップの基本幅を計算（パディング込み）
+	var chip_widths: Array[float] = []
+	var total_w := 0.0
+	for lbl_v: Variant in option_labels:
+		var lbl := lbl_v as String
+		var tw  := _font.get_string_size(lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var cw  := tw + chip_pad_x * 2.0
+		chip_widths.append(cw)
+		total_w += cw
+	total_w += chip_gap * float(maxi(0, chip_widths.size() - 1))
+
+	# 利用可能幅を超える場合は均等縮小
+	var scale := 1.0
+	if total_w > avail_w and total_w > 0.0:
+		scale = avail_w / total_w
+
+	var cx := x
+	for i: int in range(option_labels.size()):
+		var lbl    := option_labels[i] as String
+		var cw     := (chip_widths[i] as float) * scale
+		var is_sel := (i == sel_idx)
+
+		# 背景色・文字色の決定
+		var bg_col:  Color
+		var txt_col: Color
+		if is_sel and is_focused and is_editable_flag:
+			# フォーカスあり・編集可・選択中: 明るいハイライト
+			bg_col  = Color(0.25, 0.45, 0.85, 0.85)
+			txt_col = Color(1.0, 1.0, 0.25)
+		elif is_sel and is_focused:
+			# フォーカスあり・閲覧のみ・選択中: 控えめハイライト
+			bg_col  = Color(0.25, 0.30, 0.55, 0.65)
+			txt_col = Color(0.90, 0.90, 0.75)
+		elif is_sel:
+			# フォーカスなし・選択中: 薄い背景
+			bg_col  = Color(0.20, 0.28, 0.50, 0.40)
+			txt_col = Color(0.78, 0.88, 0.68)
+		else:
+			# 非選択
+			bg_col  = Color.TRANSPARENT
+			txt_col = Color(0.48, 0.48, 0.60) if is_focused else Color(0.38, 0.38, 0.50)
+
+		# 背景
+		if bg_col.a > 0.01:
+			_control.draw_rect(Rect2(cx, chip_y, cw, chip_h), bg_col)
+
+		# テキスト（チップ内横中央）
+		var tw2 := _font.get_string_size(lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var tx  := cx + maxf(0.0, (cw - tw2) * 0.5)
+		_control.draw_string(_font, Vector2(tx, chip_y + chip_h * 0.78),
+			lbl, HORIZONTAL_ALIGNMENT_LEFT, cw, fs, txt_col)
+
+		cx += cw + chip_gap * scale
 
 
 func _get_col_xs(px: float, panel_w: float, pad: float) -> Array[float]:
