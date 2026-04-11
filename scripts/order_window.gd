@@ -16,39 +16,61 @@ signal switch_requested(new_character: Character)
 
 # ── 定数 ─────────────────────────────────────────────────────────────────────
 
-const PRESETS: Array[String] = ["攻撃", "防衛", "待機", "追従", "撤退", "探索"]
-
-## プリセット → [combat, battle_formation, move, target, on_low_hp, item_pickup]
-const PRESET_TABLE: Array = [
-	["aggressive", "surround", "cluster",   "nearest",        "keep_fighting", "aggressive"],
-	["support",    "surround", "cluster",   "same_as_leader", "retreat",       "passive"],
-	["standby",    "surround", "cluster",   "nearest",        "retreat",       "avoid"],
-	["support",    "surround", "cluster",   "same_as_leader", "retreat",       "passive"],
-	["standby",    "surround", "cluster",   "nearest",        "flee",          "avoid"],
-	["aggressive", "surround", "explore",   "nearest",        "retreat",       "aggressive"],
+## 全体方針の行定義（key: Party.global_orders のキー）
+const GLOBAL_ROWS: Array = [
+	{"key": "combat",       "label": "戦闘方針",
+	 "options": ["aggressive", "defensive", "standby", "follow", "retreat"],
+	 "labels":  ["積極攻撃", "防衛", "待機", "追従", "撤退"]},
+	{"key": "target",       "label": "ターゲット方針",
+	 "options": ["nearest", "weakest", "focus"],
+	 "labels":  ["最近傍", "最弱", "集中"]},
+	{"key": "on_low_hp",    "label": "低HP時の行動",
+	 "options": ["keep_fighting", "retreat", "flee"],
+	 "labels":  ["戦い続ける", "後退", "逃走"]},
+	{"key": "item_pickup",  "label": "アイテム取得",
+	 "options": ["aggressive", "passive", "avoid"],
+	 "labels":  ["積極的に拾う", "近くのみ", "拾わない"]},
+	{"key": "hp_potion",    "label": "HPポーション",
+	 "options": ["50pct", "25pct", "never"],
+	 "labels":  ["HP50%以下", "HP25%以下", "使わない"]},
+	{"key": "sp_mp_potion", "label": "SP/MPポーション",
+	 "options": ["save", "aggressive"],
+	 "labels":  ["節約", "積極使用"]},
 ]
 
-const COL_OPTIONS: Array = [
-	["explore", "same_room", "cluster", "guard_room", "standby"],
-	["surround", "front", "rear", "same_as_leader"],
-	["aggressive", "support", "standby"],
-	["nearest", "weakest", "same_as_leader"],
-	["keep_fighting", "retreat", "flee"],
-	["aggressive", "passive", "avoid"],
+## 個別指示列（非ヒーラー）: 名前列を除く4列
+const MEMBER_COLS: Array = [
+	{"key": "battle_formation", "header": "隊形",
+	 "options": ["surround", "front", "rear", "same_as_leader"],
+	 "labels":  ["包囲", "前衛", "後衛", "リーダーと同じ"]},
+	{"key": "combat",           "header": "戦闘",
+	 "options": ["aggressive", "support", "standby"],
+	 "labels":  ["積極攻撃", "援護", "待機"]},
+	{"key": "target",           "header": "ターゲット",
+	 "options": ["nearest", "weakest", "same_as_leader"],
+	 "labels":  ["最近傍", "最弱", "リーダーと同じ"]},
+	{"key": "special_skill",    "header": "特殊攻撃",
+	 "options": ["auto", "manual"],
+	 "labels":  ["自動", "手動"]},
 ]
 
-const COL_LABELS: Array = [
-	["探索", "同じ部屋", "密集", "部屋守る", "待機"],
-	["包囲", "前衛", "後衛", "リーダーと同じ"],
-	["積極攻撃", "援護", "待機"],
-	["最近傍", "最弱", "リーダーと同じ"],
-	["戦い続ける", "後退", "逃走"],
-	["積極的に拾う", "近くのみ", "拾わない"],
+## 個別指示列（ヒーラー専用）
+const HEALER_COLS: Array = [
+	{"key": "battle_formation", "header": "隊形",
+	 "options": ["surround", "front", "rear", "same_as_leader"],
+	 "labels":  ["包囲", "前衛", "後衛", "リーダーと同じ"]},
+	{"key": "heal_mode",        "header": "回復",
+	 "options": ["aggressive", "support", "standby"],
+	 "labels":  ["積極回復", "援護", "待機"]},
+	{"key": "heal_target",      "header": "回復対象",
+	 "options": ["lowest_hp", "nearest", "same_as_leader"],
+	 "labels":  ["HP最低", "最近傍", "リーダーと同じ"]},
+	{"key": "special_skill",    "header": "特殊攻撃",
+	 "options": ["auto", "manual"],
+	 "labels":  ["自動", "手動"]},
 ]
 
-const COL_HEADERS: Array[String] = ["移動", "隊形", "戦闘", "ターゲット", "低HP", "取得"]
-const COL_KEYS: Array[String] = ["move", "battle_formation", "combat", "target", "on_low_hp", "item_pickup"]
-const TOTAL_COLS := 7
+const TOTAL_COLS := 5  ## 名前列1 + 個別指示列4
 
 ## 攻撃タイプの表示名
 const ATTACK_TYPE_LABELS: Dictionary = {
@@ -74,8 +96,7 @@ const CLASS_EQUIP_TYPES: Dictionary = {
 
 var _party:          Party
 var _focus_area:     _FocusArea = _FocusArea.GLOBAL_POLICY
-var _policy_cursor:  int = 0
-var _applied_policy: int = -1
+var _global_cursor:  int = 0  ## 全体方針の行カーソル（0〜GLOBAL_ROWS.size()-1）
 var _member_cursor:  int = 0
 var _col_cursor:     int = 0
 
@@ -174,21 +195,30 @@ func _handle_input() -> void:
 
 	match _focus_area:
 		_FocusArea.GLOBAL_POLICY:
-			if Input.is_action_just_pressed("ui_left"):
-				_policy_cursor = (_policy_cursor - 1 + PRESETS.size()) % PRESETS.size()
+			if Input.is_action_just_pressed("ui_up"):
+				if _global_cursor > 0:
+					_global_cursor -= 1
+				else:
+					close_window()
+			elif Input.is_action_just_pressed("ui_down"):
+				if _global_cursor < GLOBAL_ROWS.size() - 1:
+					_global_cursor += 1
+				elif members_count > 0:
+					_focus_area    = _FocusArea.MEMBER_TABLE
+					_member_cursor = 0
+					_col_cursor    = 0
+				else:
+					_focus_area = _FocusArea.CLOSE
+			elif Input.is_action_just_pressed("ui_left"):
+				if _is_editable():
+					_cycle_global_row(-1)
 			elif Input.is_action_just_pressed("ui_right"):
-				_policy_cursor = (_policy_cursor + 1) % PRESETS.size()
+				if _is_editable():
+					_cycle_global_row(1)
 			elif Input.is_action_just_pressed("attack") \
 					or Input.is_action_just_pressed("ui_accept"):
 				if _is_editable():
-					_apply_preset(_policy_cursor)
-			elif Input.is_action_just_pressed("ui_down"):
-				if members_count > 0:
-					_focus_area    = _FocusArea.MEMBER_TABLE
-					_member_cursor = 0
-					_col_cursor    = 0  # 操作列から開始
-				else:
-					_focus_area = _FocusArea.CLOSE
+					_cycle_global_row(1)
 			elif Input.is_action_just_pressed("ui_cancel") \
 					or Input.is_action_just_pressed("menu_back"):
 				close_window()
@@ -238,7 +268,7 @@ func _handle_input() -> void:
 						_submenu_cursor = 0
 						_submenu_open   = true
 					else:
-						# 1..6 列：リーダー操作中のみ値変更可
+						# 1..4 列：リーダー操作中のみ値変更可
 						if _is_editable():
 							_cycle_member_col(_member_cursor, _col_cursor - 1, +1)
 				elif Input.is_action_just_pressed("ui_cancel") \
@@ -485,28 +515,50 @@ func _is_editable() -> bool:
 		and _controlled_char.is_leader
 
 
-func _apply_preset(preset_index: int) -> void:
-	_applied_policy = preset_index
+## 全体方針の現在行の値を dir 方向に1段階切り替え、メンバー current_order にも同期する
+func _cycle_global_row(dir: int) -> void:
+	if _party == null or _global_cursor >= GLOBAL_ROWS.size():
+		return
+	var row  := GLOBAL_ROWS[_global_cursor] as Dictionary
+	var key  : String = row["key"] as String
+	var opts : Array  = row["options"] as Array
+	var cur_val : String = _party.global_orders.get(key, opts[0] as String) as String
+	var idx  : int = opts.find(cur_val)
+	if idx < 0:
+		idx = 0
+	idx = (idx + dir + opts.size()) % opts.size()
+	var new_val : String = opts[idx] as String
+	_party.global_orders[key] = new_val
+	# AI が読む current_order にも反映（互換キーのみ）
+	_sync_global_to_members(key, new_val)
+
+
+## global_orders の変更を全メンバーの current_order に反映する（AI 互換キーのみ）
+func _sync_global_to_members(key: String, val: String) -> void:
 	if _party == null:
 		return
-	var p: Array = PRESET_TABLE[preset_index]
-	var is_explore := (preset_index == PRESETS.size() - 1)
-	var sorted := _party.sorted_members()
-	for mi: int in range(sorted.size()):
-		var ch := sorted[mi] as Character
+	# current_order に存在するキー（combat/target/on_low_hp/item_pickup）のみ同期
+	var sync_keys: Array[String] = ["combat", "target", "on_low_hp", "item_pickup"]
+	if not sync_keys.has(key):
+		return
+	for m_v: Variant in _party.members:
+		var ch := m_v as Character
 		if not is_instance_valid(ch):
 			continue
-		var move_val: String = p[2] as String
-		if is_explore and mi > 0:
-			move_val = "same_room"
-		ch.current_order = {
-			"combat":           p[0] as String,
-			"battle_formation": p[1] as String,
-			"move":             move_val,
-			"target":           p[3] as String,
-			"on_low_hp":        p[4] as String,
-			"item_pickup":      p[5] as String,
-		}
+		ch.current_order[key] = val
+
+
+## キャラクターの個別指示列定義を返す（ヒーラーは専用列、それ以外は共通列）
+func _get_cols_for(ch: Character) -> Array:
+	return HEALER_COLS if _is_healer(ch) else MEMBER_COLS
+
+
+## キャラクターがヒーラークラスか判定する
+func _is_healer(ch: Character) -> bool:
+	return ch != null \
+		and is_instance_valid(ch) \
+		and ch.character_data != null \
+		and ch.character_data.class_id == "healer"
 
 
 func _cycle_member_col(member_index: int, col_param_index: int, dir: int) -> void:
@@ -515,9 +567,13 @@ func _cycle_member_col(member_index: int, col_param_index: int, dir: int) -> voi
 	var ch := _sorted_members[member_index] as Character
 	if not is_instance_valid(ch):
 		return
-	var key:  String = COL_KEYS[col_param_index]
-	var opts: Array  = COL_OPTIONS[col_param_index] as Array
-	var cur: int     = opts.find(ch.current_order.get(key, opts[0] as String))
+	var cols := _get_cols_for(ch)
+	if col_param_index >= cols.size():
+		return
+	var col  := cols[col_param_index] as Dictionary
+	var key  : String = col["key"] as String
+	var opts : Array  = col["options"] as Array
+	var cur  : int    = opts.find(ch.current_order.get(key, opts[0] as String))
 	if cur < 0:
 		cur = 0
 	cur = (cur + dir + opts.size()) % opts.size()
@@ -525,11 +581,15 @@ func _cycle_member_col(member_index: int, col_param_index: int, dir: int) -> voi
 
 
 func _get_col_label(ch: Character, col_param_index: int) -> String:
-	var key:  String = COL_KEYS[col_param_index]
-	var opts: Array  = COL_OPTIONS[col_param_index] as Array
-	var lbls: Array  = COL_LABELS[col_param_index] as Array
-	var val:  String = ch.current_order.get(key, opts[0] as String) as String
-	var idx: int     = opts.find(val)
+	var cols := _get_cols_for(ch)
+	if col_param_index >= cols.size():
+		return ""
+	var col  := cols[col_param_index] as Dictionary
+	var key  : String = col["key"] as String
+	var opts : Array  = col["options"] as Array
+	var lbls : Array  = col["labels"] as Array
+	var val  : String = ch.current_order.get(key, opts[0] as String) as String
+	var idx  : int    = opts.find(val)
 	if idx < 0:
 		return val
 	return lbls[idx] as String
@@ -666,11 +726,12 @@ func _on_draw() -> void:
 		status_section_h += stat_h + pad * 0.5             # （なし）＋下余白
 
 	# ── パネルサイズ計算 ──────────────────────────────────────────────────────
+	var global_row_h: float = maxf(22.0, gs_f * 0.24)  ## 全体方針行は少し細め
 	var panel_w := clampf(field_w * 0.90, 500.0, 960.0)
 	var panel_h := pad
 	panel_h += float(fs_title) + 10.0
 	panel_h += 25.0                                        # sep
-	panel_h += row_h + 8.0                                 # 全体方針行
+	panel_h += float(GLOBAL_ROWS.size()) * global_row_h + 8.0  # 全体方針6行
 	panel_h += 25.0                                        # sep
 	panel_h += row_h                                       # ヘッダー行
 	panel_h += float(member_count) * row_h + 8.0
@@ -702,31 +763,48 @@ func _on_draw() -> void:
 	_draw_sep(px, y, panel_w, pad)
 	y += 13.0
 
-	# ── 全体方針行 ────────────────────────────────────────────────────────────
+	# ── 全体方針（6行） ───────────────────────────────────────────────────────
+	var global_row_h2: float = maxf(22.0, gs_f * 0.24)
 	var is_policy := (_focus_area == _FocusArea.GLOBAL_POLICY)
-	if is_policy:
-		_control.draw_rect(Rect2(px + 4.0, y, panel_w - 8.0, row_h),
-			Color(0.18, 0.24, 0.48, 0.70))
+	# ラベル幅（最長ラベルに合わせてオフセット）
+	var glbl_w := 0.0
+	for grd_v: Variant in GLOBAL_ROWS:
+		var grd := grd_v as Dictionary
+		var gw := _font.get_string_size(grd["label"] as String,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label).x
+		if gw > glbl_w:
+			glbl_w = gw
+	glbl_w += 10.0
 
-	_control.draw_string(_font,
-		Vector2(px + pad, y + row_h * 0.66),
-		"全体方針：",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label, Color(0.78, 0.78, 0.92))
-
-	var lw  := _font.get_string_size("全体方針：", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label).x
-	var px2 := px + pad + lw + 6.0
-	for pi: int in range(PRESETS.size()):
-		var is_cur := is_policy and (pi == _policy_cursor)
-		var is_app := (pi == _applied_policy)
-		var col: Color
-		if is_cur:   col = Color(1.0, 1.0, 0.3)
-		elif is_app: col = Color(0.35, 1.0, 0.45)
-		else:        col = Color(0.55, 0.55, 0.70)
-		var txt := "[%s]" % PRESETS[pi] if (is_cur or is_app) else PRESETS[pi]
-		_control.draw_string(_font, Vector2(px2, y + row_h * 0.66),
-			txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_body, col)
-		px2 += _font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_body).x + 10.0
-	y += row_h + 8.0
+	for gi: int in range(GLOBAL_ROWS.size()):
+		var grd     := GLOBAL_ROWS[gi] as Dictionary
+		var g_key   : String = grd["key"] as String
+		var g_label : String = grd["label"] as String
+		var g_opts  : Array  = grd["options"] as Array
+		var g_lbls  : Array  = grd["labels"] as Array
+		var is_cur_row := is_policy and (gi == _global_cursor)
+		if is_cur_row:
+			_control.draw_rect(Rect2(px + 4.0, y, panel_w - 8.0, global_row_h2),
+				Color(0.18, 0.24, 0.48, 0.70))
+		var lbl_col := Color(1.0, 1.0, 0.3) if is_cur_row else Color(0.78, 0.78, 0.92)
+		_control.draw_string(_font,
+			Vector2(px + pad, y + global_row_h2 * 0.72),
+			g_label + "：",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label, lbl_col)
+		# 現在値
+		var cur_val : String = ""
+		if _party != null:
+			cur_val = _party.global_orders.get(g_key, g_opts[0] as String) as String
+		var val_idx  : int    = g_opts.find(cur_val)
+		var val_lbl  : String = (g_lbls[val_idx] as String) if val_idx >= 0 else cur_val
+		var val_str  := ("◀ %s ▶" % val_lbl) if (is_cur_row and _is_editable()) else val_lbl
+		var val_col  := Color(1.0, 1.0, 0.3) if is_cur_row else Color(0.85, 0.95, 0.80)
+		_control.draw_string(_font,
+			Vector2(px + pad + glbl_w + 12.0, y + global_row_h2 * 0.72),
+			val_str,
+			HORIZONTAL_ALIGNMENT_LEFT, panel_w - pad * 2.0 - glbl_w - 12.0, fs_body, val_col)
+		y += global_row_h2
+	y += 8.0
 
 	_draw_sep(px, y, panel_w, pad)
 	y += 13.0
@@ -734,18 +812,19 @@ func _on_draw() -> void:
 	# ── テーブル列位置計算 ────────────────────────────────────────────────────
 	var col_xs := _get_col_xs(px, panel_w, pad)
 
-	# ── ヘッダー行 ────────────────────────────────────────────────────────────
+	# ── ヘッダー行（非ヒーラー列ヘッダーを基準に表示） ──────────────────────────
 	var nm_h_col: Color = Color(1.0, 1.0, 0.3) \
 		if (_focus_area == _FocusArea.MEMBER_TABLE and _col_cursor == 0) \
 		else Color(0.55, 0.55, 0.70)
 	_control.draw_string(_font, Vector2(col_xs[0], y + row_h * 0.66),
 		"名前", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label, nm_h_col)
-	for ci: int in range(COL_HEADERS.size()):
+	for ci: int in range(MEMBER_COLS.size()):
 		var h_col: Color = Color(1.0, 1.0, 0.3) \
 			if (_focus_area == _FocusArea.MEMBER_TABLE and ci + 1 == _col_cursor) \
 			else Color(0.55, 0.55, 0.70)
+		var col_def := MEMBER_COLS[ci] as Dictionary
 		_control.draw_string(_font, Vector2(col_xs[ci + 1], y + row_h * 0.66),
-			COL_HEADERS[ci], HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label, h_col)
+			col_def["header"] as String, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label, h_col)
 	y += row_h
 
 	# ── メンバー行 ────────────────────────────────────────────────────────────
@@ -784,7 +863,8 @@ func _on_draw() -> void:
 		_control.draw_string(_font, Vector2(col_xs[0], y + row_h * 0.67),
 			nm_prefix + nm_str, HORIZONTAL_ALIGNMENT_LEFT, name_w, fs_body, nm_color)
 
-		for ci: int in range(COL_HEADERS.size()):
+		var cols_for_ch := _get_cols_for(ch)
+		for ci: int in range(cols_for_ch.size()):
 			var lbl     := _get_col_label(ch, ci)
 			var focused := is_mem and (ci + 1 == _col_cursor)
 			var c_col: Color = Color(1.0, 1.0, 0.3) if focused else Color(0.80, 0.80, 0.80)
@@ -832,7 +912,9 @@ func _on_draw() -> void:
 		var sub_w:  float = 200.0
 		var sub_ih: float = maxf(22.0, gs_f * 0.24)
 		var sub_h:  float = SUBMENU_ITEMS.size() * sub_ih + 8.0
-		var row_offset := py + pad + float(fs_title) + 10.0 + 13.0 + row_h + 8.0 + 13.0 \
+		var _g_row_h := maxf(22.0, gs_f * 0.24)
+		var row_offset := py + pad + float(fs_title) + 10.0 + 13.0 \
+			+ float(GLOBAL_ROWS.size()) * _g_row_h + 8.0 + 13.0 \
 			+ row_h + float(_member_cursor) * row_h
 		var sub_x := col_xs[0]
 		var sub_y := row_offset + row_h
@@ -867,10 +949,15 @@ func _on_draw() -> void:
 		hint_str = "↑↓:スクロール  Z/Enter/Esc:ログを閉じる  Tab:ウィンドウを閉じる"
 	elif _submenu_open:
 		hint_str = "↑↓:選択  Z/Enter:決定  Esc:キャンセル"
+	elif _focus_area == _FocusArea.GLOBAL_POLICY:
+		if _is_editable():
+			hint_str = "↑↓:行選択  ←→/Z:値変更  ↓(最終行):メンバー表へ  Esc:閉じる"
+		else:
+			hint_str = "↑↓:行選択  ↓(最終行):メンバー表へ  Esc:閉じる（閲覧のみ）"
 	elif _is_editable():
-		hint_str = "↑↓:行移動  ←→:列/方針切替  Z/Enter:選択/値切替  Tab/Esc:閉じる"
+		hint_str = "↑↓:行移動  ←→:列移動  Z:値切替（名前列はサブメニュー）  Esc:閉じる"
 	else:
-		hint_str = "↑↓:行移動  ←→:列移動  Z/Enter:名前列で操作切替  Tab/Esc:閉じる（閲覧のみ）"
+		hint_str = "↑↓:行移動  ←→:列移動  Z:名前列でサブメニュー  Esc:閉じる（閲覧のみ）"
 	_control.draw_string(_font,
 		Vector2(px + pad, py + panel_h - float(fs_hint) - pad * 0.45),
 		hint_str,
@@ -1159,10 +1246,10 @@ func _load_item_tex(item: Dictionary) -> Texture2D:
 func _get_col_xs(px: float, panel_w: float, pad: float) -> Array[float]:
 	var avail  := panel_w - pad * 2.0
 	var name_r := 0.22
-	var item_r := (1.0 - name_r) / float(COL_HEADERS.size())
+	var item_r := (1.0 - name_r) / float(MEMBER_COLS.size())
 	var xs: Array[float] = []
 	xs.append(px + pad)  # [0] 名前列
-	for ci: int in range(COL_HEADERS.size()):
+	for ci: int in range(MEMBER_COLS.size()):
 		xs.append(px + pad + avail * (name_r + item_r * float(ci)))  # [1..n] 指示列
 	return xs
 

@@ -225,7 +225,7 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 			_draw_bar(tx, content_y, tw, bar_h, sp_cur_r, Color(0.4, 0.8, 1.0), sp_max_r)
 			content_y += bar_h + 4.0
 
-	# 指示状態（OrderWindow の COL_LABELS と完全一致する表記）
+	# 指示状態（current_order から読み込み。move/on_low_hp/item_pickup は全体方針から同期）
 	var ord: Dictionary = c.current_order
 	var move_a: String  = {"explore": "探索", "same_room": "同じ部屋", "cluster": "密集",
 		"guard_room": "部屋を守る", "standby": "待機"}.get(

@@ -1423,6 +1423,52 @@ rank値: C=0, B=1, A=2, S=3
     - 操作キャラから 1.5 マス先、リーダー方向を向く三角形（リーダーの `party_color` 色・alpha 0.80・白輪郭線）
     - `viewport.get_canvas_transform()` でスクリーン座標変換し `get_visible_rect().has_point()` で画面内外判定
     - `map_node` セット時に `_setup_leader_indicator()` を即時呼び出し（セッタ経由）
+- [x] Phase 13-3: MessageWindow スムーズスクロール
+  - メッセージ追加時に最新エントリの高さ分だけ `_scroll_offset` を設定し、`SCROLL_DURATION=0.15秒` かけて 0 まで線形補間
+  - 既存エントリが上に流れ、最新エントリがウィンドウ下端から滑り込む視覚効果
+  - **時間停止なし**：スクロール中も `world_time_running` は変更しない
+  - スクロール中にウィンドウ下端を超えるエントリは描画をスキップ（正常な見切れ）
+  - F1 デバッグ表示のデフォルトを ON → OFF に変更（`MessageLog.debug_visible = false`）
+  - 上端パディングを 4px → 8px に拡大（`avail_h = box_h - 12.0`・`entry_y` の最低値を `by + 8.0` に変更）。スクロール後に最上段エントリが上端に食い込む問題を修正
+  - **上端クリッピング修正**：エントリ描画を `SubViewportContainer`（`_svc`）+ `SubViewport`（`_svp`）+ 内部 Control（`_scroll_content`）構成に変更。`_on_scroll_draw()` でローカル座標描画。SubViewport のサイズ境界がピクセル単位のクリップ領域になる。スクロール中に `start_g - 1`（退場中グループ）も y<0 に描画し、上端から滑らかに消えるように修正
+- [x] Phase 13-4: ダンジョン部屋形状・障害物改修
+  - **DungeonBuilder 拡張**（`scripts/dungeon_builder.gd`）：`_carve_room()` に `wall_tiles` / `obstacle_tiles` の処理を追加
+    - `wall_tiles`: 内部をWALLに戻す（L字・T字・多角形など非矩形形状用）。rx/ry は部屋左上隅からの相対座標
+    - `obstacle_tiles`: 内部を OBSTACLE に設定（飛行キャラは通過可・地上キャラは不可）
+    - 処理順：FLOOR で内部を埋める → wall_tiles で WALL 戻し → obstacle_tiles で OBSTACLE 設定 → 後続の corridor 掘削で通路が上書き（FLOOR 以外の場合 CORRIDOR に）
+    - **バグ修正**：`_carve_corridor()` が wall_tiles 設定の WALL を CORRIDOR に上書きしていた問題を修正。条件を `t != FLOOR and t != WALL` に変更し、部屋形状の壁タイルを保護（部屋内部に通路色タイルが現れる視覚バグを解消）
+    - **ルート確保バグ修正**：WALL 上書き禁止が廊下の外壁貫通も妨げていた問題を修正。処理順を `_carve_room()` → `_carve_corridor()` → `_apply_room_overlays()` に変更。wall_tiles/obstacle_tiles は通路掘削後に適用し、CORRIDOR タイルは上書きしない（出入り口を塞がない）
+  - **`dungeon_handcrafted.json` 全49部屋を再設計**
+    - 各フロアに3種以上の異なる形状パターンを使用（切り欠きなし・NE/NW/SE/SW/N/S/全角・対角など8種）
+    - 形状パターン一覧（10×8部屋・interior rx∈[1..8] ry∈[1..6]）：
+      - **cut-NE**: NE角2列×3行をWALL（rx7-8,ry1-3）
+      - **cut-NW**: NW角2列×3行をWALL（rx1-2,ry1-3）
+      - **cut-SE**: SE角2列×3行をWALL（rx7-8,ry4-6）
+      - **cut-SW**: SW角2列×3行をWALL（rx1-2,ry4-6）
+      - **cut-N**: 上部左右2×2ずつカット（rx1-2＋7-8, ry1-2）
+      - **cut-S**: 下部左右2×2ずつカット（rx1-2＋7-8, ry5-6）
+      - **cut-all**: 全4角2×2カット（cut-N＋cut-S）→ 八角形に近い形
+      - **cut-NE+SE**: 右2列全行をWALL（縦長L字型）
+      - **cut-NW+SE**: 対角L字
+      - **pillar-LR**: 右下2×2のWALL島（柱型）
+    - 各部屋に1〜2個のOBSTACLEタイル（岩の列・瓦礫・崩れた柱など）を配置
+    - ボス部屋（r5_1 / 30×22）：4角3×3カット＋4本の2×2障害物柱（戦術的カバーポイント）
+    - キャラクタースポーン・階段タイルとの位置確認済み（衝突なし）
+- [x] Phase 13-5: OrderWindow 全体方針セクション刷新・個別指示テーブル4列化
+  - **全体方針を 1 行プリセット選択 → 6 行個別設定に刷新**
+    - `GlobalConstants.gd`：12 の新定数を追加（GLOBAL_COMBAT/TARGET/LOW_HP/ITEM_PICKUP/HP_POTION/SP_MP_POTION・MEMBER_FORMATION/COMBAT/ATTACK_TARGET/SPECIAL/HEAL/HEAL_TARGET）
+    - `Party.gd`：`var global_orders: Dictionary` を追加（6 キーのデフォルト値付き）
+    - `OrderWindow.GLOBAL_ROWS`：6 行定義（key/label/options/labels を持つ配列）
+    - 全体方針行で ←→/Z で値切替。変更時は combat/target/on_low_hp/item_pickup を全メンバーの current_order にも同期（AI 互換）
+    - hp_potion / sp_mp_potion は global_orders のみ（AI 未接続・将来実装）
+  - **個別指示テーブルを 6 列 → 4 列に変更**（`TOTAL_COLS: 7 → 5`）
+    - 旧 `COL_OPTIONS/COL_LABELS/COL_HEADERS/COL_KEYS/PRESETS/PRESET_TABLE` を削除
+    - 新 `MEMBER_COLS`（非ヒーラー）：隊形/戦闘/ターゲット/特殊攻撃
+    - 新 `HEALER_COLS`（ヒーラー専用）：隊形/回復/回復対象/特殊攻撃
+    - `_get_cols_for(ch)` でキャラクター別に列定義を切り替え
+    - `_is_healer(ch)` ヘルパー追加
+    - 移動/低HP/取得列は全体方針に移動（per-member 表からは削除）
+  - **AI 変更なし**：character.current_order の既存キーは保持。battle_formation/combat/target は引き続き AI が参照
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム

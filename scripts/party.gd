@@ -10,6 +10,16 @@ var active_character: Character = null
 ## 加入順インデックスカウンター（add_member() 呼び出しごとに増加）
 var _next_join_index: int = 0
 
+## パーティー全体の方針（OrderWindow の全体方針行が管理。将来 AI が参照予定）
+var global_orders: Dictionary = {
+	"combat":       "aggressive",
+	"target":       "nearest",
+	"on_low_hp":    "keep_fighting",
+	"item_pickup":  "aggressive",
+	"hp_potion":    "50pct",
+	"sp_mp_potion": "save",
+}
+
 
 func add_member(character: Character) -> void:
 	character.join_index = _next_join_index
