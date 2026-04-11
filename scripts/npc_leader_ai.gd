@@ -417,7 +417,7 @@ func _take_potion_from_party(needer: Character, kind: String) -> Variant:
 			continue
 		if donor.character_data == null:
 			continue
-		var pot := _find_potion_in_cd(donor.character_data, kind)
+		var pot: Variant = _find_potion_in_cd(donor.character_data, kind)
 		if pot != null:
 			donor.character_data.inventory.erase(pot)
 			return pot
