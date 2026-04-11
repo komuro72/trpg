@@ -275,8 +275,10 @@ func _auto_equip_members() -> void:
 	# 装備可能な item_type ごとに未装備品を収集
 	var pool_by_type: Dictionary = {}  # item_type -> Array[{item, owner_data}]
 	for mv: Variant in _party_members:
+		if not is_instance_valid(mv as Object):
+			continue
 		var member := mv as Character
-		if not is_instance_valid(member) or member.character_data == null:
+		if member == null or member.character_data == null:
 			continue
 		var cd := member.character_data
 		for item_var: Variant in cd.inventory:
