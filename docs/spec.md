@@ -3003,24 +3003,27 @@ Godot 4 では Tab・Esc キーが UI フォーカスナビゲーション / ui_
 - **非リーダー操作中**：閲覧のみ（指示変更キーは無効。タイトルに「（閲覧のみ）」表示）
 - 会話中・その他ブロック中（`player_controller.is_blocked == true`）は開かない
 
-### ウィンドウ構成（Phase 13-5 刷新版）
+### ウィンドウ構成（確定仕様）
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  タイトル「パーティー指示」                                   │
 ├──────────────────────────────────────────────────────────────┤
-│  [全体方針セクション: 6行]                                    │
-│    戦闘方針：     積極  防衛  待機  追従  撤退               │
-│    ターゲット方針：近傍  最弱  集中                          │
-│    低HP時の行動： 継続  後退  逃走                           │
-│    アイテム取得： 積極  近くのみ  拾わない                   │
+│  [全体共通設定: 6行]                                          │
+│    移動：         追従  密集  同じ部屋  待機  探索           │
+│    攻撃ターゲット：近傍  最弱  同じ  援護                    │
+│    低HP時の行動： 戦い続ける  撤退する                       │
+│    アイテム取得： 積極  必要なら  拾わない                   │
 │    HPポーション： HP50%  HP25%  使わない                    │
-│    SP/MPポーション：節約  積極                               │
+│    MP/SPポーション：温存  積極的に使う                       │
 │    ↑↓:行選択  ←→:選択肢切替  ↓(最終行)→メンバー表        │
 ├──────────────────────────────────────────────────────────────┤
-│  [メンバーテーブル: 名前+4列]                                 │
-│    名前  │  隊形           │  戦闘       │  ターゲット  │  特殊攻撃 │
-│          │ 包囲 前衛 後衛 同じ│ 積極 援護 待機│ 近傍 最弱 同じ│ 自動 手動 │
-│  （ヒーラーは 戦闘→回復・ターゲット→回復対象）               │
+│  [個別設定テーブル: 名前+4列]                                 │
+│  非ヒーラー:                                                  │
+│    名前  │  ターゲット        │  隊形     │  戦闘       │  特殊攻撃         │
+│          │近傍 最弱 同じ 援護│包囲 突進 後衛│攻撃 防御 逃走│積極 強敵 劣勢 使わない│
+│  ヒーラー:                                                    │
+│    名前  │  隊形     │  戦闘       │  回復                    │  特殊攻撃         │
+│          │包囲 突進 後衛│攻撃 防御 逃走│積極 リーダー優先 瀕死優先 しない│積極 強敵 劣勢 使わない│
 │    ↑↓:行移動  ←→:列移動/選択肢切替  Z:名前列でサブメニュー│
 ├──────────────────────────────────────────────────────────────┤
 │  [下部] 選択中キャラ詳細                                      │
@@ -3034,24 +3037,82 @@ Godot 4 では Tab・Esc キーが UI フォーカスナビゲーション / ui_
 - 全体方針・個別指示ともに全選択肢を横並びで常時表示
 - 現在選択中の項目はハイライト（フォーカスあり＋編集可：青背景＋黄文字、フォーカスあり＋閲覧のみ：薄い背景、フォーカスなし：薄い背景＋暗めの文字）
 - ←→ キーで選択肢を切り替えるとハイライトが移動
-- 表示ラベルは `short_labels`（省略形）を使用（"リーダーと同じ"→"同じ"、"積極的に拾う"→"積極" など）
+- 表示ラベルは `short_labels`（省略形）を使用
 - 利用可能な幅が足りない場合はチップを均等縮小（省略なし）
 
-#### 全体方針行（`Party.global_orders`）
-- `combat`      ← "aggressive"/"defensive"/"standby"/"follow"/"retreat"
-- `target`      ← "nearest"/"weakest"/"focus"
-- `on_low_hp`   ← "keep_fighting"/"retreat"/"flee"
-- `item_pickup` ← "aggressive"/"passive"/"avoid"
-- `hp_potion`   ← "50pct"/"25pct"/"never"
-- `sp_mp_potion`← "save"/"aggressive"
-- 変更時に combat/target/on_low_hp/item_pickup は全メンバーの `current_order` にも同期（AI 互換）
+#### 全体共通設定（`Party.global_orders`）
+
+| キー | 選択肢 | 説明 |
+|------|--------|------|
+| `move` | follow / cluster / same_room / standby / explore | 追従 / 密集 / 同じ部屋 / 待機 / 探索 |
+| `target` | nearest / weakest / same_as_leader / support | 最近傍 / 最弱優先 / リーダーと同じ / 援護 |
+| `on_low_hp` | keep_fighting / retreat | 戦い続ける / 撤退する |
+| `item_pickup` | aggressive / passive / avoid | 積極的に拾う / 必要なら拾う / 拾わない |
+| `hp_potion` | 50pct / 25pct / never | HP50%以下で使用 / HP25%以下で使用 / 使わない |
+| `sp_mp_potion` | save / aggressive | 温存 / 積極的に使う |
+
+- 変更時に move/target/on_low_hp/item_pickup は全メンバーの `current_order` にも同期（AI 互換）
 - hp_potion / sp_mp_potion は `global_orders` のみ（AI 未接続。将来実装）
 
-#### メンバー個別指示テーブル（`character.current_order`）
-- 非ヒーラー4列: battle_formation / combat / target / special_skill
-- ヒーラー4列: battle_formation / heal_mode / heal_target / special_skill
-- `special_skill`: "auto"（AI が自動発動）/ "manual"（プレイヤー操作時のみ。AI は未使用）
-- `heal_mode` / `heal_target`: AI 未接続（将来実装）
+#### 個別設定（`character.current_order`）
+
+**非ヒーラー 4列（ターゲット → 隊形 → 戦闘 → 特殊攻撃）**
+
+| キー | 選択肢 | 説明 |
+|------|--------|------|
+| `target` | nearest / weakest / same_as_leader / support | 最近傍 / 最弱優先 / リーダーと同じ / 援護 |
+| `battle_formation` | surround / rush / rear | 包囲 / 突進 / 後衛 |
+| `combat` | attack / defense / flee | 攻撃 / 防御 / 逃走 |
+| `special_skill` | aggressive / strong_enemy / disadvantage / never | 積極的に使う / 強敵なら使う / 劣勢なら使う / 使わない |
+
+**ヒーラー 4列（隊形 → 戦闘 → 回復 → 特殊攻撃）**
+
+| キー | 選択肢 | 説明 |
+|------|--------|------|
+| `battle_formation` | surround / rush / rear | 包囲 / 突進 / 後衛 |
+| `combat` | attack / defense / flee | 攻撃 / 防御 / 逃走 |
+| `heal` | aggressive / leader_first / lowest_hp_first / none | 積極回復 / リーダー優先 / 瀕死度優先 / 回復しない |
+| `special_skill` | aggressive / strong_enemy / disadvantage / never | 積極的に使う / 強敵なら使う / 劣勢なら使う / 使わない |
+
+#### 各指示の定義
+
+**移動**
+- 追従（follow）：操作キャラの1マス後ろに位置取る
+- 密集（cluster）：操作キャラの周囲1マスに位置取る
+- 同じ部屋（same_room）：同じ部屋にいれば自由に動く
+- 待機（standby）：その場から動かない
+- 探索（explore）：リーダー位置に関係なく未訪問エリアを自律探索
+- 移動と戦闘指示は独立（待機中でも戦闘指示が有効）
+- 隊形（包囲/突進/後衛）は同じ部屋にいる場合のみ適用
+
+**攻撃ターゲット**（全体共通・個別共通）
+- 最近傍（nearest）：最も距離が近い敵
+- 最弱優先（weakest）：ダメージ状態が最も悪い敵（同率なら距離で決定）
+- リーダーと同じ（same_as_leader）：リーダーのターゲットに合わせる
+- 援護（support）：HP割合が最も低い味方に最も近い敵を狙う
+
+**隊形**
+- 包囲（surround）：ターゲットの背後→側面→正面の優先順で空きマスに位置取る
+- 突進（rush）：ターゲットへ最短経路で向かう
+- 後衛（rear）：射程距離を保つ（マージンあり）
+
+**戦闘**
+- 攻撃（attack）：ターゲット方針に従って積極的に攻撃する
+- 防御（defense）：ガードしながら反撃のみ
+- 逃走（flee）：戦闘を避けて離脱する
+
+**回復**（ヒーラー専用・heal_mode + heal_target を統合）
+- 積極回復（aggressive）：MPに余裕があれば積極的に回復する
+- リーダー優先（leader_first）：瀕死の味方がいたらリーダーを優先
+- 瀕死度優先（lowest_hp_first）：HP割合が最も低い味方を優先
+- 回復しない（none）：回復行動を取らない
+- 自分優先は選択肢に含めない（ヒーラーは他者優先のキャラクター設定）
+
+**特殊攻撃**
+- 積極的に使う（aggressive）：クールタイム明け次第使用
+- 強敵なら使う（strong_enemy）：相手ランク ≧ 自分ランク
+- 劣勢なら使う（disadvantage）：味方パーティーの平均HP割合が閾値以下（閾値は `GlobalConstants` に定数定義・深層移動判定など他ロジックと共有）
+- 使わない（never）：使用しない
 
 ### ステータス3列表示（下部）
 ```

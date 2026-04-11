@@ -1455,20 +1455,20 @@ rank値: C=0, B=1, A=2, S=3
     - ボス部屋（r5_1 / 30×22）：4角3×3カット＋4本の2×2障害物柱（戦術的カバーポイント）
     - キャラクタースポーン・階段タイルとの位置確認済み（衝突なし）
 - [x] Phase 13-5: OrderWindow 全体方針セクション刷新・個別指示テーブル4列化・選択肢横並び表示
-  - **全体方針を 1 行プリセット選択 → 6 行個別設定に刷新**
+  - **全体方針を 1 行プリセット選択 → 6 行個別設定に刷新（実装済み）**
     - `GlobalConstants.gd`：12 の新定数を追加（GLOBAL_COMBAT/TARGET/LOW_HP/ITEM_PICKUP/HP_POTION/SP_MP_POTION・MEMBER_FORMATION/COMBAT/ATTACK_TARGET/SPECIAL/HEAL/HEAL_TARGET）
     - `Party.gd`：`var global_orders: Dictionary` を追加（6 キーのデフォルト値付き）
     - `OrderWindow.GLOBAL_ROWS`：6 行定義（key/label/options/labels/short_labels を持つ配列）
     - 全体方針行で ←→ で値切替。変更時は combat/target/on_low_hp/item_pickup を全メンバーの current_order にも同期（AI 互換）
     - hp_potion / sp_mp_potion は global_orders のみ（AI 未接続・将来実装）
-  - **個別指示テーブルを 6 列 → 4 列に変更**（`TOTAL_COLS: 7 → 5`）
+  - **個別指示テーブルを 6 列 → 4 列に変更（実装済み）**
     - 旧 `COL_OPTIONS/COL_LABELS/COL_HEADERS/COL_KEYS/PRESETS/PRESET_TABLE` を削除
     - 新 `MEMBER_COLS`（非ヒーラー）：隊形/戦闘/ターゲット/特殊攻撃（各列に short_labels を追加）
     - 新 `HEALER_COLS`（ヒーラー専用）：隊形/回復/回復対象/特殊攻撃（各列に short_labels を追加）
     - `_get_cols_for(ch)` でキャラクター別に列定義を切り替え
     - `_is_healer(ch)` ヘルパー追加
     - 移動/低HP/取得列は全体方針に移動（per-member 表からは削除）
-  - **選択肢横並び（チップ形式）表示**
+  - **選択肢横並び（チップ形式）表示（実装済み）**
     - `_draw_option_chips()` ヘルパー追加：全選択肢を横並びで描画し、選択中をハイライト
     - 全体方針・個別指示ともに `◀ val ▶` 単独表示を廃止しチップ形式に変更
     - フォーカスあり＋編集可：選択中チップを青背景＋黄文字で強調
@@ -1476,7 +1476,35 @@ rank値: C=0, B=1, A=2, S=3
     - フォーカスなし：選択中チップを薄い背景・暗めの文字で表示
     - 幅が足りない場合はチップを均等縮小（省略せず全選択肢を表示）
     - 全体方針は `fs_body`・個別指示列は `fs_hint` で描画
-  - **AI 変更なし**：character.current_order の既存キーは保持。battle_formation/combat/target は引き続き AI が参照
+  - **行動指示仕様（確定・次フェーズで実装）**
+    - **全体共通設定**（`Party.global_orders`）
+      - `move`（移動）: follow=追従 / cluster=密集 / same_room=同じ部屋 / standby=待機 / explore=探索
+        - 現在コードは `combat`（戦闘方針）キーだが、次フェーズで `move` に差し替える
+      - `target`（攻撃ターゲット）: nearest=最近傍 / weakest=最弱優先 / same_as_leader=リーダーと同じ / support=援護
+        - 「援護」= HP割合が最も低い味方に最も近い敵を狙う。次フェーズで選択肢を追加
+      - `on_low_hp`（低HP時の行動）: keep_fighting=戦い続ける / retreat=撤退する（2択に削減。flee は廃止）
+      - `item_pickup`（アイテム取得）: aggressive=積極的に拾う / passive=必要なら拾う / avoid=拾わない（変更なし）
+      - `hp_potion`（HPポーション）: 50pct / 25pct / never（変更なし）
+      - `sp_mp_potion`（MP/SPポーション）: save=温存 / aggressive=積極的に使う（変更なし）
+    - **個別設定**（`character.current_order`）
+      - 非ヒーラー 4列（列順変更）：ターゲット / 隊形 / 戦闘 / 特殊攻撃
+        - `target`（ターゲット）: nearest / weakest / same_as_leader / support（全体方針と同値セット）
+        - `battle_formation`（隊形）: surround=包囲 / rush=突進 / rear=後衛（3択に変更。front/same_as_leader を廃止）
+        - `combat`（戦闘）: attack=攻撃 / defense=防御 / flee=逃走（3択に変更。aggressive/support/standby を廃止）
+        - `special_skill`（特殊攻撃）: aggressive=積極的に使う / strong_enemy=強敵なら使う / disadvantage=劣勢なら使う / never=使わない（4択に拡張）
+      - ヒーラー 4列：隊形 / 戦闘 / 回復 / 特殊攻撃
+        - `battle_formation`・`combat`・`special_skill`：非ヒーラーと共通
+        - `heal`（回復）: aggressive=積極回復 / leader_first=リーダー優先 / lowest_hp_first=瀕死度優先 / none=回復しない
+          - heal_mode + heal_target の2列を1列に統合。ターゲットは heal 設定が内包
+    - **各指示の定義**
+      - 移動と戦闘指示は独立（待機中でも戦闘指示が有効）
+      - 隊形（包囲/突進/後衛）は同じ部屋にいる場合のみ適用
+      - 包囲：ターゲットの背後→側面→正面の優先順で位置取る
+      - 突進：ターゲットへ最短経路で向かう
+      - 後衛：射程距離を保つ（マージンあり）
+      - 援護：HP割合が最も低い味方に最も近い敵を狙う
+      - 劣勢判定閾値（`GlobalConstants` 定数として定義予定）：味方パーティーの平均HP割合がこれを下回ると「劣勢」。深層移動判定など他ロジックと共有
+  - **AI 変更なし（今フェーズ）**：character.current_order の既存キーは保持。battle_formation/combat/target は引き続き AI が参照
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム
