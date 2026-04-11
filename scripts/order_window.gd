@@ -58,16 +58,17 @@ const MEMBER_COLS: Array = [
 ]
 
 ## 個別指示列（ヒーラー専用）
+## 列順を MEMBER_COLS と合わせる（col0=回復、col1=隊形、col2=戦闘、col3=特殊攻撃）
 const HEALER_COLS: Array = [
+	{"key": "heal_mode",        "header": "回復",
+	 "options": ["aggressive", "leader_first", "lowest_hp_first", "none"],
+	 "labels":  ["積極回復", "リーダー優先", "瀕死度優先", "回復しない"]},
 	{"key": "battle_formation", "header": "隊形",
 	 "options": ["surround", "rush", "rear", "gather"],
 	 "labels":  ["包囲", "突進", "後衛", "集結"]},
 	{"key": "combat",           "header": "戦闘",
 	 "options": ["attack", "defense", "flee"],
 	 "labels":  ["攻撃", "防御", "逃走"]},
-	{"key": "heal_mode",        "header": "回復",
-	 "options": ["aggressive", "leader_first", "lowest_hp_first", "none"],
-	 "labels":  ["積極回復", "リーダー優先", "瀕死度優先", "回復しない"]},
 	{"key": "special_skill",    "header": "特殊攻撃",
 	 "options": ["aggressive", "strong_enemy", "disadvantage", "never"],
 	 "labels":  ["積極的に使う", "強敵なら使う", "劣勢なら使う", "使わない"]},
@@ -903,11 +904,18 @@ func _on_draw() -> void:
 		else Color(0.55, 0.55, 0.70)
 	_control.draw_string(_font, Vector2(col_xs[0], y + row_h * 0.66),
 		"名前", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label, nm_h_col)
-	for ci: int in range(MEMBER_COLS.size()):
+	# フォーカス中メンバーの列定義を使用してヘッダーを表示（ヒーラーでは回復列等が正しく表示される）
+	var header_cols: Array = MEMBER_COLS
+	if _focus_area == _FocusArea.MEMBER_TABLE \
+			and _member_cursor >= 0 and _member_cursor < _sorted_members.size():
+		var focused_ch := _sorted_members[_member_cursor] as Character
+		if is_instance_valid(focused_ch):
+			header_cols = _get_cols_for(focused_ch)
+	for ci: int in range(header_cols.size()):
 		var h_col: Color = Color(1.0, 1.0, 0.3) \
 			if (_focus_area == _FocusArea.MEMBER_TABLE and ci + 1 == _col_cursor) \
 			else Color(0.55, 0.55, 0.70)
-		var col_def := MEMBER_COLS[ci] as Dictionary
+		var col_def := header_cols[ci] as Dictionary
 		_control.draw_string(_font, Vector2(col_xs[ci + 1], y + row_h * 0.66),
 			col_def["header"] as String, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label, h_col)
 	y += row_h
