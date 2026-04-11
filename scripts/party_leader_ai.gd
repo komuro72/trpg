@@ -209,20 +209,29 @@ func _assign_orders() -> void:
 		if _party_strategy == Strategy.FLEE:
 			effective_strat = int(Strategy.FLEE)
 		elif _party_strategy == Strategy.EXPLORE:
-			# 探索戦略：UnitAI には WAIT を渡し、move を explore / stairs に設定
-			var cd := member.character_data
-			if cd != null and (cd.power > 0 or cd.buff_mp_cost > 0):
-				effective_strat = int(Strategy.WAIT)
+			if joined_to_player:
+				# 合流済みメンバー：探索ではなく global_orders の移動方針（follow 等）に従う
+				# move_policy は上で _global_orders から設定済みのためここでは上書きしない
+				var cd := member.character_data
+				if cd != null and (cd.power > 0 or cd.buff_mp_cost > 0):
+					effective_strat = int(Strategy.WAIT)
+				else:
+					effective_strat = int(Strategy.ATTACK)
 			else:
-				effective_strat = int(Strategy.ATTACK)
-			var pol := _get_explore_move_policy()
-			if pol == "stairs_down" or pol == "stairs_up":
-				# フロア移動判断: 全メンバーが一斉に階段を目指す
-				move_policy = pol
-			else:
-				# 目標フロア到達後は全メンバーが探索行動に移る
-				# （通路で同士が固まって待機する問題を防ぐ）
-				move_policy = "explore"
+				# 未合流 NPC：探索戦略として move を explore / stairs に設定
+				var cd := member.character_data
+				if cd != null and (cd.power > 0 or cd.buff_mp_cost > 0):
+					effective_strat = int(Strategy.WAIT)
+				else:
+					effective_strat = int(Strategy.ATTACK)
+				var pol := _get_explore_move_policy()
+				if pol == "stairs_down" or pol == "stairs_up":
+					# フロア移動判断: 全メンバーが一斉に階段を目指す
+					move_policy = pol
+				else:
+					# 目標フロア到達後は全メンバーが探索行動に移る
+					# （通路で同士が固まって待機する問題を防ぐ）
+					move_policy = "explore"
 		else:
 			# 回復・バフ専用キャラ（heal_mp_cost > 0 または buff_mp_cost > 0）は常に WAIT を渡す
 			# UnitAI._generate_queue() の先頭で heal/buff キューが自動生成される

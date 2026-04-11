@@ -113,8 +113,9 @@ func receive_order(order: Dictionary) -> void:
 	if raw_target != null and is_instance_valid(raw_target):
 		ordered_target = raw_target as Character
 
-	# 移動方針を更新
+	# 移動方針を更新（変化があったか記録してから更新）
 	var new_move := order.get("move", "spread") as String
+	var prev_move_policy := _move_policy
 	# guard_room: 初回設定時に現在地の部屋を記憶する
 	if new_move == "guard_room":
 		if _guard_room_area.is_empty() and _map_data != null \
@@ -144,7 +145,10 @@ func receive_order(order: Dictionary) -> void:
 	var on_stair := _member != null and is_instance_valid(_member) \
 			and _is_stair_tile(_member.grid_pos) \
 			and _move_policy != "stairs_down" and _move_policy != "stairs_up"
-	if not on_stair and effective_strategy == _strategy and effective_target == _target \
+	# 移動方針が変化した場合もキューを強制再生成する
+	var policy_changed := prev_move_policy != _move_policy
+	if not on_stair and not policy_changed \
+			and effective_strategy == _strategy and effective_target == _target \
 			and _queue.size() >= QUEUE_MIN_LEN:
 		return
 
