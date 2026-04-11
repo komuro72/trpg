@@ -19,11 +19,11 @@ var _next_join_index: int = 0
 ## sp_mp_potion: SP/MPポーション自動使用（use=特殊攻撃前に自動使用/never=使わない）
 var global_orders: Dictionary = {
 	"move":         "follow",
-	"target":       "nearest",
-	"on_low_hp":    "keep_fighting",
+	"target":       "same_as_leader",
+	"on_low_hp":    "retreat",
 	"item_pickup":  "passive",
 	"hp_potion":    "use",
-	"sp_mp_potion": "never",
+	"sp_mp_potion": "use",
 }
 
 

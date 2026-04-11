@@ -3045,11 +3045,11 @@ Godot 4 では Tab・Esc キーが UI フォーカスナビゲーション / ui_
 | キー | 選択肢（値） | 表示ラベル | デフォルト |
 |------|------------|----------|----------|
 | `move` | follow / cluster / same_room / standby / explore | 追従 / 密集 / 同じ部屋 / 待機 / 探索 | — |
-| `target` | nearest / weakest / same_as_leader / support | 最近傍 / 最弱優先 / リーダーと同じ / 援護 | nearest |
-| `on_low_hp` | keep_fighting / retreat / flee | 戦闘継続 / 後退 / 逃走 | keep_fighting |
+| `target` | nearest / weakest / same_as_leader / support | 最近傍 / 最弱優先 / リーダーと同じ / 援護 | same_as_leader |
+| `on_low_hp` | keep_fighting / retreat / flee | 戦闘継続 / 後退 / 逃走 | retreat |
 | `item_pickup` | aggressive / passive / avoid | 積極的に拾う / 近くなら拾う / 拾わない | passive |
 | `hp_potion` | use / never | 瀕死なら使う / 使わない | use |
-| `sp_mp_potion` | use / never | 使う / 使わない | never |
+| `sp_mp_potion` | use / never | 必要なら使う / 使わない | use |
 
 - 変更時に move/target/on_low_hp/item_pickup は全メンバーの `current_order` にも同期（AI 互換）
 - hp_potion / sp_mp_potion は `global_orders` に加え `PartyLeaderAI._global_orders` 経由で UnitAI にも渡す（Phase 13-6 で実装済み）

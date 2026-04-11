@@ -35,7 +35,7 @@ const GLOBAL_ROWS: Array = [
 	 "labels":  ["瀕死なら使う", "使わない"]},
 	{"key": "sp_mp_potion", "label": "SP/MPポーション",
 	 "options": ["use", "never"],
-	 "labels":  ["使う", "使わない"]},
+	 "labels":  ["必要なら使う", "使わない"]},
 ]
 
 ## 個別指示列（非ヒーラー）: 名前列を除く4列

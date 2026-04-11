@@ -1528,7 +1528,9 @@ rank値: C=0, B=1, A=2, S=3
     - `"combat"` → `"move"`（移動方針）にキー名変更。デフォルト `"follow"`
     - `"item_pickup"` デフォルトを `"aggressive"` → `"passive"` に変更
     - `"hp_potion"` デフォルトを `"50pct"` → `"use"` に変更
-    - `"sp_mp_potion"` デフォルトを `"save"` → `"never"` に変更
+    - `"sp_mp_potion"` デフォルトを `"save"` → `"use"` に変更（「必要なら使う」）
+    - `"target"` デフォルトを `"nearest"` → `"same_as_leader"` に変更
+    - `"on_low_hp"` デフォルトを `"keep_fighting"` → `"retreat"` に変更
   - **`OrderWindow.gd`：GLOBAL_ROWS・MEMBER_COLS・HEALER_COLS を更新**
     - `GLOBAL_ROWS`：`move` キーを `combat` キーから差し替え。`hp_potion`/`sp_mp_potion` 行を追加
     - `MEMBER_COLS`：`battle_formation`（surround/rush/rear）・`combat`（attack/defense/flee）・`target`・`special_skill`（4択）
