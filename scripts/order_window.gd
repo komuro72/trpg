@@ -41,43 +41,53 @@ const GLOBAL_ROWS: Array = [
 	 "labels":  ["必要なら使う", "使わない"]},
 ]
 
-## 個別指示列（非ヒーラー）: 名前列を除く4列
+## 個別指示列（非ヒーラー）: 4列。"pos" は常時5列ヘッダーにおける表示位置（heal=pos3 をスキップ）
 const MEMBER_COLS: Array = [
-	{"key": "target",           "header": "ターゲット",
+	{"key": "target",           "header": "ターゲット", "pos": 0,
 	 "options": ["nearest", "weakest", "same_as_leader", "support"],
 	 "labels":  ["最近傍", "最弱優先", "リーダーと同じ", "援護"]},
-	{"key": "battle_formation", "header": "隊形",
+	{"key": "battle_formation", "header": "隊形",       "pos": 1,
 	 "options": ["surround", "rush", "rear", "gather"],
 	 "labels":  ["包囲", "突進", "後衛", "集結"]},
-	{"key": "combat",           "header": "戦闘",
+	{"key": "combat",           "header": "戦闘",       "pos": 2,
 	 "options": ["attack", "defense", "flee"],
 	 "labels":  ["攻撃", "防御", "逃走"]},
-	{"key": "special_skill",    "header": "特殊攻撃",
+	{"key": "special_skill",    "header": "特殊攻撃",   "pos": 4,
 	 "options": ["aggressive", "strong_enemy", "disadvantage", "never"],
 	 "labels":  ["積極的に使う", "強敵なら使う", "劣勢なら使う", "使わない"]},
 ]
 
-## 個別指示列（ヒーラー専用・5列）
-## 列順: ターゲット / 隊形 / 戦闘 / 回復 / 特殊攻撃
+## 個別指示列（ヒーラー専用・5列）: 常時5列ヘッダーの全5位置を使用
+## pos: ターゲット=0 / 隊形=1 / 戦闘=2 / 回復=3 / 特殊攻撃=4
 const HEALER_COLS: Array = [
-	{"key": "target",           "header": "ターゲット",
+	{"key": "target",           "header": "ターゲット", "pos": 0,
 	 "options": ["nearest", "weakest", "same_as_leader", "support"],
 	 "labels":  ["最近傍", "最弱優先", "リーダーと同じ", "援護"]},
-	{"key": "battle_formation", "header": "隊形",
+	{"key": "battle_formation", "header": "隊形",       "pos": 1,
 	 "options": ["surround", "rush", "rear", "gather"],
 	 "labels":  ["包囲", "突進", "後衛", "集結"]},
-	{"key": "combat",           "header": "戦闘",
+	{"key": "combat",           "header": "戦闘",       "pos": 2,
 	 "options": ["attack", "defense", "flee"],
 	 "labels":  ["攻撃", "防御", "逃走"]},
-	{"key": "heal",             "header": "回復",
+	{"key": "heal",             "header": "回復",       "pos": 3,
 	 "options": ["aggressive", "leader_first", "lowest_hp_first", "none"],
 	 "labels":  ["積極回復", "リーダー優先", "瀕死度優先", "回復しない"]},
-	{"key": "special_skill",    "header": "特殊攻撃",
+	{"key": "special_skill",    "header": "特殊攻撃",   "pos": 4,
 	 "options": ["aggressive", "strong_enemy", "disadvantage", "never"],
 	 "labels":  ["積極的に使う", "強敵なら使う", "劣勢なら使う", "使わない"]},
 ]
 
-const TOTAL_COLS := 6  ## 名前列1 + 個別指示列最大5（ヒーラーは5列・非ヒーラーは4列）
+## 個別指示列ヘッダー（常時5列・HEALER_COLS と同じ並び）
+## ヘッダー描画はこの定数を常に使う
+const HEADER_COLS: Array = [
+	{"header": "ターゲット", "pos": 0},
+	{"header": "隊形",       "pos": 1},
+	{"header": "戦闘",       "pos": 2},
+	{"header": "回復",       "pos": 3},
+	{"header": "特殊攻撃",   "pos": 4},
+]
+
+const TOTAL_COLS := 6  ## 名前列1 + 個別指示位置5（ヒーラーは5列・非ヒーラーは4列で pos3 をスキップ）
 
 ## 攻撃タイプの表示名
 const ATTACK_TYPE_LABELS: Dictionary = {
@@ -903,26 +913,31 @@ func _on_draw() -> void:
 	# ── テーブル列位置計算 ────────────────────────────────────────────────────
 	var col_xs := _get_col_xs(px, panel_w, pad)
 
-	# ── ヘッダー行（非ヒーラー列ヘッダーを基準に表示） ──────────────────────────
+	# ── ヘッダー行（常時5列・HEADER_COLS を使用） ───────────────────────────────
 	var nm_h_col: Color = Color(1.0, 1.0, 0.3) \
 		if (_focus_area == _FocusArea.MEMBER_TABLE and _col_cursor == 0) \
 		else Color(0.55, 0.55, 0.70)
 	_control.draw_string(_font, Vector2(col_xs[0], y + row_h * 0.66),
 		"名前", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label, nm_h_col)
-	# フォーカス中メンバーの列定義を使用してヘッダーを表示（ヒーラーでは回復列等が正しく表示される）
-	var header_cols: Array = MEMBER_COLS
+	# フォーカス中メンバーの列定義から「pos → カーソル位置」のマッピングを作成
+	var pos_to_cursor: Dictionary = {}
 	if _focus_area == _FocusArea.MEMBER_TABLE \
 			and _member_cursor >= 0 and _member_cursor < _sorted_members.size():
 		var focused_ch := _sorted_members[_member_cursor] as Character
 		if is_instance_valid(focused_ch):
-			header_cols = _get_cols_for(focused_ch)
-	for ci: int in range(header_cols.size()):
-		var h_col: Color = Color(1.0, 1.0, 0.3) \
-			if (_focus_area == _FocusArea.MEMBER_TABLE and ci + 1 == _col_cursor) \
+			var fcols := _get_cols_for(focused_ch)
+			for fi: int in range(fcols.size()):
+				var fc := fcols[fi] as Dictionary
+				pos_to_cursor[fc.get("pos", fi) as int] = fi + 1
+	for hi: int in range(HEADER_COLS.size()):
+		var hc     := HEADER_COLS[hi] as Dictionary
+		var hpos   : int    = hc["pos"] as int
+		var cursor_at_pos : int = pos_to_cursor.get(hpos, -1) as int
+		var h_col  : Color = Color(1.0, 1.0, 0.3) \
+			if (cursor_at_pos >= 0 and cursor_at_pos == _col_cursor) \
 			else Color(0.55, 0.55, 0.70)
-		var col_def := header_cols[ci] as Dictionary
-		_control.draw_string(_font, Vector2(col_xs[ci + 1], y + row_h * 0.66),
-			col_def["header"] as String, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label, h_col)
+		_control.draw_string(_font, Vector2(col_xs[hpos + 1], y + row_h * 0.66),
+			hc["header"] as String, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_label, h_col)
 	y += row_h
 
 	# ── メンバー行 ────────────────────────────────────────────────────────────
@@ -967,18 +982,35 @@ func _on_draw() -> void:
 			var c_key     : String = col_def["key"] as String
 			var c_opts    : Array  = col_def["options"] as Array
 			var c_lbls    : Array  = col_def["labels"] as Array
+			var c_pos     : int    = col_def.get("pos", ci) as int
 			var cur_val_c : String = ch.current_order.get(c_key, c_opts[0] as String) as String
 			var sel_idx_c : int    = c_opts.find(cur_val_c)
 			if sel_idx_c < 0:
 				sel_idx_c = 0
-			var focused := is_mem and (ci + 1 == _col_cursor)
-			var col_w: float
-			if ci + 2 < col_xs.size():
-				col_w = col_xs[ci + 2] - col_xs[ci + 1] - 4.0
+			var focused   : bool   = is_mem and (ci + 1 == _col_cursor)
+			var cx        : float  = col_xs[c_pos + 1]
+			# 次の表示位置までの幅（最後の列はパネル右端まで）
+			var next_x    : float
+			if c_pos + 2 < col_xs.size():
+				next_x = col_xs[c_pos + 2]
 			else:
-				col_w = px + panel_w - pad - col_xs[ci + 1]
-			_draw_option_chips(col_xs[ci + 1], y, col_w, row_h,
-				c_lbls, sel_idx_c, focused, _is_editable(), fs_hint)
+				next_x = px + panel_w - pad + 4.0
+			var col_w     : float  = next_x - cx - 4.0
+			# 個別指示：現在の選択肢ラベルのみ表示（チップ展開しない）
+			var lbl       : String = c_lbls[sel_idx_c] as String
+			# フォーカス時はハイライト背景
+			if focused:
+				_control.draw_rect(Rect2(cx - 2.0, y + 2.0, col_w, row_h - 4.0),
+					Color(0.25, 0.35, 0.65, 0.70))
+			var txt_col: Color
+			if focused and _is_editable():
+				txt_col = Color(1.0, 1.0, 0.3)
+			elif focused:
+				txt_col = Color(0.85, 0.85, 1.0)
+			else:
+				txt_col = Color(0.72, 0.82, 0.92)
+			_control.draw_string(_font, Vector2(cx, y + row_h * 0.67),
+				lbl, HORIZONTAL_ALIGNMENT_LEFT, col_w, fs_hint, txt_col)
 
 		y += row_h
 	y += 8.0
@@ -1429,14 +1461,15 @@ func _get_active_total_cols() -> int:
 
 
 func _get_col_xs(px: float, panel_w: float, pad: float) -> Array[float]:
+	## [0]=名前, [1..5]=指示位置0..4（HEADER_COLS の pos に対応）
 	var avail  := panel_w - pad * 2.0
 	var name_r := 0.22
-	var n_cols  := maxi(MEMBER_COLS.size(), HEALER_COLS.size())
-	var item_r := (1.0 - name_r) / float(n_cols)
+	var n_pos   := HEADER_COLS.size()  # 常に5
+	var item_r := (1.0 - name_r) / float(n_pos)
 	var xs: Array[float] = []
 	xs.append(px + pad)  # [0] 名前列
-	for ci: int in range(n_cols):
-		xs.append(px + pad + avail * (name_r + item_r * float(ci)))  # [1..n] 指示列
+	for pi: int in range(n_pos):
+		xs.append(px + pad + avail * (name_r + item_r * float(pi)))  # [1..5] 指示位置
 	return xs
 
 
