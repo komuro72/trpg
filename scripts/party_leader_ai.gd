@@ -536,8 +536,8 @@ func _all_members_at_home() -> bool:
 		if unit_ai == null:
 			continue
 		var home := unit_ai.get_home_position()
-		var dx := abs(member.grid_pos.x - home.x)
-		var dy := abs(member.grid_pos.y - home.y)
+		var dx: int = abs(member.grid_pos.x - home.x)
+		var dy: int = abs(member.grid_pos.y - home.y)
 		if dx + dy > 2:
 			return false
 	return true
