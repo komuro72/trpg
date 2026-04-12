@@ -573,8 +573,16 @@ func _setup_panels() -> void:
 	add_child(debug_window)
 	debug_window.setup(
 		party,
-		func() -> Array: return enemy_managers,
-		func() -> Array: return npc_managers,
+		func() -> Array:
+			var all_ems: Array = []
+			for fl_v: Variant in _per_floor_enemies:
+				all_ems.append_array(fl_v as Array)
+			return all_ems,
+		func() -> Array:
+			var all_nms: Array = []
+			for fl_v: Variant in _per_floor_npcs:
+				all_nms.append_array(fl_v as Array)
+			return all_nms,
 		func() -> int: return _current_floor_index,
 		func() -> MapData: return _all_map_data[_current_floor_index] if _current_floor_index < _all_map_data.size() else null,
 		hero
