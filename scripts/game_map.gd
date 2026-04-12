@@ -377,6 +377,8 @@ func _setup_floor_npcs(floor_idx: int) -> void:
 		# スポーン時にフロアインデックスをセット（クロスフロア攻撃防止）
 		for ch: Character in nm.get_members():
 			ch.current_floor = floor_idx
+		# フロアアイテム辞書への参照を渡す（UnitAI がアイテムへ向かうナビゲーションに使用）
+		nm.set_floor_items(_floor_items)
 		_connect_npc_combat_signals(nm)
 		fnms.append(nm)
 		idx += 1
@@ -1182,10 +1184,23 @@ func _load_item_texture(image_path: String) -> Texture2D:
 
 ## 床アイテムの拾得チェック（_process から毎フレーム呼ぶ）
 func _check_item_pickup() -> void:
-	if _floor_items.is_empty() or party == null:
+	if _floor_items.is_empty():
 		return
-	for member_v: Variant in party.sorted_members():
-		var ch := member_v as Character
+	# 収集対象: パーティーメンバー + 未加入 NPC メンバー
+	var all_chars: Array[Character] = []
+	if party != null:
+		for mv: Variant in party.sorted_members():
+			var cm := mv as Character
+			if is_instance_valid(cm):
+				all_chars.append(cm)
+	for nm_v: Variant in npc_managers:
+		var nm := nm_v as NpcManager
+		if not is_instance_valid(nm):
+			continue
+		for ch: Character in nm.get_members():
+			if is_instance_valid(ch):
+				all_chars.append(ch)
+	for ch: Character in all_chars:
 		if not is_instance_valid(ch) or ch.character_data == null:
 			continue
 		var ch_floor := ch.current_floor

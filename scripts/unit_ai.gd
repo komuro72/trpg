@@ -159,6 +159,21 @@ func receive_order(order: Dictionary) -> void:
 	# 移動アニメーション中は戦略・方針が変わらない限りキューを再生成しない
 	# （再生成すると _state=IDLE にリセットされ移動が中断・再起動してブルブル現象が起きる）
 	var is_mid_move := _state == _State.MOVING
+	# アイテム取得優先チェック（早期リターン前）
+	# follow 等で隊形キューが積まれていてもアイテムが近くにあれば優先してナビゲーション開始
+	# WAIT 策略のみ（ATTACK 中はアイテムより戦闘を優先する）
+	if effective_strategy == Strategy.WAIT and not is_mid_move and _item_pickup != "avoid":
+		var item_pos := _find_item_pickup_target()
+		if item_pos != Vector2i(-1, -1) and item_pos != _member.grid_pos:
+			_strategy = effective_strategy
+			_target   = effective_target
+			_queue    = [{"action": "move_to_explore", "goal": item_pos}]
+			if _state != _State.ATTACKING_PRE and _state != _State.ATTACKING_POST:
+				_current_action = {}
+				_state = _State.IDLE
+				if _member != null and is_instance_valid(_member):
+					_member.is_attacking = false
+			return
 	if not on_stair and not policy_changed \
 			and effective_strategy == _strategy and effective_target == _target \
 			and (_queue.size() >= QUEUE_MIN_LEN or is_mid_move):

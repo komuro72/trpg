@@ -65,7 +65,7 @@ const NPC_HP_THRESHOLD: float = 0.5
 const NPC_ENERGY_THRESHOLD: float = 0.3
 
 ## アイテム取得範囲（item_pickup=passive 設定時の取得判定距離・マンハッタン距離）
-const ITEM_PICKUP_RANGE: int = 2
+const ITEM_PICKUP_RANGE: int = 5
 ## 瀕死判定閾値（HP率がこれ以下で「瀕死」と判定。HPポーション使用・on_low_hp発動・heal対象選定に使用）
 const NEAR_DEATH_THRESHOLD: float = 0.25
 ## 劣勢判定閾値（パーティーの生存率がこれ以下で「劣勢」と判定。special_skill「劣勢なら使う」に使用）
