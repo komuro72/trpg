@@ -1106,6 +1106,16 @@ rank値: C=0, B=1, A=2, S=3
       - `_find_non_stair_adjacent()` / `_is_stair_tile()` ヘルパー追加
     - **未加入 NPC のフロア遷移：意図しない方向への遷移を防止**
       - `game_map._check_npc_member_stairs()` で NpcManager の `get_explore_move_policy()` を確認し、`"stairs_down"` / `"stairs_up"` の意図がない場合は遷移をスキップ
+  - [x] Phase 12-7 追加修正（NPC メンバーのワープ問題）
+    - **NPC リーダー遷移時に全メンバーが一括ワープする問題を修正**
+      - 修正前：`_transition_npc_floor()` がパーティー全員を一括で新フロアへ転送していた
+      - 修正方針：プレイヤーパーティーメンバー遷移（`_check_party_member_stairs()`）と同じ個別遷移方式を採用
+      - **`_transition_npc_floor()` の変更**：リーダーのみ新フロアへ遷移。リーダーの UnitAI map_data のみ更新（`nm.set_member_map_data()`）。NpcManager は全メンバー遷移完了まで旧フロアリストに残す
+      - **新規 `_transition_single_npc_member(nm, member, direction)`**：非リーダーメンバーを個別に遷移。全員揃ったら NpcManager の管理フロアを更新（`_per_floor_npcs` 移動・VisionSystem 更新・`_rebuild_blocking_characters()`）
+      - **`_check_npc_member_stairs()` の変更**：リーダーのみ監視 → 全メンバーを個別監視。リーダーは従来通り move_policy チェックで遷移。非リーダーは「リーダーと別フロアかつリーダー方向の階段タイルに静止」で個別遷移
+      - **`party_leader_ai._assign_orders()` の変更**：未加入 NPC の非リーダーメンバーがリーダーと別フロアにいる場合、`move_policy = "stairs_down"/"stairs_up"` を強制設定（戦闘中断して階段へ向かう）
+      - **`PartyLeaderAI.set_member_map_data(member_name, map_data)`** 追加：特定メンバーの UnitAI map_data のみ更新
+      - **`PartyManager.set_member_map_data(member, map_data)`** 追加：LeaderAI への passthrough
 - [x] Phase 12-8: OrderWindowバグ修正・NPC会話専用ウィンドウ・階段複数設置
   - [x] **OrderWindow 名前列フォーカス時の右キー動作修正**
     - 修正前：名前列（_col_cursor=0）で右キーを押すとサブメニューが開いていた

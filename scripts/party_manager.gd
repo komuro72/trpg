@@ -86,6 +86,12 @@ func set_map_data(new_map_data: MapData) -> void:
 		_leader_ai.set_map_data(new_map_data)
 
 
+## 特定メンバーの UnitAI の map_data のみ更新する（個別フロア遷移時に使用）
+func set_member_map_data(member: Character, new_map_data: MapData) -> void:
+	if _leader_ai != null:
+		_leader_ai.set_member_map_data(member.name, new_map_data)
+
+
 ## 全パーティー合算メンバーリストを設定する（game_map が全マネージャー生成後に呼ぶ）
 func set_all_members(all_members: Array[Character]) -> void:
 	_all_members = all_members

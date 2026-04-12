@@ -128,6 +128,14 @@ func set_map_data(new_map_data: MapData) -> void:
 			unit_ai.set_map_data(new_map_data)
 
 
+## 特定メンバーの UnitAI の map_data のみ更新する（個別フロア遷移時に使用）
+## パーティー全体の map_data は変えずに特定メンバーのパスファインディングだけ更新する
+func set_member_map_data(member_name: String, new_map_data: MapData) -> void:
+	var unit_ai := _unit_ais.get(member_name) as UnitAI
+	if unit_ai != null:
+		unit_ai.set_map_data(new_map_data)
+
+
 func _process(delta: float) -> void:
 	# 時間停止中（プレイヤーのターゲット選択中など）は再評価を止める
 	if not GlobalConstants.world_time_running:
@@ -300,6 +308,18 @@ func _assign_orders() -> void:
 		# クロスフロアターゲット排除（別フロアのキャラを攻撃しない）
 		if target != null and is_instance_valid(target) \
 				and target.current_floor != member.current_floor:
+			target = null
+
+		# フロアをまたいだ追従（未加入 NPC 非リーダーメンバー専用）：
+		# リーダーが先に別フロアへ遷移済みの場合、残メンバーを強制的に階段方向へ誘導する
+		# joined_to_player メンバーは _follow_hero_floors / _generate_floor_follow_queue() で対応済み
+		if not joined_to_player and member.is_friendly \
+				and leader_char != null and is_instance_valid(leader_char) \
+				and member != leader_char \
+				and member.current_floor != leader_char.current_floor:
+			var floor_dir: int = sign(leader_char.current_floor - member.current_floor)
+			move_policy = "stairs_down" if floor_dir > 0 else "stairs_up"
+			effective_strat = int(Strategy.WAIT)
 			target = null
 
 		unit_ai.receive_order({

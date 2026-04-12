@@ -82,6 +82,10 @@ var npc_dialogue_window: NpcDialogueWindow  ## NPC会話専用ウィンドウ
 var pause_menu: PauseMenu  ## ポーズメニュー
 var debug_window: DebugWindow  ## F1 デバッグウィンドウ
 var _debug_follow_target: Character = null  ## デバッグ用カメラ追跡対象（null=通常追跡）
+## デバッグ表示フロア（-1=通常。>=0 のときそのフロアを描画。ゲームロジックは _current_floor_index を使用）
+var _debug_view_floor: int = -1
+var _debug_tile_textures: Dictionary = {}  ## デバッグフロアのタイル画像
+var _debug_map_data: MapData = null  ## デバッグフロアのマップデータ
 
 
 func _ready() -> void:
@@ -112,6 +116,7 @@ func _input(event: InputEvent) -> void:
 					debug_window.visible = not debug_window.visible
 					if not debug_window.visible:
 						debug_window.clear_selection()
+						_restore_hero_floor_view()
 					if vision_system != null:
 						vision_system.debug_show_all = debug_window.visible
 						queue_redraw()
@@ -199,6 +204,11 @@ func _process(delta: float) -> void:
 	# ゲームパッドアクション（ポーリング方式）
 	if Input.is_action_just_pressed("open_order_window"):
 		_toggle_order_window()
+
+	# デバッグ追跡対象がフロアを移動したら表示フロアを自動更新
+	if _debug_follow_target != null and is_instance_valid(_debug_follow_target):
+		if _debug_view_floor >= 0 and _debug_follow_target.current_floor != _debug_view_floor:
+			_set_debug_view_floor(_debug_follow_target.current_floor)
 
 	# 床アイテムの拾得チェック
 	_check_item_pickup()
@@ -744,8 +754,60 @@ func set_debug_follow_target(ch: Character) -> void:
 			camera_controller.set_follow_target(player_controller.character)
 
 
+## デバッグ閲覧終了時に通常表示に戻す
+func _restore_hero_floor_view() -> void:
+	_set_debug_view_floor(-1)
+
+
 func _on_debug_leader_selected(leader: Character) -> void:
 	set_debug_follow_target(leader)
+	if leader != null and is_instance_valid(leader):
+		_set_debug_view_floor(leader.current_floor)
+	else:
+		_set_debug_view_floor(-1)
+
+
+## デバッグ表示フロアを設定する（-1 で通常に戻す）
+## _current_floor_index やゲームロジックは一切変更しない
+func _set_debug_view_floor(floor: int) -> void:
+	_debug_view_floor = floor
+	if floor >= 0 and floor < _all_map_data.size():
+		_debug_map_data = _all_map_data[floor] as MapData
+		# タイル画像をデバッグフロア用にロード（現フロアと異なる場合のみ）
+		var dbg_tile_set := (_all_floor_data[floor] as Dictionary).get("tile_set", DEFAULT_TILE_SET) as String
+		if dbg_tile_set != _tile_set_id:
+			var saved_id := _tile_set_id
+			var saved_tex := _tile_textures.duplicate()
+			_tile_set_id = dbg_tile_set
+			_load_tile_textures()
+			_debug_tile_textures = _tile_textures.duplicate()
+			_tile_set_id = saved_id
+			_tile_textures = saved_tex
+		else:
+			_debug_tile_textures = _tile_textures.duplicate()
+		# カメラリミットをデバッグフロアのマップに合わせる
+		if camera_controller != null and is_instance_valid(camera_controller):
+			var cam := camera_controller.camera
+			if cam != null and is_instance_valid(cam):
+				var gs := GlobalConstants.GRID_SIZE
+				cam.limit_left   = 0
+				cam.limit_right  = _debug_map_data.map_width  * gs
+				cam.limit_top    = 0
+				cam.limit_bottom = _debug_map_data.map_height * gs
+	else:
+		_debug_map_data = null
+		_debug_tile_textures.clear()
+		# カメラリミットを現フロアに戻す
+		if camera_controller != null and is_instance_valid(camera_controller):
+			var cam := camera_controller.camera
+			if cam != null and is_instance_valid(cam):
+				_update_camera_limits(cam)
+	# フロア番号表示を更新
+	if area_name_display != null:
+		var view_fl := _debug_view_floor if _debug_view_floor >= 0 else _current_floor_index
+		area_name_display.set_floor(view_fl)
+	_update_character_visibility()
+	queue_redraw()
 
 
 func _on_npc_bumped(npc_member: Character) -> void:
@@ -1247,61 +1309,108 @@ func _transition_member_floor(ch: Character, direction: int) -> void:
 	queue_redraw()
 
 
-## 未加入 NPC が階段にいるかチェックし、フロアランクに基づいて遷移させる
+## 未加入 NPC が階段にいるかチェックし、フロアランクに基づいて個別に遷移させる。
+## リーダー：move_policy に基づき階段に達したとき _transition_npc_floor() でリーダーのみ遷移
+## 非リーダー：リーダーと別フロアで、かつリーダー方向の階段に達したとき個別遷移
 func _check_npc_member_stairs() -> void:
 	if _member_stair_cooldown > 0.0:
 		return
 	# イテレーション中に _per_floor_npcs が変更されないよう先に収集する
-	var to_transition: Array = []  # [nm, direction] のペア
+	var leader_transitions: Array = []   # [nm, direction]
+	var member_transitions: Array = []   # [nm, member, direction]
 	for fi: int in range(_per_floor_npcs.size()):
 		for nm_v: Variant in (_per_floor_npcs[fi] as Array).duplicate():
 			var nm := nm_v as NpcManager
 			if not is_instance_valid(nm):
 				continue
+			# リーダーを特定する（クロスフロア判定に使用）
+			var leader_ch: Character = null
 			for ch: Character in nm.get_members():
-				if not is_instance_valid(ch) or ch.hp <= 0 or ch.is_moving():
+				if is_instance_valid(ch) and ch.hp > 0 and ch.is_leader:
+					leader_ch = ch
+					break
+			for ch: Character in nm.get_members():
+				if not is_instance_valid(ch) or ch.hp <= 0:
+					continue
+				if ch.is_moving():
 					continue
 				if ch.current_floor < 0 or ch.current_floor >= _all_map_data.size():
 					continue
+				# そのメンバーが実際にいるフロアのマップで階段タイルを確認する
 				var member_map := _all_map_data[ch.current_floor] as MapData
 				var tile := member_map.get_tile(ch.grid_pos)
-				var direction := 0
-				if tile == MapData.TileType.STAIRS_DOWN:
-					direction = 1
-				elif tile == MapData.TileType.STAIRS_UP:
-					direction = -1
+				if ch.is_leader:
+					# ── リーダー遷移チェック ──────────────────────────────────────
+					# move_policy が階段方向と一致していること（探索の意図確認）
+					var direction := 0
+					if tile == MapData.TileType.STAIRS_DOWN:
+						direction = 1
+					elif tile == MapData.TileType.STAIRS_UP:
+						direction = -1
+					else:
+						continue
+					var policy := nm.get_explore_move_policy()
+					var intended_dir := 0
+					if policy == "stairs_down":
+						intended_dir = 1
+					elif policy == "stairs_up":
+						intended_dir = -1
+					if intended_dir == 0 or intended_dir != direction:
+						continue
+					var new_fi := ch.current_floor + direction
+					if new_fi < 0 or new_fi >= _all_map_data.size():
+						continue
+					leader_transitions.append([nm, direction])
 				else:
-					continue
-				# 意図チェック：NPC が実際にこの方向の階段を目指しているときのみ遷移する
-				var policy := nm.get_explore_move_policy()
-				var intended_dir := 0
-				if policy == "stairs_down":
-					intended_dir = 1
-				elif policy == "stairs_up":
-					intended_dir = -1
-				if intended_dir == 0 or intended_dir != direction:
-					continue
-				var new_floor_idx := ch.current_floor + direction
-				if new_floor_idx < 0 or new_floor_idx >= _all_map_data.size():
-					continue
-				to_transition.append([nm, direction])
-				break  # 同パーティーを重複登録しない
-	if to_transition.is_empty():
-		return
-	for pair: Variant in to_transition:
-		var pair_arr := pair as Array
-		_transition_npc_floor(pair_arr[0] as NpcManager, pair_arr[1] as int)
-	_member_stair_cooldown = 0.3  # NPC 一括遷移後の短いクールダウン
+					# ── 非リーダー個別遷移チェック ───────────────────────────────
+					# リーダーが先に別フロアへ遷移済みのときだけ対象にする
+					if leader_ch == null or not is_instance_valid(leader_ch):
+						continue
+					if ch.current_floor == leader_ch.current_floor:
+						continue  # 同フロア：まだ遷移不要
+					var direction: int = sign(leader_ch.current_floor - ch.current_floor)
+					if direction == 0:
+						continue
+					var expected_tile := MapData.TileType.STAIRS_DOWN if direction > 0 \
+						else MapData.TileType.STAIRS_UP
+					if tile != expected_tile:
+						continue
+					var new_fi := ch.current_floor + direction
+					if new_fi < 0 or new_fi >= _all_map_data.size():
+						continue
+					member_transitions.append([nm, ch, direction])
+	# リーダー遷移を先に処理（非リーダーの着地先がリーダーの新フロアに依存するため）
+	for pair: Variant in leader_transitions:
+		var arr := pair as Array
+		_transition_npc_floor(arr[0] as NpcManager, arr[1] as int)
+	# 非リーダーメンバーの個別遷移
+	for pair: Variant in member_transitions:
+		var arr := pair as Array
+		_transition_single_npc_member(arr[0] as NpcManager, arr[1] as Character, arr[2] as int)
+	if not leader_transitions.is_empty() or not member_transitions.is_empty():
+		_member_stair_cooldown = 0.3
 
 
 ## 未加入 NPC パーティーを direction 方向のフロアに遷移させる
+## NPC リーダーのみを新フロアに遷移させる。
+## 非リーダーメンバーは _assign_orders() のクロスフロア追従ロジックで階段へ誘導され、
+## 各自が階段に到達したときに _transition_single_npc_member() で個別遷移する。
+## NpcManager は全メンバーが遷移完了するまで旧フロアリストに残る。
 func _transition_npc_floor(nm: NpcManager, direction: int) -> void:
 	if nm == null or not is_instance_valid(nm):
 		return
 	var members := nm.get_members()
 	if members.is_empty():
 		return
-	var old_floor: int = (members[0] as Character).current_floor
+	# リーダーを特定する（リーダーが実際に階段を踏んでいる）
+	var leader_ch: Character = null
+	for m: Character in members:
+		if is_instance_valid(m) and m.is_leader and m.hp > 0:
+			leader_ch = m
+			break
+	if leader_ch == null:
+		return
+	var old_floor: int = leader_ch.current_floor
 	var new_floor := old_floor + direction
 	if new_floor < 0 or new_floor >= _all_map_data.size():
 		return
@@ -1311,74 +1420,110 @@ func _transition_npc_floor(nm: NpcManager, direction: int) -> void:
 		_setup_floor_enemies(new_floor)
 	if (_per_floor_npcs[new_floor] as Array).is_empty() and not new_map.npc_parties.is_empty():
 		_setup_floor_npcs(new_floor)
-	# 着地位置: NPC が踏んでいた旧フロアの階段に最も近い新フロアの階段を選ぶ（分散着地）
+	# 着地位置: リーダーが踏んでいた旧フロアの階段に最も近い新フロアの階段を選ぶ
 	var spawn_type := MapData.TileType.STAIRS_UP if direction > 0 else MapData.TileType.STAIRS_DOWN
 	var spawn_stairs := new_map.find_stairs(spawn_type)
 	var base_spawn := Vector2i(5, 5)
 	if not spawn_stairs.is_empty():
-		# 旧フロアで踏んでいた階段位置に最も近い着地階段を選ぶ
-		var old_stair_pos := Vector2i(-1, -1)
-		for member: Character in members:
-			if is_instance_valid(member):
-				old_stair_pos = member.grid_pos
-				break
-		if old_stair_pos != Vector2i(-1, -1):
-			var best_dist := INF
-			for s: Vector2i in spawn_stairs:
-				var dist: float = float((s - old_stair_pos).length())
-				if dist < best_dist:
-					best_dist = dist
-					base_spawn = s
-		else:
-			base_spawn = spawn_stairs[0]
-	# 全メンバーを新フロアに移動
-	# 1人目は階段タイルに直接着地、2人目以降は隣接タイルへ分散
-	var placed_positions: Array[Vector2i] = []
-	for member: Character in members:
-		if not is_instance_valid(member):
-			continue
-		member.current_floor = new_floor
-		var land_pos := base_spawn
-		if base_spawn in placed_positions:
-			land_pos = _find_free_adjacent_to(base_spawn, new_map, member.is_flying)
-			if land_pos == Vector2i(-1, -1):
-				land_pos = base_spawn
-		placed_positions.append(land_pos)
-		member.grid_pos = land_pos
-		member.sync_position()
-	# NPC フロア遷移デバッグログ
-	var leader_name := "NPC"
-	for m: Character in members:
-		if is_instance_valid(m) and m.is_leader and m.character_data != null:
-			leader_name = m.character_data.character_name
-			break
+		var best_dist := INF
+		for s: Vector2i in spawn_stairs:
+			var dist: float = float((s - leader_ch.grid_pos).length())
+			if dist < best_dist:
+				best_dist = dist
+				base_spawn = s
+	# リーダーのみ新フロアへ遷移
+	leader_ch.current_floor = new_floor
+	leader_ch.grid_pos = base_spawn
+	leader_ch.sync_position()
+	# リーダーの UnitAI map_data を新フロアのものに更新（他メンバーは旧フロアのままにする）
+	nm.set_member_map_data(leader_ch, new_map)
+	# ログ
+	var leader_name := leader_ch.character_data.character_name \
+		if leader_ch.character_data != null else leader_ch.name
 	var dir_str := "↓" if direction > 0 else "↑"
-	MessageLog.add_ai("[NPC遷移] %s: F%d %s F%d" % [leader_name, old_floor, dir_str, new_floor])
-	# NpcManager の map_data を更新
-	nm.set_map_data(new_map)
-	# _per_floor_npcs の管理を更新
-	(_per_floor_npcs[old_floor] as Array).erase(nm)
-	(_per_floor_npcs[new_floor] as Array).append(nm)
-	# 新フロアの敵リストを NpcManager に設定
+	MessageLog.add_ai("[NPC遷移] %s(リーダー): F%d %s F%d　残メンバーは個別に追従" \
+		% [leader_name, old_floor, dir_str, new_floor])
+	# リーダーの新フロアの敵・全メンバーリストを NpcManager に設定（リーダーAI の認識を更新）
 	var new_enemies: Array[Character] = []
+	var fl_all_members: Array[Character] = []
 	for em: EnemyManager in (_per_floor_enemies[new_floor] as Array):
 		if is_instance_valid(em):
 			new_enemies.append_array(em.get_enemies())
+			fl_all_members.append_array(em.get_enemies())
+	for nm2: NpcManager in (_per_floor_npcs[new_floor] as Array):
+		if is_instance_valid(nm2):
+			fl_all_members.append_array(nm2.get_members())
 	nm.set_enemy_list(new_enemies)
-	# VisionSystem・npc_managers を更新
-	if old_floor == _current_floor_index:
-		npc_managers.erase(nm)
-		if vision_system != null:
-			vision_system.remove_npc_manager(nm)
-	if new_floor == _current_floor_index:
-		npc_managers.append(nm)
-		if vision_system != null:
-			vision_system.add_npc_manager(nm)
-			nm.set_vision_system(vision_system)
-		# 新フロア現フロアへ到着：dialogue_trigger を更新
-		if dialogue_trigger != null and is_instance_valid(hero):
-			dialogue_trigger.setup(hero, npc_managers, enemy_managers, vision_system, map_data)
-		# NPC が現フロアに到着したので blocking_characters を再構築（すり抜け防止）
+	nm.set_all_members(fl_all_members)
+	# NpcManager は全メンバー遷移後に旧→新フロアリストへ移動するため、ここでは更新しない
+	_update_character_visibility()
+	queue_redraw()
+
+
+## 非リーダーの NPC メンバーを個別に新フロアへ遷移させる。
+## 全メンバー遷移完了時に NpcManager の管理フロアを更新する。
+func _transition_single_npc_member(nm: NpcManager, member: Character, direction: int) -> void:
+	if not is_instance_valid(nm) or not is_instance_valid(member):
+		return
+	var old_floor: int = member.current_floor
+	var new_floor := old_floor + direction
+	if new_floor < 0 or new_floor >= _all_map_data.size():
+		return
+	var new_map := _all_map_data[new_floor] as MapData
+	# 着地位置: メンバーが踏んでいた旧フロアの階段に最も近い新フロアの対応階段を選ぶ
+	var spawn_type := MapData.TileType.STAIRS_UP if direction > 0 else MapData.TileType.STAIRS_DOWN
+	var spawn_stairs := new_map.find_stairs(spawn_type)
+	var land_pos := Vector2i(5, 5)
+	if not spawn_stairs.is_empty():
+		var best_dist := INF
+		for s: Vector2i in spawn_stairs:
+			var dist: float = float((s - member.grid_pos).length())
+			if dist < best_dist:
+				best_dist = dist
+				land_pos = s
+		# 着地タイルが他のキャラに占有されていれば隣接タイルへ
+		for m2: Character in nm.get_members():
+			if is_instance_valid(m2) and m2 != member and m2.current_floor == new_floor \
+					and m2.grid_pos == land_pos:
+				var alt := _find_free_adjacent_to(land_pos, new_map, member.is_flying)
+				if alt != Vector2i(-1, -1):
+					land_pos = alt
+				break
+	# メンバーを新フロアに遷移
+	member.current_floor = new_floor
+	member.grid_pos = land_pos
+	member.sync_position()
+	# このメンバーの UnitAI map_data を新フロアのものに更新
+	nm.set_member_map_data(member, new_map)
+	var mname := member.character_data.character_name \
+		if member.character_data != null else member.name
+	var dir_str := "↓" if direction > 0 else "↑"
+	MessageLog.add_ai("[NPC遷移] %s: F%d %s F%d" % [mname, old_floor, dir_str, new_floor])
+	# 全メンバーが新フロアに揃ったか確認
+	var all_on_new_floor := true
+	for m: Character in nm.get_members():
+		if is_instance_valid(m) and m.current_floor != new_floor:
+			all_on_new_floor = false
+			break
+	if all_on_new_floor:
+		# 全員揃ったので NpcManager の管理フロアを更新する
+		nm.set_map_data(new_map)
+		(_per_floor_npcs[old_floor] as Array).erase(nm)
+		(_per_floor_npcs[new_floor] as Array).append(nm)
+		if old_floor == _current_floor_index:
+			npc_managers.erase(nm)
+			if vision_system != null:
+				vision_system.remove_npc_manager(nm)
+		if new_floor == _current_floor_index:
+			npc_managers.append(nm)
+			if vision_system != null:
+				vision_system.add_npc_manager(nm)
+				nm.set_vision_system(vision_system)
+			if dialogue_trigger != null and is_instance_valid(hero):
+				dialogue_trigger.setup(hero, npc_managers, enemy_managers, vision_system, map_data)
+		_rebuild_blocking_characters()
+	else:
+		# まだ旧フロアにいるメンバーがいる：旧フロアの blocking を再構築
 		_rebuild_blocking_characters()
 	_update_character_visibility()
 	queue_redraw()
@@ -1576,7 +1721,8 @@ func _transition_floor(direction: int) -> void:
 
 ## フロア表示だけを切り替える（キャラクター移動なし）
 ## 操作キャラが別フロアにいるときの操作切り替えで使用する
-func _switch_floor_view(new_floor: int) -> void:
+## update_player_controller=false にするとプレイヤー操作に影響しない（デバッグ閲覧用）
+func _switch_floor_view(new_floor: int, update_player_controller: bool = true) -> void:
 	if new_floor < 0 or new_floor >= _all_map_data.size():
 		return
 	if new_floor == _current_floor_index:
@@ -1625,7 +1771,7 @@ func _switch_floor_view(new_floor: int) -> void:
 		if is_instance_valid(nm):
 			nm.activate()
 
-	if player_controller != null:
+	if player_controller != null and update_player_controller:
 		player_controller.map_data = new_map
 		_rebuild_blocking_characters()
 
@@ -1652,35 +1798,44 @@ func _switch_floor_view(new_floor: int) -> void:
 
 
 ## フロアに応じてキャラクターの表示/非表示を切り替える
+## デバッグ表示フロアが設定されている場合はそのフロアのキャラクターを表示する
 func _update_character_visibility() -> void:
+	var view_floor := _debug_view_floor if _debug_view_floor >= 0 else _current_floor_index
+	var debug_mode := (_debug_view_floor >= 0)
 	# 全フロアの敵を走査
 	for fi: int in range(_per_floor_enemies.size()):
-		var is_current := (fi == _current_floor_index)
+		var is_view := (fi == view_floor)
 		for em: EnemyManager in (_per_floor_enemies[fi] as Array):
 			if is_instance_valid(em):
 				for ch: Character in em.get_enemies():
 					if is_instance_valid(ch):
-						# 表示は VisionSystem が制御するため、
-						# 別フロアの敵は強制非表示
-						if not is_current:
+						if not is_view:
+							# 表示フロア以外は強制非表示
 							ch.visible = false
+						elif debug_mode and fi != _current_floor_index:
+							# デバッグ表示フロアの敵は強制表示
+							ch.visible = true
+						# else: VisionSystem が制御（current_floor と一致）
 	# NPC
 	for fi: int in range(_per_floor_npcs.size()):
-		var is_current := (fi == _current_floor_index)
+		var is_view := (fi == view_floor)
 		for nm: NpcManager in (_per_floor_npcs[fi] as Array):
 			if is_instance_valid(nm):
 				for ch: Character in nm.get_members():
 					if is_instance_valid(ch):
-						if not is_current:
+						if not is_view:
 							ch.visible = false
-	# パーティーメンバー（hero 以外）：current_floor が一致するフロアのみ表示
+						elif debug_mode and fi != _current_floor_index:
+							# デバッグ表示フロアのNPCは強制表示
+							ch.visible = true
+	# パーティーメンバー（hero 以外）：current_floor が view_floor と一致するフロアのみ表示
 	if party != null:
 		for member_var: Variant in party.members:
 			if not is_instance_valid(member_var):
 				continue
 			var ch := member_var as Character
 			if ch != null and ch != hero:
-				ch.visible = (ch.current_floor == _current_floor_index)
+				ch.visible = (ch.current_floor == view_floor)
 
 
 ## F2 デバッグ情報をファイルに書き出す（フルスクリーン実行対応）
@@ -1822,22 +1977,26 @@ func _draw() -> void:
 		return
 	var gs := GlobalConstants.GRID_SIZE
 
+	# デバッグフロア表示中はデバッグフロアのマップを使用
+	var draw_map    := _debug_map_data if _debug_map_data != null else map_data
+	var draw_textures := _debug_tile_textures if (not _debug_tile_textures.is_empty() and _debug_map_data != null) else _tile_textures
+
 	# 可視タイル集合を取得（空の場合はエリアデータなし→全タイル描画）
 	var visible_tiles := vision_system.get_visible_tiles() if vision_system != null else {}
 	var use_vision    := not visible_tiles.is_empty()
 
-	for y in range(map_data.map_height):
-		for x in range(map_data.map_width):
+	for y in range(draw_map.map_height):
+		for x in range(draw_map.map_width):
 			var pos  := Vector2i(x, y)
 			# 未訪問タイルは描画しない（背景の黒のまま）
 			if use_vision and not visible_tiles.has(pos):
 				continue
 
-			var tile := map_data.get_tile(pos)
+			var tile := draw_map.get_tile(pos)
 			var rect := Rect2(x * gs, y * gs, gs, gs)
 
-			if _tile_textures.has(int(tile)):
-				draw_texture_rect(_tile_textures[int(tile)] as Texture2D, rect, false)
+			if draw_textures.has(int(tile)):
+				draw_texture_rect(draw_textures[int(tile)] as Texture2D, rect, false)
 			else:
 				var fill_color: Color
 				match tile:
@@ -1863,8 +2022,9 @@ func _draw() -> void:
 					draw_string(font, Vector2(cx - float(fsize) * 0.3, cy),
 						sym, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, sym_color)
 
-	# 床アイテムを描画（現在フロア・訪問済みタイルのみ）
-	var cur_floor_items := _floor_items.get(_current_floor_index, {}) as Dictionary
+	# 床アイテムを描画（表示フロア・訪問済みタイルのみ）
+	var view_floor_for_draw := _debug_view_floor if _debug_view_floor >= 0 else _current_floor_index
+	var cur_floor_items := _floor_items.get(view_floor_for_draw, {}) as Dictionary
 	for tile_v: Variant in cur_floor_items.keys():
 		var ipos  := tile_v as Vector2i
 		if use_vision and not visible_tiles.has(ipos):
