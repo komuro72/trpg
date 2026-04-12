@@ -1603,10 +1603,17 @@ rank値: C=0, B=1, A=2, S=3
     - `_find_potion_in_inventory()` ヘルパー追加（category=="consumable" + effect キーで検索）
     - `_generate_queue()` 内で heal/buff より前にポーション使用を優先
     - `_start_action()` に `"use_potion"` アクション処理を追加（`character.use_consumable(item)` 呼び出し）
-  - **`PartyManager.gd`：`set_global_orders()` メソッド追加**（LeaderAI に参照を転送）
-  - **`game_map.gd`：`set_global_orders()` 呼び出し追加**
-    - `_setup_hero()` で `_hero_manager.set_global_orders(party.global_orders)` を呼ぶ
-    - `_merge_npc_into_player_party()` / `_merge_player_into_npc_party()` で合流 NPC に渡す
+    - **アイテムナビゲーション追加（合流済みメンバー専用）**
+      - `_item_pickup: String` / `_all_floor_items: Dictionary` フィールド追加
+      - `receive_order()` で `"item_pickup"` キーを受け取り格納
+      - `set_floor_items(items)`: `_floor_items` 参照を設定（更新が自動反映される）
+      - `_find_item_pickup_target()`: "aggressive"=同一部屋、"passive"=ITEM_PICKUP_RANGE以内、"avoid"=スキップ
+      - `_generate_queue()` の `Strategy.WAIT` ブランチ先頭でアイテムターゲットチェックを追加（ATTACK/FLEE 時は行わない）
+  - **`PartyManager.gd`：`set_global_orders()` / `set_floor_items()` メソッド追加**（LeaderAI に参照を転送）
+  - **`PartyLeaderAI.gd`：`set_floor_items()` 追加**（全 UnitAI に配布）
+  - **`game_map.gd`：各種 set 呼び出し追加**
+    - `_setup_hero()` で `_hero_manager.set_global_orders()` / `set_floor_items()` を呼ぶ
+    - `_merge_npc_into_player_party()` / `_merge_player_into_npc_party()` で合流 NPC に `set_global_orders()` / `set_floor_items()` を渡す
 - [x] Phase 13-7: 移動前回転実装（向きだけ変える操作）
   - **`player_controller.gd`**
     - `_pending_move_dir: Vector2i` フィールド追加（回転中に保留する移動方向）

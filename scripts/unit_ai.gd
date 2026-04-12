@@ -58,9 +58,11 @@ var _battle_formation: String    = "surround"
 ## グローバル方針（party_leader_ai から receive_order で受け取る）
 var _hp_potion:        String    = "never"  ## "use" = 瀕死時に自動使用
 var _sp_mp_potion:     String    = "never"  ## "use" = 特殊攻撃前に自動使用
+var _item_pickup:      String    = "passive"  ## "aggressive" / "passive" / "avoid"
 var _leader_ref:       Character = null  ## 隊形計算の基準となるリーダーキャラ
 var _guard_room_area:  String    = ""    ## guard_room 時の記憶部屋ID（初回設定後不変）
 var _home_position:    Vector2i  = Vector2i.ZERO  ## スポーン地点（帰還の基点。setup() で初期化）
+var _all_floor_items:  Dictionary = {}  ## {floor_idx: {Vector2i: item}} 参照（game_map から設定）
 
 
 func setup(member: Character, player: Character, map_data: MapData,
@@ -136,6 +138,7 @@ func receive_order(order: Dictionary) -> void:
 	_battle_formation = order.get("battle_formation", "surround") as String
 	_hp_potion    = order.get("hp_potion",    "never") as String
 	_sp_mp_potion = order.get("sp_mp_potion", "never") as String
+	_item_pickup  = order.get("item_pickup",  "passive") as String
 
 	var raw_leader: Variant = order.get("leader", null)
 	if raw_leader != null and is_instance_valid(raw_leader as Object):
@@ -550,6 +553,12 @@ func _generate_queue(strategy: Strategy, target: Character) -> Array:
 	if not buff_q.is_empty():
 		return buff_q
 
+	# アイテム取得ナビゲーション（Strategy.WAIT のみ。ATTACK/FLEE 時は行わない）
+	if strategy == Strategy.WAIT:
+		var item_pos := _find_item_pickup_target()
+		if item_pos != Vector2i(-1, -1) and item_pos != _member.grid_pos:
+			return [{"action": "move_to_explore", "goal": item_pos}]
+
 	match strategy:
 		Strategy.ATTACK:
 			if target == null or not is_instance_valid(target):
@@ -709,6 +718,48 @@ func _generate_guard_room_queue() -> Array:
 	if _manhattan(_member.grid_pos, _home_position) <= 2:
 		return [{"action": "wait"}]
 	return [{"action": "move_to_home"}]
+
+
+## フロアアイテム辞書の参照を設定する（game_map から一度だけ呼ばれる）
+## Dictionary は参照型なので、以降の追加・削除が自動的に反映される
+func set_floor_items(items: Dictionary) -> void:
+	_all_floor_items = items
+
+
+## item_pickup 指示に従って取得すべきフィールドアイテムのタイル座標を返す
+## アイテムがない・avoid の場合は Vector2i(-1,-1) を返す
+func _find_item_pickup_target() -> Vector2i:
+	if _item_pickup == "avoid" or _all_floor_items.is_empty():
+		return Vector2i(-1, -1)
+	if _map_data == null or _member == null or not is_instance_valid(_member):
+		return Vector2i(-1, -1)
+	var floor_idx := _member.current_floor
+	if not _all_floor_items.has(floor_idx):
+		return Vector2i(-1, -1)
+	var floor_dict := _all_floor_items[floor_idx] as Dictionary
+	if floor_dict.is_empty():
+		return Vector2i(-1, -1)
+	var my_area := _map_data.get_area(_member.grid_pos)
+	var best_pos := Vector2i(-1, -1)
+	var best_dist: float = INF
+	for pos_v: Variant in floor_dict.keys():
+		var item_pos := pos_v as Vector2i
+		var dist := float(_manhattan(_member.grid_pos, item_pos))
+		if _item_pickup == "aggressive":
+			# 同じ部屋のアイテムのみ対象（通路にいる場合はスキップ）
+			if my_area.is_empty():
+				continue
+			var item_area := _map_data.get_area(item_pos)
+			if item_area != my_area:
+				continue
+		elif _item_pickup == "passive":
+			# ITEM_PICKUP_RANGE マス以内のアイテムのみ対象
+			if dist > float(GlobalConstants.ITEM_PICKUP_RANGE):
+				continue
+		if dist < best_dist:
+			best_dist = dist
+			best_pos = item_pos
+	return best_pos
 
 
 ## 探索目標タイルを選ぶ

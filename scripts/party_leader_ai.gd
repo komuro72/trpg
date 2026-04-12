@@ -331,7 +331,16 @@ func _assign_orders() -> void:
 			"leader":           formation_ref,
 			"hp_potion":        _global_orders.get("hp_potion",    "never") as String,
 			"sp_mp_potion":     _global_orders.get("sp_mp_potion", "never") as String,
+			"item_pickup":      member.current_order.get("item_pickup", "passive") as String,
 		})
+
+
+## フロアアイテム辞書の参照を全 UnitAI に配布する（game_map から一度だけ呼ばれる）
+func set_floor_items(items: Dictionary) -> void:
+	for unit_ai_var: Variant in _unit_ais.values():
+		var unit_ai := unit_ai_var as UnitAI
+		if unit_ai != null:
+			unit_ai.set_floor_items(items)
 
 
 ## 状況変化通知（PartyManager から呼ばれる）：即座に再評価してオーダーを発行する

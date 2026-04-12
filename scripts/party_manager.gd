@@ -112,6 +112,12 @@ func set_global_orders(orders: Dictionary) -> void:
 		_leader_ai.set_global_orders(orders)
 
 
+## フロアアイテム辞書の参照を LeaderAI 経由で全 UnitAI に配布する（game_map から呼ばれる）
+func set_floor_items(items: Dictionary) -> void:
+	if _leader_ai != null:
+		_leader_ai.set_floor_items(items)
+
+
 ## 後方互換エイリアス（game_map が set_all_enemies() を呼んでいるため）
 func set_all_enemies(all_enemies: Array[Character]) -> void:
 	set_all_members(all_enemies)

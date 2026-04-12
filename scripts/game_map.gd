@@ -287,6 +287,8 @@ func _setup_hero() -> void:
 	_hero_manager.activate()
 	# Party.global_orders への参照を渡す（hp_potion / sp_mp_potion 設定を AI に反映）
 	_hero_manager.set_global_orders(party.global_orders)
+	# フロアアイテム辞書への参照を渡す（UnitAI がアイテムへ向かうナビゲーションに使用）
+	_hero_manager.set_floor_items(_floor_items)
 	# hero パーティーはプレイヤーが手動で階段を操作するため、
 	# フロア遷移スコア判断を無効化して "explore" のみ返すようにする
 	if _hero_manager.enemy_ai is NpcLeaderAI:
@@ -939,6 +941,8 @@ func _merge_npc_into_player_party(nm: NpcManager) -> void:
 	nm.set_joined_to_player(true)
 	# Party.global_orders を合流済み NPC パーティー AI に反映する
 	nm.set_global_orders(party.global_orders)
+	# フロアアイテム辞書への参照を渡す（アイテムナビゲーションに使用）
+	nm.set_floor_items(_floor_items)
 	# VisionSystem の管理から外す（常に表示）
 	if vision_system != null:
 		vision_system.remove_npc_manager(nm)
@@ -982,6 +986,8 @@ func _merge_player_into_npc_party(nm: NpcManager) -> void:
 	nm.set_joined_to_player(true)
 	# Party.global_orders を合流済み NPC パーティー AI に反映する
 	nm.set_global_orders(party.global_orders)
+	# フロアアイテム辞書への参照を渡す（アイテムナビゲーションに使用）
+	nm.set_floor_items(_floor_items)
 	# 左パネルのハイライトは操作キャラ（hero）のまま維持する
 	if left_panel != null and player_controller != null:
 		left_panel.set_active_character(player_controller.character)

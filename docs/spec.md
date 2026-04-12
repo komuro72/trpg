@@ -2152,6 +2152,23 @@ assets/master/items/
     - `item_pickup == "avoid"` かつ AI 制御中はスキップ
     - 該当マスのアイテムを `inventory.append()`、`_floor_items.erase()`、メッセージ表示
   - `_draw()` でフロアアイテムを黄色マーカー（50%サイズの矩形）で描画。ビジョン外は非表示
+  - `_check_item_pickup()` は `party.sorted_members()`（合流済みメンバー全員）を毎フレームチェックし、同マスのアイテムを自動取得する（`item_pickup == "avoid"` 時のみスキップ）
+
+#### UnitAI アイテム取得ナビゲーション（合流済みメンバー専用）
+
+- `unit_ai.gd` に `_item_pickup: String` / `_all_floor_items: Dictionary` フィールドを追加
+- `receive_order()` で `item_pickup` キーを受け取り `_item_pickup` に格納
+- `set_floor_items(items: Dictionary)`: `_all_floor_items` に `_floor_items` 参照をセット（Dictionary は参照型のため以降の更新が自動反映される）
+- `_find_item_pickup_target() -> Vector2i`: `_item_pickup` に応じて目標アイテム座標を返す
+  - `"aggressive"`: 同一部屋のアイテムのみ対象（通路にいる場合は対象外）
+  - `"passive"`: `GlobalConstants.ITEM_PICKUP_RANGE`（=2）マス以内のアイテムのみ対象
+  - `"avoid"`: 常に `(-1,-1)` を返す
+- `_generate_queue()` の `Strategy.WAIT` ブランチ先頭でアイテムターゲットを確認し、見つかればそこへ向かう `move_to_explore` アクションを生成（`Strategy.ATTACK` / `Strategy.FLEE` 時は行わない）
+- `party_leader_ai.set_floor_items()`: 全 UnitAI に配布
+- `party_manager.set_floor_items()`: LeaderAI へのパススルー
+- `game_map.gd` で設定タイミング：
+  - `_setup_hero()` 後に `_hero_manager.set_floor_items(_floor_items)`
+  - `_merge_npc_into_player_party()` / `_merge_player_into_npc_party()` で `nm.set_floor_items(_floor_items)`
 
 #### item_pickup 指示の追加
 
