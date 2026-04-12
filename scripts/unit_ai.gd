@@ -661,12 +661,20 @@ func _generate_stair_queue(direction: int) -> Array:
 	if stairs.is_empty():
 		return [{"action": "wait"}]
 
+	# すでに目的の階段タイル上にいる場合は即座に待機（game_map が遷移を処理する）
+	if _member.grid_pos in stairs:
+		return [{"action": "wait"}]
+
 	# 視界ベース：訪問済みエリアの階段のみ対象（フラグで地図持ちに切り替え可）
 	if not GlobalConstants.NPC_KNOWS_STAIRS_LOCATION:
 		var known: Array[Vector2i] = []
 		for s: Vector2i in stairs:
 			var area := _map_data.get_area(s)
-			if area != "" and _visited_areas.has(area):
+			# エリアIDが空（通路・境界）の場合も隣接していれば既知扱い
+			if area.is_empty():
+				if _manhattan(_member.grid_pos, s) <= 3:
+					known.append(s)
+			elif _visited_areas.has(area):
 				known.append(s)
 		if known.is_empty():
 			# 訪問済みエリアに階段未発見 → 通常探索にフォールバック
