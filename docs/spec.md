@@ -3398,6 +3398,26 @@ OrderWindow の `GLOBAL_ROWS` に表示行として追加（move 行の直後）
 `_move_policy`（follow/cluster/same_room 等）は Strategy.WAIT/EXPLORE 時のみ適用される。  
 `standby` は例外として ATTACK 中でも移動しない（射程内のみ攻撃）。
 
+### follow 追従ロジック（`unit_ai.gd`）
+
+**`_formation_satisfied()`** の "follow" 判定：
+
+| 条件 | 結果 |
+|------|------|
+| メンバーがリーダーの前方タイルにいる | 不満足（常に後ろに回り込む） |
+| 後方が通行可 かつ メンバーが後方から1タイル以内（後方・左後方・右後方） | 満足 |
+| 後方が壁・障害物 かつ メンバーがリーダー隣接 | 満足 |
+
+**`_formation_move_goal()`** の "follow" 目標候補（優先順位順）：
+1. 後方（リーダー facing 逆方向）
+2. 左後方（リーダー視点）
+3. 右後方
+4. 左
+5. 右
+6. 任意の隣接タイル（フォールバック）
+
+ATTACK 戦略中はこれらの formation ロジックは適用されず、`_battle_formation` のみで行動する。
+
 ---
 
 ## Phase 13-10: 敵縄張り・追跡システム ✅ 完了

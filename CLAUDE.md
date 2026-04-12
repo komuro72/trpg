@@ -1701,6 +1701,12 @@ rank値: C=0, B=1, A=2, S=3
     - `_generate_queue()` の Strategy.ATTACK ブランチ（ターゲットあり）で `_formation_satisfied()` / `_target_in_formation_zone()` を廃止
     - `_battle_formation` のみで移動先を決定：`"rear"` は射程内なら攻撃・射程外なら接近、それ以外は `move_to_attack` → `attack`
     - `_move_policy`（follow/cluster/same_room 等）は Strategy.WAIT/EXPLORE 時のみ適用（`standby` は例外として維持）
+  - **follow 追従ロジック修正（`unit_ai.gd`）**
+    - `_formation_satisfied()` の "follow" 判定を「リーダー後方1タイル以内にいるか」に変更（旧：リーダー隣接距離チェックのみ）
+      - 前方タイルにいる場合は常に不満足（後ろに回り込む）
+      - 後方が通行可：後方から1タイル以内（後方・左後方・右後方）なら満足
+      - 後方が壁・障害物：リーダー隣接なら満足
+    - `_formation_move_goal()` の "follow" フォールバックを優先順位付きに変更：後方→左後方→右後方→左→右の順で候補を探す（旧：任意の隣接タイル）
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム

@@ -994,10 +994,20 @@ func _formation_satisfied() -> bool:
 		"spread", "standby", "explore", "stairs_down", "stairs_up":
 			return true
 		"follow":
-			# リーダーの2タイル以内にいれば満足
+			# リーダーの後方1マス周辺にいれば満足（後方・左後方・右後方）
 			if _leader_ref == null or not is_instance_valid(_leader_ref) \
 					or _leader_ref == _member:
 				return true
+			var fwd_sat  := Character.dir_to_vec(_leader_ref.facing)
+			var behind_sat := _leader_ref.grid_pos - fwd_sat
+			var front_sat  := _leader_ref.grid_pos + fwd_sat
+			# 前方にいる場合は常に不満足（後ろに回り込む）
+			if _member.grid_pos == front_sat:
+				return false
+			# 後方が通行可：後方から1タイル以内なら満足（後方・左後方・右後方をカバー）
+			if _map_data != null and _map_data.is_walkable_for(behind_sat, _member.is_flying):
+				return _manhattan(_member.grid_pos, behind_sat) <= 1
+			# 後方が壁・障害物：リーダーの隣接にいれば満足
 			return _manhattan(_member.grid_pos, _leader_ref.grid_pos) <= 1
 		"cluster":
 			if _leader_ref == null or not is_instance_valid(_leader_ref) \
@@ -1091,15 +1101,24 @@ func _formation_move_goal() -> Vector2i:
 					return best
 			return _member.grid_pos
 		"follow":
-			# リーダーの後ろ（facing 逆方向）の隣接タイルを目標に
+			# 後方優先で候補を探す（後方→左後方→右後方→左→右）
 			if _leader_ref == null or not is_instance_valid(_leader_ref) \
 					or _leader_ref == _member:
 				return _member.grid_pos
-			var behind := _leader_ref.grid_pos - Character.dir_to_vec(_leader_ref.facing)
-			if _map_data != null and _map_data.is_walkable_for(behind, _member.is_flying) \
-					and _is_passable(behind):
-				return behind
-			# behind が通れない場合は隣接タイルにフォールバック
+			var fwd_g  := Character.dir_to_vec(_leader_ref.facing)
+			var perp_g := Vector2i(-fwd_g.y, fwd_g.x)  # リーダー視点の左方向
+			var behind_g := _leader_ref.grid_pos - fwd_g
+			var candidates_g: Array[Vector2i] = [
+				behind_g,                           # 後方
+				behind_g + perp_g,                  # 左後方
+				behind_g - perp_g,                  # 右後方
+				_leader_ref.grid_pos + perp_g,      # 左
+				_leader_ref.grid_pos - perp_g,      # 右
+			]
+			for cand_g: Vector2i in candidates_g:
+				if _map_data != null and _map_data.is_walkable_for(cand_g, _member.is_flying) \
+						and _is_passable(cand_g):
+					return cand_g
 			return _find_adjacent_goal(_leader_ref)
 		"gather":
 			# パーティー全メンバーの重心へ向かう
