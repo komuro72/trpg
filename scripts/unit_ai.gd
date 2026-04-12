@@ -876,6 +876,30 @@ func _find_adjacent_goal(target: Character) -> Vector2i:
 	return best
 
 
+## クラスター隊形用：メンバーごとに方向をずらした隣接ゴールを返す
+## join_index を使って異なる方向を優先させることで、全員が同じタイルに集中するのを防ぐ
+func _find_spread_adjacent_goal(target: Character) -> Vector2i:
+	# 既に隣接していれば現在位置を返す
+	var d := target.grid_pos - _member.grid_pos
+	if abs(d.x) + abs(d.y) == 1:
+		return _member.grid_pos
+	# 方向候補リストを join_index でローテーションする（4方向）
+	var base_offsets: Array[Vector2i] = [
+		Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0)
+	]
+	var idx := (_member.join_index if _member != null else 0) % base_offsets.size()
+	# join_index 番目から試す（ローテーション）
+	for i: int in range(base_offsets.size()):
+		var offset := base_offsets[(idx + i) % base_offsets.size()]
+		var candidate := target.grid_pos + offset
+		if candidate == _member.grid_pos:
+			return candidate
+		if _is_passable(candidate) and not _is_stair_tile(candidate):
+			return candidate
+	# 通行不可の場合は通常の隣接ゴール探索にフォールバック
+	return _find_adjacent_goal(target)
+
+
 ## 現在地から最近傍の非階段タイルを BFS で探す（距離5まで・味方はすり抜け可能）
 ## 密集時に隣接4タイルが全て塞がれていても脱出経路を見つけられる
 func _find_non_stair_adjacent(pos: Vector2i) -> Vector2i:
@@ -1026,7 +1050,7 @@ func _formation_satisfied() -> bool:
 			if _leader_ref == null or not is_instance_valid(_leader_ref) \
 					or _leader_ref == _member:
 				return true
-			return _manhattan(_member.grid_pos, _leader_ref.grid_pos) <= 3
+			return _manhattan(_member.grid_pos, _leader_ref.grid_pos) <= 5
 		"same_room":
 			if _leader_ref == null or not is_instance_valid(_leader_ref) \
 					or _leader_ref == _member:
@@ -1136,8 +1160,15 @@ func _formation_move_goal() -> Vector2i:
 		"gather":
 			# パーティー全メンバーの重心へ向かう
 			return _calc_party_centroid()
+		"cluster":
+			# メンバーごとに異なる隣接タイルを優先する（join_index で方向をずらす）
+			# → 全員が同一タイルを目標にして衝突・振動するのを防ぐ
+			if _leader_ref == null or not is_instance_valid(_leader_ref) \
+					or _leader_ref == _member:
+				return _member.grid_pos
+			return _find_spread_adjacent_goal(_leader_ref)
 		_:
-			# cluster / same_room → リーダーの隣接タイルへ
+			# same_room → リーダーの隣接タイルへ
 			if _leader_ref == null or not is_instance_valid(_leader_ref) \
 					or _leader_ref == _member:
 				return _member.grid_pos
@@ -1206,11 +1237,19 @@ func _is_passable(pos: Vector2i) -> bool:
 			continue
 		if pos in other.get_occupied_tiles():
 			return false
+		# 移動予約中（アニメーション前半）の目的地もブロック扱いにする
+		# → 複数メンバーが同一タイルを目標に選んで衝突するのを防ぐ
+		if other.is_pending() and other.get_pending_grid_pos() == pos:
+			return false
 	# _player == _member の場合（hero の自己AI）は自分のタイルをブロックしない
 	if _player != null and is_instance_valid(_player) and _player != _member:
 		if _player.current_floor == _member.current_floor \
 				and _player.is_flying == _member.is_flying \
 				and pos in _player.get_occupied_tiles():
+			return false
+		if _player.is_pending() and _player.get_pending_grid_pos() == pos \
+				and _player.current_floor == _member.current_floor \
+				and _player.is_flying == _member.is_flying:
 			return false
 	return true
 
