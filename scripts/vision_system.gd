@@ -182,9 +182,9 @@ func _process(_delta: float) -> void:
 			for member: Character in nm.get_members():
 				if is_instance_valid(member):
 					var a := _map_data.get_area(member.grid_pos)
-					# 未訪問エリアのNPCは friendly_areas に含めない
-					# （未訪問部屋のNPCがその部屋の敵をアクティブ化するのを防ぐ）
-					if not a.is_empty() and is_area_visited(a):
+					# NPCのいるエリアは訪問済み判定に関わらず friendly_areas に含める
+					# （NPCが自律探索で未訪問部屋に入ったとき敵をアクティブ化する）
+					if not a.is_empty():
 						friendly_areas[a] = true
 
 	# 敵・NPC マネージャーに可視性を通知
