@@ -38,6 +38,7 @@ var _friendly_list:  Array[Character] = []  ## 攻撃対象の友好キャラ一
 var _drop_items:     Array = []             ## ドロップアイテム（全滅時に party_wiped で転送）
 var _room_id:        String = ""            ## このパーティーが属する部屋のエリアID
 var _floor_items_ref: Dictionary = {}       ## フロアアイテム参照（activate 前に set_floor_items が呼ばれた場合に保持）
+var _floor_items_set: bool = false          ## set_floor_items が一度でも呼ばれたか
 
 
 ## VisionSystem から呼ばれる。true なら距離ベースのアクティブ化を無効にする
@@ -117,6 +118,7 @@ func set_global_orders(orders: Dictionary) -> void:
 ## activate() より前に呼ばれた場合は _floor_items_ref に保持し、_start_ai() で再適用する
 func set_floor_items(items: Dictionary) -> void:
 	_floor_items_ref = items
+	_floor_items_set = true
 	if _leader_ai != null:
 		_leader_ai.set_floor_items(items)
 
@@ -309,8 +311,9 @@ func _start_ai() -> void:
 		_leader_ai.set_friendly_list(_friendly_list)
 	add_child(_leader_ai)
 	_leader_ai.setup(_members, _player, _map_data, _all_members)
-	# activate() より前に set_floor_items が呼ばれていた場合は再適用する
-	if not _floor_items_ref.is_empty():
+	# activate() より前に set_floor_items が呼ばれていた場合は必ず再適用する
+	# （_floor_items_ref が空でも参照を渡す：後から _floor_items[n] が追加されたとき UnitAI が見えるようにするため）
+	if _floor_items_set:
 		_leader_ai.set_floor_items(_floor_items_ref)
 
 

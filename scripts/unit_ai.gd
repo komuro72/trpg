@@ -161,8 +161,10 @@ func receive_order(order: Dictionary) -> void:
 	var is_mid_move := _state == _State.MOVING
 	# アイテム取得優先チェック（早期リターン前）
 	# follow 等で隊形キューが積まれていてもアイテムが近くにあれば優先してナビゲーション開始
-	# WAIT 策略のみ（ATTACK 中はアイテムより戦闘を優先する）
-	if effective_strategy == Strategy.WAIT and not is_mid_move and _item_pickup != "avoid":
+	# WAIT / EXPLORE 策略のみ（ATTACK / FLEE / GUARD_ROOM 中はアイテムより戦闘・逃走を優先する）
+	var _is_item_strategy := effective_strategy == Strategy.WAIT \
+			or effective_strategy == Strategy.EXPLORE
+	if _is_item_strategy and not is_mid_move and _item_pickup != "avoid":
 		var item_pos := _find_item_pickup_target()
 		if item_pos != Vector2i(-1, -1) and item_pos != _member.grid_pos:
 			_strategy = effective_strategy
@@ -568,8 +570,8 @@ func _generate_queue(strategy: Strategy, target: Character) -> Array:
 	if not buff_q.is_empty():
 		return buff_q
 
-	# アイテム取得ナビゲーション（Strategy.WAIT のみ。ATTACK/FLEE 時は行わない）
-	if strategy == Strategy.WAIT:
+	# アイテム取得ナビゲーション（WAIT/EXPLORE のみ。ATTACK/FLEE/GUARD_ROOM 時は行わない）
+	if strategy == Strategy.WAIT or strategy == Strategy.EXPLORE:
 		var item_pos := _find_item_pickup_target()
 		if item_pos != Vector2i(-1, -1) and item_pos != _member.grid_pos:
 			return [{"action": "move_to_explore", "goal": item_pos}]
