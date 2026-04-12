@@ -43,6 +43,9 @@ var _has_area_data: bool = false
 ## デバッグ時に未探索区域を表示するフラグ（F1 DebugWindow 表示中に true）
 var debug_show_all: bool = false
 
+## DebugWindow で別フロアを閲覧中のフロアインデックス（-1=通常・game_map が設定）
+var debug_view_floor: int = -1
+
 
 func setup(player: Character, map_data: MapData) -> void:
 	_player   = player
@@ -188,17 +191,19 @@ func _process(_delta: float) -> void:
 						friendly_areas[a] = true
 
 	# 敵・NPC マネージャーに可視性を通知
+	# デバッグ別フロア閲覧中は debug_view_floor を使用（リーダー先行遷移中の正確な可視判定に必要）
+	var vis_floor: int = debug_view_floor if debug_view_floor >= 0 else _current_floor_index
 	var visited: Dictionary = {}
 	if _current_floor_index < _floor_visited.size():
 		visited = (_floor_visited[_current_floor_index] as Dictionary).get(PLAYER_PARTY_ID, {}) as Dictionary
 	for em_var: Variant in _enemy_managers:
 		var em := em_var as EnemyManager
 		if is_instance_valid(em):
-			em.update_visibility(_current_area, _map_data, visited, friendly_areas, _current_floor_index, debug_show_all)
+			em.update_visibility(_current_area, _map_data, visited, friendly_areas, vis_floor, debug_show_all)
 	for nm_var: Variant in _npc_managers:
 		var nm := nm_var as NpcManager
 		if is_instance_valid(nm):
-			nm.update_visibility(_current_area, _map_data, visited, {}, _current_floor_index, debug_show_all)
+			nm.update_visibility(_current_area, _map_data, visited, {}, vis_floor, debug_show_all)
 
 
 ## プレイヤーパーティーメンバーの隣接タイルが未訪問エリアに属していれば先行可視化する

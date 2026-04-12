@@ -771,6 +771,9 @@ func _on_debug_leader_selected(leader: Character) -> void:
 ## _current_floor_index やゲームロジックは一切変更しない
 func _set_debug_view_floor(floor: int) -> void:
 	_debug_view_floor = floor
+	# VisionSystem にも伝播（毎フレームの update_visibility で正しいフロアを使用させる）
+	if vision_system != null:
+		vision_system.debug_view_floor = floor
 	if floor >= 0 and floor < _all_map_data.size():
 		_debug_map_data = _all_map_data[floor] as MapData
 		# タイル画像をデバッグフロア用にロード（現フロアと異なる場合のみ）
