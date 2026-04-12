@@ -1662,6 +1662,14 @@ rank値: C=0, B=1, A=2, S=3
     - GUARD_ROOM→WAIT：全員がスポーン地点2タイル以内に帰還完了
   - **`PartyLeaderAI._assign_orders()`** の effective_strat 決定に GUARD_ROOM ブランチを追加（WAIT + move_policy="guard_room"）
   - `_strategy_to_preset_name()` / `get_global_orders_hint()` / `_get_strategy_change_reason()` に GUARD_ROOM ケースを追加
+- [x] Phase 13-10 後続修正: ヒーラー回復指示デフォルト変更・OrderWindow UI調整
+  - **ヒーラーの `heal` 指示デフォルトを `"lowest_hp_first"`（瀕死度優先）に変更**
+    - `order_window.gd` HEALER_COLS の `heal.options` を `["lowest_hp_first", "aggressive", "leader_first", "none"]` に並び替え（先頭がデフォルト値）
+    - `unit_ai.gd`：`_find_heal_target()` の `heal_mode` 初期値・`.get("heal", ...)` のフォールバック値を `"lowest_hp_first"` に変更
+    - `character.gd`：`current_order` 辞書に `"heal": "lowest_hp_first"` キーを追加
+  - **非ヒーラー行の「回復」列に「－」をグレー表示**（`order_window.gd`）
+    - HEALER_COLS の `heal` 列（pos=3）位置に `_is_healer(ch) == false` のとき「－」をグレーで描画
+    - 常時5列ヘッダー（HEADER_COLS）との整合性を維持
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム

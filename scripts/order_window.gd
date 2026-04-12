@@ -70,8 +70,8 @@ const HEALER_COLS: Array = [
 	 "options": ["attack", "defense", "flee"],
 	 "labels":  ["攻撃", "防御", "逃走"]},
 	{"key": "heal",             "header": "回復",       "pos": 3,
-	 "options": ["aggressive", "leader_first", "lowest_hp_first", "none"],
-	 "labels":  ["積極回復", "リーダー優先", "瀕死度優先", "回復しない"]},
+	 "options": ["lowest_hp_first", "aggressive", "leader_first", "none"],
+	 "labels":  ["瀕死度優先", "積極回復", "リーダー優先", "回復しない"]},
 	{"key": "special_skill",    "header": "特殊攻撃",   "pos": 4,
 	 "options": ["aggressive", "strong_enemy", "disadvantage", "never"],
 	 "labels":  ["積極的に使う", "強敵なら使う", "劣勢なら使う", "使わない"]},
@@ -1011,6 +1011,20 @@ func _on_draw() -> void:
 				txt_col = Color(0.72, 0.82, 0.92)
 			_control.draw_string(_font, Vector2(cx, y + row_h * 0.67),
 				lbl, HORIZONTAL_ALIGNMENT_LEFT, col_w, fs_hint, txt_col)
+
+		# 非ヒーラー行：「回復」列（pos=3）の位置に「－」をグレーで表示
+		if not _is_healer(ch):
+			var heal_pos: int = 3
+			if heal_pos + 1 < col_xs.size():
+				var hx: float = col_xs[heal_pos + 1]
+				var hnext_x: float
+				if heal_pos + 2 < col_xs.size():
+					hnext_x = col_xs[heal_pos + 2]
+				else:
+					hnext_x = px + panel_w - pad + 4.0
+				var hcol_w: float = hnext_x - hx - 4.0
+				_control.draw_string(_font, Vector2(hx, y + row_h * 0.67),
+					"－", HORIZONTAL_ALIGNMENT_LEFT, hcol_w, fs_hint, Color(0.5, 0.5, 0.5))
 
 		y += row_h
 	y += 8.0

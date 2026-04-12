@@ -90,6 +90,7 @@ var current_order: Dictionary = {
 	"target":           "nearest",
 	"on_low_hp":        "keep_fighting",  # 攻撃プリセット初期値
 	"item_pickup":      "aggressive",
+	"heal":             "lowest_hp_first",
 }
 
 ## プレースホルダー色（素材がない場合に使用）

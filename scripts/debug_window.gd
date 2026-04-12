@@ -20,6 +20,7 @@ var _party:               Party     = null
 var _get_enemy_managers:  Callable           ## () -> Array
 var _get_npc_managers:    Callable           ## () -> Array
 var _get_floor:           Callable           ## () -> int
+var _get_map_data:        Callable           ## () -> MapData
 var _hero:                Character = null
 
 var _control:       Control
@@ -45,11 +46,12 @@ func _ready() -> void:
 
 ## game_map から呼ぶ。Callable を渡すことで常に最新のフロアデータを参照できる
 func setup(p_party: Party, get_enemy_managers: Callable, get_npc_managers: Callable,
-		get_floor: Callable, p_hero: Character) -> void:
+		get_floor: Callable, get_map_data: Callable, p_hero: Character) -> void:
 	_party              = p_party
 	_get_enemy_managers = get_enemy_managers
 	_get_npc_managers   = get_npc_managers
 	_get_floor          = get_floor
+	_get_map_data       = get_map_data
 	_hero               = p_hero
 
 
@@ -121,6 +123,8 @@ func _draw_party_state(font: Font, x: float, y_start: float,
 	var cy: float  = y_start
 	var bottom: float = y_start + h
 
+	var floor_idx: int = int(_get_floor.call()) if _get_floor.is_valid() else 0
+
 	var ems: Array = _get_enemy_managers.call() if _get_enemy_managers.is_valid() else []
 	var nms: Array = _get_npc_managers.call()   if _get_npc_managers.is_valid()   else []
 
@@ -131,7 +135,8 @@ func _draw_party_state(font: Font, x: float, y_start: float,
 		var em := em_v as PartyManager
 		if em == null or not is_instance_valid(em):
 			continue
-		cy = _draw_party_block(font, em, "敵", Color(1.0, 0.45, 0.45), x, cy, w, bottom)
+		cy = _draw_party_block(font, em, "敵", Color(1.0, 0.45, 0.45),
+				x, cy, w, bottom, floor_idx, false)
 
 	# NPC パーティー
 	for nm_v: Variant in nms:
@@ -140,79 +145,137 @@ func _draw_party_state(font: Font, x: float, y_start: float,
 		var nm := nm_v as NpcManager
 		if nm == null or not is_instance_valid(nm):
 			continue
-		cy = _draw_party_block(font, nm, "NPC", Color(0.45, 1.0, 0.55), x, cy, w, bottom)
+		cy = _draw_party_block(font, nm, "NPC", Color(0.45, 1.0, 0.55),
+				x, cy, w, bottom, floor_idx, true)
 
 	# プレイヤーパーティー
 	if _party != null and cy < bottom:
-		_draw_player_party(font, x, cy, w, bottom)
+		_draw_player_party(font, x, cy, w, bottom, floor_idx)
 
 
+## show_orders: false=敵（item 列を省略）、true=NPC/プレイヤー（全列表示）
 func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
-		header_color: Color, x: float, y: float, w: float, bottom: float) -> float:
+		header_color: Color, x: float, y: float, w: float, bottom: float,
+		floor_idx: int, show_orders: bool) -> float:
 	var members: Array[Character] = pm.get_members()
 	if members.is_empty():
 		return y
 
-	# 生存数カウント
-	var alive: int = 0
+	# 現在フロアのメンバーのみ対象
+	var floor_members: Array[Character] = []
 	for m_v: Variant in members:
 		var m := m_v as Character
-		if is_instance_valid(m) and m.hp > 0:
+		if is_instance_valid(m) and m.current_floor == floor_idx:
+			floor_members.append(m)
+	if floor_members.is_empty():
+		return y
+
+	# 生存数カウント（フロア内のみ）
+	var alive: int = 0
+	for m: Character in floor_members:
+		if m.hp > 0:
 			alive += 1
 
-	# ヘッダー（リーダー名・戦略）
+	# リーダー名・クラス
 	var leader_name: String = ""
 	var first_class: String = ""
-	if not members.is_empty():
-		var first := members[0] as Character
+	if not floor_members.is_empty():
+		var first: Character = floor_members[0]
 		if is_instance_valid(first) and first.character_data != null:
 			leader_name = first.character_data.character_name
 			first_class = GlobalConstants.CLASS_NAME_JP.get(first.character_data.class_id, "")
 
-	var strategy: String = pm.get_strategy_name()
-	var header := "[%s] %s(%s)  生存:%d/%d  戦略:%s" % [
-		type_label, leader_name, first_class, alive, members.size(), strategy]
+	# 全体指示ヒント
+	var hint: Dictionary = pm.get_global_orders_hint()
+	var mv_str:     String = _label("move",          hint.get("move",          "-") as String)
+	var battle_str: String = _label("battle_policy", hint.get("battle_policy", "-") as String)
+	var tgt_str:    String = _label("target",        hint.get("target",        "-") as String)
+	var hp_str:     String = _label("on_low_hp",     hint.get("on_low_hp",     "-") as String)
+
+	var header: String
+	if show_orders:
+		var item_str: String = _label("item_pickup", hint.get("item_pickup", "-") as String)
+		header = "[%s] %s(%s)  生存:%d/%d  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
+			type_label, leader_name, first_class, alive, floor_members.size(),
+			mv_str, battle_str, tgt_str, hp_str, item_str]
+	else:
+		header = "[%s] %s(%s)  生存:%d/%d  mv=%s  battle=%s  tgt=%s  hp=%s" % [
+			type_label, leader_name, first_class, alive, floor_members.size(),
+			mv_str, battle_str, tgt_str, hp_str]
+
 	_control.draw_string(font, Vector2(x, y + FS), header,
 		HORIZONTAL_ALIGNMENT_LEFT, w, FS, header_color)
 	y += LINE_H
 
 	# メンバー行
-	for m_v: Variant in members:
+	for m: Character in floor_members:
 		if y >= bottom:
 			break
-		var m := m_v as Character
-		if m == null or not is_instance_valid(m):
-			continue
-		y = _draw_member_line(font, m, x + INDENT, y, w - INDENT, bottom)
+		y = _draw_member_line(font, m, x + INDENT, y, w - INDENT, bottom, show_orders)
 
 	return y + 3.0
 
 
-func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float) -> float:
-	if y >= bottom:
+func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
+		floor_idx: int) -> float:
+	if y >= bottom or _party == null:
 		return y
 
-	_control.draw_string(font, Vector2(x, y + FS), "[プレイヤー]",
+	# 現在フロアのメンバーのみ対象
+	var sorted: Array = _party.sorted_members()
+	var floor_members: Array = []
+	for m_v: Variant in sorted:
+		var m := m_v as Character
+		if is_instance_valid(m) and m.current_floor == floor_idx:
+			floor_members.append(m)
+
+	if floor_members.is_empty():
+		return y
+
+	var alive: int = 0
+	for m_v: Variant in floor_members:
+		var m := m_v as Character
+		if m.hp > 0:
+			alive += 1
+
+	# リーダー名・クラス
+	var leader_name: String = ""
+	var first_class: String = ""
+	var first_m := floor_members[0] as Character
+	if is_instance_valid(first_m) and first_m.character_data != null:
+		leader_name = first_m.character_data.character_name
+		first_class = GlobalConstants.CLASS_NAME_JP.get(first_m.character_data.class_id, "")
+
+	# 全体指示（party.global_orders を直接参照）
+	var go: Dictionary = _party.global_orders
+	var mv_str:     String = _label("move",          go.get("move",          "-") as String)
+	var battle_str: String = _label("battle_policy", go.get("battle_policy", "-") as String)
+	var tgt_str:    String = _label("target",        go.get("target",        "-") as String)
+	var hp_str:     String = _label("on_low_hp",     go.get("on_low_hp",     "-") as String)
+	var item_str:   String = _label("item_pickup",   go.get("item_pickup",   "-") as String)
+
+	var header := "[プレイヤー] %s(%s)  生存:%d/%d  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
+		leader_name, first_class, alive, floor_members.size(),
+		mv_str, battle_str, tgt_str, hp_str, item_str]
+	_control.draw_string(font, Vector2(x, y + FS), header,
 		HORIZONTAL_ALIGNMENT_LEFT, w, FS, Color(0.45, 0.75, 1.0))
 	y += LINE_H
 
-	if _party == null:
-		return y
-
-	var sorted: Array = _party.sorted_members()
-	for m_v: Variant in sorted:
+	for m_v: Variant in floor_members:
 		if y >= bottom:
 			break
 		var m := m_v as Character
 		if m == null or not is_instance_valid(m):
 			continue
-		y = _draw_member_line(font, m, x + INDENT, y, w - INDENT, bottom)
+		y = _draw_member_line(font, m, x + INDENT, y, w - INDENT, bottom, true)
 
 	return y + 3.0
 
 
+## show_orders: false=敵（skill= を省略）、true=NPC/プレイヤー（skill= を表示）
+## HP・指示概要を1行に統合して表示する
 func _draw_member_line(font: Font, ch: Character, x: float, y: float,
-		w: float, bottom: float) -> float:
+		w: float, bottom: float, show_orders: bool) -> float:
 	if y >= bottom:
 		return y
 
@@ -232,31 +295,63 @@ func _draw_member_line(font: Font, ch: Character, x: float, y: float,
 		char_color = Color(1.0, 0.35, 0.35)
 
 	var star:  String = "★" if ch.is_player_controlled else "  "
-	var stun:  String = " [スタン]"  if ch.is_stunned   else ""
-	var guard: String = " [ガード]"  if ch.is_guarding  else ""
-	var line   := "%s%s(%s)[%s]  HP:%d/%d%s%s" % [
-		star, name_str, class_jp, rank_str, ch.hp, ch.max_hp, stun, guard]
+	var stun:  String = " [スタン]" if ch.is_stunned  else ""
+	var guard: String = " [ガード]" if ch.is_guarding else ""
+
+	# 指示概要を同一行に連結
+	var order_str: String = ""
+	var order: Dictionary = ch.current_order
+	if not order.is_empty():
+		var tgt_s: String = _label("target",           str(order.get("target",           "-")))
+		var fm_s:  String = _label("battle_formation", str(order.get("battle_formation", "-")))
+		var cbt_s: String = _label("combat",           str(order.get("combat",           "-")))
+		var is_healer: bool = cd != null and cd.class_id == "healer"
+		if is_healer:
+			var heal_s: String = _label("heal", str(order.get("heal", "-")))
+			order_str = "  tgt=%s fm=%s cbt=%s heal=%s" % [tgt_s, fm_s, cbt_s, heal_s]
+		elif show_orders:
+			var skill_s: String = _label("special_skill", str(order.get("special_skill", "-")))
+			order_str = "  tgt=%s fm=%s cbt=%s skill=%s" % [tgt_s, fm_s, cbt_s, skill_s]
+		else:
+			order_str = "  tgt=%s fm=%s cbt=%s" % [tgt_s, fm_s, cbt_s]
+
+	var line := "%s%s(%s)[%s]  HP:%d/%d%s%s%s" % [
+		star, name_str, class_jp, rank_str, ch.hp, ch.max_hp, stun, guard, order_str]
 	_control.draw_string(font, Vector2(x, y + FS), line,
 		HORIZONTAL_ALIGNMENT_LEFT, w, FS, char_color)
 	y += LINE_H
 
-	# 指示概要（current_order が非空なら表示）
-	var order: Dictionary = ch.current_order
-	if not order.is_empty() and y < bottom:
-		var form_str: String = str(order.get("battle_formation", ""))
-		var comb_str: String = str(order.get("combat", ""))
-		var tgt_str:  String = str(order.get("target", ""))
-		var heal_str: String = str(order.get("heal", ""))
-		var detail: String
-		if heal_str.is_empty():
-			detail = "  form=%s  cbt=%s  tgt=%s" % [form_str, comb_str, tgt_str]
-		else:
-			detail = "  form=%s  cbt=%s  heal=%s" % [form_str, comb_str, heal_str]
-		_control.draw_string(font, Vector2(x + 6.0, y + FS), detail,
-			HORIZONTAL_ALIGNMENT_LEFT, w - 6.0, FS - 1, Color(0.60, 0.60, 0.60))
-		y += LINE_H
-
 	return y
+
+
+## OrderWindow の定数から構築したラベルキャッシュ（key → {option: label}）
+var _label_cache: Dictionary = {}
+
+## OrderWindow.GLOBAL_ROWS / MEMBER_COLS / HEALER_COLS からキャッシュを構築する
+func _build_label_cache() -> void:
+	if not _label_cache.is_empty():
+		return
+	for src: Array in [OrderWindow.GLOBAL_ROWS, OrderWindow.MEMBER_COLS, OrderWindow.HEALER_COLS]:
+		for def_v: Variant in src:
+			var def := def_v as Dictionary
+			var key: String = def.get("key", "") as String
+			if key.is_empty() or _label_cache.has(key):
+				continue
+			var opts: Array = def.get("options", [])
+			var lbls: Array = def.get("labels",  [])
+			var sub: Dictionary = {}
+			for i: int in range(mini(opts.size(), lbls.size())):
+				sub[opts[i] as String] = lbls[i] as String
+			_label_cache[key] = sub
+
+
+## key に対応する OrderWindow のラベルで val を変換する。未定義なら val をそのまま返す
+func _label(key: String, val: String) -> String:
+	if val == "-":
+		return "-"
+	_build_label_cache()
+	var sub := _label_cache.get(key, {}) as Dictionary
+	return sub.get(val, val) as String
 
 
 # --------------------------------------------------------------------------

@@ -1287,9 +1287,9 @@ func _generate_buff_queue() -> Array:
 func _find_heal_target() -> Character:
 	if _member == null:
 		return null
-	var heal_mode: String = "aggressive"
+	var heal_mode: String = "lowest_hp_first"
 	if _member.current_order != null:
-		heal_mode = _member.current_order.get("heal", "aggressive") as String
+		heal_mode = _member.current_order.get("heal", "lowest_hp_first") as String
 
 	if heal_mode == "none":
 		return null

@@ -566,6 +566,7 @@ func _setup_panels() -> void:
 		func() -> Array: return enemy_managers,
 		func() -> Array: return npc_managers,
 		func() -> int: return _current_floor_index,
+		func() -> MapData: return _all_map_data[_current_floor_index] if _current_floor_index < _all_map_data.size() else null,
 		hero
 	)
 

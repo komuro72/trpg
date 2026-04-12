@@ -65,6 +65,13 @@ func get_strategy_name() -> String:
 	return "-"
 
 
+## 全体指示のヒントを返す（DebugWindow 表示用）
+func get_global_orders_hint() -> Dictionary:
+	if _leader_ai != null:
+		return _leader_ai.get_global_orders_hint()
+	return {}
+
+
 ## 現在の探索移動方針を返す（game_map が NPC の階段使用意図を判定するために使用）
 func get_explore_move_policy() -> String:
 	if _leader_ai != null:

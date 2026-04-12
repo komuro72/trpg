@@ -2560,6 +2560,19 @@ assets/master/items/
 - `sync_position()`: テレポート時は即時確定のまま（変更なし）
 - 効果: 視界・衝突判定が視覚位置と一致し、移動の不自然さが解消
 
+#### パーティーメンバー押し出しシステム（player_controller.gd）
+- **目的**: 加入済みパーティーメンバーが移動先を塞いでいる場合に押し出す（abort_move の押し戻しを防ぐ）
+- **対象**: `is_friendly=true` かつ `blocking_characters` に含まれない（＝加入済み）かつ `is_flying=false` のキャラクター
+- **アルゴリズム** (`_try_push(target_char, push_dir, depth)`):
+  1. 深度が3以上なら失敗 return
+  2. 候補方向：前方・左90°・右90° の順に試みる
+  3. 各方向の dest = target_char.grid_pos + cand_dir を `_can_push_to()` で走行可否確認
+  4. dest に別の押し出し可能な味方がいる場合は再帰的に `_try_push(next_ally, cand_dir, depth+1)`
+  5. 再帰成功 or 誰もいない → `target_char.move_to(dest, duration)` でプレイヤーと同時アニメーション
+  6. 全方向失敗なら false を返す
+- **統合** (`_try_move()`): `_can_move_to(new_pos)` が true のとき `_find_pushable_ally(new_pos)` でチェック。押し出し失敗ならプレイヤーも移動しない
+- **`_can_push_to(pos, ch)`**: タイル走行可否 + blocking_characters（敵・未加入NPC）ブロックチェック
+
 | ファイル | 変更内容 |
 |---------|---------|
 | `scripts/camera_controller.gd` | DEAD_ZONE_RATIO 0.70→0.40 |
@@ -3344,15 +3357,17 @@ OrderWindow の `GLOBAL_ROWS` に表示行として追加（move 行の直後）
 非ヒーラーの MEMBER_COLS（4列）に対し、ヒーラーは5列。
 `_get_cols_for(ch)` でキャラクター別に切り替え。`_col_cursor` 循環は `_get_active_total_cols()` で動的取得。
 
-| 列 | key | 選択肢 |
-|----|-----|--------|
+| 列 | key | 選択肢（先頭がデフォルト） |
+|----|-----|--------------------------|
 | 0 | target | nearest / weakest / same_as_leader / support |
 | 1 | battle_formation | surround / rush / rear / gather |
 | 2 | combat | attack / defense / flee |
-| 3 | heal | aggressive / leader_first / lowest_hp_first / none |
+| 3 | heal | **lowest_hp_first** / aggressive / leader_first / none |
 | 4 | special_skill | aggressive / strong_enemy / disadvantage / never |
 
-`unit_ai._find_heal_target()` は `current_order.get("heal", "aggressive")` を参照（旧 `"heal_mode"` から変更）。
+`unit_ai._find_heal_target()` は `current_order.get("heal", "lowest_hp_first")` を参照。デフォルトは `"lowest_hp_first"`（瀕死度優先）。
+`character.gd` の `current_order` 辞書に `"heal": "lowest_hp_first"` キーを追加済み。
+非ヒーラー行の回復列（pos=3）には「－」をグレーで表示（`_is_healer(ch)` で判定）。
 
 ### 集結隊形 "gather"（`unit_ai.gd`）
 `_calc_party_centroid()` — `_party_peers` の全メンバーの `grid_pos` 平均を返すヘルパー。
@@ -3368,6 +3383,46 @@ OrderWindow の `GLOBAL_ROWS` に表示行として追加（move 行の直後）
 `_battle_formation == "rear"` かつ `dist_to_leader > attack_range × 0.8` の場合：
 - 射程内なら攻撃
 - 射程外なら待機（追わない）
+
+---
+
+## Phase 13-10: 敵縄張り・追跡システム ✅ 完了
+
+### 概要
+敵がスポーン地点を「縄張り」として持ち、一定距離以上離れると帰還する。縄張り内に戻るまでは `GUARD_ROOM` 戦略で行動する。
+
+### CharacterData フィールド追加
+| フィールド | 型 | デフォルト | 説明 |
+|-----------|-----|-----------|------|
+| `chase_range` | int | 10 | 追跡を維持する最大距離（スポーン地点からではなく現在位置から目標まで） |
+| `territory_range` | int | 50 | 縄張り範囲（スポーン地点からの最大許容距離） |
+
+全16敵種JSONに追加済み。種族特性に応じた値：
+- ゴブリン系・ゾンビ・スケルトン系・dark-lord: chase=10, territory=50
+- wolf/hobgoblin: chase=6-8, territory=8（縄張り守備タイプ）
+- salamander: chase=6, territory=8
+- harpy: chase=10, territory=12
+- dark-knight: chase=10, territory=18
+- dark-mage/dark-priest: chase=6, territory=10
+- lich: chase=8, territory=15
+- demon: chase=10, territory=20
+
+### UnitAI 追加
+- `_home_position: Vector2i` — `setup()` 時点の `member.grid_pos` を記録
+- `get_home_position() -> Vector2i`
+- `_generate_guard_room_queue()` — スポーン地点から2タイル以内なら `wait`、それ以外は `move_to_home`
+- `_start_action()` の `"move_to_home"` ケース — `_goal = _home_position` にしてMOVING状態へ
+- `_generate_queue()` WAIT ブランチに `"guard_room"` move_policy ケースを追加
+
+### PartyLeaderAI 追加
+- `Strategy.GUARD_ROOM = 5` を enum に追加
+- `_apply_range_check(base_strat) -> Strategy` — `_evaluate_party_strategy()` の結果をラップ
+  - ATTACK → GUARD_ROOM: 全員が縄張り外（dist_home > territory_range）かつ目標が遠い（dist_target > chase_range）
+  - GUARD_ROOM → ATTACK: 1体でも縄張り内かつ射程内の目標あり
+  - GUARD_ROOM → WAIT: 全員がスポーン地点2タイル以内に帰還完了
+- `_all_members_out_of_range()` / `_any_member_can_engage()` / `_all_members_at_home()` ヘルパー
+- `_assign_orders()` の effective_strat 決定に GUARD_ROOM ブランチを追加（`move_policy = "guard_room"`）
+- 友好パーティー（`first_member.is_friendly`）にはrange_checkを適用しない
 
 ---
 
