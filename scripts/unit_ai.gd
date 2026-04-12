@@ -235,7 +235,8 @@ func _process(delta: float) -> void:
 
 		_State.MOVING:
 			# 移動先が他キャラに取られた場合はアボートして再評価
-			if _member.is_pending() and _is_dest_occupied_by_other(_member.get_pending_grid_pos()):
+			# ただし相手がすでにそのタイルを離れる途中（別の場所へ pending 移動中）なら無視する
+			if _member.is_pending() and _is_dest_blocked_by_other(_member.get_pending_grid_pos()):
 				_member.abort_move()
 				_queue.clear()
 				notify_situation_changed()
@@ -449,6 +450,10 @@ func _step_toward_goal() -> bool:
 
 	var next := _get_next_step(_goal)
 	if next != _member.grid_pos:
+		# 階段を目指しているとき、次のタイルに友好キャラがいれば押し出しを試みる
+		if _move_policy == "stairs_down" or _move_policy == "stairs_up":
+			var push_dir := next - _member.grid_pos
+			_try_push_friendly_at(next, push_dir)
 		_member.move_to(next, _get_move_interval())
 		return _member.grid_pos != _goal
 
@@ -1198,8 +1203,14 @@ func _calc_party_centroid() -> Vector2i:
 # 通行可能チェック
 # --------------------------------------------------------------------------
 
-## 移動先の座標が他キャラの確定位置（grid_pos）に被っているか調べる
+## 移動先の座標が他キャラの確定位置（grid_pos）に被っているか調べる（旧・互換）
 func _is_dest_occupied_by_other(pos: Vector2i) -> bool:
+	return _is_dest_blocked_by_other(pos)
+
+
+## 移動先の座標が「実際にブロックされている」か調べる
+## 相手がすでに pos から離れる途中（is_pending かつ pending_grid_pos != pos）なら無視する
+func _is_dest_blocked_by_other(pos: Vector2i) -> bool:
 	for other: Character in _all_members:
 		if not is_instance_valid(other) or other == _member:
 			continue
@@ -1208,12 +1219,63 @@ func _is_dest_occupied_by_other(pos: Vector2i) -> bool:
 		if other.is_flying != _member.is_flying:
 			continue
 		if other.grid_pos == pos:
+			# 相手がそのタイルから別の場所へ移動中（押し出され済み）なら無視
+			if other.is_pending() and other.get_pending_grid_pos() != pos:
+				continue
 			return true
 	if _player != null and is_instance_valid(_player) and _player != _member:
 		if _player.current_floor == _member.current_floor \
 				and _player.is_flying == _member.is_flying \
 				and _player.grid_pos == pos:
-			return true
+			if _player.is_pending() and _player.get_pending_grid_pos() != pos:
+				pass  # 離れる途中なら無視
+			else:
+				return true
+	return false
+
+
+## 指定タイルにいる友好キャラを隣接タイルへ押し出す（階段移動中のリーダー専用）
+## 成功すれば true を返す。push_dir は「リーダーが進んでいる方向」
+func _try_push_friendly_at(pos: Vector2i, push_dir: Vector2i) -> bool:
+	# 対象キャラを探す
+	var target_char: Character = null
+	for other: Character in _all_members:
+		if not is_instance_valid(other) or other == _member:
+			continue
+		if other.current_floor != _member.current_floor:
+			continue
+		if other.is_flying != _member.is_flying:
+			continue
+		if other.grid_pos == pos and other.is_friendly and not other.is_player_controlled:
+			target_char = other
+			break
+	if target_char == null:
+		# _all_members に含まれない場合（player 自身）は押し出し不要
+		return false
+	# 押し出し先候補：前方（進行方向）→ 左 → 右 の順で試す
+	var perp := Vector2i(-push_dir.y, push_dir.x)
+	var candidates: Array[Vector2i] = [pos + push_dir, pos + perp, pos - perp]
+	for dest: Vector2i in candidates:
+		if _map_data == null or not _map_data.is_walkable_for(dest, target_char.is_flying):
+			continue
+		# 押し出し先に別キャラがいないか確認（pending 含む）
+		var blocked := false
+		for ch: Character in _all_members:
+			if not is_instance_valid(ch) or ch == target_char:
+				continue
+			if ch.current_floor != _member.current_floor:
+				continue
+			if ch.grid_pos == dest or (ch.is_pending() and ch.get_pending_grid_pos() == dest):
+				blocked = true
+				break
+		if blocked:
+			continue
+		if _player != null and is_instance_valid(_player) and _player != target_char:
+			if _player.grid_pos == dest or (_player.is_pending() and _player.get_pending_grid_pos() == dest):
+				continue
+		# 押し出し実行（リーダーの移動と同じ速度で同時移動）
+		target_char.move_to(dest, _get_move_interval())
+		return true
 	return false
 
 
