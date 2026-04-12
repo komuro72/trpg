@@ -285,6 +285,10 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 			type_label, leader_name, first_class, alive, floor_members.size(),
 			mv_str, battle_str, tgt_str, hp_str]
 
+	# ヘッダーが描画可能か確認
+	if y + LINE_H > bottom:
+		return y
+
 	# 選択中リーダーの「▶」マーカー
 	var leader_char: Character = floor_members[0] if not floor_members.is_empty() else null
 	var is_selected: bool = (leader_char != null and _selected_leader != null
@@ -296,13 +300,12 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 		HORIZONTAL_ALIGNMENT_LEFT, w - INDENT, FS, header_color)
 	y += LINE_H
 
-	# メンバー行
-	for m: Character in floor_members:
-		if y >= bottom:
-			break
-		y = _draw_member_line(font, m, x + INDENT, y, w - INDENT, bottom, show_orders)
+	# メンバー全員を1行に横並び表示
+	if y < bottom:
+		_draw_members_row(font, floor_members, x + INDENT, y, w - INDENT * 2)
+		y += LINE_H
 
-	return y + 3.0
+	return y + 2.0
 
 
 func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
@@ -346,6 +349,9 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 	var header := "[プレイヤー] %s(%s)  生存:%d/%d  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
 		leader_name, first_class, alive, floor_members.size(),
 		mv_str, battle_str, tgt_str, hp_str, item_str]
+	if y + LINE_H > bottom:
+		return y
+
 	var player_leader: Character = floor_members[0] as Character if not floor_members.is_empty() else null
 	var is_selected: bool = (player_leader != null and _selected_leader != null
 		and is_instance_valid(_selected_leader) and _selected_leader == player_leader)
@@ -356,15 +362,60 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 		HORIZONTAL_ALIGNMENT_LEFT, w - INDENT, FS, Color(0.45, 0.75, 1.0))
 	y += LINE_H
 
-	for m_v: Variant in floor_members:
-		if y >= bottom:
-			break
-		var m := m_v as Character
-		if m == null or not is_instance_valid(m):
-			continue
-		y = _draw_member_line(font, m, x + INDENT, y, w - INDENT, bottom, true)
+	# メンバー全員を1行に横並び表示
+	if y < bottom:
+		_draw_members_row(font, floor_members, x + INDENT, y, w - INDENT * 2)
+		y += LINE_H
 
-	return y + 3.0
+	return y + 2.0
+
+
+## メンバー全員を1行に横並びで描画する
+## 各メンバー：★名前[ランク] HP:x/y [ス][ガ]  （幅を超えたら打ち切り）
+func _draw_members_row(font: Font, members: Array, x: float, y: float, w: float) -> void:
+	var cx: float = x
+	const SEP: String = "  "
+	var sep_w: float = font.get_string_size(SEP, HORIZONTAL_ALIGNMENT_LEFT, -1, FS).x
+
+	for i: int in range(members.size()):
+		var m_v: Variant = members[i]
+		var m := m_v as Character
+		if not is_instance_valid(m):
+			continue
+
+		# HP比率で色分け
+		var hp_pct: float = float(m.hp) / float(m.max_hp) if m.max_hp > 0 else 0.0
+		var col: Color
+		if hp_pct > 0.5:    col = Color(0.85, 0.85, 0.85)
+		elif hp_pct > 0.25: col = Color(1.0, 1.0, 0.3)
+		else:               col = Color(1.0, 0.35, 0.35)
+
+		var cd := m.character_data
+		var name_s: String = (cd.character_name if cd != null else "?") as String
+		var rank_s: String = (cd.rank          if cd != null else "?") as String
+		var star_s: String = "★" if m.is_player_controlled else ""
+		var status: String = ""
+		if m.is_stunned:  status += "ス"
+		if m.is_guarding: status += "ガ"
+		if not status.is_empty(): status = "[%s]" % status
+
+		var part := "%s%s[%s] HP:%d/%d%s" % [star_s, name_s, rank_s, m.hp, m.max_hp, status]
+		var part_w: float = font.get_string_size(part, HORIZONTAL_ALIGNMENT_LEFT, -1, FS).x
+
+		if cx + part_w > x + w:
+			# 幅不足：省略を示す "..." を描いて打ち切り
+			_control.draw_string(font, Vector2(cx, y + FS), "...",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, FS, Color(0.5, 0.5, 0.5))
+			break
+
+		_control.draw_string(font, Vector2(cx, y + FS), part,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, FS, col)
+		cx += part_w
+
+		if i < members.size() - 1:
+			_control.draw_string(font, Vector2(cx, y + FS), SEP,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, FS, Color(0.4, 0.4, 0.5))
+			cx += sep_w
 
 
 ## show_orders: false=敵（skill= を省略）、true=NPC/プレイヤー（skill= を表示）
