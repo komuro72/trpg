@@ -62,7 +62,7 @@ func _create_unit_ai(_member: Character) -> UnitAI:
 
 
 ## パーティー全体の戦略を評価する
-## 同じフロアに生存 かつ 可視（訪問済みエリア）の敵がいれば ATTACK、いなければ EXPLORE
+## 同じフロアに生存 かつ NPC自身が訪問済みのエリアにいる敵がいれば ATTACK、いなければ EXPLORE
 func _evaluate_party_strategy() -> Strategy:
 	# 自パーティーのフロアを取得
 	var my_floor := -1
@@ -76,8 +76,14 @@ func _evaluate_party_strategy() -> Strategy:
 		# 同フロアの敵のみ ATTACK トリガーにする（他フロアの敵は無視）
 		if my_floor >= 0 and enemy.current_floor != my_floor:
 			continue
-		# 未探索エリアの敵は無視（プレイヤーが発見していない敵には反応しない）
-		if not enemy.visible:
+		# NPC 自身が訪問済みのエリアにいる敵のみ ATTACK トリガーにする
+		# （debug_show_all による全敵可視化の影響を受けない）
+		if _map_data != null:
+			var area_id := _map_data.get_area(enemy.grid_pos)
+			if area_id.is_empty() or not _visited_areas.has(area_id):
+				continue
+		elif not enemy.visible:
+			# MapData なし（初期化前）のフォールバック
 			continue
 		return Strategy.ATTACK
 	return Strategy.EXPLORE
