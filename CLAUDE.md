@@ -1677,6 +1677,26 @@ rank値: C=0, B=1, A=2, S=3
   - **非ヒーラー行の「回復」列に「－」をグレー表示**（`order_window.gd`）
     - HEALER_COLS の `heal` 列（pos=3）位置に `_is_healer(ch) == false` のとき「－」をグレーで描画
     - 常時5列ヘッダー（HEADER_COLS）との整合性を維持
+- [x] Phase 13-11: フロア0敵構成見直し・NPCデフォルト指示修正
+  - **フロア0をゴブリンのみに変更**（`dungeon_handcrafted.json`）
+    - goblin-archer / goblin-mage / hobgoblin をフロア0から全て除去
+    - 対象7部屋（r1_2, r1_7, r1_8, r1_9, r1_10, r1_11, r1_12）の非ゴブリンをすべて goblin に置換
+    - goblin-archer / goblin-mage / hobgoblin はフロア1以降（r2_*以降）で引き続き登場
+  - **NPCパーティーの `current_order` デフォルト修正**
+    - `character.gd`：`current_order` デフォルト値をプレイヤーパーティーと整合する値に変更
+      - `"move": "cluster"` → `"follow"`
+      - `"combat": "aggressive"` → `"attack"`
+      - `"target": "nearest"` → `"same_as_leader"`
+      - `"on_low_hp": "keep_fighting"` → `"retreat"`
+      - `"item_pickup": "aggressive"` → `"passive"`
+    - `npc_manager.gd`：`_apply_attack_preset_to_member()` 静的メソッドを追加
+      - `setup()` でスポーン後に各メンバーへ battle_policy="attack" のクラス別プリセットを適用
+      - ヒーラー: rear/attack/lowest_hp_first、弓・魔法: rear/attack、斧: rush/attack、その他: surround/attack
+  - **デバッグ時フォグオブウォー無効化**（前セッション実装）
+    - `vision_system.gd`：`debug_show_all: bool` フラグ追加。`get_visible_tiles()` / `update_visibility()` に反映
+    - F1でDebugWindow表示中は全タイル・未訪問エリアの敵・NPCも描画
+  - **NPCが未訪問部屋に入ったとき敵をアクティブ化するよう修正**（前セッション実装）
+    - `vision_system._process()`：NPC エリアの `is_area_visited` チェックを廃止（未訪問でも friendly_areas に追加）
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム

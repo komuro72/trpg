@@ -197,7 +197,7 @@
                   "y": 4
                 },
                 {
-                  "enemy_id": "goblin-archer",
+                  "enemy_id": "goblin",
                   "x": 23,
                   "y": 5
                 }
@@ -884,7 +884,7 @@
                   "y": 30
                 },
                 {
-                  "enemy_id": "goblin-archer",
+                  "enemy_id": "goblin",
                   "x": 8,
                   "y": 29
                 }
@@ -1041,7 +1041,7 @@
                   "y": 28
                 },
                 {
-                  "enemy_id": "goblin-mage",
+                  "enemy_id": "goblin",
                   "x": 22,
                   "y": 29
                 },
@@ -1154,7 +1154,7 @@
               "party_id": 4,
               "members": [
                 {
-                  "enemy_id": "hobgoblin",
+                  "enemy_id": "goblin",
                   "x": 36,
                   "y": 29
                 },
@@ -1253,12 +1253,12 @@
                   "y": 40
                 },
                 {
-                  "enemy_id": "goblin-archer",
+                  "enemy_id": "goblin",
                   "x": 8,
                   "y": 41
                 },
                 {
-                  "enemy_id": "goblin-archer",
+                  "enemy_id": "goblin",
                   "x": 9,
                   "y": 40
                 }
@@ -1352,7 +1352,7 @@
                   "y": 40
                 },
                 {
-                  "enemy_id": "goblin-mage",
+                  "enemy_id": "goblin",
                   "x": 22,
                   "y": 41
                 }
@@ -1508,17 +1508,17 @@
               "party_id": 7,
               "members": [
                 {
-                  "enemy_id": "hobgoblin",
+                  "enemy_id": "goblin",
                   "x": 36,
                   "y": 41
                 },
                 {
-                  "enemy_id": "goblin-archer",
+                  "enemy_id": "goblin",
                   "x": 33,
                   "y": 40
                 },
                 {
-                  "enemy_id": "goblin-mage",
+                  "enemy_id": "goblin",
                   "x": 34,
                   "y": 42
                 }

@@ -17,6 +17,27 @@ func set_enemy_list(enemies: Array[Character]) -> void:
 		(_leader_ai as NpcLeaderAI).set_enemy_list(enemies)
 
 
+## battle_policy="attack" プリセットをクラスに応じてメンバーに適用する
+static func _apply_attack_preset_to_member(ch: Character) -> void:
+	if ch.character_data == null:
+		return
+	var cid := ch.character_data.class_id
+	match cid:
+		"healer":
+			ch.current_order["battle_formation"] = "rear"
+			ch.current_order["combat"]           = "attack"
+			ch.current_order["heal"]             = "lowest_hp_first"
+		"archer", "magician-fire", "magician-water":
+			ch.current_order["battle_formation"] = "rear"
+			ch.current_order["combat"]           = "attack"
+		"fighter-axe":
+			ch.current_order["battle_formation"] = "rush"
+			ch.current_order["combat"]           = "attack"
+		_:  # fighter-sword, scout
+			ch.current_order["battle_formation"] = "surround"
+			ch.current_order["combat"]           = "attack"
+
+
 ## NPC 用スポーン：class_id でキャラクターをランダム生成する
 ## drop_items は NPC には不使用（PartyManager との署名互換のために宣言）
 func setup(spawn_list: Array, player: Character, map_data: MapData, drop_items: Array = []) -> void:
@@ -32,6 +53,10 @@ func setup(spawn_list: Array, player: Character, map_data: MapData, drop_items: 
 		# 初期装備を付与する
 		if member.character_data != null and not items.is_empty():
 			member.character_data.apply_initial_items(items)
+		# global_orders デフォルト値（Party.global_orders と同一）をメンバーの current_order に反映
+		# Character.current_order のデフォルトは Party.global_orders と一致しているが、
+		# クラス依存の battle_formation / combat はここで確定する
+		_apply_attack_preset_to_member(member)
 		_members.append(member)
 
 

@@ -84,12 +84,12 @@ var is_friendly: bool = false
 ## target:           nearest=最近傍 / weakest=最弱 / same_as_leader=リーダーと同じ
 ## on_low_hp:        keep_fighting=戦い続ける / retreat=後退 / flee=逃走
 var current_order: Dictionary = {
-	"move":             "cluster",        # 攻撃プリセット初期値
+	"move":             "follow",
 	"battle_formation": "surround",
-	"combat":           "aggressive",
-	"target":           "nearest",
-	"on_low_hp":        "keep_fighting",  # 攻撃プリセット初期値
-	"item_pickup":      "aggressive",
+	"combat":           "attack",
+	"target":           "same_as_leader",
+	"on_low_hp":        "retreat",
+	"item_pickup":      "passive",
 	"heal":             "lowest_hp_first",
 }
 
