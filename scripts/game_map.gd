@@ -1193,13 +1193,26 @@ func _check_item_pickup() -> void:
 			var cm := mv as Character
 			if is_instance_valid(cm):
 				all_chars.append(cm)
+	# 未加入 NPC: npc_managers（現フロアの確定済みマネージャー）＋
+	# 遷移途中でまだ旧フロアに登録されているが個別メンバーが現フロアにいるケースも拾う
+	var seen_npc_mgrs: Dictionary = {}
 	for nm_v: Variant in npc_managers:
 		var nm := nm_v as NpcManager
 		if not is_instance_valid(nm):
 			continue
+		seen_npc_mgrs[nm] = true
 		for ch: Character in nm.get_members():
 			if is_instance_valid(ch):
 				all_chars.append(ch)
+	# フロア遷移途中のメンバーを補足（管理フロアが旧フロアのまま一部が現フロアに着いている）
+	for fi: int in range(_per_floor_npcs.size()):
+		for nm2_v: Variant in (_per_floor_npcs[fi] as Array):
+			var nm2 := nm2_v as NpcManager
+			if not is_instance_valid(nm2) or seen_npc_mgrs.has(nm2):
+				continue
+			for ch: Character in nm2.get_members():
+				if is_instance_valid(ch) and ch.current_floor == _current_floor_index:
+					all_chars.append(ch)
 	for ch: Character in all_chars:
 		if not is_instance_valid(ch) or ch.character_data == null:
 			continue
