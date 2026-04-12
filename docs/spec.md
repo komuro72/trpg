@@ -3369,6 +3369,15 @@ OrderWindow の `GLOBAL_ROWS` に表示行として追加（move 行の直後）
 `character.gd` の `current_order` 辞書に `"heal": "lowest_hp_first"` キーを追加済み。
 非ヒーラー行の回復列（pos=3）には「－」をグレーで表示（`_is_healer(ch)` で判定）。
 
+### global_orders の初期値をメンバーへ反映（`order_window.gd`）
+`setup()` 呼び出し時（ゲーム開始時の1回）に `_sync_all_global_to_members()` を呼んで
+`Party.global_orders` のデフォルト値（`"target": "same_as_leader"` 等）を
+全メンバーの `current_order` に反映する。
+
+- 対象キー：`"move"` / `"target"` / `"on_low_hp"` / `"item_pickup"`
+- `battle_policy` は別途 `_apply_battle_policy_preset()` 経由で反映（変更時のみ）
+- `setup()` は1回しか呼ばれないため、プレイヤーの個別設定を上書きしない
+
 ### 集結隊形 "gather"（`unit_ai.gd`）
 `_calc_party_centroid()` — `_party_peers` の全メンバーの `grid_pos` 平均を返すヘルパー。
 

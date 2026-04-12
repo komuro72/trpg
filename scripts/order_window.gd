@@ -159,6 +159,8 @@ var _transfer_cursor:    int       = 0
 func setup(party: Party, message_window: MessageWindow = null) -> void:
 	_party          = party
 	_message_window = message_window
+	# global_orders の初期値を全メンバーの current_order に反映（ゲーム開始時の1回のみ）
+	_sync_all_global_to_members()
 
 
 func set_controlled(ch: Character) -> void:
@@ -594,6 +596,22 @@ const BATTLE_POLICY_PRESET: Dictionary = {
 
 
 ## global_orders の変更を全メンバーの current_order に反映する（AI 互換キーのみ）
+## global_orders の全 sync キーを一括で全メンバーに反映する（初回セットアップ用）
+func _sync_all_global_to_members() -> void:
+	if _party == null:
+		return
+	var sync_keys: Array[String] = ["move", "target", "on_low_hp", "item_pickup"]
+	for key: String in sync_keys:
+		var val: String = _party.global_orders.get(key, "") as String
+		if val.is_empty():
+			continue
+		for m_v: Variant in _party.members:
+			var ch := m_v as Character
+			if not is_instance_valid(ch):
+				continue
+			ch.current_order[key] = val
+
+
 func _sync_global_to_members(key: String, val: String) -> void:
 	if _party == null:
 		return

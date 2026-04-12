@@ -1564,6 +1564,7 @@ rank値: C=0, B=1, A=2, S=3
     - `MEMBER_COLS`：`battle_formation`（surround/rush/rear）・`combat`（attack/defense/flee）・`target`・`special_skill`（4択）
     - `HEALER_COLS`（5列）：`target`・`battle_formation`・`combat`・`heal`（aggressive/leader_first/lowest_hp_first/none）・`special_skill`
     - `_sync_global_to_members()`：sync_keys を `["move","target","on_low_hp","item_pickup"]` に更新
+    - `_sync_all_global_to_members()`：`setup()` 呼び出し時に全 sync_keys を一括で全メンバーに反映（初回のみ）。`Party.global_orders` のデフォルト値（`"target": "same_as_leader"` 等）をゲーム開始時に `current_order` へ反映する
     - `CLASS_EQUIP_TYPES` に `"magician-water"` を追加
   - **`PartyLeaderAI.gd`：global_orders 参照・AI ロジック更新**
     - `_global_orders: Dictionary` フィールド追加。`set_global_orders(orders)` メソッドで Party.global_orders への参照を受け取る
