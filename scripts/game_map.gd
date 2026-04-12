@@ -1816,16 +1816,17 @@ func _update_character_visibility() -> void:
 							# デバッグ表示フロアの敵は強制表示
 							ch.visible = true
 						# else: VisionSystem が制御（current_floor と一致）
-	# NPC
+	# NPC：NpcManager の管理フロア（fi）ではなく各キャラクターの current_floor で判定する
+	# リーダーが先行遷移中は NpcManager が旧フロアリストに残るため fi での判定が不正確になる
 	for fi: int in range(_per_floor_npcs.size()):
-		var is_view := (fi == view_floor)
 		for nm: NpcManager in (_per_floor_npcs[fi] as Array):
 			if is_instance_valid(nm):
 				for ch: Character in nm.get_members():
 					if is_instance_valid(ch):
-						if not is_view:
+						var ch_is_view := (ch.current_floor == view_floor)
+						if not ch_is_view:
 							ch.visible = false
-						elif debug_mode and fi != _current_floor_index:
+						elif debug_mode and ch.current_floor != _current_floor_index:
 							# デバッグ表示フロアのNPCは強制表示
 							ch.visible = true
 	# パーティーメンバー（hero 以外）：current_floor が view_floor と一致するフロアのみ表示
