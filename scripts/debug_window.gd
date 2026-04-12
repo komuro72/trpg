@@ -27,6 +27,13 @@ var _control:       Control
 var _redraw_timer:  float = 0.0
 const REDRAW_INTERVAL: float = 0.20  ## パーティー状態の再描画間隔（秒）
 
+## リーダー選択（修正2）
+var _selected_leader: Character = null  ## 選択中のリーダーキャラ（null=未選択）
+var _leader_list: Array = []            ## 描画順のリーダーキャラ一覧（毎描画フレームで更新）
+
+## リーダー選択が変わったとき発火（game_map がカメラを切り替えるために購読）
+signal leader_selected(leader: Character)
+
 
 func _ready() -> void:
 	layer = 15
@@ -53,6 +60,43 @@ func setup(p_party: Party, get_enemy_managers: Callable, get_npc_managers: Calla
 	_get_floor          = get_floor
 	_get_map_data       = get_map_data
 	_hero               = p_hero
+
+
+func _input(event: InputEvent) -> void:
+	if not visible:
+		return
+	if event is InputEventKey and (event as InputEventKey).pressed:
+		var key: int = (event as InputEventKey).physical_keycode
+		if key == KEY_UP:
+			_navigate_selection(-1)
+			get_viewport().set_input_as_handled()
+		elif key == KEY_DOWN:
+			_navigate_selection(1)
+			get_viewport().set_input_as_handled()
+
+
+## リーダー一覧内でカーソルを移動する。_leader_list は前回の描画で構築済み
+func _navigate_selection(dir: int) -> void:
+	# freed なエントリを除去
+	_leader_list = _leader_list.filter(func(c: Variant) -> bool:
+		return c != null and is_instance_valid(c as Object))
+	if _leader_list.is_empty():
+		return
+	var idx: int = _leader_list.find(_selected_leader)
+	if idx < 0:
+		idx = 0 if dir > 0 else _leader_list.size() - 1
+	else:
+		idx = (idx + dir + _leader_list.size()) % _leader_list.size()
+	_selected_leader = _leader_list[idx] as Character
+	leader_selected.emit(_selected_leader)
+	_control.queue_redraw()
+
+
+## ウィンドウを閉じるときに選択をリセットする（game_map から呼ぶ）
+func clear_selection() -> void:
+	_selected_leader = null
+	_leader_list.clear()
+	leader_selected.emit(null)
 
 
 func _process(delta: float) -> void:
@@ -84,9 +128,10 @@ func _on_draw() -> void:
 	var pw: float = vp.x * 0.70
 	var ph: float = vp.y * 0.80
 
-	# 背景パネル
-	_control.draw_rect(Rect2(px, py, pw, ph), Color(0.04, 0.04, 0.12, 0.92))
-	_control.draw_rect(Rect2(px, py, pw, ph), Color(0.45, 0.55, 0.85, 0.7), false, 1.5)
+	# 背景パネルなし（完全透過）
+
+	# 描画前にリーダー一覧を構築（上下キー選択用）
+	_leader_list = _build_leader_list()
 
 	# タイトル行
 	var floor_idx: int = int(_get_floor.call()) if _get_floor.is_valid() else 0
@@ -153,6 +198,43 @@ func _draw_party_state(font: Font, x: float, y_start: float,
 		_draw_player_party(font, x, cy, w, bottom, floor_idx)
 
 
+## 描画順のリーダーキャラ一覧を構築する（上下キー選択の対象リスト）
+func _build_leader_list() -> Array:
+	var list: Array = []
+	var floor_idx: int = int(_get_floor.call()) if _get_floor.is_valid() else 0
+	var ems: Array = _get_enemy_managers.call() if _get_enemy_managers.is_valid() else []
+	var nms: Array = _get_npc_managers.call()   if _get_npc_managers.is_valid()   else []
+	for em_v: Variant in ems:
+		var em := em_v as PartyManager
+		if em == null or not is_instance_valid(em):
+			continue
+		var leader := _get_floor_leader(em.get_members(), floor_idx)
+		if leader != null:
+			list.append(leader)
+	for nm_v: Variant in nms:
+		var nm := nm_v as NpcManager
+		if nm == null or not is_instance_valid(nm):
+			continue
+		var leader := _get_floor_leader(nm.get_members(), floor_idx)
+		if leader != null:
+			list.append(leader)
+	if _party != null:
+		var sorted: Array = _party.sorted_members()
+		var leader := _get_floor_leader(sorted, floor_idx)
+		if leader != null:
+			list.append(leader)
+	return list
+
+
+## メンバーリストから現在フロアの先頭キャラ（リーダー相当）を返す
+func _get_floor_leader(members: Array, floor_idx: int) -> Character:
+	for m_v: Variant in members:
+		var m := m_v as Character
+		if is_instance_valid(m) and m.current_floor == floor_idx:
+			return m
+	return null
+
+
 ## show_orders: false=敵（item 列を省略）、true=NPC/プレイヤー（全列表示）
 func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 		header_color: Color, x: float, y: float, w: float, bottom: float,
@@ -203,8 +285,15 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 			type_label, leader_name, first_class, alive, floor_members.size(),
 			mv_str, battle_str, tgt_str, hp_str]
 
+	# 選択中リーダーの「▶」マーカー
+	var leader_char: Character = floor_members[0] if not floor_members.is_empty() else null
+	var is_selected: bool = (leader_char != null and _selected_leader != null
+		and is_instance_valid(_selected_leader) and _selected_leader == leader_char)
+	if is_selected:
+		_control.draw_string(font, Vector2(x - INDENT, y + FS), "▶",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, FS, Color(1.0, 1.0, 0.3))
 	_control.draw_string(font, Vector2(x, y + FS), header,
-		HORIZONTAL_ALIGNMENT_LEFT, w, FS, header_color)
+		HORIZONTAL_ALIGNMENT_LEFT, w - INDENT, FS, header_color)
 	y += LINE_H
 
 	# メンバー行
@@ -257,8 +346,14 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 	var header := "[プレイヤー] %s(%s)  生存:%d/%d  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
 		leader_name, first_class, alive, floor_members.size(),
 		mv_str, battle_str, tgt_str, hp_str, item_str]
+	var player_leader: Character = floor_members[0] as Character if not floor_members.is_empty() else null
+	var is_selected: bool = (player_leader != null and _selected_leader != null
+		and is_instance_valid(_selected_leader) and _selected_leader == player_leader)
+	if is_selected:
+		_control.draw_string(font, Vector2(x - INDENT, y + FS), "▶",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, FS, Color(1.0, 1.0, 0.3))
 	_control.draw_string(font, Vector2(x, y + FS), header,
-		HORIZONTAL_ALIGNMENT_LEFT, w, FS, Color(0.45, 0.75, 1.0))
+		HORIZONTAL_ALIGNMENT_LEFT, w - INDENT, FS, Color(0.45, 0.75, 1.0))
 	y += LINE_H
 
 	for m_v: Variant in floor_members:

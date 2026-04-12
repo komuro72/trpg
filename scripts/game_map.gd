@@ -81,6 +81,7 @@ var _dialogue_npc_initiates: bool = false
 var npc_dialogue_window: NpcDialogueWindow  ## NPC会話専用ウィンドウ
 var pause_menu: PauseMenu  ## ポーズメニュー
 var debug_window: DebugWindow  ## F1 デバッグウィンドウ
+var _debug_follow_target: Character = null  ## デバッグ用カメラ追跡対象（null=通常追跡）
 
 
 func _ready() -> void:
@@ -109,6 +110,8 @@ func _input(event: InputEvent) -> void:
 			KEY_F1:
 				if debug_window != null:
 					debug_window.visible = not debug_window.visible
+					if not debug_window.visible:
+						debug_window.clear_selection()
 			KEY_F2:
 				_print_debug_floor_info()
 			KEY_F5:
@@ -171,6 +174,10 @@ func _finish_setup() -> void:
 
 
 func _process(delta: float) -> void:
+	# デバッグ追跡対象が死亡・解放された場合は通常追跡に戻す
+	if _debug_follow_target != null and not is_instance_valid(_debug_follow_target):
+		set_debug_follow_target(null)
+
 	# 射程オーバーレイの再描画（ターゲット選択モード切り替わり時）
 	var now_targeting := player_controller != null and player_controller.is_targeting()
 	if now_targeting != _was_targeting:
@@ -569,6 +576,7 @@ func _setup_panels() -> void:
 		func() -> MapData: return _all_map_data[_current_floor_index] if _current_floor_index < _all_map_data.size() else null,
 		hero
 	)
+	debug_window.leader_selected.connect(_on_debug_leader_selected)
 
 	# 起動時の初期フロア・エリア名を表示
 	if area_name_display != null:
@@ -708,6 +716,25 @@ func _on_switch_character_requested(new_char: Character) -> void:
 	# 操作キャラが別フロアにいる場合はフロア表示を切り替える
 	if new_char.current_floor != _current_floor_index:
 		_switch_floor_view(new_char.current_floor)
+
+
+## デバッグ用：カメラの追跡対象を一時的に ch に切り替える（null で通常追跡に戻す）
+func set_debug_follow_target(ch: Character) -> void:
+	_debug_follow_target = ch
+	if camera_controller == null or not is_instance_valid(camera_controller):
+		return
+	if ch != null and is_instance_valid(ch):
+		camera_controller.set_follow_target(ch)
+	else:
+		_debug_follow_target = null
+		# 通常の操作キャラへカメラを戻す
+		if player_controller != null and player_controller.character != null \
+				and is_instance_valid(player_controller.character):
+			camera_controller.set_follow_target(player_controller.character)
+
+
+func _on_debug_leader_selected(leader: Character) -> void:
+	set_debug_follow_target(leader)
 
 
 func _on_npc_bumped(npc_member: Character) -> void:
