@@ -133,9 +133,18 @@ func _on_draw() -> void:
 	# 描画前にリーダー一覧を構築（上下キー選択用）
 	_leader_list = _build_leader_list()
 
+	# 表示フロアを決定：選択中リーダーのフロア > プレイヤーのフロア
+	var player_floor: int = int(_get_floor.call()) if _get_floor.is_valid() else 0
+	var display_floor: int = player_floor
+	if _selected_leader != null and is_instance_valid(_selected_leader):
+		display_floor = _selected_leader.current_floor
+
 	# タイトル行
-	var floor_idx: int = int(_get_floor.call()) if _get_floor.is_valid() else 0
-	var title := "■ DEBUG WINDOW  [F1で閉じる]  Floor: %d" % floor_idx
+	var title: String
+	if display_floor != player_floor:
+		title = "■ DEBUG WINDOW  [F1で閉じる]  Player:F%d  表示:F%d" % [player_floor, display_floor]
+	else:
+		title = "■ DEBUG WINDOW  [F1で閉じる]  Floor: %d" % player_floor
 	_control.draw_string(font, Vector2(px + PAD, py + PAD + HDR_FS),
 		title, HORIZONTAL_ALIGNMENT_LEFT, -1, HDR_FS, Color(0.8, 0.8, 1.0))
 
@@ -148,8 +157,8 @@ func _on_draw() -> void:
 	var c_h: float   = ph - (title_bottom - py) - 2.0
 	var div_y: float = c_top + c_h * 0.55  # 上55%：パーティー状態
 
-	# 上半分：パーティー状態
-	_draw_party_state(font, px + PAD, c_top + 2.0, pw - PAD * 2, div_y - c_top - 4.0)
+	# 上半分：パーティー状態（表示フロアを引数で渡す）
+	_draw_party_state(font, px + PAD, c_top + 2.0, pw - PAD * 2, div_y - c_top - 4.0, display_floor)
 
 	# 区切り線
 	_control.draw_line(Vector2(px + PAD, div_y), Vector2(px + pw - PAD, div_y),
@@ -164,11 +173,9 @@ func _on_draw() -> void:
 # --------------------------------------------------------------------------
 
 func _draw_party_state(font: Font, x: float, y_start: float,
-		w: float, h: float) -> void:
+		w: float, h: float, floor_idx: int) -> void:
 	var cy: float  = y_start
 	var bottom: float = y_start + h
-
-	var floor_idx: int = int(_get_floor.call()) if _get_floor.is_valid() else 0
 
 	var ems: Array = _get_enemy_managers.call() if _get_enemy_managers.is_valid() else []
 	var nms: Array = _get_npc_managers.call()   if _get_npc_managers.is_valid()   else []
@@ -199,34 +206,42 @@ func _draw_party_state(font: Font, x: float, y_start: float,
 
 
 ## 描画順のリーダーキャラ一覧を構築する（上下キー選択の対象リスト）
+## 全フロアのリーダーを含む（フロアをまたいだナビゲーションに対応）
 func _build_leader_list() -> Array:
 	var list: Array = []
-	var floor_idx: int = int(_get_floor.call()) if _get_floor.is_valid() else 0
 	var ems: Array = _get_enemy_managers.call() if _get_enemy_managers.is_valid() else []
 	var nms: Array = _get_npc_managers.call()   if _get_npc_managers.is_valid()   else []
 	for em_v: Variant in ems:
 		var em := em_v as PartyManager
 		if em == null or not is_instance_valid(em):
 			continue
-		var leader := _get_floor_leader(em.get_members(), floor_idx)
+		var leader := _get_any_leader(em.get_members())
 		if leader != null:
 			list.append(leader)
 	for nm_v: Variant in nms:
 		var nm := nm_v as NpcManager
 		if nm == null or not is_instance_valid(nm):
 			continue
-		var leader := _get_floor_leader(nm.get_members(), floor_idx)
+		var leader := _get_any_leader(nm.get_members())
 		if leader != null:
 			list.append(leader)
 	if _party != null:
-		var sorted: Array = _party.sorted_members()
-		var leader := _get_floor_leader(sorted, floor_idx)
+		var leader := _get_any_leader(_party.sorted_members())
 		if leader != null:
 			list.append(leader)
 	return list
 
 
-## メンバーリストから現在フロアの先頭キャラ（リーダー相当）を返す
+## メンバーリストから生存中の先頭キャラを返す（フロア不問）
+func _get_any_leader(members: Array) -> Character:
+	for m_v: Variant in members:
+		var m := m_v as Character
+		if is_instance_valid(m) and m.hp > 0:
+			return m
+	return null
+
+
+## メンバーリストから指定フロアの先頭キャラを返す（旧互換・未使用になる可能性あり）
 func _get_floor_leader(members: Array, floor_idx: int) -> Character:
 	for m_v: Variant in members:
 		var m := m_v as Character
