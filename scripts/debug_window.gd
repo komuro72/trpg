@@ -269,7 +269,12 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 
 	# 全体指示ヒント
 	var hint: Dictionary = pm.get_global_orders_hint()
-	var mv_str:     String = _label("move",          hint.get("move",          "-") as String)
+	var mv_raw:     String = hint.get("move", "-") as String
+	var mv_str:     String = _label("move", mv_raw)
+	# 階段移動中は目標フロアを付加表示
+	if mv_raw == "stairs_down" or mv_raw == "stairs_up":
+		var tgt_f: String = hint.get("target_floor", "?") as String
+		mv_str += "(F" + tgt_f + ")"
 	var battle_str: String = _label("battle_policy", hint.get("battle_policy", "-") as String)
 	var tgt_str:    String = _label("target",        hint.get("target",        "-") as String)
 	var hp_str:     String = _label("on_low_hp",     hint.get("on_low_hp",     "-") as String)
@@ -495,6 +500,10 @@ func _build_label_cache() -> void:
 func _label(key: String, val: String) -> String:
 	if val == "-":
 		return "-"
+	# 階段移動方針は OrderWindow 定数に存在しないため個別処理
+	if key == "move":
+		if val == "stairs_down": return "↓階段"
+		if val == "stairs_up":   return "↑階段"
 	_build_label_cache()
 	var sub := _label_cache.get(key, {}) as Dictionary
 	return sub.get(val, val) as String

@@ -226,8 +226,11 @@ func _assign_orders() -> void:
 					effective_strat = int(Strategy.ATTACK)
 				var pol := _get_explore_move_policy()
 				if pol == "stairs_down" or pol == "stairs_up":
-					# フロア移動判断: 全メンバーが一斉に階段を目指す
-					move_policy = pol
+					# フロア移動判断: リーダーのみ階段を目指す、非リーダーはリーダーを追従
+					if member == leader_char:
+						move_policy = pol
+					else:
+						move_policy = order.get("move", "follow") as String
 				elif member == leader_char:
 					# リーダーのみ探索行動（自律的に未訪問エリアへ向かう）
 					move_policy = "explore"

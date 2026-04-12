@@ -1708,6 +1708,11 @@ rank値: C=0, B=1, A=2, S=3
       - 後方が壁・障害物：リーダー隣接なら満足
     - `_formation_move_goal()` の "follow" フォールバックを優先順位付きに変更：後方→左後方→右後方→左→右の順で候補を探す（旧：任意の隣接タイル）
     - `party_leader_ai._assign_orders()`：EXPLORE + 未加入NPC の場合、リーダーのみ "explore"、非リーダーメンバーは `current_order["move"]`（= "follow"）を使うよう変更（旧：全員 "explore" に上書きしていたため follow が効いていなかった）
+    - 階段移動判断（stairs_down/stairs_up）時もリーダーのみ階段を目指し、非リーダーはリーダーを追従（`current_order["move"]`）
+  - **デバッグウィンドウにフロア移動状況を表示**
+    - `npc_leader_ai.get_global_orders_hint()`：EXPLORE 戦略時に `_get_explore_move_policy()` の実値（"stairs_down"/"stairs_up"/"explore"）を返す。階段移動中は `"target_floor"` キーで目標フロア番号も追加
+    - `debug_window._label()`："stairs_down" → "↓階段"、"stairs_up" → "↑階段" の特殊変換を追加
+    - `debug_window._draw_party_block()`：`mv_raw` が "stairs_down"/"stairs_up" の場合、目標フロアを "↓階段(F2)" のように付加表示
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム

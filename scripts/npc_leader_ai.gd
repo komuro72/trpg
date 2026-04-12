@@ -245,7 +245,10 @@ func get_global_orders_hint() -> Dictionary:
 		Strategy.WAIT, Strategy.DEFEND:
 			hint["battle_policy"] = "defense"
 		Strategy.EXPLORE:
-			hint["move"] = "explore"
+			var pol := _get_explore_move_policy()
+			hint["move"] = pol
+			if pol == "stairs_down" or pol == "stairs_up":
+				hint["target_floor"] = str(_get_target_floor())
 		Strategy.GUARD_ROOM:
 			hint["move"] = "guard_room"
 	return hint
