@@ -179,9 +179,9 @@ func _assign_orders() -> void:
 			continue
 
 		var order          := member.current_order
-		var combat         : String = order.get("combat",          "aggressive")
+		var combat         : String = order.get("combat",          "attack")
 		var on_low_hp      : String = order.get("on_low_hp",       "retreat")
-		var tgt_policy     : String = order.get("target",          "nearest")
+		var tgt_policy     : String = order.get("target",          "same_as_leader")
 		var battle_form    : String = order.get("battle_formation", "surround")
 
 		# ── 移動方針設定 ──────────────────────────────────────────────────

@@ -224,6 +224,33 @@ func _calc_recoverable_energy(member: Character) -> int:
 	return total
 
 
+## NPC パーティーの global_orders ヒントを返す（デバッグウィンドウ表示用）
+## _global_orders が設定されていない場合は NPC デフォルト値＋現在戦略を合成して返す
+func get_global_orders_hint() -> Dictionary:
+	if not _global_orders.is_empty():
+		return _global_orders
+	var hint: Dictionary = {
+		"move":          "follow",
+		"battle_policy": "attack",
+		"target":        "same_as_leader",
+		"on_low_hp":     "retreat",
+		"item_pickup":   "passive",
+		"hp_potion":     "use",
+		"sp_mp_potion":  "use",
+	}
+	match _party_strategy:
+		Strategy.FLEE:
+			hint["battle_policy"] = "retreat"
+			hint["on_low_hp"]     = "flee"
+		Strategy.WAIT, Strategy.DEFEND:
+			hint["battle_policy"] = "defense"
+		Strategy.EXPLORE:
+			hint["move"] = "explore"
+		Strategy.GUARD_ROOM:
+			hint["move"] = "guard_room"
+	return hint
+
+
 ## 戦略変更の理由
 func _get_strategy_change_reason() -> String:
 	if _party_strategy == Strategy.ATTACK:
