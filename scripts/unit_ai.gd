@@ -153,9 +153,12 @@ func receive_order(order: Dictionary) -> void:
 			and _move_policy != "stairs_down" and _move_policy != "stairs_up"
 	# 移動方針が変化した場合もキューを強制再生成する
 	var policy_changed := prev_move_policy != _move_policy
+	# 移動アニメーション中は戦略・方針が変わらない限りキューを再生成しない
+	# （再生成すると _state=IDLE にリセットされ移動が中断・再起動してブルブル現象が起きる）
+	var is_mid_move := _state == _State.MOVING
 	if not on_stair and not policy_changed \
 			and effective_strategy == _strategy and effective_target == _target \
-			and _queue.size() >= QUEUE_MIN_LEN:
+			and (_queue.size() >= QUEUE_MIN_LEN or is_mid_move):
 		return
 
 	_strategy = effective_strategy

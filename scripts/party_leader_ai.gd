@@ -226,18 +226,18 @@ func _assign_orders() -> void:
 					effective_strat = int(Strategy.ATTACK)
 				var pol := _get_explore_move_policy()
 				if pol == "stairs_down" or pol == "stairs_up":
-					# フロア移動判断: リーダーのみ階段を目指す、非リーダーはリーダーを追従
+					# フロア移動判断: リーダーのみ階段を目指す、非リーダーはリーダー付近に留まる
 					if member == leader_char:
 						move_policy = pol
 					else:
-						move_policy = order.get("move", "follow") as String
+						move_policy = "cluster"  # follow より寛容（5タイル以内）にして詰まりを防止
 				elif member == leader_char:
 					# リーダーのみ探索行動（自律的に未訪問エリアへ向かう）
 					move_policy = "explore"
 				else:
-					# 非リーダーメンバーはリーダーを追従
-					# current_order["move"] のデフォルトは "follow"
-					move_policy = order.get("move", "follow") as String
+					# 非リーダーメンバーはリーダー付近に集まる（cluster: 5タイル以内）
+					# "follow" は全員が同一タイルを目指して詰まるため使わない
+					move_policy = "cluster"
 		elif _party_strategy == Strategy.GUARD_ROOM:
 			# 帰還中：全員を WAIT + guard_room ポリシーで動かす
 			effective_strat = int(Strategy.WAIT)
