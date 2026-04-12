@@ -112,6 +112,9 @@ func _input(event: InputEvent) -> void:
 					debug_window.visible = not debug_window.visible
 					if not debug_window.visible:
 						debug_window.clear_selection()
+					if vision_system != null:
+						vision_system.debug_show_all = debug_window.visible
+						queue_redraw()
 			KEY_F2:
 				_print_debug_floor_info()
 			KEY_F5:

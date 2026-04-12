@@ -181,7 +181,7 @@ func get_enemies() -> Array[Character]:
 ## 敵マネージャーの場合、friendly_areas のいずれかにメンバーがいればアクティブ化する
 func update_visibility(player_area: String, map_data: MapData,
 		visited_areas: Dictionary, friendly_areas: Dictionary = {},
-		current_floor: int = -1) -> void:
+		current_floor: int = -1, show_all: bool = false) -> void:
 	for member: Character in _members:
 		if not is_instance_valid(member):
 			continue
@@ -191,7 +191,7 @@ func update_visibility(player_area: String, map_data: MapData,
 			continue
 		var member_area := map_data.get_area(member.grid_pos)
 		# エリア情報がない場合（静的マップ等）は常に表示
-		if member_area.is_empty():
+		if member_area.is_empty() or show_all:
 			member.visible = true
 		else:
 			# 訪問済みエリアのメンバーは表示（一度見たら消えない）

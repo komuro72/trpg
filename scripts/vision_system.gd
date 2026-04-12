@@ -40,6 +40,9 @@ var _visible_tiles: Dictionary = {}
 ## エリアデータが存在するか（存在しない場合は視界システムを無効化して全タイル表示）
 var _has_area_data: bool = false
 
+## デバッグ時に未探索区域を表示するフラグ（F1 DebugWindow 表示中に true）
+var debug_show_all: bool = false
+
 
 func setup(player: Character, map_data: MapData) -> void:
 	_player   = player
@@ -95,8 +98,10 @@ func is_area_visited(area_id: String) -> bool:
 
 
 ## 可視タイルの辞書を返す（game_map._draw() で使用）
-## エリアデータが存在しない場合は空辞書を返す（呼び出し側が全タイル描画にフォールバック）
+## エリアデータが存在しない場合、またはデバッグ全表示中は空辞書を返す（呼び出し側が全タイル描画にフォールバック）
 func get_visible_tiles() -> Dictionary:
+	if debug_show_all:
+		return {}
 	return _visible_tiles
 
 
@@ -189,11 +194,11 @@ func _process(_delta: float) -> void:
 	for em_var: Variant in _enemy_managers:
 		var em := em_var as EnemyManager
 		if is_instance_valid(em):
-			em.update_visibility(_current_area, _map_data, visited, friendly_areas, _current_floor_index)
+			em.update_visibility(_current_area, _map_data, visited, friendly_areas, _current_floor_index, debug_show_all)
 	for nm_var: Variant in _npc_managers:
 		var nm := nm_var as NpcManager
 		if is_instance_valid(nm):
-			nm.update_visibility(_current_area, _map_data, visited, {}, _current_floor_index)
+			nm.update_visibility(_current_area, _map_data, visited, {}, _current_floor_index, debug_show_all)
 
 
 ## プレイヤーパーティーメンバーの隣接タイルが未訪問エリアに属していれば先行可視化する
