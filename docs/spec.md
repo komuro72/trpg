@@ -3375,7 +3375,7 @@ OrderWindow の `GLOBAL_ROWS` に表示行として追加（move 行の直後）
 全メンバーの `current_order` に反映する。
 
 - 対象キー：`"move"` / `"target"` / `"on_low_hp"` / `"item_pickup"`
-- `battle_policy` は別途 `_apply_battle_policy_preset()` 経由で反映（変更時のみ）
+- `battle_policy` も初期値（デフォルト `"attack"`）を `_apply_battle_policy_preset()` 経由で適用（クラスごとの `battle_formation` / `combat` が正しく設定される）
 - `setup()` は1回しか呼ばれないため、プレイヤーの個別設定を上書きしない
 
 ### 集結隊形 "gather"（`unit_ai.gd`）

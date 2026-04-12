@@ -610,6 +610,9 @@ func _sync_all_global_to_members() -> void:
 			if not is_instance_valid(ch):
 				continue
 			ch.current_order[key] = val
+	# battle_policy のプリセットも初期値に基づいて適用する
+	var bp: String = _party.global_orders.get("battle_policy", "attack") as String
+	_apply_battle_policy_preset(bp)
 
 
 func _sync_global_to_members(key: String, val: String) -> void:
