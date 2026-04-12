@@ -3387,11 +3387,16 @@ OrderWindow の `GLOBAL_ROWS` に表示行として追加（move 行の直後）
 | `_target_in_formation_zone()` | 重心から4タイル以内の敵を攻撃 |
 | `_formation_move_goal()` | `_calc_party_centroid()` を目標タイルとして返す |
 
-### 後衛距離制限（`unit_ai.gd`）
-`_generate_queue()` の Strategy.ATTACK ブランチ内。  
-`_battle_formation == "rear"` かつ `dist_to_leader > attack_range × 0.8` の場合：
-- 射程内なら攻撃
-- 射程外なら待機（追わない）
+### Strategy.ATTACK 中の battle_formation 優先（`unit_ai.gd`）
+`_generate_queue()` の Strategy.ATTACK ブランチ（ターゲットあり）では `_move_policy`（follow/cluster 等）を無視し、`_battle_formation` のみで移動先を決定する。
+
+| battle_formation | 動作 |
+|-----------------|------|
+| `rear` | 射程内なら現在位置から攻撃（2回）。射程外なら接近して攻撃 |
+| `surround` / `rush` / `gather` | `move_to_attack` → `attack` で積極的に追跡・攻撃 |
+
+`_move_policy`（follow/cluster/same_room 等）は Strategy.WAIT/EXPLORE 時のみ適用される。  
+`standby` は例外として ATTACK 中でも移動しない（射程内のみ攻撃）。
 
 ---
 

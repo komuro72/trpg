@@ -565,37 +565,23 @@ func _generate_queue(strategy: Strategy, target: Character) -> Array:
 					_:
 						return [{"action": "wait"}]
 			var atype := _get_attack_type()
-			# standby: 隣接のみ攻撃、移動しない（ranged/dive は射程内なら攻撃）
+			# standby: 移動せず射程内のみ攻撃
 			if _move_policy == "standby":
 				if _can_attack_target(target, atype):
 					return [{"action": "attack"}]
 				return [{"action": "wait"}]
-			# 隊形が満たされていない場合はリーダーに向かってから攻撃
-			if not _formation_satisfied():
-				var q: Array = []
-				for _i: int in range(3):
-					q.append({"action": "move_to_formation"})
-				q.append({"action": "wait"})
-				return q
-			# ターゲットが隊形ゾーン外にいる場合は追わない
-			if not _target_in_formation_zone(target):
-				return [{"action": "wait"}]
-			# 後衛：リーダーから離れすぎない（attack_range × 0.8 以内に留まる）
-			if _battle_formation == "rear" and _leader_ref != null and is_instance_valid(_leader_ref) and _leader_ref != _member:
-				var ar := float(_member.attack_range) if _member.character_data else 1.0
-				var dist_to_leader := _manhattan(_member.grid_pos, _leader_ref.grid_pos)
-				if float(dist_to_leader) > ar * 0.8:
-					# 上限超過：射程内なら攻撃、それ以外は待機
-					if _can_attack_target(target, _get_attack_type()):
-						return [{"action": "attack"}]
-					return [{"action": "wait"}]
-			# explore/spread は長いキューで頻繁な再評価を抑制
-			var repeat := 4 if (_move_policy == "spread" or _move_policy == "explore") else 1
-			var q: Array = []
-			for _i: int in range(repeat):
-				q.append({"action": "move_to_attack"})
-				q.append({"action": "attack"})
-			return q
+			# 戦闘中は battle_formation のみで移動先を決定（move_policy を無視）
+			match _battle_formation:
+				"rear":
+					# 後衛：射程内なら現在位置から攻撃。射程外なら接近して攻撃
+					if _can_attack_target(target, atype):
+						return [{"action": "attack"}, {"action": "attack"}]
+					return [{"action": "move_to_attack"}, {"action": "attack"}]
+				_:  # surround / rush / gather
+					var q: Array = []
+					q.append({"action": "move_to_attack"})
+					q.append({"action": "attack"})
+					return q
 
 		Strategy.FLEE:
 			if target == null or not is_instance_valid(target):

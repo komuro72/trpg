@@ -1697,6 +1697,10 @@ rank値: C=0, B=1, A=2, S=3
     - F1でDebugWindow表示中は全タイル・未訪問エリアの敵・NPCも描画
   - **NPCが未訪問部屋に入ったとき敵をアクティブ化するよう修正**（前セッション実装）
     - `vision_system._process()`：NPC エリアの `is_area_visited` チェックを廃止（未訪問でも friendly_areas に追加）
+  - **戦闘中の battle_formation 優先（`unit_ai.gd`）**
+    - `_generate_queue()` の Strategy.ATTACK ブランチ（ターゲットあり）で `_formation_satisfied()` / `_target_in_formation_zone()` を廃止
+    - `_battle_formation` のみで移動先を決定：`"rear"` は射程内なら攻撃・射程外なら接近、それ以外は `move_to_attack` → `attack`
+    - `_move_policy`（follow/cluster/same_room 等）は Strategy.WAIT/EXPLORE 時のみ適用（`standby` は例外として維持）
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム
