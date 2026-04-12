@@ -1204,7 +1204,7 @@ func _check_item_pickup() -> void:
 		for ch: Character in nm.get_members():
 			if is_instance_valid(ch):
 				all_chars.append(ch)
-	# フロア遷移途中のメンバーを補足（管理フロアが旧フロアのまま一部が現フロアに着いている）
+	# フロア遷移途中のメンバーを補足（管理フロアが旧フロアのまま一部が現フロアにいるケースも拾う）
 	for fi: int in range(_per_floor_npcs.size()):
 		for nm2_v: Variant in (_per_floor_npcs[fi] as Array):
 			var nm2 := nm2_v as NpcManager

@@ -37,6 +37,7 @@ var _all_members:    Array[Character] = []  ## 全パーティー合算（AI 起
 var _friendly_list:  Array[Character] = []  ## 攻撃対象の友好キャラ一覧（敵 AI 用・activate 時に渡す）
 var _drop_items:     Array = []             ## ドロップアイテム（全滅時に party_wiped で転送）
 var _room_id:        String = ""            ## このパーティーが属する部屋のエリアID
+var _floor_items_ref: Dictionary = {}       ## フロアアイテム参照（activate 前に set_floor_items が呼ばれた場合に保持）
 
 
 ## VisionSystem から呼ばれる。true なら距離ベースのアクティブ化を無効にする
@@ -113,7 +114,9 @@ func set_global_orders(orders: Dictionary) -> void:
 
 
 ## フロアアイテム辞書の参照を LeaderAI 経由で全 UnitAI に配布する（game_map から呼ばれる）
+## activate() より前に呼ばれた場合は _floor_items_ref に保持し、_start_ai() で再適用する
 func set_floor_items(items: Dictionary) -> void:
+	_floor_items_ref = items
 	if _leader_ai != null:
 		_leader_ai.set_floor_items(items)
 
@@ -306,6 +309,9 @@ func _start_ai() -> void:
 		_leader_ai.set_friendly_list(_friendly_list)
 	add_child(_leader_ai)
 	_leader_ai.setup(_members, _player, _map_data, _all_members)
+	# activate() より前に set_floor_items が呼ばれていた場合は再適用する
+	if not _floor_items_ref.is_empty():
+		_leader_ai.set_floor_items(_floor_items_ref)
 
 
 ## メンバー死亡時の処理
