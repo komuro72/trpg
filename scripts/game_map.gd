@@ -1438,7 +1438,7 @@ func _transition_npc_floor(nm: NpcManager, direction: int) -> void:
 	# リーダーの UnitAI map_data を新フロアのものに更新（他メンバーは旧フロアのままにする）
 	nm.set_member_map_data(leader_ch, new_map)
 	# ログ
-	var leader_name := leader_ch.character_data.character_name \
+	var leader_name: String = leader_ch.character_data.character_name \
 		if leader_ch.character_data != null else leader_ch.name
 	var dir_str := "↓" if direction > 0 else "↑"
 	MessageLog.add_ai("[NPC遷移] %s(リーダー): F%d %s F%d　残メンバーは個別に追従" \
@@ -1495,7 +1495,7 @@ func _transition_single_npc_member(nm: NpcManager, member: Character, direction:
 	member.sync_position()
 	# このメンバーの UnitAI map_data を新フロアのものに更新
 	nm.set_member_map_data(member, new_map)
-	var mname := member.character_data.character_name \
+	var mname: String = member.character_data.character_name \
 		if member.character_data != null else member.name
 	var dir_str := "↓" if direction > 0 else "↑"
 	MessageLog.add_ai("[NPC遷移] %s: F%d %s F%d" % [mname, old_floor, dir_str, new_floor])
