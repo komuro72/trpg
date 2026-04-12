@@ -218,7 +218,7 @@ func _assign_orders() -> void:
 				else:
 					effective_strat = int(Strategy.ATTACK)
 			else:
-				# 未合流 NPC：探索戦略として move を explore / stairs に設定
+				# 未合流 NPC：リーダーは探索、非リーダーはリーダーを追従
 				var cd := member.character_data
 				if cd != null and (cd.power > 0 or cd.buff_mp_cost > 0):
 					effective_strat = int(Strategy.WAIT)
@@ -228,10 +228,13 @@ func _assign_orders() -> void:
 				if pol == "stairs_down" or pol == "stairs_up":
 					# フロア移動判断: 全メンバーが一斉に階段を目指す
 					move_policy = pol
-				else:
-					# 目標フロア到達後は全メンバーが探索行動に移る
-					# （通路で同士が固まって待機する問題を防ぐ）
+				elif member == leader_char:
+					# リーダーのみ探索行動（自律的に未訪問エリアへ向かう）
 					move_policy = "explore"
+				else:
+					# 非リーダーメンバーはリーダーを追従
+					# current_order["move"] のデフォルトは "follow"
+					move_policy = order.get("move", "follow") as String
 		elif _party_strategy == Strategy.GUARD_ROOM:
 			# 帰還中：全員を WAIT + guard_room ポリシーで動かす
 			effective_strat = int(Strategy.WAIT)

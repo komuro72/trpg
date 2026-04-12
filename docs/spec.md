@@ -3418,6 +3418,16 @@ OrderWindow の `GLOBAL_ROWS` に表示行として追加（move 行の直後）
 
 ATTACK 戦略中はこれらの formation ロジックは適用されず、`_battle_formation` のみで行動する。
 
+### EXPLORE 戦略中の未加入 NPC パーティーの移動方針（`party_leader_ai._assign_orders()`）
+
+| メンバー種別 | move_policy |
+|------------|------------|
+| NPC リーダー | `"explore"`（自律的に未訪問エリアへ向かう） |
+| NPC 非リーダーメンバー | `current_order["move"]`（デフォルト `"follow"`：リーダーを追従） |
+| 全員（フロア移動時） | `"stairs_down"` / `"stairs_up"` |
+
+旧実装では全員 `"explore"` に上書きしていたため、非リーダーメンバーが独立して行動しリーダーより先に進む問題があった。
+
 ---
 
 ## Phase 13-10: 敵縄張り・追跡システム ✅ 完了
