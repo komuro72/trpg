@@ -66,6 +66,7 @@ var _combat_situation:  Dictionary = {}       ## 戦況判断結果（PartyLeade
 var _leader_ref:       Character = null  ## 隊形計算の基準となるリーダーキャラ
 var _guard_room_area:  String    = ""    ## guard_room 時の記憶部屋ID（初回設定後不変）
 var _home_position:    Vector2i  = Vector2i.ZERO  ## スポーン地点（帰還の基点。setup() で初期化）
+var _dbg_stuck_count:  int       = 0              ## デバッグ: 連続停滞回数
 var _all_floor_items:  Dictionary = {}  ## {floor_idx: {Vector2i: item}} 参照（game_map から設定）
 
 
@@ -85,6 +86,18 @@ func get_home_position() -> Vector2i:
 
 func set_all_members(all_members: Array[Character]) -> void:
 	_all_members = all_members
+	# --- デバッグ: _all_members の構成をログ出力（初回のみ） ---
+	if _member != null and is_instance_valid(_member) and _member.is_friendly:
+		var my_name := _member.character_data.character_name if _member.character_data != null else String(_member.name)
+		var friendly_count := 0
+		var friendly_names: PackedStringArray = []
+		for m: Character in _all_members:
+			if is_instance_valid(m) and m.is_friendly:
+				friendly_count += 1
+				var n := m.character_data.character_name if m.character_data != null else String(m.name)
+				friendly_names.append(n)
+		MessageLog.add_ai("[DBG_AM] %s: _all_members=%d friendly=%d(%s)" % [
+			my_name, _all_members.size(), friendly_count, ",".join(friendly_names)])
 
 
 ## heal/buff ターゲット検索に使う同一パーティーメンバーリストを設定する
@@ -477,7 +490,41 @@ func _step_toward_goal() -> bool:
 			var push_dir := next - _member.grid_pos
 			_try_push_friendly_at(next, push_dir)
 		_member.move_to(next, _get_move_interval())
+		_dbg_stuck_count = 0
 		return _member.grid_pos != _goal
+
+	# --- デバッグ: 移動先が見つからず停滞している場合 ---
+	if _member.is_friendly:
+		_dbg_stuck_count += 1
+		if _dbg_stuck_count >= 5:  # 5回連続で動けなかったらログ出力
+			_dbg_stuck_count = 0
+			var my_name := _member.character_data.character_name if _member.character_data != null else String(_member.name)
+			var action_type := _current_action.get("action", "?") as String
+			# 隣接タイルのブロック状況を調べる
+			var dirs := [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1)]
+			var block_info: PackedStringArray = []
+			for d: Vector2i in dirs:
+				var adj := _member.grid_pos + d
+				var passable := _is_passable(adj)
+				if not passable:
+					# 誰がブロックしているか特定
+					var blocker_name := ""
+					for other: Character in _all_members:
+						if is_instance_valid(other) and other != _member \
+								and other.current_floor == _member.current_floor \
+								and adj in other.get_occupied_tiles():
+							blocker_name = other.character_data.character_name if other.character_data != null else String(other.name)
+							break
+					if blocker_name.is_empty() and _player != null and is_instance_valid(_player) \
+							and _player != _member and adj in _player.get_occupied_tiles():
+						blocker_name = "hero"
+					if blocker_name.is_empty():
+						blocker_name = "wall/tile"
+					block_info.append("%s=%s" % [adj, blocker_name])
+			MessageLog.add_ai("[DBG_STUCK] %s@%s F%d act=%s goal=%s mv=%s blocks=[%s] _all=%d" % [
+				my_name, _member.grid_pos, _member.current_floor,
+				action_type, _goal, _move_policy,
+				",".join(block_info), _all_members.size()])
 
 	return false
 

@@ -480,6 +480,24 @@ func _link_all_character_lists() -> void:
 		_hero_manager.set_all_members(all_combatants)
 		_hero_manager.set_enemy_list(all_enemies)
 
+	# --- デバッグ: _all_members の構成を出力 ---
+	var party_names: PackedStringArray = []
+	for mv: Variant in party.members:
+		var ch := mv as Character
+		if is_instance_valid(ch) and ch.character_data != null:
+			party_names.append("%s(F%d)" % [ch.character_data.character_name, ch.current_floor])
+	var combatant_count := all_combatants.size()
+	var party_in_combatants := 0
+	for mv: Variant in party.members:
+		var ch := mv as Character
+		if is_instance_valid(ch) and ch in all_combatants:
+			party_in_combatants += 1
+	MessageLog.add_ai("[DBG_LINK] party=%d(%s) combatants=%d party_in_comb=%d enemies=%d friendlies=%d hero_mgr=%s" % [
+		party_names.size(), ",".join(party_names),
+		combatant_count, party_in_combatants,
+		all_enemies.size(), all_friendlies.size(),
+		"yes" if _hero_manager != null else "no"])
+
 
 func _setup_controller() -> void:
 	player_controller = PlayerController.new()
