@@ -219,11 +219,11 @@ func _assign_orders() -> void:
 					if member == leader_char:
 						move_policy = pol
 					else:
-						move_policy = "cluster"
+						move_policy = "follow"
 				elif member == leader_char:
 					move_policy = "explore"
 				else:
-					move_policy = "cluster"
+					move_policy = "follow"
 		elif _party_strategy == Strategy.GUARD_ROOM:
 			move_policy = "guard_room"
 
