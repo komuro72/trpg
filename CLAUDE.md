@@ -330,6 +330,32 @@ game_map
               └── UnitAI（AI操作時。receive_order の内容に従って行動）
 ```
 
+### 実装状況
+
+| クラス | ファイル | 状態 |
+|--------|---------|------|
+| PartyLeader | `party_leader.gd` | ✅ 実装済み。旧 PartyLeaderAI から共通ロジックを抽出 |
+| PartyLeaderAI | `party_leader_ai.gd` | ✅ 実装済み。extends PartyLeader に変更済み |
+| EnemyLeaderAI | `enemy_leader_ai.gd` | ✅ 実装済み。extends PartyLeaderAI |
+| 種族固有AI | `goblin_leader_ai.gd` 等 | ✅ 実装済み。extends EnemyLeaderAI |
+| NpcLeaderAI | `npc_leader_ai.gd` | ✅ 実装済み。extends PartyLeaderAI |
+| PartyLeaderPlayer | `party_leader_player.gd` | ⚠️ クラス作成済みだが未接続。hero_manager がまだ NpcManager + NpcLeaderAI を使用している |
+| `_evaluate_combat_situation()` | `party_leader.gd` | ⚠️ 空のスタブのみ。中身は将来実装 |
+
+### 残作業: PartyLeaderPlayer の接続
+
+現在の hero_manager は `NpcManager`（PartyManager のサブクラス）を使用しており、`_create_leader_ai()` が `NpcLeaderAI` を生成する。PartyLeaderPlayer に切り替えるには以下の対応が必要：
+
+1. **hero_manager 用の PartyManager サブクラス作成**（または PartyManager に leader_type 指定の仕組みを追加）
+   - `_create_leader_ai()` で PartyLeaderPlayer を返す
+2. **`set_enemy_list()` の呼び出し変更**
+   - 現在は `NpcManager.set_enemy_list()` 経由で NpcLeaderAI に渡している
+   - PartyLeaderPlayer にも `set_enemy_list()` があるので、PartyManager 経由で渡す仕組みが必要
+3. **`suppress_floor_navigation` の扱い**
+   - NpcLeaderAI 固有のフラグ。PartyLeaderPlayer には不要（プレイヤーが手動で階段操作するため）
+4. **合流処理への影響確認**
+   - `_merge_npc_into_player_party()` / `_merge_player_into_npc_party()` で hero_manager の扱いが変わる可能性
+
 ## ゲームデザイン方針
 - レベルアップなし。装備と仲間の強化が成長の主軸
 - 武器はキャラ職業（クラス）に紐づく（剣士は剣のみなど）
