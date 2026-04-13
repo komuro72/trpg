@@ -233,6 +233,8 @@ func get_debug_info() -> Dictionary:
 # ステートマシン
 # --------------------------------------------------------------------------
 
+var _dbg_process_timer: float = 0.0  ## デバッグ: _process 動作確認用タイマー
+
 func _process(delta: float) -> void:
 	if _member == null or not is_instance_valid(_member):
 		return
@@ -242,6 +244,16 @@ func _process(delta: float) -> void:
 	# 時間停止中（プレイヤーのターゲット選択中など）は AI 処理を停止する
 	if not GlobalConstants.world_time_running:
 		return
+
+	# --- デバッグ: AI が動作しているか3秒ごとに確認 ---
+	if _member.is_friendly:
+		_dbg_process_timer += delta
+		if _dbg_process_timer >= 3.0:
+			_dbg_process_timer = 0.0
+			var my_name := _member.character_data.character_name if _member.character_data != null else String(_member.name)
+			MessageLog.add_ai("[DBG_AI] %s F%d@%s state=%d queue=%d combat=%s mv=%s _all=%d" % [
+				my_name, _member.current_floor, _member.grid_pos,
+				int(_state), _queue.size(), _combat, _move_policy, _all_members.size()])
 
 	# スタン中は行動をスキップしてキューをクリア
 	if _member.is_stunned:
