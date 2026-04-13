@@ -267,6 +267,7 @@ PartyManager（パーティー管理。全パーティー種別で共通）
 
 ### PartyLeader（意思決定層の基底クラス）
 - パーティー全体の戦略を決定し、各メンバーの UnitAI に指示を伝達する
+- `_evaluate_party_strength()`: パーティーの戦力値を算出する共通メソッド（ランク和 × HP充足率。HPポーション回復量を加味）
 - `_evaluate_combat_situation()`: 戦況判断の共通ルーチン。全サブクラスで共有する。結果は `_assign_orders()` → `receive_order()` でメンバーに伝達する
 - `_evaluate_party_strategy()`: 仮想メソッド。戦略決定（ATTACK / WAIT / FLEE 等）。サブクラスがオーバーライドする
 - `_select_target_for()`: 仮想メソッド。ターゲット選択。サブクラスがオーバーライドする
@@ -319,7 +320,8 @@ PartyManager（パーティー管理。全パーティー種別で共通）
 game_map
   └── PartyManager
         ├── PartyLeader（Player または AI）
-        │     ├── _evaluate_combat_situation()  ← 戦況判断（共通）
+        │     ├── _evaluate_party_strength()      ← 戦力評価（共通）
+        │     ├── _evaluate_combat_situation()  ← 戦況判断（共通・スタブ）
         │     ├── _evaluate_party_strategy()    ← 戦略決定（サブクラス固有）
         │     └── _assign_orders()              ← 指示伝達（共通）
         │           └── UnitAI.receive_order({

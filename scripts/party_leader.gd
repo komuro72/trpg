@@ -18,6 +18,9 @@ enum Strategy { ATTACK, FLEE, WAIT, DEFEND, EXPLORE, GUARD_ROOM }
 
 const REEVAL_INTERVAL := 1.5  ## 定期再評価の間隔（秒）
 
+## ランク文字列 → スコア数値の変換テーブル（C=3, B=4, A=5, S=6）
+const RANK_VALUES: Dictionary = { "C": 3, "B": 4, "A": 5, "S": 6 }
+
 var _party_members: Array[Character] = []
 var _player:        Character
 var _map_data:      MapData
@@ -600,7 +603,46 @@ func _select_weakest_target(member: Character) -> Character:
 	return _select_target_for(member)
 
 
-## 戦況判断の共通ルーチン（将来実装用スタブ）
+## パーティーの戦力値を算出する（ランク和 × HP充足率）
+## HP充足率にはHPポーションの回復量を加味する
+## 生存メンバーが0人の場合は 0.0 を返す
+func _evaluate_party_strength() -> float:
+	var rank_sum := 0
+	var total_current_hp := 0
+	var total_max_hp := 0
+	var total_potion_heal := 0
+	for m: Character in _party_members:
+		if not is_instance_valid(m) or m.hp <= 0:
+			continue
+		if m.character_data != null:
+			rank_sum += RANK_VALUES.get(m.character_data.rank, 3) as int
+		total_current_hp += m.hp
+		total_max_hp += m.max_hp
+		total_potion_heal += _calc_total_potion_hp(m)
+	if total_max_hp <= 0:
+		return 0.0
+	var hp_ratio := clampf(float(total_current_hp + total_potion_heal) / float(total_max_hp), 0.0, 1.0)
+	return float(rank_sum) * hp_ratio
+
+
+## メンバーが所持しているHPポーションの合計回復量を返す
+func _calc_total_potion_hp(member: Character) -> int:
+	if member.character_data == null:
+		return 0
+	var total := 0
+	for item: Variant in member.character_data.inventory:
+		var it := item as Dictionary
+		if it == null:
+			continue
+		var eff := it.get("effect", {}) as Dictionary
+		total += eff.get("restore_hp", 0) as int
+	return total
+
+
+## 戦況判断の共通ルーチン
 ## 全サブクラスで共有し、結果は receive_order() 経由でメンバーに伝達する
 func _evaluate_combat_situation() -> Dictionary:
+	# TODO: 自軍戦力 = _evaluate_party_strength()
+	# TODO: 敵戦力の評価方法を決定後、比較ロジックを実装
+	# TODO: 結果を receive_order() の combat_situation に含めてメンバーに伝達
 	return {}
