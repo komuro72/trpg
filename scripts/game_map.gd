@@ -475,6 +475,14 @@ func _link_all_character_lists() -> void:
 		em.set_friendly_list(all_friendlies)
 	for nm: PartyManager in npc_managers:
 		nm.set_all_members(all_combatants)
+	# 合流済み NPC パーティー（npc_managers から除外されている）にも配布する
+	var joined_nms: Dictionary = {}  # PartyManager -> true（重複排除用）
+	for nm_v: Variant in _member_to_npc_manager.values():
+		var jnm := nm_v as PartyManager
+		if is_instance_valid(jnm) and not joined_nms.has(jnm):
+			joined_nms[jnm] = true
+			jnm.set_all_members(all_combatants)
+			jnm.set_enemy_list(all_enemies)
 	# hero マネージャーにも衝突回避リストと攻撃対象リストを渡す
 	if _hero_manager != null:
 		_hero_manager.set_all_members(all_combatants)
