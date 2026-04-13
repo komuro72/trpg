@@ -98,6 +98,24 @@ const STAT_NAME_JP: Dictionary = {
 ## Autoload の GlobalConstants に定義して回避する
 enum ConsumableDisplayMode { NORMAL, ITEM_SELECT, ACTION_SELECT, TRANSFER_SELECT }
 
+## 状態ラベル（condition）の HP% 閾値
+## Character.get_condition() が返す文字列の判定基準
+## 戦力評価で敵のHP推定に使用する（_estimate_hp_ratio_from_condition）
+const CONDITION_HEALTHY_THRESHOLD:  float = 0.75  ## HP75%以上 → "healthy"
+const CONDITION_WOUNDED_THRESHOLD:  float = 0.35  ## HP35%以上75%未満 → "wounded"
+## HP35%未満 → "critical"
+
+## 戦況判断（_evaluate_combat_situation）の比率閾値
+## 自軍戦力 / 敵戦力 の比率で戦況を分類する
+const COMBAT_RATIO_OVERWHELMING: float = 2.0  ## 圧倒的優勢
+const COMBAT_RATIO_ADVANTAGE:    float = 1.2  ## 優勢
+const COMBAT_RATIO_EVEN:         float = 0.8  ## 互角
+const COMBAT_RATIO_DISADVANTAGE: float = 0.5  ## 劣勢
+## 0.5 未満 → CRITICAL（危険）
+
+## 戦況の分類値（_evaluate_combat_situation の戻り値 "situation" キー）
+enum CombatSituation { SAFE, OVERWHELMING, ADVANTAGE, EVEN, DISADVANTAGE, CRITICAL }
+
 ## ダメージ段階の閾値（battle メッセージの「小/中/大/特大ダメージ」判定に使用）
 const DAMAGE_LEVEL_SMALL:  int = 5   ## 小ダメージの上限（これ以下）
 const DAMAGE_LEVEL_MEDIUM: int = 15  ## 中ダメージの上限（これ以下）

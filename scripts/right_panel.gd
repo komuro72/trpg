@@ -190,7 +190,7 @@ func _draw_char_row(c: Character, px: int, pw: int, row_y: float, row_h: int,
 			rank, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, _rank_color(rank))
 
 	# 状態テキスト
-	var cond := _condition(c)
+	var cond := c.get_condition()
 	var cond_col: Color
 	match cond:
 		"wounded":  cond_col = Color(1.0, 0.80, 0.20)
@@ -254,15 +254,7 @@ func _hp_modulate(c: Character) -> Color:
 		return Color.WHITE.lerp(Color(1.0, 0.15, 0.15), pulse)
 
 
-func _condition(c: Character) -> String:
-	if not is_instance_valid(c) or c.max_hp <= 0:
-		return "healthy"
-	var ratio := float(c.hp) / float(c.max_hp)
-	if ratio > 0.5:
-		return "healthy"
-	elif ratio > 0.25:
-		return "wounded"
-	return "critical"
+## 廃止: Character.get_condition() に統一済み
 
 
 func _rank_color(rank: String) -> Color:

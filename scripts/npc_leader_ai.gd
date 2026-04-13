@@ -54,6 +54,11 @@ func set_enemy_list(enemies: Array[Character]) -> void:
 	_enemy_list = enemies
 
 
+## 対立するキャラクターのリスト（敵リスト）を返す
+func _get_opposing_characters() -> Array[Character]:
+	return _enemy_list
+
+
 ## NPC 用 UnitAI を生成する
 func _create_unit_ai(_member: Character) -> UnitAI:
 	return NpcUnitAI.new()

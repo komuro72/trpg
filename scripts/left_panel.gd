@@ -191,7 +191,7 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 	_control.draw_string(_font, Vector2(tx, header_y),
 		header, HORIZONTAL_ALIGNMENT_LEFT, tw, 13, Color.WHITE)
 	# 状態テキストをヘッダーの右に配置
-	var cond     := _condition(c)
+	var cond     := c.get_condition()
 	var cond_col := Color(0.4, 0.9, 0.4) if cond == "healthy" \
 		else (Color(1.0, 0.8, 0.2) if cond == "wounded" else Color(1.0, 0.35, 0.35))
 	var header_w := _font.get_string_size(header, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 4.0
@@ -337,13 +337,7 @@ func _hp_modulate(c: Character) -> Color:
 		return Color.WHITE.lerp(Color(1.0, 0.15, 0.15), pulse)
 
 
-func _condition(c: Character) -> String:
-	var ratio := float(c.hp) / float(c.max_hp) if c.max_hp > 0 else 0.0
-	if ratio > 0.5:
-		return "healthy"
-	elif ratio > 0.25:
-		return "wounded"
-	return "critical"
+## 廃止: Character.get_condition() に統一済み
 
 
 func _condition_color(c: Character) -> Color:

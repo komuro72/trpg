@@ -203,8 +203,7 @@ func _draw_panel(field_x: float, field_w: float, vp_h: float, gs_f: float) -> vo
 			var nm_str:  String = cd.character_name if cd != null else String(member.name)
 			var cls_str: String = cd.class_id       if cd != null else ""
 			var rnk_str: String = cd.rank           if cd != null else "C"
-			var ratio  := float(member.hp) / float(member.max_hp) if member.max_hp > 0 else 0.0
-			var cond_s := "healthy" if ratio > 0.6 else ("wounded" if ratio > 0.3 else "critical")
+			var cond_s := member.get_condition()
 			var cond_col: Color
 			match cond_s:
 				"healthy": cond_col = Color(0.40, 0.90, 0.40)

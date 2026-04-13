@@ -19,6 +19,11 @@ func set_enemy_list(enemies: Array[Character]) -> void:
 	_enemy_list = enemies
 
 
+## 対立するキャラクターのリスト（敵リスト）を返す
+func _get_opposing_characters() -> Array[Character]:
+	return _enemy_list
+
+
 ## パーティー全体の戦略を評価する
 ## global_orders.battle_policy を戦略に変換する
 func _evaluate_party_strategy() -> Strategy:

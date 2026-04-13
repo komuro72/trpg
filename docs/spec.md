@@ -3729,8 +3729,81 @@ HP充足率 = min(1.0, (合計現HP + 合計HPポーション回復量) / 合計
 - Bランク4人HP満タン: 戦力16.0 → F2適正（≥13）
 - Bランク4人HP半分: 戦力8.0 → F1適正（F2の13に届かず自動降格）
 
-### `_evaluate_combat_situation()` への準備
-TODOコメントを追加: 自軍戦力・敵戦力の比較ロジック・receive_order 連携
+---
+
+## 状態ラベル・戦況判断システム ✅ 完了
+
+### 状態ラベル（condition）
+
+`Character.get_condition()` メソッドを追加。HP 割合に基づく 3 段階ラベルを返す。
+閾値は `GlobalConstants` で管理:
+
+| ラベル | HP割合 | 定数 |
+|--------|--------|------|
+| `"healthy"` | 75%以上 | `CONDITION_HEALTHY_THRESHOLD = 0.75` |
+| `"wounded"` | 35%以上75%未満 | `CONDITION_WOUNDED_THRESHOLD = 0.35` |
+| `"critical"` | 35%未満 | — |
+
+旧実装（`_condition()` ローカル関数 × 4箇所コピペ、閾値不統一）を `Character.get_condition()` に統一。
+- `left_panel.gd` / `right_panel.gd` / `dialogue_window.gd`: `c.get_condition()` に置き換え
+- `enemy_ai.gd` / `hud.gd`: 旧コード（未使用）のため変更なし
+
+### HP% 推定関数
+
+`PartyLeader._estimate_hp_ratio_from_condition(condition)`:
+敵の戦力を過大評価する安全側に倒すため、各ラベルの閾値範囲の最大値を返す。
+
+| condition | 推定HP% | 根拠 |
+|-----------|---------|------|
+| `"healthy"` | 1.0 | 75%〜100% の最大値 |
+| `"wounded"` | 0.75 | 35%〜75% の最大値 |
+| `"critical"` | 0.35 | 0%〜35% の最大値 |
+| 不明 | 1.0 | 安全側 |
+
+### `_evaluate_party_strength_for()` 拡張
+
+`_evaluate_party_strength()` を汎用化:
+```
+func _evaluate_party_strength_for(members: Array, use_estimated_hp: bool = false) -> float
+```
+- `use_estimated_hp = false`（自軍）: 正確な HP% + ポーション回復量
+- `use_estimated_hp = true`（敵）: `get_condition()` → `_estimate_hp_ratio_from_condition()` で HP 推定。ポーション回復量 = 0
+
+既存の `_evaluate_party_strength()` は `_evaluate_party_strength_for(_party_members, false)` のラッパーとして残す。
+
+### `_evaluate_combat_situation()` 実装
+
+PartyLeader の共通メソッド。自パーティーと同じエリアにいる敵の戦力を比較して戦況を分類する。
+
+**対象の敵**: `_get_opposing_characters()` 仮想メソッドで取得し、`_map_data.get_area()` でエリアフィルタ。
+- EnemyLeaderAI（デフォルト）: `_friendly_list`（プレイヤー・NPC）
+- NpcLeaderAI: `_enemy_list`（敵キャラ）
+- PartyLeaderPlayer: `_enemy_list`（敵キャラ）
+
+**判定ロジック**:
+```
+ratio = 自軍戦力 / 敵戦力
+```
+
+| 戦況 | enum値 | ratio 条件 | 定数 |
+|------|--------|-----------|------|
+| SAFE | 0 | 敵なし or 敵戦力0 | — |
+| OVERWHELMING | 1 | ratio ≥ 2.0 | `COMBAT_RATIO_OVERWHELMING` |
+| ADVANTAGE | 2 | ratio ≥ 1.2 | `COMBAT_RATIO_ADVANTAGE` |
+| EVEN | 3 | ratio ≥ 0.8 | `COMBAT_RATIO_EVEN` |
+| DISADVANTAGE | 4 | ratio ≥ 0.5 | `COMBAT_RATIO_DISADVANTAGE` |
+| CRITICAL | 5 | ratio < 0.5 | — |
+
+`GlobalConstants.CombatSituation` enum で定義。
+
+**戻り値**: `{ "situation": int, "ratio": float, "my_strength": float, "enemy_strength": float }`
+
+### 呼び出しタイミング
+
+- `PartyLeader._process()`: 再評価タイマー（1.5秒間隔）で `_evaluate_combat_situation()` → `_assign_orders()`
+- `notify_situation_changed()`: メンバー死亡時等に即時再評価
+
+結果は `_assign_orders()` → `receive_order()` の `"combat_situation"` フィールドに含めて各 UnitAI に伝達。
 
 ---
 

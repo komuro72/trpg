@@ -517,3 +517,14 @@
 - 症状: `_evaluate_party_strength()` not found in base self（npc_leader_ai.gd:104）
 - 原因: Godot 4.6 の `.gd.uid` ファイルが Git にコミットされておらず、PartyLeader クラスのリソース解決が不安定になっていた
 - 修正: 未登録の `.gd.uid` ファイル（party_leader / party_leader_player / debug_window / enemy_leader_ai）をコミット。削除済みの default_leader_ai.gd.uid を反映
+
+### 設計変更: 状態ラベル（condition）の統一と戦況判断システム実装
+- 理由: 敵のHP推定・戦力比較を情報制限に準拠した方法で行うため
+- 変更内容:
+  - `Character.get_condition()` メソッドを追加（HP割合 → healthy/wounded/critical）
+  - 旧 `_condition()` ローカル関数（4箇所コピペ・閾値不統一）を統一
+  - `_evaluate_party_strength_for()` を追加（敵にも適用可能な戦力評価。状態ラベル経由でHP推定）
+  - `_evaluate_combat_situation()` を実装（同エリア敵との戦力比較 → CombatSituation enum）
+  - `_get_opposing_characters()` 仮想メソッドを追加（敵AI=friendly_list、味方AI=enemy_list）
+  - 戦況結果を `receive_order()` の `combat_situation` フィールドで UnitAI に伝達
+  - `GlobalConstants` に閾値定数・`CombatSituation` enum を追加

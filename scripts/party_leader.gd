@@ -10,10 +10,11 @@ extends Node
 ##   _evaluate_party_strategy() : パーティー全体の戦略判断
 ##   _select_target_for()       : メンバーごとの攻撃ターゲット選択
 ##   _select_weakest_target()   : 最弱ターゲット選択（複数候補がある場合）
-##   _evaluate_combat_situation(): 戦況判断（将来実装用スタブ）
+##   _evaluate_combat_situation(): 戦況判断（自軍と同エリア敵の戦力比較）
+##   _get_opposing_characters() : 対立キャラリストを返す（敵AI=friendly_list、味方AI=enemy_list）
 
 ## パーティー戦略（ATTACK=0, FLEE=1, WAIT=2 は UnitAI.Strategy と int 値一致）
-## DEFEND=3, EXPLORE=4, GUARD_ROOM=5 はパーティーレベル専用（UnitAI へは WAIT/ATTACK に変換して渡す）
+## DEFEND=3, EXPLORE=4, GUARD_ROOM=5 はパーティーレベル専用（UnitAI へは WAIT/ATTACK+move に変換して渡す）
 enum Strategy { ATTACK, FLEE, WAIT, DEFEND, EXPLORE, GUARD_ROOM }
 
 const REEVAL_INTERVAL := 1.5  ## 定期再評価の間隔（秒）
@@ -27,6 +28,7 @@ var _map_data:      MapData
 var _unit_ais:      Dictionary = {}  ## member.name -> UnitAI
 var _party_strategy: Strategy = Strategy.WAIT
 var _prev_strategy:  Strategy = Strategy.WAIT  ## 前回の戦略（変更検出用）
+var _combat_situation: Dictionary = {}  ## 最新の戦況判断結果（_evaluate_combat_situation の戻り値）
 var log_enabled:     bool  = true  ## false にするとログ出力を抑制する（一時パーティー用）
 var joined_to_player: bool = false ## true の場合は _player を隊形基準として使用する（合流済み NPC パーティー）
 var _reeval_timer:   float = 0.0
@@ -141,6 +143,7 @@ func _process(delta: float) -> void:
 	_reeval_timer -= delta
 	if _reeval_timer <= 0.0:
 		_reeval_timer = REEVAL_INTERVAL
+		_combat_situation = _evaluate_combat_situation()
 		_assign_orders()
 
 
@@ -297,15 +300,16 @@ func _assign_orders() -> void:
 			target = null
 
 		unit_ai.receive_order({
-			"strategy":         effective_strat,
-			"target":           target,
-			"combat":           combat,
-			"move":             move_policy,
-			"battle_formation": battle_form,
-			"leader":           formation_ref,
-			"hp_potion":        _global_orders.get("hp_potion",    "never") as String,
-			"sp_mp_potion":     _global_orders.get("sp_mp_potion", "never") as String,
-			"item_pickup":      member.current_order.get("item_pickup", "passive") as String,
+			"strategy":          effective_strat,
+			"target":            target,
+			"combat":            combat,
+			"move":              move_policy,
+			"battle_formation":  battle_form,
+			"leader":            formation_ref,
+			"hp_potion":         _global_orders.get("hp_potion",    "never") as String,
+			"sp_mp_potion":      _global_orders.get("sp_mp_potion", "never") as String,
+			"item_pickup":       member.current_order.get("item_pickup", "passive") as String,
+			"combat_situation":  _combat_situation,
 		})
 
 
@@ -316,6 +320,7 @@ func _assign_orders() -> void:
 ## 状況変化通知（PartyManager から呼ばれる）：即座に再評価してオーダーを発行する
 func notify_situation_changed() -> void:
 	_reeval_timer = 0.0
+	_combat_situation = _evaluate_combat_situation()
 	_assign_orders()
 	for unit_ai_var: Variant in _unit_ais.values():
 		var unit_ai := unit_ai_var as UnitAI
@@ -606,23 +611,48 @@ func _select_weakest_target(member: Character) -> Character:
 ## パーティーの戦力値を算出する（ランク和 × HP充足率）
 ## HP充足率にはHPポーションの回復量を加味する
 ## 生存メンバーが0人の場合は 0.0 を返す
+## 自パーティーの戦力を評価する（正確なHP%とポーション回復量を使用）
+## 既存の呼び出し箇所を壊さないラッパー
 func _evaluate_party_strength() -> float:
+	return _evaluate_party_strength_for(_party_members, false)
+
+
+## 指定メンバーリストの戦力を評価する
+## use_estimated_hp = false: 正確なHP%とポーション回復量を使う（自軍用）
+## use_estimated_hp = true:  状態ラベル（condition）からHP%を推定する（敵用。hp/max_hp を直接参照しない）
+func _evaluate_party_strength_for(members: Array, use_estimated_hp: bool = false) -> float:
 	var rank_sum := 0
-	var total_current_hp := 0
-	var total_max_hp := 0
-	var total_potion_heal := 0
-	for m: Character in _party_members:
-		if not is_instance_valid(m) or m.hp <= 0:
+	var hp_ratio_sum := 0.0
+	var alive_count := 0
+	for mv: Variant in members:
+		var m := mv as Character
+		if m == null or not is_instance_valid(m) or m.hp <= 0:
 			continue
 		if m.character_data != null:
 			rank_sum += RANK_VALUES.get(m.character_data.rank, 3) as int
-		total_current_hp += m.hp
-		total_max_hp += m.max_hp
-		total_potion_heal += _calc_total_potion_hp(m)
-	if total_max_hp <= 0:
+		alive_count += 1
+		if use_estimated_hp:
+			hp_ratio_sum += _estimate_hp_ratio_from_condition(m.get_condition())
+		else:
+			var total_max := m.max_hp
+			if total_max <= 0:
+				continue
+			var cur := m.hp + _calc_total_potion_hp(m)
+			hp_ratio_sum += clampf(float(cur) / float(total_max), 0.0, 1.0)
+	if alive_count <= 0:
 		return 0.0
-	var hp_ratio := clampf(float(total_current_hp + total_potion_heal) / float(total_max_hp), 0.0, 1.0)
-	return float(rank_sum) * hp_ratio
+	var avg_hp_ratio := hp_ratio_sum / float(alive_count)
+	return float(rank_sum) * avg_hp_ratio
+
+
+## 状態ラベルからHP割合を推定する（敵の戦力を過大評価する安全側に倒す）
+## 各ラベルの閾値範囲の最大値を返す
+func _estimate_hp_ratio_from_condition(condition: String) -> float:
+	match condition:
+		"healthy":  return 1.0
+		"wounded":  return GlobalConstants.CONDITION_HEALTHY_THRESHOLD
+		"critical": return GlobalConstants.CONDITION_WOUNDED_THRESHOLD
+		_:          return 1.0  # 不明な値 → 安全側（敵を強く見積もる）
 
 
 ## メンバーが所持しているHPポーションの合計回復量を返す
@@ -640,9 +670,77 @@ func _calc_total_potion_hp(member: Character) -> int:
 
 
 ## 戦況判断の共通ルーチン
-## 全サブクラスで共有し、結果は receive_order() 経由でメンバーに伝達する
+## 自パーティーの戦力と、同じエリアにいる敵の戦力を比較して戦況を分類する
+## 結果は _assign_orders() → receive_order() の combat_situation フィールドに含めてメンバーに伝達する
 func _evaluate_combat_situation() -> Dictionary:
-	# TODO: 自軍戦力 = _evaluate_party_strength()
-	# TODO: 敵戦力の評価方法を決定後、比較ロジックを実装
-	# TODO: 結果を receive_order() の combat_situation に含めてメンバーに伝達
-	return {}
+	# 自パーティーのフロアとエリアを取得
+	var my_floor := -1
+	var my_area := ""
+	for m: Character in _party_members:
+		if is_instance_valid(m) and m.hp > 0:
+			my_floor = m.current_floor
+			if _map_data != null:
+				my_area = _map_data.get_area(m.grid_pos)
+			break
+
+	# 同じエリアにいる敵を収集
+	var area_enemies: Array[Character] = []
+	# 敵 AI → _friendly_list が攻撃対象（プレイヤー・NPC）。自分が敵の場合、_friendly_list が「敵」
+	# 味方 AI → _enemy_list は PartyLeaderPlayer / NpcLeaderAI が保持。PartyLeader には直接ない
+	# → 共通化のため、_get_opposing_characters() 仮想メソッドで取得する
+	var opponents := _get_opposing_characters()
+	for opp: Character in opponents:
+		if not is_instance_valid(opp) or opp.hp <= 0:
+			continue
+		if opp.current_floor != my_floor:
+			continue
+		if _map_data != null:
+			var opp_area := _map_data.get_area(opp.grid_pos)
+			if my_area.is_empty() or opp_area != my_area:
+				continue
+		area_enemies.append(opp)
+
+	# 敵がいなければ安全
+	if area_enemies.is_empty():
+		return {
+			"situation": int(GlobalConstants.CombatSituation.SAFE),
+			"ratio": 0.0,
+			"my_strength": _evaluate_party_strength(),
+			"enemy_strength": 0.0,
+		}
+
+	# 戦力比較
+	var my_strength := _evaluate_party_strength()
+	var enemy_strength := _evaluate_party_strength_for(area_enemies, true)
+
+	var ratio := 0.0
+	var situation: int
+	if enemy_strength <= 0.0:
+		ratio = 99.0
+		situation = int(GlobalConstants.CombatSituation.SAFE)
+	else:
+		ratio = my_strength / enemy_strength
+		if ratio >= GlobalConstants.COMBAT_RATIO_OVERWHELMING:
+			situation = int(GlobalConstants.CombatSituation.OVERWHELMING)
+		elif ratio >= GlobalConstants.COMBAT_RATIO_ADVANTAGE:
+			situation = int(GlobalConstants.CombatSituation.ADVANTAGE)
+		elif ratio >= GlobalConstants.COMBAT_RATIO_EVEN:
+			situation = int(GlobalConstants.CombatSituation.EVEN)
+		elif ratio >= GlobalConstants.COMBAT_RATIO_DISADVANTAGE:
+			situation = int(GlobalConstants.CombatSituation.DISADVANTAGE)
+		else:
+			situation = int(GlobalConstants.CombatSituation.CRITICAL)
+
+	return {
+		"situation": situation,
+		"ratio": ratio,
+		"my_strength": my_strength,
+		"enemy_strength": enemy_strength,
+	}
+
+
+## 対立するキャラクターのリストを返す（サブクラスでオーバーライド）
+## 敵 AI: _friendly_list（プレイヤー・NPC）
+## 味方 AI: _enemy_list（敵キャラ）
+func _get_opposing_characters() -> Array[Character]:
+	return _friendly_list

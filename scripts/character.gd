@@ -66,6 +66,19 @@ var stun_timer:   float = 0.0
 ## スライディング中フラグ（斥候の特殊攻撃中は take_damage() を無視する）
 var is_sliding:   bool  = false
 
+
+## 状態ラベルを返す（HP 割合に基づく。GlobalConstants の閾値で判定）
+## AI の戦力評価で敵のHP推定に使用する（直接 hp を参照してはならないため）
+func get_condition() -> String:
+	if max_hp <= 0:
+		return "healthy"
+	var ratio := float(hp) / float(max_hp)
+	if ratio >= GlobalConstants.CONDITION_HEALTHY_THRESHOLD:
+		return "healthy"
+	elif ratio >= GlobalConstants.CONDITION_WOUNDED_THRESHOLD:
+		return "wounded"
+	return "critical"
+
 ## バフ状態（一時的な防御力アップ。0=なし、>0=残り秒数）
 var defense_buff_timer: float = 0.0
 ## バフ中の防御ボーナス

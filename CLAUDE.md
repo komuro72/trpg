@@ -346,7 +346,7 @@ game_map
 | 種族固有AI | `goblin_leader_ai.gd` 等 | ✅ 実装済み。extends EnemyLeaderAI |
 | NpcLeaderAI | `npc_leader_ai.gd` | ✅ 実装済み。extends PartyLeaderAI |
 | PartyLeaderPlayer | `party_leader_player.gd` | ✅ 実装済み。hero_manager に接続済み（party_type="player" で PartyLeaderPlayer を生成） |
-| `_evaluate_combat_situation()` | `party_leader.gd` | ⚠️ 空のスタブのみ。中身は将来実装 |
+| `_evaluate_combat_situation()` | `party_leader.gd` | ✅ 実装済み。同エリア敵との戦力比較で CombatSituation を返す |
 
 ## ゲームデザイン方針
 - レベルアップなし。装備と仲間の強化が成長の主軸
@@ -539,6 +539,8 @@ rank値: C=0, B=1, A=2, S=3
 - [x] Phase 13-10: 敵の縄張り・追跡システムを実装。chase_range/territory_rangeで追跡範囲を制限し、範囲外では帰還行動に切り替え
 - [x] Phase 13-10 後続修正: ヒーラーの回復指示デフォルトを瀕死度優先に変更・非ヒーラー行の回復列にグレー「-」表示
 - [x] Phase 13-11: フロア0をゴブリンのみに変更・NPCデフォルト指示をプレイヤーと整合・戦闘中のbattle_formation優先・follow追従ロジック改善
+- [x] Phase 13-12: バグ修正完了（フロア2以降の敵が攻撃しない問題・未加入NPCがアイテムを素通りする問題）
+- [x] パーティーシステムリファクタリング: 敵リーダーAI継承構造リファクタリング（EnemyLeaderAI）・PartyLeader基底クラス抽出・NpcManager/EnemyManager廃止しPartyManagerに統合・パーティー戦力評価メソッド追加
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム
@@ -698,6 +700,7 @@ rank値: C=0, B=1, A=2, S=3
 | 即死耐性 | `instant_death_immune` | bool。デフォルト false。ボス級は true（ヘッドショット無効・無力化水魔法短縮） |
 | アンデッド | `is_undead` | bool。デフォルト false。skeleton / skeleton-archer / lich が true。ヒーラーの回復魔法が特効（回復量をダメージとして適用）。物理耐性極高・魔法はある程度有効 |
 | 巻き添え | `friendly_fire` | bool。デフォルト false（将来実装。範囲攻撃が味方・他パーティーにも当たる仕様） |
+| 状態ラベル | `get_condition()` | HP割合に基づく3段階ラベル（healthy/wounded/critical）。AI の戦力評価で敵のHP推定に使用。閾値は GlobalConstants で管理 |
 
 - 魔法命中精度は `skill` と共通（`power` 系は攻撃・回復とも同じ命中扱い）
 - 回復魔法は必ず命中するため、ヒーラー（attack_type="heal"）には OrderWindow の魔法技量行を表示しない
@@ -894,6 +897,14 @@ rank値: C=0, B=1, A=2, S=3
   - Godot が自動生成する `.import` / `.uid` ファイルはコミット不要（`.gitignore` 対象外だが追跡しない）
   - 新規ディレクトリ配下のファイルは `git status` で untracked になるため見落としやすい。意識的に確認する
 
+## 敵キャラクターのステータス直接参照の禁止
+- 敵キャラクターの正確なステータス（hp, max_hp, power, skill 等）をAIの判断ロジックで直接参照してはならない
+  - 理由：ゲーム仕様上、敵のステータスは不可視。将来的に情報制限を導入する前提で設計する
+  - HP の推定は状態ラベル（condition: healthy/wounded/critical）経由で行う
+  - 戦力評価は `_evaluate_party_strength_for()` を使う
+  - 種族固有リーダーAI（GoblinLeaderAI 等）でも同じルールを守ること
+  - 自パーティーのメンバーのステータスは直接参照してよい
+
 ## GDScript 警告の運用方針
 - `warnings/inference_on_variant=1`（project.godot に設定済み）により、Variant 推論警告はエラー扱いせず警告として表示する
 - 警告はビルドを通すが、放置はしない。コミットの節目に以下のコマンドで一覧を確認し、まとめて修正する：
@@ -909,11 +920,8 @@ rank値: C=0, B=1, A=2, S=3
 - 巻き添え（`friendly_fire`）：範囲攻撃（炎陣など）が味方・他パーティーにも当たる仕様。`CharacterData.friendly_fire: bool`（当面 false 固定）で管理し、将来切り替え可能にする
 - 大型ボスの即死耐性設計：`instant_death_immune: bool`（ボス級は true）。ヘッドショット無効・無力化水魔法持続短縮。敵 JSON でフラグを設定できる設計にする
 - ログ参照の改善（OrderWindowのログをより使いやすく）：現在は最新50件をそのまま表示するだけ。フィルタリング・検索・スクロール操作の改善を検討
-- パーティーシステムのリファクタリング：
-  - [x] Step 1: PartyLeader 基底クラスの抽出（party_leader_ai.gd から共通部分を party_leader.gd に分離）
-  - [x] Step 2: PartyLeaderPlayer の作成（party_leader_player.gd。プレイヤー操作パーティー用）
-  - [x] Step 3: NpcManager / EnemyManager を廃止し PartyManager に統合。hero_manager を PartyManager（party_type="player"）に切り替え、PartyLeaderPlayer を接続
-  - [ ] 戦況判断ルーチン（`_evaluate_combat_situation()`）の実装（PartyLeader の共通メソッド。現在はスタブのみ）
+- パーティーシステムの残作業：
+  - [x] 戦況判断ルーチン（`_evaluate_combat_situation()`）の実装（PartyLeader の共通メソッド。同エリア敵との戦力比較で CombatSituation を返す）
   - [ ] NpcLeaderAI の撤退ロジック追加（現在 FLEE 判断がない。戦況判断結果を使ってパーティーレベルの撤退を判断する）
   - [ ] special_skill 指示のAI接続（strong_enemy / disadvantage 等の条件判定。現在はUI定義のみでAI未接続。DISADVANTAGE_THRESHOLD は GlobalConstants に定義済みだが未使用）
 
