@@ -37,6 +37,9 @@ var _all_members:    Array[Character] = []  ## 全パーティー合算（AI 起
 var _friendly_list:  Array[Character] = []  ## 攻撃対象の友好キャラ一覧（敵 AI 用・activate 時に渡す）
 var _drop_items:     Array = []             ## ドロップアイテム（全滅時に party_wiped で転送）
 var _room_id:        String = ""            ## このパーティーが属する部屋のエリアID
+var _floor_items:    Dictionary = {}        ## フロアアイテム辞書（activate 前に set_floor_items が呼ばれた場合のキャッシュ）
+var _vision_system_ref: VisionSystem = null ## VisionSystem 参照（activate 前キャッシュ）
+var _global_orders:  Dictionary = {}        ## Party.global_orders 参照（activate 前キャッシュ）
 
 
 ## VisionSystem から呼ばれる。true なら距離ベースのアクティブ化を無効にする
@@ -54,6 +57,7 @@ func set_party_color(color: Color) -> void:
 
 ## VisionSystem を LeaderAI 経由で各 UnitAI に配布する（explore 行動に必要）
 func set_vision_system(vs: VisionSystem) -> void:
+	_vision_system_ref = vs
 	if _leader_ai != null:
 		_leader_ai.set_vision_system(vs)
 
@@ -108,12 +112,14 @@ func set_friendly_list(friendlies: Array[Character]) -> void:
 
 ## Party.global_orders dict への参照を LeaderAI に渡す（hp_potion / sp_mp_potion 設定の反映に使用）
 func set_global_orders(orders: Dictionary) -> void:
+	_global_orders = orders
 	if _leader_ai != null:
 		_leader_ai.set_global_orders(orders)
 
 
 ## フロアアイテム辞書の参照を LeaderAI 経由で全 UnitAI に配布する（game_map から呼ばれる）
 func set_floor_items(items: Dictionary) -> void:
+	_floor_items = items
 	if _leader_ai != null:
 		_leader_ai.set_floor_items(items)
 
@@ -304,8 +310,15 @@ func _start_ai() -> void:
 	_leader_ai.joined_to_player = joined_to_player  # 合流フラグを伝播
 	if not _friendly_list.is_empty():
 		_leader_ai.set_friendly_list(_friendly_list)
+	if not _floor_items.is_empty():
+		_leader_ai.set_floor_items(_floor_items)
+	if not _global_orders.is_empty():
+		_leader_ai.set_global_orders(_global_orders)
 	add_child(_leader_ai)
 	_leader_ai.setup(_members, _player, _map_data, _all_members)
+	# VisionSystem は setup 後に渡す（UnitAI が生成済みである必要があるため）
+	if _vision_system_ref != null:
+		_leader_ai.set_vision_system(_vision_system_ref)
 
 
 ## メンバー死亡時の処理

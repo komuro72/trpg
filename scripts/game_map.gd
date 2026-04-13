@@ -47,6 +47,8 @@ var _current_floor_index: int = 0
 var _stair_cooldown: float = 0.0
 ## パーティーメンバー・NPC の階段踏みつけクールダウン（hero のクールダウンとは独立）
 var _member_stair_cooldown: float = 0.0
+## プレイヤー不在フロアの NPC 近接敵アクティブ化タイマー
+var _npc_enemy_activate_timer: float = 0.0
 ## パーティーメンバー → NpcManager マッピング（フロア遷移時の map_data 更新に使用）
 var _member_to_npc_manager: Dictionary = {}  # Character -> NpcManager
 
@@ -209,6 +211,12 @@ func _process(delta: float) -> void:
 	if _debug_follow_target != null and is_instance_valid(_debug_follow_target):
 		if _debug_view_floor >= 0 and _debug_follow_target.current_floor != _debug_view_floor:
 			_set_debug_view_floor(_debug_follow_target.current_floor)
+
+	# プレイヤー不在フロアの NPC 近接敵アクティブ化（2秒間隔）
+	_npc_enemy_activate_timer -= delta
+	if _npc_enemy_activate_timer <= 0.0:
+		_npc_enemy_activate_timer = 2.0
+		_activate_enemies_on_npc_floors()
 
 	# 床アイテムの拾得チェック
 	_check_item_pickup()
@@ -1186,32 +1194,24 @@ func _load_item_texture(image_path: String) -> Texture2D:
 func _check_item_pickup() -> void:
 	if _floor_items.is_empty():
 		return
-	# 収集対象: パーティーメンバー + 未加入 NPC メンバー
+	# 収集対象: パーティーメンバー + 全フロアの NPC メンバー
+	# アイテムは任意のフロアに存在するため、現フロアに限定せず全フロアのキャラを対象にする
 	var all_chars: Array[Character] = []
 	if party != null:
 		for mv: Variant in party.sorted_members():
 			var cm := mv as Character
 			if is_instance_valid(cm):
 				all_chars.append(cm)
-	# 未加入 NPC: npc_managers（現フロアの確定済みマネージャー）＋
-	# 遷移途中でまだ旧フロアに登録されているが個別メンバーが現フロアにいるケースも拾う
+	# 全フロアの NPC を走査（現フロア以外のNPCも含める）
 	var seen_npc_mgrs: Dictionary = {}
-	for nm_v: Variant in npc_managers:
-		var nm := nm_v as NpcManager
-		if not is_instance_valid(nm):
-			continue
-		seen_npc_mgrs[nm] = true
-		for ch: Character in nm.get_members():
-			if is_instance_valid(ch):
-				all_chars.append(ch)
-	# フロア遷移途中のメンバーを補足（管理フロアが旧フロアのまま一部が現フロアに着いている）
 	for fi: int in range(_per_floor_npcs.size()):
-		for nm2_v: Variant in (_per_floor_npcs[fi] as Array):
-			var nm2 := nm2_v as NpcManager
-			if not is_instance_valid(nm2) or seen_npc_mgrs.has(nm2):
+		for nm_v: Variant in (_per_floor_npcs[fi] as Array):
+			var nm := nm_v as NpcManager
+			if not is_instance_valid(nm) or seen_npc_mgrs.has(nm):
 				continue
-			for ch: Character in nm2.get_members():
-				if is_instance_valid(ch) and ch.current_floor == _current_floor_index:
+			seen_npc_mgrs[nm] = true
+			for ch: Character in nm.get_members():
+				if is_instance_valid(ch):
 					all_chars.append(ch)
 	for ch: Character in all_chars:
 		if not is_instance_valid(ch) or ch.character_data == null:
@@ -1492,6 +1492,8 @@ func _transition_npc_floor(nm: NpcManager, direction: int) -> void:
 			fl_all_members.append_array(nm2.get_members())
 	nm.set_enemy_list(new_enemies)
 	nm.set_all_members(fl_all_members)
+	# NPC が到着したエリアの敵をアクティブ化する（VisionSystem はプレイヤーフロアでしか動かないため）
+	_activate_enemies_near_npc(new_floor, new_map, leader_ch)
 	# NpcManager は全メンバー遷移後に旧→新フロアリストへ移動するため、ここでは更新しない
 	_update_character_visibility()
 	queue_redraw()
@@ -1536,6 +1538,8 @@ func _transition_single_npc_member(nm: NpcManager, member: Character, direction:
 		if member.character_data != null else member.name
 	var dir_str := "↓" if direction > 0 else "↑"
 	MessageLog.add_ai("[NPC遷移] %s: F%d %s F%d" % [mname, old_floor, dir_str, new_floor])
+	# 到着メンバーの周囲の敵をアクティブ化する
+	_activate_enemies_near_npc(new_floor, new_map, member)
 	# 全メンバーが新フロアに揃ったか確認
 	var all_on_new_floor := true
 	for m: Character in nm.get_members():
@@ -1564,6 +1568,116 @@ func _transition_single_npc_member(nm: NpcManager, member: Character, direction:
 		_rebuild_blocking_characters()
 	_update_character_visibility()
 	queue_redraw()
+
+
+## NPC が新フロアに到着したとき、同エリアの敵パーティーをアクティブ化し friendly_list を配布する。
+## VisionSystem はプレイヤーのフロアでしか update_visibility を呼ばないため、
+## NPC のみが到着したフロアでは手動でアクティブ化する必要がある。
+func _activate_enemies_near_npc(floor_idx: int, floor_map: MapData, npc_char: Character) -> void:
+	var npc_area := floor_map.get_area(npc_char.grid_pos)
+	if npc_area.is_empty():
+		return
+	# このフロアにいるフレンドリーキャラを収集する
+	# 注意: 遷移途中の NPC は _per_floor_npcs[floor_idx] にまだ登録されていない場合がある
+	# そのため全フロアの NPC を走査し current_floor で判別する
+	var friendlies: Array[Character] = _collect_friendlies_on_floor(floor_idx)
+	# 到着した NPC 自身が漏れていれば明示的に追加
+	if is_instance_valid(npc_char) and npc_char.current_floor == floor_idx \
+			and npc_char not in friendlies:
+		friendlies.append(npc_char)
+	if friendlies.is_empty():
+		return
+	# 同フロアの全敵に friendly_list を更新し、未アクティブで NPC と同エリアならアクティブ化
+	for em_v: Variant in (_per_floor_enemies[floor_idx] as Array):
+		var em := em_v as EnemyManager
+		if not is_instance_valid(em):
+			continue
+		# friendly_list は常に更新（既にアクティブな敵も NPC をターゲットにできるようにする）
+		em.set_friendly_list(friendlies)
+		if em.is_active():
+			continue
+		# 敵メンバーのいずれかが NPC と同じエリアにいれば未アクティブ敵をアクティブ化
+		var in_same_area := false
+		for enemy: Character in em.get_enemies():
+			if is_instance_valid(enemy):
+				var enemy_area := floor_map.get_area(enemy.grid_pos)
+				if enemy_area == npc_area:
+					in_same_area = true
+					break
+		if in_same_area:
+			em.activate()
+
+
+## 指定フロアにいるフレンドリーキャラ（プレイヤーパーティー＋NPC）を収集する。
+## 遷移途中の NPC も current_floor ベースで拾うため、_per_floor_npcs 登録前でも検出できる。
+func _collect_friendlies_on_floor(floor_idx: int) -> Array[Character]:
+	var result: Array[Character] = []
+	# プレイヤーパーティー（フロアが一致するメンバーのみ）
+	if party != null:
+		for m_var: Variant in party.members:
+			if not is_instance_valid(m_var):
+				continue
+			var ch := m_var as Character
+			if ch != null and ch.current_floor == floor_idx:
+				result.append(ch)
+	# 全フロアの NPC を走査（遷移途中のマネージャーも漏らさない）
+	for fi: int in range(_per_floor_npcs.size()):
+		for nm_v: Variant in (_per_floor_npcs[fi] as Array):
+			var nm2 := nm_v as NpcManager
+			if not is_instance_valid(nm2):
+				continue
+			for ch: Character in nm2.get_members():
+				if is_instance_valid(ch) and ch.current_floor == floor_idx:
+					result.append(ch)
+	return result
+
+
+## プレイヤー不在フロアで NPC が探索中に新しい部屋に入ったとき、
+## その部屋の敵をアクティブ化する定期チェック（_process から2秒間隔で呼ばれる）
+func _activate_enemies_on_npc_floors() -> void:
+	for fi: int in range(_per_floor_npcs.size()):
+		if fi == _current_floor_index:
+			continue  # プレイヤーフロアは VisionSystem が処理する
+		var floor_enemies: Array = _per_floor_enemies[fi] as Array
+		if floor_enemies.is_empty():
+			continue
+		# 未アクティブの敵がなければスキップ
+		var has_inactive := false
+		for em_v: Variant in floor_enemies:
+			var em := em_v as EnemyManager
+			if is_instance_valid(em) and not em.is_active():
+				has_inactive = true
+				break
+		if not has_inactive:
+			continue
+		var floor_map := _all_map_data[fi] as MapData
+		# そのフロアにいるフレンドリーキャラを収集
+		var friendlies := _collect_friendlies_on_floor(fi)
+		if friendlies.is_empty():
+			continue
+		# フレンドリーがいるエリアを収集
+		var npc_areas: Dictionary = {}
+		for ch: Character in friendlies:
+			var a := floor_map.get_area(ch.grid_pos)
+			if not a.is_empty():
+				npc_areas[a] = true
+		if npc_areas.is_empty():
+			continue
+		# 全敵の friendly_list を更新 + NPC と同エリアの未アクティブ敵をアクティブ化
+		for em_v2: Variant in floor_enemies:
+			var em2 := em_v2 as EnemyManager
+			if not is_instance_valid(em2):
+				continue
+			em2.set_friendly_list(friendlies)
+			if em2.is_active():
+				continue
+			for enemy: Character in em2.get_enemies():
+				if not is_instance_valid(enemy):
+					continue
+				var enemy_area := floor_map.get_area(enemy.grid_pos)
+				if npc_areas.has(enemy_area):
+					em2.activate()
+					break  # 1体でも同エリアなら全員アクティブ化
 
 
 ## center からBFSで最近傍の空きタイルを探す（最大マンハッタン距離 5）
