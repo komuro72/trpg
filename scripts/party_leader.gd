@@ -72,7 +72,7 @@ func set_friendly_list(friendlies: Array[Character]) -> void:
 
 
 ## Party.global_orders への参照を受け取る（GDScript では Dictionary は参照型のため変更が自動反映）
-## game_map が NpcManager / hero_manager セットアップ時に呼ぶ
+## game_map が PartyManager セットアップ時に呼ぶ
 func set_global_orders(orders: Dictionary) -> void:
 	_global_orders = orders
 

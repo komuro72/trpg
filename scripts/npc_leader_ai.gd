@@ -46,12 +46,11 @@ var has_been_healed: bool = false
 var _prev_target_floor: int = -1
 
 ## trueにするとフロア遷移スコア判断をスキップして常に "explore" を返す
-## hero パーティーのマネージャー（_hero_manager）など、
-## プレイヤーが階段を手動操作するケースで使用する
+## NPC パーティーがフロア遷移を自律判断しないようにするフラグ
 var suppress_floor_navigation: bool = false
 
 
-## 攻撃対象とする敵リストを設定する（NpcManager が初期化後に呼ぶ）
+## 攻撃対象とする敵リストを設定する（PartyManager が初期化後に呼ぶ）
 func set_enemy_list(enemies: Array[Character]) -> void:
 	_enemy_list = enemies
 

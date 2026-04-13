@@ -17,7 +17,7 @@ const CHOICE_CANCEL    := "cancel"
 enum _State { HIDDEN, SHOWING, REJECTED }
 
 var _state:         _State = _State.HIDDEN
-var _npc_manager:   NpcManager
+var _npc_manager:   PartyManager
 var _npc_initiates: bool         = false
 var _choices:       Array[String] = []
 var _choice_index:  int           = 0
@@ -39,7 +39,7 @@ func _ready() -> void:
 	_control.draw.connect(_on_draw)
 
 
-func show_dialogue(nm: NpcManager, npc_initiates: bool) -> void:
+func show_dialogue(nm: PartyManager, npc_initiates: bool) -> void:
 	_npc_manager   = nm
 	_npc_initiates = npc_initiates
 	_state         = _State.SHOWING

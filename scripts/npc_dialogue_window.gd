@@ -24,7 +24,7 @@ enum _State { HIDDEN, MAIN, CONFIRM, PARTY_FULL }
 var _confirm_pending: String = CHOICE_JOIN_US
 
 var _state:             _State     = _State.HIDDEN
-var _npc_manager:       NpcManager = null
+var _npc_manager:       PartyManager = null
 var _npc_initiates:     bool       = false
 var _main_cursor:       int        = 0
 var _confirm_cursor:    int        = 1   ## 0=はい, 1=いいえ（デフォルト: いいえ）
@@ -50,7 +50,7 @@ func _ready() -> void:
 
 
 ## パーティー満員のため仲間にできない旨を表示する
-func show_party_full(nm: NpcManager) -> void:
+func show_party_full(nm: PartyManager) -> void:
 	_npc_manager    = nm
 	_state          = _State.PARTY_FULL
 	visible         = true
@@ -59,7 +59,7 @@ func show_party_full(nm: NpcManager) -> void:
 
 
 ## NPC との会話ウィンドウを表示してゲームを一時停止する
-func show_dialogue(nm: NpcManager, npc_initiates: bool) -> void:
+func show_dialogue(nm: PartyManager, npc_initiates: bool) -> void:
 	_npc_manager        = nm
 	_npc_initiates      = npc_initiates
 	_main_cursor        = 0

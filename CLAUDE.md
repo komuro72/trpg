@@ -256,11 +256,14 @@ PartyManager（パーティー管理。全パーティー種別で共通）
 
 ### PartyManager（管理層）
 - パーティーのメンバーとリーダーを管理する
-- パーティー種別（プレイヤー / 未加入NPC / 敵）に応じて適切な PartyLeader サブクラスを生成する
-- game_map からのデータ（friendly_list / floor_items / vision_system 等）を受け取り、PartyLeader に伝達する
+- `party_type`（`"enemy"` / `"npc"` / `"player"`）に応じてスポーン処理と PartyLeader サブクラスを切り替える
+  - `"enemy"`: 敵JSONから読み込み → EnemyLeaderAI（種族別分岐）
+  - `"npc"`: CharacterGeneratorでランダム生成 → NpcLeaderAI
+  - `"player"`: スポーンなし（setup_adopted）→ PartyLeaderPlayer
+- game_map からのデータ（friendly_list / enemy_list / floor_items / vision_system 等）を受け取り、PartyLeader に伝達する
 - リーダー管理（初期設定またはリーダー死亡時に再選出）
 - パーティー単位の情報共有・再評価通知
-- 混成パーティー対応（異なるキャラ種が同じパーティーに混在）
+- 旧 NpcManager / EnemyManager の処理を統合済み（サブクラス不要）
 
 ### PartyLeader（意思決定層の基底クラス）
 - パーティー全体の戦略を決定し、各メンバーの UnitAI に指示を伝達する
@@ -334,27 +337,14 @@ game_map
 
 | クラス | ファイル | 状態 |
 |--------|---------|------|
+| PartyManager | `party_manager.gd` | ✅ 実装済み。party_type で敵/NPC/プレイヤーを統合管理。旧 NpcManager / EnemyManager を統合済み |
 | PartyLeader | `party_leader.gd` | ✅ 実装済み。旧 PartyLeaderAI から共通ロジックを抽出 |
 | PartyLeaderAI | `party_leader_ai.gd` | ✅ 実装済み。extends PartyLeader に変更済み |
 | EnemyLeaderAI | `enemy_leader_ai.gd` | ✅ 実装済み。extends PartyLeaderAI |
 | 種族固有AI | `goblin_leader_ai.gd` 等 | ✅ 実装済み。extends EnemyLeaderAI |
 | NpcLeaderAI | `npc_leader_ai.gd` | ✅ 実装済み。extends PartyLeaderAI |
-| PartyLeaderPlayer | `party_leader_player.gd` | ⚠️ クラス作成済みだが未接続。hero_manager がまだ NpcManager + NpcLeaderAI を使用している |
+| PartyLeaderPlayer | `party_leader_player.gd` | ✅ 実装済み。hero_manager に接続済み（party_type="player" で PartyLeaderPlayer を生成） |
 | `_evaluate_combat_situation()` | `party_leader.gd` | ⚠️ 空のスタブのみ。中身は将来実装 |
-
-### 残作業: PartyLeaderPlayer の接続
-
-現在の hero_manager は `NpcManager`（PartyManager のサブクラス）を使用しており、`_create_leader_ai()` が `NpcLeaderAI` を生成する。PartyLeaderPlayer に切り替えるには以下の対応が必要：
-
-1. **hero_manager 用の PartyManager サブクラス作成**（または PartyManager に leader_type 指定の仕組みを追加）
-   - `_create_leader_ai()` で PartyLeaderPlayer を返す
-2. **`set_enemy_list()` の呼び出し変更**
-   - 現在は `NpcManager.set_enemy_list()` 経由で NpcLeaderAI に渡している
-   - PartyLeaderPlayer にも `set_enemy_list()` があるので、PartyManager 経由で渡す仕組みが必要
-3. **`suppress_floor_navigation` の扱い**
-   - NpcLeaderAI 固有のフラグ。PartyLeaderPlayer には不要（プレイヤーが手動で階段操作するため）
-4. **合流処理への影響確認**
-   - `_merge_npc_into_player_party()` / `_merge_player_into_npc_party()` で hero_manager の扱いが変わる可能性
 
 ## ゲームデザイン方針
 - レベルアップなし。装備と仲間の強化が成長の主軸
@@ -917,10 +907,10 @@ rank値: C=0, B=1, A=2, S=3
 - 巻き添え（`friendly_fire`）：範囲攻撃（炎陣など）が味方・他パーティーにも当たる仕様。`CharacterData.friendly_fire: bool`（当面 false 固定）で管理し、将来切り替え可能にする
 - 大型ボスの即死耐性設計：`instant_death_immune: bool`（ボス級は true）。ヘッドショット無効・無力化水魔法持続短縮。敵 JSON でフラグを設定できる設計にする
 - ログ参照の改善（OrderWindowのログをより使いやすく）：現在は最新50件をそのまま表示するだけ。フィルタリング・検索・スクロール操作の改善を検討
-- パーティーシステムのリファクタリング（進行中）：
+- パーティーシステムのリファクタリング：
   - [x] Step 1: PartyLeader 基底クラスの抽出（party_leader_ai.gd から共通部分を party_leader.gd に分離）
   - [x] Step 2: PartyLeaderPlayer の作成（party_leader_player.gd。プレイヤー操作パーティー用）
-  - [ ] Step 3: hero_manager への PartyLeaderPlayer 接続（hero_manager が NpcManager を使用しているため慎重な対応が必要。NpcManager._create_leader_ai / set_enemy_list / suppress_floor_navigation の扱いを整理してから実装する）
+  - [x] Step 3: NpcManager / EnemyManager を廃止し PartyManager に統合。hero_manager を PartyManager（party_type="player"）に切り替え、PartyLeaderPlayer を接続
   - [ ] 戦況判断ルーチン（`_evaluate_combat_situation()`）の実装（PartyLeader の共通メソッド。現在はスタブのみ）
   - [ ] NpcLeaderAI の撤退ロジック追加（現在 FLEE 判断がない。戦況判断結果を使ってパーティーレベルの撤退を判断する）
   - [ ] special_skill 指示のAI接続（strong_enemy / disadvantage 等の条件判定。現在はUI定義のみでAI未接続。DISADVANTAGE_THRESHOLD は GlobalConstants に定義済みだが未使用）

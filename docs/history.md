@@ -495,7 +495,19 @@
   - `party_leader_player.gd`（PartyLeaderPlayer）を新設: プレイヤー操作パーティー用リーダー。`global_orders.battle_policy` → 戦略変換、敵リストからのターゲット選択
   - PartyManager / NpcManager の型参照を `PartyLeaderAI` → `PartyLeader` に更新
   - `_evaluate_combat_situation()` スタブを PartyLeader に追加（将来の戦況判断ルーチン用）
-- 残作業: PartyLeaderPlayer は未接続。hero_manager がまだ NpcManager + NpcLeaderAI を使用しており、接続変更は別セッションで実施予定
+- ~~残作業: PartyLeaderPlayer は未接続~~ → 下記「PartyManager 統合リファクタリング」で完了
+
+### PartyManager 統合リファクタリング（Step 3 完了）
+- NpcManager / EnemyManager を廃止し PartyManager に統合
+  - `party_type`（`"enemy"` / `"npc"` / `"player"`）で setup / _create_leader_ai を分岐
+  - NpcManager の `_spawn_member()` → `_spawn_npc_member()` として移植
+  - NpcManager の `set_enemy_list()` / `_apply_attack_preset_to_member()` を移植
+  - EnemyManager（空の後方互換ラッパー）を削除
+- hero_manager を `PartyManager`（party_type="player"）に変更
+  - `_create_leader_ai()` が `PartyLeaderPlayer` を生成するようになった
+  - `suppress_floor_navigation = true` の行を削除（PartyLeaderPlayer にはフロア遷移判断がないため不要）
+- 全ファイルの型参照を `NpcManager` / `EnemyManager` → `PartyManager` に置き換え
+  - 対象: game_map / vision_system / right_panel / dialogue_trigger / npc_dialogue_window / dialogue_window / debug_window / base_ai / enemy_ai（計10ファイル）
 
 ### バグ修正: freed オブジェクトへの as Object キャストクラッシュ
 - 原因: `is_instance_valid(mv as Object)` の `as Object` キャストが freed オブジェクトに対してクラッシュする

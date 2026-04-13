@@ -34,7 +34,7 @@ var _attack_targets: Dictionary = {} # enemy_id -> Character
 var _force_regen: bool = false
 
 
-## アクティブ化後に EnemyManager から呼び出す
+## アクティブ化後に PartyManager から呼び出す
 func setup(enemies: Array[Character], player: Character, behavior_description: String, map_data: MapData) -> void:
 	_enemies              = enemies
 	_player               = player

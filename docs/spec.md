@@ -3655,6 +3655,49 @@ static func _apply_attack_preset_to_member(ch: Character) -> void:
 
 ---
 
+## PartyManager 統合リファクタリング ✅ 完了
+
+### 概要
+NpcManager・EnemyManager を廃止し、PartyManager に統合。同時に hero_manager を NpcManager から PartyManager に切り替え、PartyLeaderPlayer を接続した。
+
+### 変更内容
+
+#### PartyManager（`party_manager.gd`）
+- `party_type` プロパティ（`"enemy"` / `"npc"` / `"player"`）を追加
+- `setup()` を `party_type` で分岐:
+  - `"enemy"`: `_setup_enemy()` → 敵JSON読み込みスポーン（旧 PartyManager.setup のまま）
+  - `"npc"`: `_setup_npc()` → CharacterGenerator でランダム生成＋初期装備付与（旧 NpcManager.setup を移植）
+- `_spawn_enemy_member()`: 旧 `_spawn_member()` をリネーム
+- `_spawn_npc_member()`: 旧 NpcManager._spawn_member() を移植
+- `_create_leader_ai()` を `party_type` で分岐:
+  - `"player"` → `PartyLeaderPlayer.new()`
+  - `"npc"` → `NpcLeaderAI.new()`
+  - `"enemy"` → `_create_enemy_leader_ai()` で種族別分岐
+- `set_enemy_list()` / `_enemy_list`: NpcManager から移植。NpcLeaderAI / PartyLeaderPlayer 両方に転送
+- `_apply_attack_preset_to_member()`: NpcManager から移植（static メソッド）
+
+#### hero_manager（`game_map.gd`）
+- 型を `NpcManager` → `PartyManager` に変更
+- `party_type = "player"` を設定 → `_create_leader_ai()` が `PartyLeaderPlayer` を生成
+- `suppress_floor_navigation = true` の行を削除（PartyLeaderPlayer はフロア遷移判断を持たない）
+
+#### 削除ファイル
+- `npc_manager.gd`: PartyManager に統合完了
+- `enemy_manager.gd`: 後方互換ラッパー（空クラス）を廃止
+
+#### 型参照の置き換え
+以下のファイルで `NpcManager` / `EnemyManager` の型アノテーション・キャストを `PartyManager` に変更:
+- `game_map.gd`: 変数宣言・for ループ・as キャスト（約80箇所）
+- `vision_system.gd`: `add_enemy_manager()` / `add_npc_manager()` 等の引数型
+- `right_panel.gd`: `setup()` / 描画ループ内のキャスト
+- `dialogue_trigger.gd`: シグナル引数・setup()引数・メソッド引数
+- `npc_dialogue_window.gd`: `show_dialogue()` / `show_party_full()` の引数
+- `dialogue_window.gd`: 変数型・メソッド引数
+- `debug_window.gd`: 描画ループ内のキャスト
+- `base_ai.gd` / `enemy_ai.gd`: コメントのみ
+
+---
+
 ## Git / GitHub
 - リポジトリ: https://github.com/komuro72/trpg
 - ブランチ: master
