@@ -512,3 +512,8 @@
 ### バグ修正: freed オブジェクトへの as Object キャストクラッシュ
 - 原因: `is_instance_valid(mv as Object)` の `as Object` キャストが freed オブジェクトに対してクラッシュする
 - 修正: `as Object` を削除（`is_instance_valid()` は Variant を直接受け付ける）。npc_leader_ai / debug_window / left_panel / unit_ai の全6箇所を修正
+
+### バグ修正: party_leader.gd.uid 未登録によるクラス解決エラー
+- 症状: `_evaluate_party_strength()` not found in base self（npc_leader_ai.gd:104）
+- 原因: Godot 4.6 の `.gd.uid` ファイルが Git にコミットされておらず、PartyLeader クラスのリソース解決が不安定になっていた
+- 修正: 未登録の `.gd.uid` ファイル（party_leader / party_leader_player / debug_window / enemy_leader_ai）をコミット。削除済みの default_leader_ai.gd.uid を反映
