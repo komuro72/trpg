@@ -59,6 +59,7 @@ var _battle_formation: String    = "surround"
 var _hp_potion:        String    = "never"  ## "use" = 瀕死時に自動使用
 var _sp_mp_potion:     String    = "never"  ## "use" = 特殊攻撃前に自動使用
 var _item_pickup:      String    = "passive"  ## "aggressive" / "passive" / "avoid"
+var _combat_situation:  Dictionary = {}       ## 戦況判断結果（PartyLeader から receive_order 経由で受信）
 var _leader_ref:       Character = null  ## 隊形計算の基準となるリーダーキャラ
 var _guard_room_area:  String    = ""    ## guard_room 時の記憶部屋ID（初回設定後不変）
 var _home_position:    Vector2i  = Vector2i.ZERO  ## スポーン地点（帰還の基点。setup() で初期化）
@@ -135,10 +136,11 @@ func receive_order(order: Dictionary) -> void:
 		_guard_room_area = ""
 	_move_policy = new_move
 
-	_battle_formation = order.get("battle_formation", "surround") as String
-	_hp_potion    = order.get("hp_potion",    "never") as String
-	_sp_mp_potion = order.get("sp_mp_potion", "never") as String
-	_item_pickup  = order.get("item_pickup",  "passive") as String
+	_battle_formation  = order.get("battle_formation", "surround") as String
+	_hp_potion         = order.get("hp_potion",    "never") as String
+	_sp_mp_potion      = order.get("sp_mp_potion", "never") as String
+	_item_pickup       = order.get("item_pickup",  "passive") as String
+	_combat_situation  = order.get("combat_situation", {}) as Dictionary
 
 	var raw_leader: Variant = order.get("leader", null)
 	if raw_leader != null and is_instance_valid(raw_leader):

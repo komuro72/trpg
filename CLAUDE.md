@@ -682,6 +682,22 @@ rank値: C=0, B=1, A=2, S=3
 - 当面：敵味方ともに正確な数値を共有
 - 将来：視界内の敵は大まかな状態のみ（healthy／wounded／critical）
 
+### 戦況判断（CombatSituation）
+- `_evaluate_combat_situation()` が同エリアの敵との戦力比から判定する
+- 戦力比 = 自軍戦力 / 敵戦力（`_evaluate_party_strength_for()` で算出）
+
+| 戦況 | 戦力比 | NPC行動への影響 |
+|------|--------|----------------|
+| SAFE | 敵なし | 通常探索 |
+| OVERWHELMING | ≥ 2.0 | 通常攻撃（余裕あり） |
+| ADVANTAGE | ≥ 1.2 | 通常攻撃 |
+| EVEN | ≥ 0.8 | 通常攻撃 |
+| DISADVANTAGE | ≥ 0.5 | 特殊攻撃を積極使用（将来実装） |
+| CRITICAL | < 0.5 | 撤退（部屋から離脱） |
+
+- 撤退後に敵がいなくなると SAFE に戻り、探索に復帰する
+- 目標フロアの再計算で HP チェックが×なら上の階に撤退する
+
 ### キャラクターステータス
 | ステータス | フィールド名（実装） | 説明 |
 |-----------|-------------------|------|
@@ -923,7 +939,7 @@ rank値: C=0, B=1, A=2, S=3
 - ログ参照の改善（OrderWindowのログをより使いやすく）：現在は最新50件をそのまま表示するだけ。フィルタリング・検索・スクロール操作の改善を検討
 - パーティーシステムの残作業：
   - [x] 戦況判断ルーチン（`_evaluate_combat_situation()`）の実装（PartyLeader の共通メソッド。同エリア敵との戦力比較で CombatSituation を返す）
-  - [ ] NpcLeaderAI の撤退ロジック追加（現在 FLEE 判断がない。戦況判断結果を使ってパーティーレベルの撤退を判断する）
+  - [x] NpcLeaderAI の撤退ロジック追加（CombatSituation.CRITICAL 時に FLEE に切り替え。SAFE 復帰で EXPLORE に戻る）
   - [ ] special_skill 指示のAI接続（strong_enemy / disadvantage 等の条件判定。現在はUI定義のみでAI未接続。DISADVANTAGE_THRESHOLD は GlobalConstants に定義済みだが未使用）
 
 ## 参照ファイル

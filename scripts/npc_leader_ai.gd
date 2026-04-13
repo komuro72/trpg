@@ -66,6 +66,7 @@ func _create_unit_ai(_member: Character) -> UnitAI:
 
 ## パーティー全体の戦略を評価する
 ## 同じフロアに生存 かつ NPC自身が訪問済みのエリアにいる敵がいれば ATTACK、いなければ EXPLORE
+## 戦況判断（CombatSituation）に基づき CRITICAL 時は FLEE に切り替える
 func _evaluate_party_strategy() -> Strategy:
 	# 自パーティーのフロアを取得
 	var my_floor := -1
@@ -73,6 +74,7 @@ func _evaluate_party_strategy() -> Strategy:
 		if is_instance_valid(m):
 			my_floor = m.current_floor
 			break
+	var has_visible_enemy := false
 	for enemy: Character in _enemy_list:
 		if not is_instance_valid(enemy) or enemy.hp <= 0:
 			continue
@@ -88,8 +90,19 @@ func _evaluate_party_strategy() -> Strategy:
 		elif not enemy.visible:
 			# MapData なし（初期化前）のフォールバック
 			continue
-		return Strategy.ATTACK
-	return Strategy.EXPLORE
+		has_visible_enemy = true
+		break
+
+	if not has_visible_enemy:
+		return Strategy.EXPLORE
+
+	# 敵がいる場合：戦況判断で撤退するか決定する
+	var situation_val: int = _combat_situation.get("situation",
+		int(GlobalConstants.CombatSituation.SAFE)) as int
+	if situation_val == int(GlobalConstants.CombatSituation.CRITICAL):
+		return Strategy.FLEE
+
+	return Strategy.ATTACK
 
 
 ## 現在の状態に基づく目標フロアを返す（戦力値 + MP/SP 補正）
@@ -231,6 +244,8 @@ func get_global_orders_hint() -> Dictionary:
 func _get_strategy_change_reason() -> String:
 	if _party_strategy == Strategy.ATTACK:
 		return "敵を検知"
+	if _party_strategy == Strategy.FLEE:
+		return "戦況危険・撤退"
 	if _party_strategy == Strategy.EXPLORE:
 		return "敵なし・周辺探索"
 	if _party_strategy == Strategy.WAIT:

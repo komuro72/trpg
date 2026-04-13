@@ -528,3 +528,12 @@
   - `_get_opposing_characters()` 仮想メソッドを追加（敵AI=friendly_list、味方AI=enemy_list）
   - 戦況結果を `receive_order()` の `combat_situation` フィールドで UnitAI に伝達
   - `GlobalConstants` に閾値定数・`CombatSituation` enum を追加
+
+### 設計変更: NpcLeaderAI に戦況判断ベースの撤退ロジックを追加
+- 理由: NPC パーティーに FLEE 判断がなく、圧倒的に不利な戦闘でも攻撃し続けていた
+- 変更内容:
+  - `_evaluate_party_strategy()` に `_combat_situation` の参照を追加
+  - CombatSituation.CRITICAL（戦力比 < 0.5）で FLEE に切り替え
+  - 撤退後に SAFE に戻ると EXPLORE に復帰し、目標フロアを再計算
+  - UnitAI に `_combat_situation` フィールドを追加（receive_order 経由で保存）
+  - EnemyLeaderAI には適用しない（種族固有 AI の既存 FLEE 判断を維持）

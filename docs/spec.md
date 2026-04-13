@@ -3805,6 +3805,23 @@ ratio = 自軍戦力 / 敵戦力
 - `notify_situation_changed()`: メンバー死亡時等に即時再評価
 
 結果は `_assign_orders()` → `receive_order()` の `"combat_situation"` フィールドに含めて各 UnitAI に伝達。
+UnitAI は `_combat_situation` フィールドに保存する（将来の特殊攻撃 AI 接続で参照予定）。
+
+### NpcLeaderAI の撤退ロジック
+
+`_evaluate_party_strategy()` に戦況判断を組み込み:
+
+| 戦況 | 戦略 |
+|------|------|
+| SAFE（敵なし） | EXPLORE（既存の探索ロジック） |
+| OVERWHELMING / ADVANTAGE / EVEN | ATTACK（既存のまま） |
+| DISADVANTAGE | ATTACK（将来：特殊攻撃を積極使用） |
+| CRITICAL | FLEE（撤退。部屋から離脱） |
+
+- FLEE → UnitAI にそのまま伝達され、ターゲットから離れる方向に逃走
+- 部屋から離脱すると同エリアに敵がいなくなり、次の再評価で SAFE → EXPLORE に復帰
+- `_get_explore_move_policy()` で目標フロアを再計算し、HP/MP/SP が不足なら上の階へ撤退
+- EnemyLeaderAI には適用しない（種族固有 AI の既存 FLEE 判断を維持）
 
 ---
 
