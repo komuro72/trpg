@@ -20,13 +20,12 @@ var party_type: String = "enemy"
 var party_color: Color = Color.TRANSPARENT
 
 ## RightPanel / vision_system からのアクセスに使用する後方互換プロパティ
-## BaseAI 時代の enemy_ai に相当。PartyLeaderAI を返す
-var enemy_ai: PartyLeaderAI:
+var enemy_ai: PartyLeader:
 	get: return _leader_ai
 
 var _members:    Array[Character] = []
 var _leader:     Character
-var _leader_ai:  PartyLeaderAI
+var _leader_ai:  PartyLeader
 var _player:     Character
 var _map_data:   MapData
 var _activated:  bool = false
@@ -250,8 +249,8 @@ func _update_leader_flags() -> void:
 			member.is_leader = (member == _leader)
 
 
-## キャラ種に応じた PartyLeaderAI サブクラスを生成するファクトリ
-func _create_leader_ai(leader: Character) -> PartyLeaderAI:
+## キャラ種に応じた PartyLeader サブクラスを生成するファクトリ
+func _create_leader_ai(leader: Character) -> PartyLeader:
 	var char_id := ""
 	if leader != null and leader.character_data != null:
 		char_id = leader.character_data.character_id
@@ -360,7 +359,7 @@ func _check_room_suppression() -> void:
 			return
 		# 部屋の外にいる場合：FLEE 戦略なら離脱扱い、それ以外は追跡中
 		var is_fleeing := _leader_ai != null \
-				and _leader_ai._party_strategy == PartyLeaderAI.Strategy.FLEE
+				and _leader_ai._party_strategy == PartyLeader.Strategy.FLEE
 		if not is_fleeing:
 			return  # 追跡で出た可能性があるため制圧対象にしない
 	# 全メンバーが「死亡 or FLEE 離脱」 → 制圧完了

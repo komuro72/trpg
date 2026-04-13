@@ -87,7 +87,7 @@ func _spawn_member(class_id: String, grid_pos: Vector2i, image_set_override: Str
 
 
 ## NpcLeaderAI を生成するファクトリ
-func _create_leader_ai(_leader: Character) -> PartyLeaderAI:
+func _create_leader_ai(_leader: Character) -> PartyLeader:
 	var ai := NpcLeaderAI.new()
 	ai.name = "NpcLeaderAI"
 	ai.set_enemy_list(_enemy_list)
