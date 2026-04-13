@@ -213,30 +213,35 @@ func _calc_recoverable_energy(member: Character) -> int:
 ## NPC パーティーの global_orders ヒントを返す（デバッグウィンドウ表示用）
 ## _global_orders が設定されていない場合は NPC デフォルト値＋現在戦略を合成して返す
 func get_global_orders_hint() -> Dictionary:
+	var hint: Dictionary
 	if not _global_orders.is_empty():
-		return _global_orders
-	var hint: Dictionary = {
-		"move":          "follow",
-		"battle_policy": "attack",
-		"target":        "same_as_leader",
-		"on_low_hp":     "retreat",
-		"item_pickup":   "passive",
-		"hp_potion":     "use",
-		"sp_mp_potion":  "use",
-	}
-	match _party_strategy:
-		Strategy.FLEE:
-			hint["battle_policy"] = "retreat"
-			hint["on_low_hp"]     = "flee"
-		Strategy.WAIT, Strategy.DEFEND:
-			hint["battle_policy"] = "defense"
-		Strategy.EXPLORE:
-			var pol := _get_explore_move_policy()
-			hint["move"] = pol
-			if pol == "stairs_down" or pol == "stairs_up":
-				hint["target_floor"] = str(_get_target_floor())
-		Strategy.GUARD_ROOM:
-			hint["move"] = "guard_room"
+		hint = _global_orders.duplicate()
+	else:
+		hint = {
+			"move":          "follow",
+			"battle_policy": "attack",
+			"target":        "same_as_leader",
+			"on_low_hp":     "retreat",
+			"item_pickup":   "passive",
+			"hp_potion":     "use",
+			"sp_mp_potion":  "use",
+		}
+		match _party_strategy:
+			Strategy.FLEE:
+				hint["battle_policy"] = "retreat"
+				hint["on_low_hp"]     = "flee"
+			Strategy.WAIT, Strategy.DEFEND:
+				hint["battle_policy"] = "defense"
+			Strategy.EXPLORE:
+				var pol := _get_explore_move_policy()
+				hint["move"] = pol
+				if pol == "stairs_down" or pol == "stairs_up":
+					hint["target_floor"] = str(_get_target_floor())
+			Strategy.GUARD_ROOM:
+				hint["move"] = "guard_room"
+	# 戦況判断を追加
+	var sit: int = _combat_situation.get("situation", int(GlobalConstants.CombatSituation.SAFE)) as int
+	hint["combat_situation"] = sit
 	return hint
 
 

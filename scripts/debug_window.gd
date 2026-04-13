@@ -293,17 +293,18 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 	var battle_str: String = _label("battle_policy", hint.get("battle_policy", "-") as String)
 	var tgt_str:    String = _label("target",        hint.get("target",        "-") as String)
 	var hp_str:     String = _label("on_low_hp",     hint.get("on_low_hp",     "-") as String)
+	var sit_str:    String = _combat_situation_label(hint.get("combat_situation", 0) as int)
 
 	var header: String
 	if show_orders:
 		var item_str: String = _label("item_pickup", hint.get("item_pickup", "-") as String)
-		header = "[%s] %s(%s)  生存:%d/%d  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
+		header = "[%s] %s(%s)  生存:%d/%d  戦況:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
 			type_label, leader_name, first_class, alive, floor_members.size(),
-			mv_str, battle_str, tgt_str, hp_str, item_str]
+			sit_str, mv_str, battle_str, tgt_str, hp_str, item_str]
 	else:
-		header = "[%s] %s(%s)  生存:%d/%d  mv=%s  battle=%s  tgt=%s  hp=%s" % [
+		header = "[%s] %s(%s)  生存:%d/%d  戦況:%s  mv=%s  battle=%s  tgt=%s  hp=%s" % [
 			type_label, leader_name, first_class, alive, floor_members.size(),
-			mv_str, battle_str, tgt_str, hp_str]
+			sit_str, mv_str, battle_str, tgt_str, hp_str]
 
 	# ヘッダーが描画可能か確認
 	if y + LINE_H > bottom:
@@ -522,6 +523,18 @@ func _label(key: String, val: String) -> String:
 	_build_label_cache()
 	var sub := _label_cache.get(key, {}) as Dictionary
 	return sub.get(val, val) as String
+
+
+## CombatSituation enum 値を短い日本語ラベルに変換する
+func _combat_situation_label(sit: int) -> String:
+	match sit:
+		int(GlobalConstants.CombatSituation.SAFE):          return "安全"
+		int(GlobalConstants.CombatSituation.OVERWHELMING):  return "圧倒"
+		int(GlobalConstants.CombatSituation.ADVANTAGE):     return "優勢"
+		int(GlobalConstants.CombatSituation.EVEN):          return "互角"
+		int(GlobalConstants.CombatSituation.DISADVANTAGE):  return "劣勢"
+		int(GlobalConstants.CombatSituation.CRITICAL):      return "危険"
+	return "?"
 
 
 # --------------------------------------------------------------------------
