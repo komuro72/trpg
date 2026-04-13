@@ -499,9 +499,9 @@ func _step_toward_goal() -> bool:
 		if _dbg_stuck_count >= 5:  # 5回連続で動けなかったらログ出力
 			_dbg_stuck_count = 0
 			var my_name := _member.character_data.character_name if _member.character_data != null else String(_member.name)
-			var action_type := _current_action.get("action", "?") as String
+			var dbg_act := _current_action.get("action", "?") as String
 			# 隣接タイルのブロック状況を調べる
-			var dirs := [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1)]
+			var dirs: Array[Vector2i] = [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1)]
 			var block_info: PackedStringArray = []
 			for d: Vector2i in dirs:
 				var adj := _member.grid_pos + d
@@ -523,7 +523,7 @@ func _step_toward_goal() -> bool:
 					block_info.append("%s=%s" % [adj, blocker_name])
 			MessageLog.add_ai("[DBG_STUCK] %s@%s F%d act=%s goal=%s mv=%s blocks=[%s] _all=%d" % [
 				my_name, _member.grid_pos, _member.current_floor,
-				action_type, _goal, _move_policy,
+				dbg_act, _goal, _move_policy,
 				",".join(block_info), _all_members.size()])
 
 	return false
