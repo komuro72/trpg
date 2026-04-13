@@ -251,9 +251,17 @@ func _process(delta: float) -> void:
 		if _dbg_process_timer >= 3.0:
 			_dbg_process_timer = 0.0
 			var my_name := _member.character_data.character_name if _member.character_data != null else String(_member.name)
-			MessageLog.add_ai("[DBG_AI] %s F%d@%s state=%d queue=%d combat=%s mv=%s _all=%d" % [
+			var eff := _determine_effective_action()
+			var safe := _is_combat_safe()
+			var tgt_name := ""
+			if _target != null and is_instance_valid(_target) and _target.character_data != null:
+				tgt_name = _target.character_data.character_name
+			var is_moving := _member.is_moving() if _member.has_method("is_moving") else false
+			MessageLog.add_ai("[DBG_AI] %s F%d@%s st=%d q=%d eff=%d safe=%s combat=%s mv=%s tgt=%s moving=%s _all=%d" % [
 				my_name, _member.current_floor, _member.grid_pos,
-				int(_state), _queue.size(), _combat, _move_policy, _all_members.size()])
+				int(_state), _queue.size(), eff, str(safe), _combat, _move_policy,
+				tgt_name if not tgt_name.is_empty() else "-",
+				str(is_moving), _all_members.size()])
 
 	# スタン中は行動をスキップしてキューをクリア
 	if _member.is_stunned:
