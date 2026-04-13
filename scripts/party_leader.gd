@@ -152,7 +152,8 @@ func _process(delta: float) -> void:
 # --------------------------------------------------------------------------
 
 ## 戦略を評価して各メンバーにオーダーを発行する
-## current_order の各項目をパーティー戦略とマージして UnitAI に渡す
+## パーティー戦略に応じて move / combat / party_fleeing を決定し UnitAI に渡す
+## 行動の最終決定は UnitAI._determine_effective_action() が行う
 func _assign_orders() -> void:
 	_party_strategy = _apply_range_check(_evaluate_party_strategy())
 
@@ -162,6 +163,9 @@ func _assign_orders() -> void:
 		_prev_strategy = _party_strategy
 		if log_enabled and not _has_player_controlled_member():
 			_log_strategy_change(old_strategy)
+
+	# パーティーレベルの撤退判断
+	var party_fleeing := (_party_strategy == Strategy.FLEE)
 
 	# リーダーのターゲットを先に決定（same_as_leader ポリシー用）
 	var leader_target: Character = null
@@ -196,11 +200,9 @@ func _assign_orders() -> void:
 		var battle_form    : String = order.get("battle_formation", "surround")
 
 		# ── 移動方針設定 ──────────────────────────────────────────────────
-		# 敵は move 制約なし（spread）。味方は global_orders.move を優先使用（OrderWindow の全体方針）
 		var move_policy  : String    = "spread"
 		var formation_ref: Character = null
 		if member.is_friendly:
-			# "move" は GLOBAL_ROWS 専用キーのため global_orders から読む（未設定時は current_order にフォールバック）
 			move_policy = _global_orders.get("move", order.get("move", "same_room")) as String
 			if leader_char == null or leader_char == member:
 				if _player != null and is_instance_valid(_player) \
@@ -209,24 +211,9 @@ func _assign_orders() -> void:
 			else:
 				formation_ref = leader_char
 
-		# ── 有効戦略を決定 ───────────────────────────────────────────────
-		# 1. パーティー逃走は最優先（GoblinLeaderAI などの集団判断）
-		var effective_strat: int
-		if _party_strategy == Strategy.FLEE:
-			effective_strat = int(Strategy.FLEE)
-		elif _party_strategy == Strategy.EXPLORE:
-			if joined_to_player:
-				var cd := member.character_data
-				if cd != null and (cd.power > 0 or cd.buff_mp_cost > 0):
-					effective_strat = int(Strategy.WAIT)
-				else:
-					effective_strat = int(Strategy.ATTACK)
-			else:
-				var cd := member.character_data
-				if cd != null and (cd.power > 0 or cd.buff_mp_cost > 0):
-					effective_strat = int(Strategy.WAIT)
-				else:
-					effective_strat = int(Strategy.ATTACK)
+		# ── パーティー戦略に応じた移動方針の上書き ──────────────────────────
+		if _party_strategy == Strategy.EXPLORE:
+			if not joined_to_player:
 				var pol := _get_explore_move_policy()
 				if pol == "stairs_down" or pol == "stairs_up":
 					if member == leader_char:
@@ -238,36 +225,12 @@ func _assign_orders() -> void:
 				else:
 					move_policy = "cluster"
 		elif _party_strategy == Strategy.GUARD_ROOM:
-			effective_strat = int(Strategy.WAIT)
 			move_policy = "guard_room"
-		else:
-			var cd := member.character_data
-			if cd != null and (cd.heal_mp_cost > 0 or cd.buff_mp_cost > 0):
-				effective_strat = int(Strategy.WAIT)
-			else:
-				match combat:
-					"attack", "aggressive":
-						effective_strat = int(Strategy.ATTACK)
-					"flee":
-						effective_strat = int(Strategy.FLEE)
-					"defense", "support", "standby":
-						effective_strat = int(Strategy.WAIT)
-					_:
-						if int(_party_strategy) > int(Strategy.WAIT):
-							effective_strat = int(Strategy.WAIT)
-						else:
-							effective_strat = int(_party_strategy)
 
-		# 2. 個別低HP条件（on_low_hp）：NEAR_DEATH_THRESHOLD 未満で発動
-		if member.max_hp > 0 \
+		# on_low_hp=retreat 時は cluster に上書き
+		if on_low_hp == "retreat" and member.max_hp > 0 \
 				and float(member.hp) / float(member.max_hp) < GlobalConstants.NEAR_DEATH_THRESHOLD:
-			match on_low_hp:
-				"flee":
-					effective_strat = int(Strategy.FLEE)
-				"retreat":
-					if effective_strat != int(Strategy.FLEE):
-						effective_strat = int(Strategy.WAIT)
-					move_policy = "cluster"
+			move_policy = "cluster"
 
 		# ── ターゲット選択 ────────────────────────────────────────────────
 		var target: Character
@@ -296,16 +259,16 @@ func _assign_orders() -> void:
 				and member.current_floor != leader_char.current_floor:
 			var floor_dir: int = sign(leader_char.current_floor - member.current_floor)
 			move_policy = "stairs_down" if floor_dir > 0 else "stairs_up"
-			effective_strat = int(Strategy.WAIT)
 			target = null
 
 		unit_ai.receive_order({
-			"strategy":          effective_strat,
 			"target":            target,
 			"combat":            combat,
+			"on_low_hp":         on_low_hp,
 			"move":              move_policy,
 			"battle_formation":  battle_form,
 			"leader":            formation_ref,
+			"party_fleeing":     party_fleeing,
 			"hp_potion":         _global_orders.get("hp_potion",    "never") as String,
 			"sp_mp_potion":      _global_orders.get("sp_mp_potion", "never") as String,
 			"item_pickup":       member.current_order.get("item_pickup", "passive") as String,

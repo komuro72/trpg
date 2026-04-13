@@ -308,10 +308,14 @@ PartyManager（パーティー管理。全パーティー種別で共通）
 - 自律的な探索・フロア移動判断・アイテム自動管理を行う
 
 ### UnitAI（個体行動層）
-- リーダーからの指示（`receive_order()`）に従って行動する
-- 戦況の判断は自分では行わず、`receive_order()` で受け取った戦況判断結果を参照する
+- リーダーからの指示（`receive_order()`）で combat / on_low_hp / move / combat_situation 等を受け取る
+- `_determine_effective_action()` で行動を最終決定する（ATTACK/FLEE/WAIT 相当の int を算出）
+  - 判定優先順位: パーティー撤退 → 種族自己逃走 → 種族攻撃可否 → 個別低HP → 戦況SAFE判定 → combat 方針
+- 種族固有行動は以下のフックメソッドでオーバーライドする（旧 `_resolve_strategy()` を廃止）:
+  - `_should_ignore_flee() -> bool`: FLEE を無視する種族（dark_knight 等）が true を返す
+  - `_should_self_flee() -> bool`: 自己判断で逃走する種族（goblin 系: HP30%未満）が true を返す
+  - `_can_attack() -> bool`: MP 不足等で攻撃不能な種族（mage 系）が false を返す
 - ステートマシン・A*経路探索・アクションキュー管理
-- クラスやキャラ種に応じた行動（射程維持、逃走条件など）
 - 全パーティー種別で同じ UnitAI を使用する
 
 ### データの流れ
@@ -321,18 +325,19 @@ game_map
   └── PartyManager
         ├── PartyLeader（Player または AI）
         │     ├── _evaluate_party_strength()      ← 戦力評価（共通）
-        │     ├── _evaluate_combat_situation()  ← 戦況判断（共通・スタブ）
+        │     ├── _evaluate_combat_situation()  ← 戦況判断（共通）
         │     ├── _evaluate_party_strategy()    ← 戦略決定（サブクラス固有）
         │     └── _assign_orders()              ← 指示伝達（共通）
         │           └── UnitAI.receive_order({
-        │                 strategy, target, combat, move,
-        │                 battle_formation, leader,
-        │                 combat_situation,    ← 戦況判断結果（将来追加）
-        │                 ...
+        │                 target, combat, on_low_hp, move,
+        │                 battle_formation, leader, party_fleeing,
+        │                 combat_situation, hp_potion, sp_mp_potion,
+        │                 item_pickup
         │               })
+        │                 └── _determine_effective_action() ← 行動最終決定
         └── Character
               ├── PlayerController（プレイヤー操作時）
-              └── UnitAI（AI操作時。receive_order の内容に従って行動）
+              └── UnitAI（AI操作時。receive_order の内容から行動を決定）
 ```
 
 ### 実装状況

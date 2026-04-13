@@ -15,10 +15,8 @@ func _init() -> void:
 
 
 ## 自己保存フック: 絶対に逃げない
-func _resolve_strategy(ordered_strategy: Strategy) -> Strategy:
-	if ordered_strategy == Strategy.FLEE:
-		return Strategy.WAIT  # 逃げずに待機（後方支援ポジション維持）
-	return ordered_strategy
+func _should_ignore_flee() -> bool:
+	return true
 
 
 ## 経路探索方法: A* 最短経路

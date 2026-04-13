@@ -17,17 +17,17 @@ func _init() -> void:
 
 
 ## 自己保存フック: HP < 30% なら逃走
-func _resolve_strategy(ordered_strategy: Strategy) -> Strategy:
+func _should_self_flee() -> bool:
 	if _member != null and is_instance_valid(_member):
 		var hp_ratio := float(_member.hp) / float(maxi(_member.max_hp, 1))
 		if hp_ratio < 0.3:
-			return Strategy.FLEE
-	return ordered_strategy
+			return true
+	return false
 
 
 ## キュー生成: 攻撃戦略のとき、ターゲットが近すぎれば後退キューを優先する
-func _generate_queue(strategy: Strategy, target: Character) -> Array:
-	if strategy == Strategy.ATTACK and target != null and is_instance_valid(target):
+func _generate_queue(strategy: int, target: Character) -> Array:
+	if strategy == 0 and target != null and is_instance_valid(target):
 		var dist := _manhattan(_member.grid_pos, target.grid_pos)
 		if dist <= MIN_CLOSE_RANGE:
 			var q: Array = []

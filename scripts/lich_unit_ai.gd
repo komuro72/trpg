@@ -18,14 +18,17 @@ func _init() -> void:
 	obedience = 1.0
 
 
-## 自己保存フック: 絶対に逃げない / MP不足なら WAIT
-func _resolve_strategy(ordered_strategy: Strategy) -> Strategy:
-	if ordered_strategy == Strategy.FLEE:
-		return Strategy.ATTACK
+## 自己保存フック: 絶対に逃げない
+func _should_ignore_flee() -> bool:
+	return true
+
+
+## MP不足なら攻撃不可
+func _can_attack() -> bool:
 	if _member != null and is_instance_valid(_member):
 		if _member.mp < MP_ATTACK_COST:
-			return Strategy.WAIT
-	return ordered_strategy
+			return false
+	return true
 
 
 ## 水弾切り替えフラグを返す（UnitAI の飛翔体生成で参照）

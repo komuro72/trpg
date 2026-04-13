@@ -15,16 +15,21 @@ func _init() -> void:
 	obedience = 0.5
 
 
-## 自己保存フック: MP不足なら WAIT、HP < 30% なら逃走
-func _resolve_strategy(ordered_strategy: Strategy) -> Strategy:
+## 自己保存フック: HP < 30% なら逃走
+func _should_self_flee() -> bool:
 	if _member != null and is_instance_valid(_member):
 		var hp_ratio := float(_member.hp) / float(maxi(_member.max_hp, 1))
 		if hp_ratio < 0.3:
-			return Strategy.FLEE
-		# MP が残っていなければ攻撃不可→ 待機
+			return true
+	return false
+
+
+## MP不足なら攻撃不可
+func _can_attack() -> bool:
+	if _member != null and is_instance_valid(_member):
 		if _member.mp < MP_ATTACK_COST:
-			return Strategy.WAIT
-	return ordered_strategy
+			return false
+	return true
 
 
 ## 攻撃後フック: MP を消費する

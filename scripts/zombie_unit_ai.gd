@@ -15,10 +15,8 @@ func _init() -> void:
 
 
 ## 自己保存フック: 絶対に逃げない
-func _resolve_strategy(ordered_strategy: Strategy) -> Strategy:
-	if ordered_strategy == Strategy.FLEE:
-		return Strategy.ATTACK
-	return ordered_strategy
+func _should_ignore_flee() -> bool:
+	return true
 
 
 ## 経路探索方法: 直進（障害物を迂回しない本能的な移動）

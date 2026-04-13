@@ -17,15 +17,13 @@ func _init() -> void:
 
 
 ## 自己保存フック: 絶対に逃げない
-func _resolve_strategy(ordered_strategy: Strategy) -> Strategy:
-	if ordered_strategy == Strategy.FLEE:
-		return Strategy.ATTACK
-	return ordered_strategy
+func _should_ignore_flee() -> bool:
+	return true
 
 
 ## キュー生成: 攻撃戦略のとき、ターゲットが近すぎれば後退キューを優先する
-func _generate_queue(strategy: Strategy, target: Character) -> Array:
-	if strategy == Strategy.ATTACK and target != null and is_instance_valid(target):
+func _generate_queue(strategy: int, target: Character) -> Array:
+	if strategy == 0 and target != null and is_instance_valid(target):
 		var dist := _manhattan(_member.grid_pos, target.grid_pos)
 		if dist <= MIN_CLOSE_RANGE:
 			var q: Array = []
