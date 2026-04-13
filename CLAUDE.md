@@ -917,6 +917,13 @@ rank値: C=0, B=1, A=2, S=3
 - 巻き添え（`friendly_fire`）：範囲攻撃（炎陣など）が味方・他パーティーにも当たる仕様。`CharacterData.friendly_fire: bool`（当面 false 固定）で管理し、将来切り替え可能にする
 - 大型ボスの即死耐性設計：`instant_death_immune: bool`（ボス級は true）。ヘッドショット無効・無力化水魔法持続短縮。敵 JSON でフラグを設定できる設計にする
 - ログ参照の改善（OrderWindowのログをより使いやすく）：現在は最新50件をそのまま表示するだけ。フィルタリング・検索・スクロール操作の改善を検討
+- パーティーシステムのリファクタリング（進行中）：
+  - [x] Step 1: PartyLeader 基底クラスの抽出（party_leader_ai.gd から共通部分を party_leader.gd に分離）
+  - [x] Step 2: PartyLeaderPlayer の作成（party_leader_player.gd。プレイヤー操作パーティー用）
+  - [ ] Step 3: hero_manager への PartyLeaderPlayer 接続（hero_manager が NpcManager を使用しているため慎重な対応が必要。NpcManager._create_leader_ai / set_enemy_list / suppress_floor_navigation の扱いを整理してから実装する）
+  - [ ] 戦況判断ルーチン（`_evaluate_combat_situation()`）の実装（PartyLeader の共通メソッド。現在はスタブのみ）
+  - [ ] NpcLeaderAI の撤退ロジック追加（現在 FLEE 判断がない。戦況判断結果を使ってパーティーレベルの撤退を判断する）
+  - [ ] special_skill 指示のAI接続（strong_enemy / disadvantage 等の条件判定。現在はUI定義のみでAI未接続。DISADVANTAGE_THRESHOLD は GlobalConstants に定義済みだが未使用）
 
 ## 参照ファイル
 - docs/spec.md：詳細仕様書（実装前に参照すること）
