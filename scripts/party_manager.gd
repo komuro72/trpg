@@ -272,8 +272,8 @@ func _create_leader_ai(leader: Character) -> PartyLeaderAI:
 
 	# goblin-archer, goblin-mage, zombie, harpy, salamander,
 	# dark-knight, dark-mage, dark_priest, dark-priest など
-	var ai := DefaultLeaderAI.new()
-	ai.name = "DefaultLeaderAI"
+	var ai := EnemyLeaderAI.new()
+	ai.name = "EnemyLeaderAI"
 	return ai
 
 

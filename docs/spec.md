@@ -1935,7 +1935,7 @@ match char_id:
     "goblin"    → GoblinLeaderAI
     "hobgoblin" → HobgoblinLeaderAI
     "wolf"      → WolfLeaderAI
-    _           → DefaultLeaderAI（goblin-archer, goblin-mage, zombie, harpy, salamander, dark-knight, dark-mage, dark-priest）
+    _           → EnemyLeaderAI（goblin-archer, goblin-mage, zombie, harpy, salamander, dark-knight, dark-mage, dark-priest）
 ```
 
 ### dungeon_handcrafted.json 更新
