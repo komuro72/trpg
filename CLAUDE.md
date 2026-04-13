@@ -234,32 +234,58 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 - Partyクラスを最初から用意し、将来の複数パーティー連携に備える
 - 仕様書はClaude Codeが作成・更新、人間が確認する運用
 
-## AIアーキテクチャ（2層構造）
+## パーティーシステムのアーキテクチャ
 
-### リーダーAI（パーティー単位）
-- パーティー全体の戦略を決定（攻撃/防衛/撤退など）
-- 各メンバーに指示を出す（攻撃対象・ポジション・行動方針）
-- リーダーのキャラ種やクラスによって戦略傾向が異なる
-
-### リーダーAIの継承構造
+### 全体構造
 
 ```
-PartyLeaderAI（基底クラス）
-  ├── EnemyLeaderAI（敵共通のデフォルト行動）
-  │     ├── GoblinLeaderAI（種族固有の差分のみオーバーライド）
-  │     ├── WolfLeaderAI
-  │     ├── HobgoblinLeaderAI
-  │     └── （将来の種族追加時もEnemyLeaderAIを継承）
-  └── NpcLeaderAI（NPC固有のロジック）
+PartyManager（パーティー管理。全パーティー種別で共通）
+  ├── PartyLeader（リーダー意思決定の基底クラス）
+  │     ├── PartyLeaderPlayer（プレイヤー操作パーティー用）
+  │     └── PartyLeaderAI（AI自動判断）
+  │           ├── EnemyLeaderAI（敵共通のデフォルト行動）
+  │           │     ├── GoblinLeaderAI（種族固有の差分のみオーバーライド）
+  │           │     ├── WolfLeaderAI
+  │           │     ├── HobgoblinLeaderAI
+  │           │     └── （将来の種族追加時もEnemyLeaderAIを継承）
+  │           └── NpcLeaderAI（NPC固有のロジック）
+  └── Character（味方・NPC・敵の全キャラクター共通）
+        ├── PlayerController（プレイヤー操作時）
+        └── UnitAI（AI操作時の個体行動。全パーティー種別で共通）
 ```
 
-#### PartyLeaderAI（基底クラス）
-- `_assign_orders()`: 戦略に応じてメンバーに指示を伝達する共通ロジック
+### PartyManager（管理層）
+- パーティーのメンバーとリーダーを管理する
+- パーティー種別（プレイヤー / 未加入NPC / 敵）に応じて適切な PartyLeader サブクラスを生成する
+- game_map からのデータ（friendly_list / floor_items / vision_system 等）を受け取り、PartyLeader に伝達する
+- リーダー管理（初期設定またはリーダー死亡時に再選出）
+- パーティー単位の情報共有・再評価通知
+- 混成パーティー対応（異なるキャラ種が同じパーティーに混在）
+
+### PartyLeader（意思決定層の基底クラス）
+- パーティー全体の戦略を決定し、各メンバーの UnitAI に指示を伝達する
+- `_evaluate_combat_situation()`: 戦況判断の共通ルーチン。全サブクラスで共有する。結果は `_assign_orders()` → `receive_order()` でメンバーに伝達する
+- `_evaluate_party_strategy()`: 仮想メソッド。戦略決定（ATTACK / WAIT / FLEE 等）。サブクラスがオーバーライドする
+- `_select_target_for()`: 仮想メソッド。ターゲット選択。サブクラスがオーバーライドする
+- `_assign_orders()`: 戦略に応じてメンバーの UnitAI に `receive_order()` で指示を伝達する（共通ロジック）
 - `_apply_range_check()`: 縄張り・帰還判定（敵パーティーのみ適用。友好パーティーはスキップ）
-- `_evaluate_party_strategy()`: 仮想メソッド。サブクラスがオーバーライドする
-- `_select_target_for()`: 仮想メソッド。サブクラスがオーバーライドする
+- UnitAI の生成・管理（`_unit_ais` 辞書）
 
-#### EnemyLeaderAI（敵のデフォルト行動）
+### PartyLeaderPlayer（プレイヤー操作パーティー用）
+- PartyLeader を継承する。プレイヤーの指示（OrderWindow）を戦略・ターゲット選択に変換する
+- `_evaluate_party_strategy()`: `global_orders.battle_policy` を戦略に変換する
+  - `"attack"` → ATTACK、`"defense"` → WAIT、`"retreat"` → FLEE
+- `_select_target_for()`: `global_orders.target` 設定に従う（nearest / weakest / same_as_leader / support）
+- プレイヤーの指示を覆さない（戦況判断はメンバーAIの条件評価のみに使う）
+- `_evaluate_combat_situation()` の結果を `receive_order()` でメンバーに渡す（AI操作メンバーの特殊攻撃判断等に使用）
+
+### PartyLeaderAI（AI自動判断の基底クラス）
+- PartyLeader を継承する。AI がパーティー全体の戦略を自動で判断する
+- `_evaluate_party_strategy()`: デフォルト実装（WAIT を返す）
+- 再評価タイマーによる定期的な戦略再評価（1.5秒間隔）
+
+### EnemyLeaderAI（敵のデフォルト行動）
+- PartyLeaderAI を継承する
 - `_evaluate_party_strategy()` のデフォルト実装:
   - friendly（プレイヤー・NPC）が生存している → ATTACK
   - friendly がいない → WAIT
@@ -268,22 +294,41 @@ PartyLeaderAI（基底クラス）
   - 最近傍の friendly を返す
 - 種族固有の行動が不要な敵はEnemyLeaderAIをそのまま使用する
 
-#### 種族固有リーダーAI（EnemyLeaderAIを継承）
+### 種族固有リーダーAI（EnemyLeaderAIを継承）
 - EnemyLeaderAIを継承し、種族の特徴に応じた差分のみオーバーライドする
 - 敵キャラクター一覧の自然言語の特徴（「臆病で逃げる」「狂暴で攻撃的」等）に基づいてClaude Codeが実装する
 - 新しい敵種を追加する場合もEnemyLeaderAIを継承し、差分だけ実装する
 
-### 個体AI（キャラ単位）
-- リーダーの指示を受けて実際の行動を決定
-- 従順度パラメータで指示への忠実さが変わる（ゾンビ=低、ゴブリン=中、人間NPC=高）
+### NpcLeaderAI（NPC固有のロジック）
+- PartyLeaderAI を継承する
+- 自律的な探索・フロア移動判断・アイテム自動管理を行う
+
+### UnitAI（個体行動層）
+- リーダーからの指示（`receive_order()`）に従って行動する
+- 戦況の判断は自分では行わず、`receive_order()` で受け取った戦況判断結果を参照する
 - ステートマシン・A*経路探索・アクションキュー管理
 - クラスやキャラ種に応じた行動（射程維持、逃走条件など）
+- 全パーティー種別で同じ UnitAI を使用する
 
-### パーティーマネージャー
-- 敵・NPC・プレイヤーパーティーで共通の管理クラス
-- リーダー管理（初期設定またはリーダー死亡時に再選出）
-- パーティー単位の情報共有・再評価通知
-- 混成パーティー対応（異なるキャラ種が同じパーティーに混在）
+### データの流れ
+
+```
+game_map
+  └── PartyManager
+        ├── PartyLeader（Player または AI）
+        │     ├── _evaluate_combat_situation()  ← 戦況判断（共通）
+        │     ├── _evaluate_party_strategy()    ← 戦略決定（サブクラス固有）
+        │     └── _assign_orders()              ← 指示伝達（共通）
+        │           └── UnitAI.receive_order({
+        │                 strategy, target, combat, move,
+        │                 battle_formation, leader,
+        │                 combat_situation,    ← 戦況判断結果（将来追加）
+        │                 ...
+        │               })
+        └── Character
+              ├── PlayerController（プレイヤー操作時）
+              └── UnitAI（AI操作時。receive_order の内容に従って行動）
+```
 
 ## ゲームデザイン方針
 - レベルアップなし。装備と仲間の強化が成長の主軸
