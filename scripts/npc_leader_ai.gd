@@ -311,7 +311,7 @@ func _auto_equip_members() -> void:
 	# 装備可能な item_type ごとに未装備品を収集
 	var pool_by_type: Dictionary = {}  # item_type -> Array[{item, owner_data}]
 	for mv: Variant in _party_members:
-		if not is_instance_valid(mv as Object):
+		if not is_instance_valid(mv):
 			continue
 		var member := mv as Character
 		if member == null or member.character_data == null:

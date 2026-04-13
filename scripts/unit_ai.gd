@@ -141,7 +141,7 @@ func receive_order(order: Dictionary) -> void:
 	_item_pickup  = order.get("item_pickup",  "passive") as String
 
 	var raw_leader: Variant = order.get("leader", null)
-	if raw_leader != null and is_instance_valid(raw_leader as Object):
+	if raw_leader != null and is_instance_valid(raw_leader):
 		_leader_ref = raw_leader as Character
 	else:
 		_leader_ref = null
@@ -363,7 +363,7 @@ func _start_action(action: Dictionary) -> void:
 
 		"move_to_heal", "move_to_buff":
 			var tgt_var: Variant = action.get("target", null)
-			if tgt_var == null or not is_instance_valid(tgt_var as Object):
+			if tgt_var == null or not is_instance_valid(tgt_var):
 				_complete_action()
 				return
 			var tgt := tgt_var as Character
@@ -381,7 +381,7 @@ func _start_action(action: Dictionary) -> void:
 
 		"heal":
 			var tgt_var: Variant = action.get("target", null)
-			if tgt_var == null or not is_instance_valid(tgt_var as Object):
+			if tgt_var == null or not is_instance_valid(tgt_var):
 				_complete_action()
 				return
 			var tgt := tgt_var as Character
@@ -412,7 +412,7 @@ func _start_action(action: Dictionary) -> void:
 
 		"buff":
 			var tgt_var: Variant = action.get("target", null)
-			if tgt_var == null or not is_instance_valid(tgt_var as Object):
+			if tgt_var == null or not is_instance_valid(tgt_var):
 				_complete_action()
 				return
 			var tgt := tgt_var as Character

@@ -63,7 +63,7 @@ func _update_icon_nodes() -> void:
 
 	# 不要ノードを削除
 	for key: Variant in _icon_nodes.keys():
-		if not current_set.has(key) or not is_instance_valid(key as Object):
+		if not current_set.has(key) or not is_instance_valid(key):
 			(_icon_nodes[key] as TextureRect).queue_free()
 			_icon_nodes.erase(key)
 

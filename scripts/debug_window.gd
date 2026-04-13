@@ -79,7 +79,7 @@ func _input(event: InputEvent) -> void:
 func _navigate_selection(dir: int) -> void:
 	# freed なエントリを除去
 	_leader_list = _leader_list.filter(func(c: Variant) -> bool:
-		return c != null and is_instance_valid(c as Object))
+		return c != null and is_instance_valid(c))
 	if _leader_list.is_empty():
 		return
 	var idx: int = _leader_list.find(_selected_leader)
