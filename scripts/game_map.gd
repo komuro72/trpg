@@ -447,6 +447,13 @@ func _merge_pre_joined_allies() -> void:
 func _link_all_character_lists() -> void:
 	var all_combatants: Array[Character] = []
 	var all_enemies: Array[Character] = []
+	# パーティーメンバーも占有チェック対象に含める（味方同士の重なり防止）
+	for member_var: Variant in party.members:
+		if not is_instance_valid(member_var):
+			continue
+		var ch := member_var as Character
+		if ch != null:
+			all_combatants.append(ch)
 	for em: PartyManager in enemy_managers:
 		all_combatants.append_array(em.get_enemies())
 		all_enemies.append_array(em.get_enemies())
