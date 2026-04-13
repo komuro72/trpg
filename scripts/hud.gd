@@ -36,22 +36,15 @@ func _process(_delta: float) -> void:
 
 	if _player != null and is_instance_valid(_player):
 		lines.append("■ Player  HP: %d / %d  [%s]" % \
-			[_player.hp, _player.max_hp, _condition(_player)])
+			[_player.hp, _player.max_hp, _player.get_condition()])
 
 	lines.append("")  # 空行で区切り
 
 	for enemy: Character in _enemies:
 		if is_instance_valid(enemy):
 			lines.append("▲ %s  HP: %d / %d  [%s]" % \
-				[enemy.name, enemy.hp, enemy.max_hp, _condition(enemy)])
+				[enemy.name, enemy.hp, enemy.max_hp, enemy.get_condition()])
 
 	_label.text = "\n".join(lines)
 
 
-func _condition(c: Character) -> String:
-	var ratio := float(c.hp) / float(c.max_hp)
-	if ratio > 0.6:
-		return "healthy"
-	elif ratio > 0.3:
-		return "wounded"
-	return "critical"

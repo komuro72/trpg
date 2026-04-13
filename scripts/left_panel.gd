@@ -337,9 +337,6 @@ func _hp_modulate(c: Character) -> Color:
 		return Color.WHITE.lerp(Color(1.0, 0.15, 0.15), pulse)
 
 
-## 廃止: Character.get_condition() に統一済み
-
-
 func _condition_color(c: Character) -> Color:
 	var ratio := float(c.hp) / float(c.max_hp) if c.max_hp > 0 else 0.0
 	if ratio > 0.5:

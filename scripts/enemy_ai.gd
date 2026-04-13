@@ -300,7 +300,7 @@ func _build_situation() -> Dictionary:
 			"position":  {"x": enemy.grid_pos.x, "y": enemy.grid_pos.y},
 			"facing":    _dir_to_str(enemy.facing),
 			"hp":        enemy.hp,
-			"condition": _condition(enemy),
+			"condition": enemy.get_condition(),
 			"status":    (_current.get(enemy.name, {}) as Dictionary).get("action", "ready")
 		})
 
@@ -311,7 +311,7 @@ func _build_situation() -> Dictionary:
 			"position":  {"x": _player.grid_pos.x, "y": _player.grid_pos.y},
 			"facing":    _dir_to_str(_player.facing),
 			"hp":        _player.hp,
-			"condition": _condition(_player)
+			"condition": _player.get_condition()
 		})
 
 	# 現在のエリアID（視界システム用）
@@ -388,15 +388,6 @@ func _is_queue_low() -> bool:
 		if (_queues.get(enemy.name, []) as Array).size() <= QUEUE_REFILL_THRESHOLD:
 			return true
 	return false
-
-
-func _condition(c: Character) -> String:
-	var ratio := float(c.hp) / float(c.max_hp)
-	if ratio > 0.6:
-		return "healthy"
-	elif ratio > 0.3:
-		return "wounded"
-	return "critical"
 
 
 func _dir_to_str(dir: Character.Direction) -> String:

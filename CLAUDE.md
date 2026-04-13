@@ -899,6 +899,7 @@ rank値: C=0, B=1, A=2, S=3
 
 ## 敵キャラクターのステータス直接参照の禁止
 - 敵キャラクターの正確なステータス（hp, max_hp, power, skill 等）をAIの判断ロジックで直接参照してはならない
+  - 参照してよい情報：ランク、クラス（種族）、condition（状態ラベル）、位置、向き、is_alive、is_flying、is_undead など外見で判断できる情報
   - 理由：ゲーム仕様上、敵のステータスは不可視。将来的に情報制限を導入する前提で設計する
   - HP の推定は状態ラベル（condition: healthy/wounded/critical）経由で行う
   - 戦力評価は `_evaluate_party_strength_for()` を使う

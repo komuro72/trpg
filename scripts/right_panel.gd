@@ -254,9 +254,6 @@ func _hp_modulate(c: Character) -> Color:
 		return Color.WHITE.lerp(Color(1.0, 0.15, 0.15), pulse)
 
 
-## 廃止: Character.get_condition() に統一済み
-
-
 func _rank_color(rank: String) -> Color:
 	match rank:
 		"S", "A": return Color(1.0, 0.30, 0.30)

@@ -3744,9 +3744,10 @@ HP充足率 = min(1.0, (合計現HP + 合計HPポーション回復量) / 合計
 | `"wounded"` | 35%以上75%未満 | `CONDITION_WOUNDED_THRESHOLD = 0.35` |
 | `"critical"` | 35%未満 | — |
 
-旧実装（`_condition()` ローカル関数 × 4箇所コピペ、閾値不統一）を `Character.get_condition()` に統一。
-- `left_panel.gd` / `right_panel.gd` / `dialogue_window.gd`: `c.get_condition()` に置き換え
-- `enemy_ai.gd` / `hud.gd`: 旧コード（未使用）のため変更なし
+旧実装（`_condition()` ローカル関数 × 5箇所コピペ、閾値不統一）を `Character.get_condition()` に統一。
+全5箇所の `_condition()` 関数を削除し `get_condition()` 呼び出しに置き換え済み:
+- `left_panel.gd` / `right_panel.gd` / `dialogue_window.gd`: UI表示で使用
+- `enemy_ai.gd` / `hud.gd`: 旧コード（未使用だが整合性のため統一）
 
 ### HP% 推定関数
 
