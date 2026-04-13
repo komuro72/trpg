@@ -537,3 +537,7 @@
   - 撤退後に SAFE に戻ると EXPLORE に復帰し、目標フロアを再計算
   - UnitAI に `_combat_situation` フィールドを追加（receive_order 経由で保存）
   - EnemyLeaderAI には適用しない（種族固有 AI の既存 FLEE 判断を維持）
+
+### バグ修正: item_pickup=passive でもアイテムを拾いに行かない
+- 原因: アイテム取得ナビゲーションが `Strategy.WAIT` のときのみ有効だった。敵がいる部屋では `Strategy.ATTACK` になるため、敵全滅後もすぐに拾いに行けなかった
+- 修正: 判定条件を `Strategy.WAIT` → `_is_combat_safe()`（戦況 SAFE = 同エリアに敵なし）に変更。戦闘終了後に即座にアイテム取得ナビが有効になる

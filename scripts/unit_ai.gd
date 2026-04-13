@@ -163,9 +163,8 @@ func receive_order(order: Dictionary) -> void:
 	var is_mid_move := _state == _State.MOVING
 	# アイテム取得優先チェック（早期リターン前）
 	# follow 等で隊形キューが積まれていてもアイテムが近くにあれば優先してナビゲーション開始
-	# WAIT 策略のみ（ATTACK / FLEE / GUARD_ROOM 中はアイテムより戦闘・逃走を優先する）
-	# ※ EXPLORE 策略は PartyLeaderAI が WAIT に変換して渡すため、WAIT チェックでカバー済み
-	if effective_strategy == Strategy.WAIT and not is_mid_move and _item_pickup != "avoid":
+	# 戦況が SAFE（同エリアに敵なし）のときのみ（戦闘中・撤退中はアイテムより戦闘を優先する）
+	if _is_combat_safe() and not is_mid_move and _item_pickup != "avoid":
 		var item_pos := _find_item_pickup_target()
 		if item_pos != Vector2i(-1, -1) and item_pos != _member.grid_pos:
 			_strategy = effective_strategy
@@ -571,9 +570,8 @@ func _generate_queue(strategy: Strategy, target: Character) -> Array:
 	if not buff_q.is_empty():
 		return buff_q
 
-	# アイテム取得ナビゲーション（WAIT のみ。ATTACK/FLEE/GUARD_ROOM 時は行わない）
-	# ※ EXPLORE 策略は PartyLeaderAI が WAIT に変換して渡すため、WAIT チェックでカバー済み
-	if strategy == Strategy.WAIT:
+	# アイテム取得ナビゲーション（戦況 SAFE のときのみ。戦闘中・撤退中は行わない）
+	if _is_combat_safe():
 		var item_pos := _find_item_pickup_target()
 		if item_pos != Vector2i(-1, -1) and item_pos != _member.grid_pos:
 			return [{"action": "move_to_explore", "goal": item_pos}]
@@ -741,6 +739,13 @@ func _generate_guard_room_queue() -> Array:
 
 ## フロアアイテム辞書の参照を設定する（game_map から一度だけ呼ばれる）
 ## Dictionary は参照型なので、以降の追加・削除が自動的に反映される
+## 戦況が SAFE（同エリアに敵なし）かどうかを返す
+func _is_combat_safe() -> bool:
+	var sit: int = _combat_situation.get("situation",
+		int(GlobalConstants.CombatSituation.SAFE)) as int
+	return sit == int(GlobalConstants.CombatSituation.SAFE)
+
+
 func set_floor_items(items: Dictionary) -> void:
 	_all_floor_items = items
 

@@ -3805,7 +3805,10 @@ ratio = 自軍戦力 / 敵戦力
 - `notify_situation_changed()`: メンバー死亡時等に即時再評価
 
 結果は `_assign_orders()` → `receive_order()` の `"combat_situation"` フィールドに含めて各 UnitAI に伝達。
-UnitAI は `_combat_situation` フィールドに保存する（将来の特殊攻撃 AI 接続で参照予定）。
+UnitAI は `_combat_situation` フィールドに保存し、以下で参照する:
+- `_is_combat_safe()`: 戦況が SAFE かどうかを返すヘルパー
+- アイテム取得ナビゲーション: `_is_combat_safe()` が true のときのみ `item_pickup` 指示に従って拾いに行く（旧: `Strategy.WAIT` のときのみ）
+- 将来: 特殊攻撃の AI 接続で DISADVANTAGE 時の積極使用判断に参照予定
 
 ### NpcLeaderAI の撤退ロジック
 
