@@ -1935,7 +1935,7 @@ match char_id:
     "goblin"    → GoblinLeaderAI
     "hobgoblin" → HobgoblinLeaderAI
     "wolf"      → WolfLeaderAI
-    _           → DefaultLeaderAI（goblin-archer, goblin-mage, zombie, harpy, salamander, dark-knight, dark-mage, dark-priest）
+    _           → EnemyLeaderAI（goblin-archer, goblin-mage, zombie, harpy, salamander, dark-knight, dark-mage, dark-priest）
 ```
 
 ### dungeon_handcrafted.json 更新
@@ -3652,6 +3652,85 @@ static func _apply_attack_preset_to_member(ch: Character) -> void:
 ### NPCによる敵アクティブ化修正（前セッション）
 - `vision_system._process()`：NPC エリアの `is_area_visited()` チェックを廃止
 - 未訪問部屋に NPC が入ったとき `friendly_areas` に加わり、敵AIが正しく起動する
+
+---
+
+## PartyManager 統合リファクタリング ✅ 完了
+
+### 概要
+NpcManager・EnemyManager を廃止し、PartyManager に統合。同時に hero_manager を NpcManager から PartyManager に切り替え、PartyLeaderPlayer を接続した。
+
+### 変更内容
+
+#### PartyManager（`party_manager.gd`）
+- `party_type` プロパティ（`"enemy"` / `"npc"` / `"player"`）を追加
+- `setup()` を `party_type` で分岐:
+  - `"enemy"`: `_setup_enemy()` → 敵JSON読み込みスポーン（旧 PartyManager.setup のまま）
+  - `"npc"`: `_setup_npc()` → CharacterGenerator でランダム生成＋初期装備付与（旧 NpcManager.setup を移植）
+- `_spawn_enemy_member()`: 旧 `_spawn_member()` をリネーム
+- `_spawn_npc_member()`: 旧 NpcManager._spawn_member() を移植
+- `_create_leader_ai()` を `party_type` で分岐:
+  - `"player"` → `PartyLeaderPlayer.new()`
+  - `"npc"` → `NpcLeaderAI.new()`
+  - `"enemy"` → `_create_enemy_leader_ai()` で種族別分岐
+- `set_enemy_list()` / `_enemy_list`: NpcManager から移植。NpcLeaderAI / PartyLeaderPlayer 両方に転送
+- `_apply_attack_preset_to_member()`: NpcManager から移植（static メソッド）
+
+#### hero_manager（`game_map.gd`）
+- 型を `NpcManager` → `PartyManager` に変更
+- `party_type = "player"` を設定 → `_create_leader_ai()` が `PartyLeaderPlayer` を生成
+- `suppress_floor_navigation = true` の行を削除（PartyLeaderPlayer はフロア遷移判断を持たない）
+
+#### 削除ファイル
+- `npc_manager.gd`: PartyManager に統合完了
+- `enemy_manager.gd`: 後方互換ラッパー（空クラス）を廃止
+
+#### 型参照の置き換え
+以下のファイルで `NpcManager` / `EnemyManager` の型アノテーション・キャストを `PartyManager` に変更:
+- `game_map.gd`: 変数宣言・for ループ・as キャスト（約80箇所）
+- `vision_system.gd`: `add_enemy_manager()` / `add_npc_manager()` 等の引数型
+- `right_panel.gd`: `setup()` / 描画ループ内のキャスト
+- `dialogue_trigger.gd`: シグナル引数・setup()引数・メソッド引数
+- `npc_dialogue_window.gd`: `show_dialogue()` / `show_party_full()` の引数
+- `dialogue_window.gd`: 変数型・メソッド引数
+- `debug_window.gd`: 描画ループ内のキャスト
+- `base_ai.gd` / `enemy_ai.gd`: コメントのみ
+
+---
+
+## パーティー戦力評価メソッド ✅ 完了
+
+### 概要
+PartyLeader に `_evaluate_party_strength()` を追加し、NpcLeaderAI の適正フロア算出で使用。
+
+### `_evaluate_party_strength()` （`party_leader.gd`）
+```
+戦力値 = ランク和 × HP充足率
+ランク和 = 生存メンバー全員の RANK_VALUES（C=3, B=4, A=5, S=6）の合計
+HP充足率 = min(1.0, (合計現HP + 合計HPポーション回復量) / 合計max_hp)
+```
+- HPポーションのみ計算に含める（MP/SPポーションは含めない）
+- 生存メンバーが0人の場合は 0.0 を返す
+- `_calc_total_potion_hp()` ヘルパーで HP ポーション回復量を合算
+
+### `RANK_VALUES` の移動
+`NpcLeaderAI` から `PartyLeader` 基底クラスに移動。全サブクラスから参照可能。
+
+### NpcLeaderAI `_get_target_floor()` の変更
+- 旧: ランク和のみで適正フロアを算出 + HP最低値チェック + MP/SPチェック
+- 新: `_evaluate_party_strength()` の戻り値で適正フロアを算出 + MP/SPチェック
+- HP チェックは `_evaluate_party_strength()` に統合（HP充足率がランク和に乗算されるため別途チェック不要）
+- MP/SP チェック（ポーション込み平均充足率 < NPC_ENERGY_THRESHOLD → 目標フロア-1）は従来通り
+- `_calc_recoverable_hp()` を削除（`_calc_total_potion_hp()` に統合済み）
+
+### FLOOR_RANK 閾値の検証
+`{0: 0, 1: 8, 2: 13, 3: 18, 4: 24}` — 調整不要。
+- Cランク3人HP満タン: 戦力9.0 → F1適正（≥8）
+- Bランク4人HP満タン: 戦力16.0 → F2適正（≥13）
+- Bランク4人HP半分: 戦力8.0 → F1適正（F2の13に届かず自動降格）
+
+### `_evaluate_combat_situation()` への準備
+TODOコメントを追加: 自軍戦力・敵戦力の比較ロジック・receive_order 連携
 
 ---
 

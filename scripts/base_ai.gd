@@ -37,7 +37,7 @@ var _targets: Dictionary = {}         # enemy_id -> Character (nullable)
 var _path_methods: Dictionary = {}    # enemy_id -> PathMethod
 
 
-## アクティブ化後に EnemyManager から呼び出す
+## アクティブ化後に PartyManager から呼び出す
 func setup(enemies: Array[Character], player: Character, map_data: MapData) -> void:
 	_enemies       = enemies
 	_all_enemies   = enemies  # set_all_enemies() で全パーティー分に上書きされる
@@ -47,7 +47,7 @@ func setup(enemies: Array[Character], player: Character, map_data: MapData) -> v
 
 
 ## 他パーティーも含む全敵リストを設定する（_is_passable での占有チェック用）
-## EnemyManager から全マネージャー生成後に呼び出される
+## PartyManager から全マネージャー生成後に呼び出される
 func set_all_enemies(all_enemies: Array[Character]) -> void:
 	_all_enemies = all_enemies
 

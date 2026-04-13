@@ -10,22 +10,22 @@ extends Node
 ## NPC が自発的に話しかけたいか（wants_to_initiate）も判断して通知する。
 
 ## 会話開始を要求するシグナル（npc_initiates: NPC が先に話しかけてきた場合 true）
-signal dialogue_requested(npc_manager: NpcManager, npc_initiates: bool)
+signal dialogue_requested(npc_manager: PartyManager, npc_initiates: bool)
 ## 会話が条件不成立で開始できなかったときに発火する
 ## reason: "enemy_in_area"（NPC のエリアに敵がいる）
 ##         "member_in_combat"（NPC の仲間が戦闘中のエリアにいる）
 signal dialogue_blocked(member: Character, reason: String)
 
 var _player:          Character
-var _npc_managers:    Array[NpcManager]   = []
-var _enemy_managers:  Array[EnemyManager] = []
+var _npc_managers:    Array[PartyManager]   = []
+var _enemy_managers:  Array[PartyManager] = []
 var _vision_system:   VisionSystem
 var _map_data:        MapData
 var _dialogue_active: bool = false
 
 
-func setup(player: Character, npc_managers: Array[NpcManager],
-		enemy_managers: Array[EnemyManager], vision_system: VisionSystem,
+func setup(player: Character, npc_managers: Array[PartyManager],
+		enemy_managers: Array[PartyManager], vision_system: VisionSystem,
 		map_data: MapData) -> void:
 	_player         = player
 	_npc_managers   = npc_managers
@@ -43,7 +43,7 @@ func set_dialogue_active(active: bool) -> void:
 func is_area_enemy_free(current_area: String) -> bool:
 	if current_area.is_empty():
 		return false
-	for em: EnemyManager in _enemy_managers:
+	for em: PartyManager in _enemy_managers:
 		if not is_instance_valid(em):
 			continue
 		for enemy: Character in em.get_enemies():
@@ -68,7 +68,7 @@ func _process(_delta: float) -> void:
 	if not is_area_enemy_free(current_area):
 		return
 
-	for nm: NpcManager in _npc_managers:
+	for nm: PartyManager in _npc_managers:
 		if not is_instance_valid(nm):
 			continue
 		if not _has_adjacent_visible_member(nm):
@@ -93,8 +93,8 @@ func try_trigger_for_member(member: Character) -> void:
 		return
 
 	# 話しかけた NPC の所属マネージャーを探す
-	var target_nm: NpcManager = null
-	for nm: NpcManager in _npc_managers:
+	var target_nm: PartyManager = null
+	for nm: PartyManager in _npc_managers:
 		if not is_instance_valid(nm):
 			continue
 		if nm.get_members().has(member):
@@ -124,8 +124,8 @@ func try_trigger_for_member(member: Character) -> void:
 	dialogue_requested.emit(target_nm, npc_initiates)
 
 
-## NpcManager の生存・可視メンバーがプレイヤーに隣接しているか確認する
-func _has_adjacent_visible_member(nm: NpcManager) -> bool:
+## PartyManager の生存・可視メンバーがプレイヤーに隣接しているか確認する
+func _has_adjacent_visible_member(nm: PartyManager) -> bool:
 	for member: Character in nm.get_members():
 		if not is_instance_valid(member) or not member.visible or member.hp <= 0:
 			continue
@@ -136,7 +136,7 @@ func _has_adjacent_visible_member(nm: NpcManager) -> bool:
 
 
 ## NpcLeaderAI が自発的に会話を開始したいか確認する
-func _npc_wants_to_initiate(nm: NpcManager) -> bool:
+func _npc_wants_to_initiate(nm: PartyManager) -> bool:
 	var leader_ai := nm.enemy_ai
 	if leader_ai == null or not is_instance_valid(leader_ai):
 		return false

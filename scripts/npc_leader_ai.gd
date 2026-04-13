@@ -24,8 +24,7 @@ const AUTO_ITEM_INTERVAL: float = 2.0
 # --------------------------------------------------------------------------
 # 合流承諾判定スコア定数（調整しやすいよう定数化）
 # --------------------------------------------------------------------------
-## ランク文字列 → スコア数値の変換テーブル（C=3, B=4, A=5, S=6）
-const RANK_VALUES: Dictionary = { "C": 3, "B": 4, "A": 5, "S": 6 }
+## RANK_VALUES は PartyLeader 基底クラスに定義（C=3, B=4, A=5, S=6）
 ## ランク和への乗数
 const RANK_SCORE_PER_RANK: float = 10.0
 ## 共闘フラグによるボーナス
@@ -46,12 +45,11 @@ var has_been_healed: bool = false
 var _prev_target_floor: int = -1
 
 ## trueにするとフロア遷移スコア判断をスキップして常に "explore" を返す
-## hero パーティーのマネージャー（_hero_manager）など、
-## プレイヤーが階段を手動操作するケースで使用する
+## NPC パーティーがフロア遷移を自律判断しないようにするフラグ
 var suppress_floor_navigation: bool = false
 
 
-## 攻撃対象とする敵リストを設定する（NpcManager が初期化後に呼ぶ）
+## 攻撃対象とする敵リストを設定する（PartyManager が初期化後に呼ぶ）
 func set_enemy_list(enemies: Array[Character]) -> void:
 	_enemy_list = enemies
 
@@ -89,13 +87,11 @@ func _evaluate_party_strategy() -> Strategy:
 	return Strategy.EXPLORE
 
 
-## 現在の状態に基づく目標フロアを返す（HP/Energy 補正込み）
-## rank_sum = 全メンバーの RANK_VALUES（C=3, B=4, A=5, S=6）の和
-## ① ランク和スコアで適正フロアを決定
-## ② HP最低値・エネルギー平均値が閾値を下回る場合は適正フロア-1（休息・浅層退避）
+## 現在の状態に基づく目標フロアを返す（戦力値 + MP/SP 補正）
+## 戦力値 = ランク和 × HP充足率（_evaluate_party_strength()）
+## MP/SP 平均充足率が NPC_ENERGY_THRESHOLD 未満の場合は適正フロア - 1
 ## suppress_floor_navigation = true またはメンバーなしの場合は現在フロアをそのまま返す
 func _get_target_floor() -> int:
-	# hero パーティーマネージャー等ではフロア遷移判断を行わない
 	var current_floor := 0
 	for m: Character in _party_members:
 		if is_instance_valid(m):
@@ -104,43 +100,24 @@ func _get_target_floor() -> int:
 	if suppress_floor_navigation or _party_members.is_empty():
 		return current_floor
 
-	# --- 1. ランク和スコア（全メンバーの RANK_VALUES 合計） ---
-	var rank_sum := 0
-	var count := 0
-	for m: Character in _party_members:
-		if not is_instance_valid(m):
-			continue
-		if m.character_data != null:
-			rank_sum += RANK_VALUES.get(m.character_data.rank, 3) as int
-		count += 1
-	if count == 0:
+	# --- 1. 戦力値（ランク和 × HP充足率） ---
+	var strength := _evaluate_party_strength()
+	if strength <= 0.0:
 		return current_floor
 
-	# --- 2. ランク和スコアで適正フロアを決定 ---
+	# --- 2. 戦力値で適正フロアを決定 ---
 	var floor_count: int = GlobalConstants.FLOOR_RANK.size()
 	var appropriate_floor := current_floor
 	if current_floor + 1 < floor_count:
 		var next_rank := GlobalConstants.FLOOR_RANK.get(current_floor + 1, 9999) as int
-		if rank_sum >= next_rank:
+		if strength >= float(next_rank):
 			appropriate_floor = current_floor + 1
 	if appropriate_floor == current_floor and current_floor > 0:
 		var this_rank := GlobalConstants.FLOOR_RANK.get(current_floor, 0) as int
-		if rank_sum < this_rank / 2:
+		if strength < float(this_rank) / 2.0:
 			appropriate_floor = current_floor - 1
 
-	# --- 3. HP チェック（最低値） ---
-	var hp_fail := false
-	var hp_min_ratio := 1.0
-	for m: Character in _party_members:
-		if not is_instance_valid(m) or m.max_hp <= 0:
-			continue
-		var recoverable := float(_calc_recoverable_hp(m))
-		var ratio := clampf((float(m.hp) + recoverable) / float(m.max_hp), 0.0, 1.0)
-		hp_min_ratio = minf(hp_min_ratio, ratio)
-	if hp_min_ratio < GlobalConstants.NPC_HP_THRESHOLD:
-		hp_fail = true
-
-	# --- 4. エネルギー（MP/SP）チェック（平均値） ---
+	# --- 3. MP/SP 充足率チェック（ポーション込み・平均値） ---
 	var energy_fail := false
 	var energy_sum := 0.0
 	var energy_count := 0
@@ -157,25 +134,24 @@ func _get_target_floor() -> int:
 	if energy_count > 0 and energy_sum / float(energy_count) < GlobalConstants.NPC_ENERGY_THRESHOLD:
 		energy_fail = true
 
-	# --- 5. 目標フロア決定（HP/Energy が低ければ-1） ---
+	# --- 4. 目標フロア決定（MP/SP が低ければ-1） ---
 	var target_floor := appropriate_floor
-	if hp_fail or energy_fail:
+	if energy_fail:
 		target_floor = maxi(0, appropriate_floor - 1)
 
-	# --- 6. デバッグログ（初回 or 目標フロア変化時） ---
+	# --- 5. デバッグログ（初回 or 目標フロア変化時） ---
 	if _prev_target_floor != target_floor:
 		var leader_name := _get_leader_name()
 		var next_rank  := GlobalConstants.FLOOR_RANK.get(current_floor + 1, 9999) as int
-		var half_rank  := (GlobalConstants.FLOOR_RANK.get(current_floor, 0) as int) / 2
-		var score_part := "ランク和%d（次F%d基準%d / 退避%d）" % [
-			rank_sum, current_floor + 1, next_rank, half_rank]
-		var hp_part := "HP最低%.0f%%%s" % [hp_min_ratio * 100.0, "×" if hp_fail else "○"]
+		var half_rank  := floori(float(GlobalConstants.FLOOR_RANK.get(current_floor, 0) as int) / 2.0)
+		var score_part := "戦力%.1f（次F%d基準%d / 退避%d）" % [
+			strength, current_floor + 1, next_rank, half_rank]
 		var en_avg  := (energy_sum / float(energy_count) * 100.0) if energy_count > 0 else 100.0
 		var en_part := "En平均%.0f%%%s" % [en_avg, "×" if energy_fail else "○"]
-		var adj_part := " →補正-1" if (hp_fail or energy_fail) else ""
+		var adj_part := " →補正-1" if energy_fail else ""
 		MessageLog.add_ai(
-			"[NPCフロア判断] %s: %s / %s / %s / 適正F%d%s → 目標F%d" % [
-				leader_name, score_part, hp_part, en_part,
+			"[NPCフロア判断] %s: %s / %s / 適正F%d%s → 目標F%d" % [
+				leader_name, score_part, en_part,
 				appropriate_floor, adj_part, target_floor]
 		)
 		_prev_target_floor = target_floor
@@ -198,20 +174,6 @@ func _get_explore_move_policy() -> String:
 	if target_floor < current_floor:
 		return "stairs_up"
 	return "explore"
-
-
-## インベントリ内の HP 回復ポーションで回復できる HP 量を計算する
-func _calc_recoverable_hp(member: Character) -> int:
-	if member.character_data == null:
-		return 0
-	var total := 0
-	for item: Variant in member.character_data.inventory:
-		var it := item as Dictionary
-		if it == null:
-			continue
-		var eff := it.get("effect", {}) as Dictionary
-		total += eff.get("restore_hp", 0) as int
-	return total
 
 
 ## インベントリ内のポーションで回復できるエネルギー（MP または SP）量を計算する
@@ -311,7 +273,7 @@ func _auto_equip_members() -> void:
 	# 装備可能な item_type ごとに未装備品を収集
 	var pool_by_type: Dictionary = {}  # item_type -> Array[{item, owner_data}]
 	for mv: Variant in _party_members:
-		if not is_instance_valid(mv as Object):
+		if not is_instance_valid(mv):
 			continue
 		var member := mv as Character
 		if member == null or member.character_data == null:

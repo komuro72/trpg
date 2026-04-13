@@ -79,7 +79,7 @@ func _input(event: InputEvent) -> void:
 func _navigate_selection(dir: int) -> void:
 	# freed なエントリを除去
 	_leader_list = _leader_list.filter(func(c: Variant) -> bool:
-		return c != null and is_instance_valid(c as Object))
+		return c != null and is_instance_valid(c))
 	if _leader_list.is_empty():
 		return
 	var idx: int = _leader_list.find(_selected_leader)
@@ -194,7 +194,7 @@ func _draw_party_state(font: Font, x: float, y_start: float,
 	for nm_v: Variant in nms:
 		if cy >= bottom:
 			break
-		var nm := nm_v as NpcManager
+		var nm := nm_v as PartyManager
 		if nm == null or not is_instance_valid(nm):
 			continue
 		cy = _draw_party_block(font, nm, "NPC", Color(0.45, 1.0, 0.55),
@@ -219,7 +219,7 @@ func _build_leader_list() -> Array:
 		if leader != null:
 			list.append(leader)
 	for nm_v: Variant in nms:
-		var nm := nm_v as NpcManager
+		var nm := nm_v as PartyManager
 		if nm == null or not is_instance_valid(nm):
 			continue
 		var leader := _get_any_leader(nm.get_members())

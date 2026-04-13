@@ -80,7 +80,7 @@ func _draw_content(px: int, pw: int, clip_y: float, gs: int) -> void:
 	# 現在エリアの可視敵リスト（最大 MAX_ROWS 体）
 	var visible_enemies: Array[Character] = []
 	for em_var: Variant in _enemy_managers:
-		var em := em_var as EnemyManager
+		var em := em_var as PartyManager
 		if not is_instance_valid(em):
 			continue
 		for enemy: Character in em.get_enemies():
@@ -98,7 +98,7 @@ func _draw_content(px: int, pw: int, clip_y: float, gs: int) -> void:
 	# 現在エリアの同室 NPC（未加入・可視）
 	var visible_npcs: Array[Character] = []
 	for nm_var: Variant in _npc_managers:
-		var nm := nm_var as NpcManager
+		var nm := nm_var as PartyManager
 		if not is_instance_valid(nm):
 			continue
 		for npc: Character in nm.get_members():

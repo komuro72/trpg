@@ -69,19 +69,19 @@ func set_party(party: Party) -> void:
 	_party = party
 
 
-func add_enemy_manager(em: EnemyManager) -> void:
+func add_enemy_manager(em: PartyManager) -> void:
 	_enemy_managers.append(em)
 
 
-func remove_enemy_manager(em: EnemyManager) -> void:
+func remove_enemy_manager(em: PartyManager) -> void:
 	_enemy_managers.erase(em)
 
 
-func add_npc_manager(nm: NpcManager) -> void:
+func add_npc_manager(nm: PartyManager) -> void:
 	_npc_managers.append(nm)
 
 
-func remove_npc_manager(nm: NpcManager) -> void:
+func remove_npc_manager(nm: PartyManager) -> void:
 	_npc_managers.erase(nm)
 
 
@@ -180,7 +180,7 @@ func _process(_delta: float) -> void:
 				if not a.is_empty():
 					friendly_areas[a] = true
 	for nm_var: Variant in _npc_managers:
-		var nm := nm_var as NpcManager
+		var nm := nm_var as PartyManager
 		if is_instance_valid(nm):
 			for member: Character in nm.get_members():
 				if is_instance_valid(member):
@@ -197,11 +197,11 @@ func _process(_delta: float) -> void:
 	if _current_floor_index < _floor_visited.size():
 		visited = (_floor_visited[_current_floor_index] as Dictionary).get(PLAYER_PARTY_ID, {}) as Dictionary
 	for em_var: Variant in _enemy_managers:
-		var em := em_var as EnemyManager
+		var em := em_var as PartyManager
 		if is_instance_valid(em):
 			em.update_visibility(_current_area, _map_data, visited, friendly_areas, vis_floor, debug_show_all)
 	for nm_var: Variant in _npc_managers:
-		var nm := nm_var as NpcManager
+		var nm := nm_var as PartyManager
 		if is_instance_valid(nm):
 			nm.update_visibility(_current_area, _map_data, visited, {}, vis_floor, debug_show_all)
 

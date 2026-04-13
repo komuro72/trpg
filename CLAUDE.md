@@ -234,25 +234,119 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 - Partyクラスを最初から用意し、将来の複数パーティー連携に備える
 - 仕様書はClaude Codeが作成・更新、人間が確認する運用
 
-## AIアーキテクチャ（2層構造）
+## パーティーシステムのアーキテクチャ
 
-### リーダーAI（パーティー単位）
-- パーティー全体の戦略を決定（攻撃/防衛/撤退など）
-- 各メンバーに指示を出す（攻撃対象・ポジション・行動方針）
-- リーダーのキャラ種やクラスによって戦略傾向が異なる
-- 将来的にプレイヤーの指示システム（Phase 7）と同じインターフェースになる
+### 全体構造
 
-### 個体AI（キャラ単位）
-- リーダーの指示を受けて実際の行動を決定
-- 従順度パラメータで指示への忠実さが変わる（ゾンビ=低、ゴブリン=中、人間NPC=高）
-- BaseAIの既存機能（ステートマシン・A*・キュー管理）をそのまま活用
-- クラスやキャラ種に応じた行動（射程維持、逃走条件など）
+```
+PartyManager（パーティー管理。全パーティー種別で共通）
+  ├── PartyLeader（リーダー意思決定の基底クラス）
+  │     ├── PartyLeaderPlayer（プレイヤー操作パーティー用）
+  │     └── PartyLeaderAI（AI自動判断）
+  │           ├── EnemyLeaderAI（敵共通のデフォルト行動）
+  │           │     ├── GoblinLeaderAI（種族固有の差分のみオーバーライド）
+  │           │     ├── WolfLeaderAI
+  │           │     ├── HobgoblinLeaderAI
+  │           │     └── （将来の種族追加時もEnemyLeaderAIを継承）
+  │           └── NpcLeaderAI（NPC固有のロジック）
+  └── Character（味方・NPC・敵の全キャラクター共通）
+        ├── PlayerController（プレイヤー操作時）
+        └── UnitAI（AI操作時の個体行動。全パーティー種別で共通）
+```
 
-### パーティーマネージャー
-- EnemyManagerの役割を汎用化（敵・NPC・プレイヤーパーティーで共通）
+### PartyManager（管理層）
+- パーティーのメンバーとリーダーを管理する
+- `party_type`（`"enemy"` / `"npc"` / `"player"`）に応じてスポーン処理と PartyLeader サブクラスを切り替える
+  - `"enemy"`: 敵JSONから読み込み → EnemyLeaderAI（種族別分岐）
+  - `"npc"`: CharacterGeneratorでランダム生成 → NpcLeaderAI
+  - `"player"`: スポーンなし（setup_adopted）→ PartyLeaderPlayer
+- game_map からのデータ（friendly_list / enemy_list / floor_items / vision_system 等）を受け取り、PartyLeader に伝達する
 - リーダー管理（初期設定またはリーダー死亡時に再選出）
 - パーティー単位の情報共有・再評価通知
-- 混成パーティー対応（異なるキャラ種が同じパーティーに混在）
+- 旧 NpcManager / EnemyManager の処理を統合済み（サブクラス不要）
+
+### PartyLeader（意思決定層の基底クラス）
+- パーティー全体の戦略を決定し、各メンバーの UnitAI に指示を伝達する
+- `_evaluate_party_strength()`: パーティーの戦力値を算出する共通メソッド（ランク和 × HP充足率。HPポーション回復量を加味）
+- `_evaluate_combat_situation()`: 戦況判断の共通ルーチン。全サブクラスで共有する。結果は `_assign_orders()` → `receive_order()` でメンバーに伝達する
+- `_evaluate_party_strategy()`: 仮想メソッド。戦略決定（ATTACK / WAIT / FLEE 等）。サブクラスがオーバーライドする
+- `_select_target_for()`: 仮想メソッド。ターゲット選択。サブクラスがオーバーライドする
+- `_assign_orders()`: 戦略に応じてメンバーの UnitAI に `receive_order()` で指示を伝達する（共通ロジック）
+- `_apply_range_check()`: 縄張り・帰還判定（敵パーティーのみ適用。友好パーティーはスキップ）
+- UnitAI の生成・管理（`_unit_ais` 辞書）
+
+### PartyLeaderPlayer（プレイヤー操作パーティー用）
+- PartyLeader を継承する。プレイヤーの指示（OrderWindow）を戦略・ターゲット選択に変換する
+- `_evaluate_party_strategy()`: `global_orders.battle_policy` を戦略に変換する
+  - `"attack"` → ATTACK、`"defense"` → WAIT、`"retreat"` → FLEE
+- `_select_target_for()`: `global_orders.target` 設定に従う（nearest / weakest / same_as_leader / support）
+- プレイヤーの指示を覆さない（戦況判断はメンバーAIの条件評価のみに使う）
+- `_evaluate_combat_situation()` の結果を `receive_order()` でメンバーに渡す（AI操作メンバーの特殊攻撃判断等に使用）
+
+### PartyLeaderAI（AI自動判断の基底クラス）
+- PartyLeader を継承する。AI がパーティー全体の戦略を自動で判断する
+- `_evaluate_party_strategy()`: デフォルト実装（WAIT を返す）
+- 再評価タイマーによる定期的な戦略再評価（1.5秒間隔）
+
+### EnemyLeaderAI（敵のデフォルト行動）
+- PartyLeaderAI を継承する
+- `_evaluate_party_strategy()` のデフォルト実装:
+  - friendly（プレイヤー・NPC）が生存している → ATTACK
+  - friendly がいない → WAIT
+  - FLEE なし（デフォルトでは逃げない）
+- `_select_target_for()` のデフォルト実装:
+  - 最近傍の friendly を返す
+- 種族固有の行動が不要な敵はEnemyLeaderAIをそのまま使用する
+
+### 種族固有リーダーAI（EnemyLeaderAIを継承）
+- EnemyLeaderAIを継承し、種族の特徴に応じた差分のみオーバーライドする
+- 敵キャラクター一覧の自然言語の特徴（「臆病で逃げる」「狂暴で攻撃的」等）に基づいてClaude Codeが実装する
+- 新しい敵種を追加する場合もEnemyLeaderAIを継承し、差分だけ実装する
+
+### NpcLeaderAI（NPC固有のロジック）
+- PartyLeaderAI を継承する
+- 自律的な探索・フロア移動判断・アイテム自動管理を行う
+
+### UnitAI（個体行動層）
+- リーダーからの指示（`receive_order()`）に従って行動する
+- 戦況の判断は自分では行わず、`receive_order()` で受け取った戦況判断結果を参照する
+- ステートマシン・A*経路探索・アクションキュー管理
+- クラスやキャラ種に応じた行動（射程維持、逃走条件など）
+- 全パーティー種別で同じ UnitAI を使用する
+
+### データの流れ
+
+```
+game_map
+  └── PartyManager
+        ├── PartyLeader（Player または AI）
+        │     ├── _evaluate_party_strength()      ← 戦力評価（共通）
+        │     ├── _evaluate_combat_situation()  ← 戦況判断（共通・スタブ）
+        │     ├── _evaluate_party_strategy()    ← 戦略決定（サブクラス固有）
+        │     └── _assign_orders()              ← 指示伝達（共通）
+        │           └── UnitAI.receive_order({
+        │                 strategy, target, combat, move,
+        │                 battle_formation, leader,
+        │                 combat_situation,    ← 戦況判断結果（将来追加）
+        │                 ...
+        │               })
+        └── Character
+              ├── PlayerController（プレイヤー操作時）
+              └── UnitAI（AI操作時。receive_order の内容に従って行動）
+```
+
+### 実装状況
+
+| クラス | ファイル | 状態 |
+|--------|---------|------|
+| PartyManager | `party_manager.gd` | ✅ 実装済み。party_type で敵/NPC/プレイヤーを統合管理。旧 NpcManager / EnemyManager を統合済み |
+| PartyLeader | `party_leader.gd` | ✅ 実装済み。旧 PartyLeaderAI から共通ロジックを抽出 |
+| PartyLeaderAI | `party_leader_ai.gd` | ✅ 実装済み。extends PartyLeader に変更済み |
+| EnemyLeaderAI | `enemy_leader_ai.gd` | ✅ 実装済み。extends PartyLeaderAI |
+| 種族固有AI | `goblin_leader_ai.gd` 等 | ✅ 実装済み。extends EnemyLeaderAI |
+| NpcLeaderAI | `npc_leader_ai.gd` | ✅ 実装済み。extends PartyLeaderAI |
+| PartyLeaderPlayer | `party_leader_player.gd` | ✅ 実装済み。hero_manager に接続済み（party_type="player" で PartyLeaderPlayer を生成） |
+| `_evaluate_combat_situation()` | `party_leader.gd` | ⚠️ 空のスタブのみ。中身は将来実装 |
 
 ## ゲームデザイン方針
 - レベルアップなし。装備と仲間の強化が成長の主軸
@@ -353,8 +447,21 @@ rank値: C=0, B=1, A=2, S=3
 - 加入形態は2種類：プレイヤーがリーダー維持で相手を引き入れる／相手パーティーのリーダーに自分が加わる
 
 ## ドキュメント運用
-- CLAUDE.md：人間・AI共通の概要・方針・フェーズ進捗。ここでの相談をもとに更新する
+- CLAUDE.md：人間・AI共通の概要・方針・ゲーム仕様・フェーズ進捗サマリー。ここでの相談をもとに更新する
 - docs/spec.md：AI管理用の詳細仕様・実装メモ。Claude Codeが作成・更新する
+- docs/history.md：変更履歴・バグ修正記録。バグの原因と修正内容、設計変更の経緯、廃止した仕様の記録を残す
+
+### CLAUDE.md のフェーズセクション記述ルール
+- 完了済みPhaseは1〜2行のサマリーで「何を実現したか」をユーザー視点で書く（ファイル名や関数名は不要）
+- 未完了Phaseは詳細を残してよい
+- 実装の詳細（変更ファイル・関数名・内部ロジック）はspec.mdに書く
+- バグ修正の詳細・設計変更の経緯・廃止した仕様の記録はhistory.mdに書く
+
+### 新しいPhaseを完了したときの更新フロー
+1. docs/spec.md に実装詳細を記録する
+2. docs/history.md にバグ修正・設計変更・廃止仕様を記録する
+3. CLAUDE.md のフェーズセクションに1〜2行のサマリーを追記する
+4. CLAUDE.md の仕様セクション（フェーズセクション以外）に影響がある場合は該当箇所も更新する
 
 ## ツール運用
 - claude.ai（チャット）：仕様の相談・設計の議論を行う。コードの実装・ファイルの編集は行わない
@@ -362,1374 +469,76 @@ rank値: C=0, B=1, A=2, S=3
 - 仕様相談はclaude.aiで行い、確定した仕様をもとに Claude Code が CLAUDE.md を更新してから実装する
 
 ## フェーズ
-- [x] Phase 1: 主人公1人の移動・画像表示・フィールド表示
-  - [x] Phase 1-1: キャラクター基盤（移動入力・グリッド座標管理）
-  - [x] Phase 1-2: グラフィック表示（スプライト・4方向切替）
-    - 1キャラクター4枚（前・後・左・右）、512x1024px
-    - ファイル名規則：`キャラ名_front.png` など
-    - 移動方向に応じて画像切替、静止中は最後の向きを維持
-    - 向き管理：enum Direction {DOWN, UP, LEFT, RIGHT}（トップビュー基準：DOWN=画面下、UP=画面上）
-    - GRID_SIZEを定数管理、表示スケールを自動計算
-  - [x] Phase 1-3: フィールド・マップ基盤（タイルマップ・Zオーダー）
-    - タイル種類：FLOOR（床）/ WALL（壁）の2種類
-    - タイルサイズ：GRID_SIZE（64px）の正方形
-    - マップサイズ：20x15タイル
-    - マップ構造：外周がWALL、内側がすべてFLOORの四角い部屋
-    - マップデータ：0=FLOOR、1=WALLの2次元配列で管理
-    - グラフィック：当面は単色（床=グレー、壁=暗いグレー）、将来タイル画像に差し替え可能な設計
-    - キャラクターはWALLタイルに移動不可
-    - キャラクターのZオーダー：タイルより手前に表示
-  - [x] Phase 1-4: カメラ・スクロール（追従・範囲制限）
-    - カメラはデッドゾーン方式（画面の40%）
-    - デッドゾーン内はカメラ固定、超えたらブロック単位でカメラ移動
-    - なめらかスクロールはアニメーション実装時に追加予定
-    - マップ外（壁の外側）は黒で表示
-    - カメラはマップ端で止める（実装上の処理として）
-    - 視界システム・探索状態管理は将来のフェーズで追加予定
-  - [x] Phase 1-5: 統合・動作確認
-- [x] Phase 2: 戦闘基盤（HP・攻撃・当たり判定）
-  - テスト構成：味方はプレイヤー操作の主人公1人、敵はゴブリン3体（同一パーティー）
-  - 敵・味方のパーティークラス共通化は検証後に判断
-  - クリア条件は未実装（動作確認のみ）
-  - [x] Phase 2-1: キャラクターステータス基盤
-    - HP・攻撃力・防御力などの基本パラメータ
-    - キャラクターデータに自然言語の行動説明フィールドを追加
-    - 死亡処理
-  - [x] Phase 2-2: 敵の配置
-    - マップデータ（dungeon_01.json）からタイル・プレイヤー・敵の配置を読み込む
-    - 敵パーティーをパーティー単位で配置（将来の複数パーティー対応を考慮）
-    - enemy_parties の各パーティーごとに別々の EnemyManager を生成（複数パーティー対応）
-    - プレイヤーが近づいたらアクティブ化
-  - [x] Phase 2-3: ルールベースAI行動生成（LLMから変更）
-    - BaseAI（基底クラス）：ステートマシン・A*経路探索・キュー管理・定期再評価（1.5秒）
-    - GoblinAI（ゴブリン専用）：HP30%未満または仲間50%以下で逃走、それ以外は攻撃
-    - 戦略・ターゲットが変わらずキューが十分残っていれば再評価をスキップ
-    - 仲間が倒されたときに即座に再評価（notify_situation_changed）
-    - LLMClient / DungeonGenerator はコード上残存しているが現在は未使用（将来削除対象）
-    - 全パーティー合算の `_all_enemies` を BaseAI が参照し、パーティーをまたいだ敵同士の重複を防止
-    - `_find_adjacent_goal` に `_is_passable` による占有チェックを追加、A* のゴールタイル特例廃止により同一パーティー内の敵重複も解消
-  - [x] Phase 2-4: 移動・攻撃の実装
-    - 敵の移動：A*経路探索で0.4秒/タイルで移動（ターゲット追従・毎タイル再計算）
-    - 占有チェック：Character.get_occupied_tiles() で抽象化（複数マスキャラ対応済み）
-    - 敵の攻撃：ATTACKING_PRE（溜め）→ 攻撃実行 → ATTACKING_POST（硬直）
-    - プレイヤーの攻撃：スペースキーで向いている方向の隣接敵を攻撃
-    - 方向ダメージ倍率：正面1.0 / 側面1.5 / 背面2.0
-    - ステータスHUD：画面左上にプレイヤー・各敵のHP・状態をリアルタイム表示
-- [x] Phase 3: フィールド生成
-  - ダンジョン構造
-    - 現在3フロア生成（トークン制限のため。将来的に増加予定）
-    - 1フロアに5部屋程度、部屋サイズ：幅10〜20、高さ10〜20タイル
-    - 部屋は通路でつながり、フロア内で分岐あり
-    - 各部屋に敵パーティーを配置（入口部屋を除く）
-    - 現在は1フロア目（CURRENT_FLOOR=0）のみ表示。フロア遷移は Phase 7 以降
-  - ダンジョンデータの管理方針（現在の運用）
-    - Claude Code が dungeon_handcrafted.json を手作りで作成・管理する（ゲーム内LLM生成は廃止済み）
-    - データ形式：`dungeon.floors[]` の配列でフロアを記述
-      - 各フロア：`floor`番号・`entrance_room`・`rooms[]`・`corridors[]`・`stairs[]`
-      - 各部屋：`id`・`x`・`y`・`width`・`height`・`type`・`enemy_party`・`is_entrance`
-      - 通路：`from`・`to`（部屋IDで指定）
-      - 階段：`room`（部屋ID）・`direction`（down／up）
-    - タイルの実データはDungeonBuilderがGodot側で展開
-  - 起動・読み込みの仕組み
-    - 起動時は dungeon_handcrafted.json を直接読み込む
-    - F5キー：シーンを再スタート（`get_tree().reload_current_scene()`）
-    - 読み込み失敗時は dungeon_01.json にフォールバック
-  - ※ LLMClient / DungeonGenerator のコードはゲーム内に残存しているが現在は未使用（将来削除対象）
-  - 将来の拡張予定
-    - フロア数を増やす（フロアを分割して複数回生成する方法を検討。一括生成はトークン上限が課題）
-    - 階段の実装（フロア遷移）→ フロア移動が必要になったタイミングで優先実装
-    - ステータス表示の改善（現フロアのキャラのみ表示。フロア遷移実装後に対応）
-    - 部屋typeにboss・treasureを追加
-    - 混成パーティー対応（goblin×3＋hobgoblin×1など）
-    - エリア名生成の強化（dungeon_handcrafted.json の JSON 編集で対応）
-      - 敵の種類・構成を考慮した部屋名（例：ゴブリンが多い部屋→「ゴブリンの巣窟」）
-      - フロアごとにテーマを統一した命名（例：1階：廃墟、2階：地下牢、3階：祭壇）
-      - ボス部屋・宝部屋には特別な名前を付ける
-      - 通路も雰囲気に合わせた名前を生成（例：「嘆きの回廊」）
-- [x] Phase 4: 攻撃バリエーション
-  - 攻撃スロット
-    - Z/A：攻撃（クラスの attack_type で近接/遠距離を自動切替。短押し：通常攻撃 / 長押し：ため攻撃）
-    - X/B：ガード（ホールド中ガード姿勢。正面ブロック3倍・移動速度50%・向き固定）
-    - C/X：アイテム使用（Phase 10-3で実装）
-    - V/Y：特殊攻撃（将来実装）
-  - 攻撃フロー（Phase adae62c で大幅改修済み）
-    - Z/A **短押し** → PRE_DELAY（pre_delay 消化・時間進行・ターゲット候補を表示）
-    - PRE_DELAY 完了 → TARGETING（ターゲット選択・時間停止）
-    - TARGETING 中：矢印キー / LB/RB で循環選択（前方±45° を距離順、次いでそれ以外）
-    - Z/A で確定 → 射程チェック → 攻撃実行 → POST_DELAY（硬直・時間進行）
-    - X/B でノーコストキャンセル（TARGETING 中のみ）
-    - 空振りなし（発動時は必ずヒット）
-  - 飛翔体エフェクト
-    - 図形（仮素材）で直線飛行、斜め方向対応
-    - 速度：2000px/秒（移動での回避不可）
-    - 発射時に命中確定（常にヒット）
-  - [x] 飛行キャラ対応
-    - 近接攻撃：地上→飛行は不可、飛行→地上は可能、飛行同士は不可
-    - 遠距離攻撃：双方向で有効
-- [x] Phase 5: グラフィック＆UI強化
-  - グラフィック
-    - [x] トップビューへの変更（キャラ画像1枚・GRID_SIZEサイズ・回転で方向対応）
-    - [x] タイル画像の追加（タイルセット方式: {category}_{id}/floor.png 等。なければフォールバック色）
-    - [x] OBSTACLEタイル（旧RUBBLE、type=2、地上は歩行不可・飛行は通過可能）
-    - [x] CORRIDORタイル追加（type=3、歩行・飛行とも通過可能。DungeonBuilderが通路に使用）
-    - [x] モード表示：ターゲット確定=白輝き（Color(1.5,1.5,1.5)）、ヒット=HitEffect（AnimatedSprite2D）
-    - [x] ターゲット選択モード：sprite_top_ready に対応（未設定時は sprite_top をそのまま使用）
-    - [x] 攻撃モーション中（ATTACKING_PRE/POST）：is_attacking フラグで構え画像に切替（EnemyAI制御）
-    - [x] キャラ状態：HP比率で色変化（白→黄→オレンジ→赤点滅）
-    - [x] GRID_SIZE動的計算（起動時に縦11タイル固定でGRID_SIZEを決定・1920x1080基準で約98px）
-  - 視界システム
-    - [x] 部屋単位の視界管理（VisionSystem.gd）
-    - [x] 訪問済みエリア管理（パーティー単位・将来の仲間視界共有に対応）
-    - [x] 未訪問エリアのタイル・敵は非表示（背景の黒のまま）
-    - [x] 一度訪問したエリアはずっと表示（暗くしない）
-    - [x] 部屋に入った瞬間に訪問済みに更新・敵アクティブ化
-    - [x] 右パネルの敵情報は現在いるエリアのみ表示
-  - UI
-    - [x] 3カラムレイアウト（左パネル=味方・中央=フィールド・右パネル=敵）
-    - [x] 左パネル（LeftPanel.gd）：フェイスアイコン・名前・HPバー・MPバー・状態
-      - フェイスアイコンは face.png（なければ front.png）を TextureRect ノードで表示
-    - [x] 右パネル（RightPanel.gd）：可視敵の種類・数・ランク（ランク色分け）
-    - [x] ~~AIデバッグパネル（RightPanel下半分）~~：Phase 10-2準備で廃止。代わりにDebugWindowへ移行（F1でトグル）
-    - [x] メッセージウィンドウ（MessageWindow.gd）：フィールド画面下部に5行固定表示。MessageLog（Autoload）で共有バッファ管理。メッセージ種別（system=白/battle=オレンジ）のみ表示。combat/aiメッセージはDebugWindowのみに表示
-    - [x] エリア名表示（AreaNameDisplay.gd）：エリア入室時にフィールド上部中央にエリア名を常時表示（名前なしエリアは非表示）
+- [x] Phase 1: 主人公1人の移動・画像表示・フィールド表示。グリッド移動・4方向スプライト切替・タイルマップ（FLOOR/WALL）・デッドゾーン方式カメラを実装
+- [x] Phase 2: 戦闘基盤。HP等基本ステータス・敵配置（JSON読み込み）・ルールベースAI（A*経路探索・ステートマシン）・近接攻撃・方向ダメージ倍率を実装
+- [x] Phase 3: フィールド生成。手作りダンジョンJSON管理・複数部屋＋通路構造・敵パーティー配置を実装
+- [x] Phase 4: 攻撃バリエーション。PRE_DELAY→TARGETING→POST_DELAYの攻撃フロー・飛翔体エフェクト・飛行キャラ対応（melee/ranged/dive）を実装
+- [x] Phase 5: グラフィック＆UI強化。トップビュー化・タイル画像・OBSTACLE/CORRIDORタイル・部屋単位の視界システム・3カラムUI（左=味方/中央=フィールド/右=敵）・メッセージウィンドウ・エリア名表示を実装
 - [ ] Phase 6: 仲間AI・操作切替
-  - [x] Phase 6-0: 準備（クラス・ステータス・グラフィック仕様の反映＋AIリファクタリング）
-    - [x] AIアーキテクチャをリーダーAI＋個体AIの2層構造にリファクタリング
-      - BaseAI/GoblinAI → PartyLeaderAI + UnitAI に再編
-      - EnemyManager → PartyManager に汎用化
-      - 既存ゴブリン3体の動作を維持しながら段階的に移行
-    - [x] クラスシステム・キャラクター生成・NPC仕様をコードに反映
-      - assets/master/classes/{class_id}.json（6クラス）作成
-      - CharacterGenerator.gd 実装（グラフィックセット走査・ステータス計算・名前生成）
-      - CharacterData に class_id / image_set / sprite_face / sex / age / build フィールド追加
-    - [x] 画像フォルダ構成を新フォーマットに移行（味方20セット・敵22セット配置済み）
-      - CharacterGenerator に scan_enemy_graphic_sets() / apply_enemy_graphics() を追加
-      - PartyManager._spawn_member() が apply_enemy_graphics() を呼び出し、敵に画像を自動割り当て
-      - 敵フォルダのパース: "_male_" / "_female_" 境界で enemy_type を検出（"-" を含む型名に対応）
-    - [x] names.json作成（男性・女性それぞれ20名）
-    - [x] 敵ランクをS/A/B/Cの4段階に統一
-  - [x] Phase 6-1: 仲間NPCの配置と基本AI行動
-    - [x] 手作りダンジョン（dungeon_handcrafted.json）の仕組みを導入
-      - 起動時は dungeon_handcrafted.json を直接読み込む
-    - [x] MapData に npc_parties フィールド追加
-    - [x] DungeonBuilder が npc_party を rooms から収集
-    - [x] NpcManager.gd：CharacterGenerator でランダム生成・is_friendly=true・緑プレースホルダー
-    - [x] NpcLeaderAI.gd：敵リストから最近傍をターゲット。生存敵あり→ATTACK、なし→WAIT
-    - [x] NpcUnitAI.gd：従順度1.0・A*経路探索
-    - [x] Character.is_friendly フラグ追加（プレースホルダー色を緑に設定）
-    - [x] Character.party_color / is_leader フラグ追加（パーティーカラーリング・リーダー二重リングで所属表示）
-    - [x] NpcManager.set_party_color()：NPC パーティーに色を割り当て、合流時に白リングに統一
-    - [x] PartyManager.activate()：VisionSystem 経由ではなく直接 AI を起動するパブリックメソッド
-    - [x] VisionSystem：add_npc_manager() 追加・NPC の表示制御・AI アクティブ化
-    - [x] game_map：_setup_npcs()・handcrafted読み込み・visionへのNPC登録
-    - [x] game_map：_link_all_character_lists() 追加・敵＋NPC 合算リストを全マネージャーに配布（NPC-敵重複防止）
-    - [x] player_controller.blocking_characters に NPC メンバーを追加（プレイヤー-NPC 重複防止）
-    - [x] party_manager.gd：ノード名衝突修正（マネージャー名をプレフィックスに追加）
-    - [x] unit_ai.gd：freed オブジェクトキャストクラッシュ修正（is_instance_valid チェック追加）
-    - [x] dungeon_handcrafted.json：入口部屋（R01）に player_party を追加（fighter-sword / archer / healer の 3 人スタート）
-    - [x] game_map._setup_initial_allies()：初期パーティーの追加メンバーを NpcManager 経由でスポーン → activate() で即時 AI 起動 → 合流処理
-  - [x] Phase 6-2: 仲間の加入の仕組み
-    - [x] DialogueTrigger.gd：隣接チェック・エリア敵全滅チェック・NPC自発申し出検出
-    - [x] DialogueTrigger.gd：NPC 自発申し出は無効（`wants_to_initiate()` は常に false）。プレイヤー起点の A ボタン隣接検出経由のみ（Phase 12-14 でバンプ方式から変更）
-    - [x] DialogueTrigger.try_trigger_for_member()：プレイヤー起点会話用の直接トリガーメソッド
-    - [x] PlayerController.gd：npc_bumped シグナル追加（A ボタン押下時に隣接 NPC を検索して発火）
-    - [x] PlayerController.gd：healed_npc_member シグナル追加（ヒーラーが未加入 NPC を回復したときに発火）
-    - [x] game_map._on_npc_bumped()：npc_bumped を受け取り DialogueTrigger.try_trigger_for_member() を呼ぶ
-    - [x] game_map._on_npc_healed()：healed_npc_member を受け取り対象 NpcManager に notify_healed() を呼ぶ
-    - [x] game_map._check_fought_together()：Character.dealt_damage_to / took_damage_from シグナルのイベント駆動で呼ばれる。NPC がプレイヤーと同フロア・同エリアで敵と戦闘したとき has_fought_together をセット（旧：_update_fought_together_flags() ポーリング方式から変更）
-    - [x] ~~DialogueWindow.gd~~：会話UIはMessageWindowに統合済み（Phase 10-2準備で移行）
-    - [x] NpcLeaderAI：will_accept() をスコア比較方式に刷新。has_fought_together / has_been_healed フラグ・定数を追加
-    - [x] NpcLeaderAI：will_accept() に適正フロア足切り条件を追加（current_floor < _get_target_floor() なら即拒否）。適正フロア算出ロジックを _get_target_floor() に切り出し、_get_explore_move_policy() と共通化
-    - [x] player_controller.gd：is_blocked フラグ追加（会話中は移動・攻撃入力を無効化）
-    - [x] vision_system.gd：remove_npc_manager() 追加
-    - [x] game_map.gd：_setup_dialogue_system() / 合流処理 / 敵入室による会話中断
-    - [x] game_map.gd：会話中は対象 NpcManager の process_mode を DISABLED に設定（NPC 停止）
-    - [x] player_controller.gd：_get_valid_targets() で is_friendly チェック追加（合流後の仲間を攻撃対象から除外）
-    - [x] ~~dialogue_window.gd~~：MessageWindowに統合済み（選択肢をインライン表示）
-    - 会話トリガー条件（`try_trigger_for_member()` 内で判定）
-      - プレイヤーと NPC メンバーが隣接（マンハッタン距離1）
-      - 通路（エリアIDなし）では会話しない（is_area_enemy_free が false を返すため）
-      - プレイヤー起点：A ボタン押下時に隣接 NPC を検索して発火（Phase 12-14 で矢印キーバンプ方式から変更）
-      - NPC 自発：現在は無効（`wants_to_initiate()` が常に false を返す）
-    - 会話トリガー失敗時のメッセージ（`DialogueTrigger.dialogue_blocked` シグナル → `game_map._on_dialogue_blocked()`）
-      - 話しかけたメンバーのエリアに敵がいる → 「○○は戦いに集中している」（MessageLog システムメッセージ）
-      - 同パーティーの別メンバーが戦闘中エリアにいる → 「○○の仲間が戦闘中のため話せない」（MessageLog システムメッセージ）
-    - 会話UI（NpcDialogueWindow）
-      - 画面中央に半透明パネル。NPC メンバーの顔画像・名前・クラス名＋ランクを表示
-      - プレイヤー起点の選択肢：「仲間にする」（→確認ダイアログ）・「一緒に行く」・「キャンセル」の3択
-      - 「仲間にする」→ CONFIRM 状態で「本当に仲間にしますか？（はい/いいえ）」
-      - 承諾判定（join_us のみ）：スコア比較方式。join_them は常に承諾
-        - プレイヤー側スコア = リーダーの統率力 + パーティーランク和×10 + 共闘ボーナス(5) + 回復ボーナス(5)
-        - NPC 側スコア = (100 - 従順度平均×100) + NPCランク和×10
-        - ランク数値: C=3, B=4, A=5, S=6
-      - 結果（合流・拒否・中断）は MessageLog に記録
-    - 合流処理
-      - 合流メンバーを party に追加・常時表示
-      - VisionSystem・npc_managers から除外（再会話防止）
-      - 「仲間にする」: hero がリーダー維持。`_merge_npc_into_player_party()` で NPC 全員を追加
-      - 「一緒に行く」: NPC リーダーが party リーダー。`_merge_player_into_npc_party()` で既存メンバーの is_leader を false に。hero は引き続き操作キャラ（ハイライト変わらず）。nm.set_joined_to_player(true) で NPC メンバーが hero を追従
-    - 会話中断：敵が部屋に入ってきたら game_map._process() が検出して即中断
-  - [x] Phase 6-3: 操作キャラの切替
-    - 指示ウィンドウ内の「操作」列でパーティーメンバーへの操作切替
-    - 切替先キャラのフィールドにカメラを即座に移動
-    - 旧操作キャラは AI 制御（UnitAI）に戻る（is_player_controlled フラグで制御）
-    - Character.is_player_controlled フラグ追加：UnitAI._process でチェックして処理スキップ
-    - Character.join_index 追加：Party.add_member() が付与し、表示ソートに使用
-    - Party.sorted_members()：リーダー先頭＋加入順で並べた表示用リストを返す
-    - 左パネル・指示ウィンドウとも sorted_members() で表示順を統一（リーダー固定）
-    - 操作中のキャラは左パネルで青ハイライト、指示ウィンドウで緑「[操作中]」表示
-    - リーダーは変わらない（指示ウィンドウは Tab でいつでも開閉可。非リーダー操作中は閲覧のみ）
-- [x] Phase 7: 指示システム（刷新済み）
-  - Tab キーで指示ウィンドウ開閉（いつでも開閉可。非リーダー操作中は閲覧のみ）
-  - 指示データ構造
-    - **全体指示**（`party.global_orders: Dictionary`）— パーティー全体に適用
-      - `move`:          follow=追従 / cluster=密集 / same_room=同じ部屋 / standby=待機 / explore=探索
-      - `battle_policy`: attack=攻撃 / defense=防衛 / retreat=撤退
-      - `target`:        nearest=最近傍 / weakest=最弱優先 / same_as_leader=リーダーと同じ / support=援護
-      - `on_low_hp`:     keep_fighting=戦闘継続 / retreat=後退 / flee=逃走
-      - `item_pickup`:   aggressive=積極的に拾う / passive=近くなら拾う / avoid=拾わない
-      - `hp_potion`:     use=瀕死なら使う / never=使わない
-      - `sp_mp_potion`:  use=使う / never=使わない
-    - **個別指示**（`character.current_order: Dictionary`）— キャラクターごとに設定（非ヒーラー4列）
-      - `target`:           nearest=最近傍 / weakest=最弱優先 / same_as_leader=リーダーと同じ / support=援護
-      - `battle_formation`: surround=包囲 / rush=突進 / rear=後衛 / gather=集結
-      - `combat`:           attack=攻撃 / defense=防御 / flee=逃走
-      - `special_skill`:    aggressive=積極的に使う / strong_enemy=強敵なら使う / disadvantage=劣勢なら使う / never=使わない
-    - **個別指示（ヒーラー）**（5列。上記に加え `heal` 列）
-      - `heal`:             aggressive=積極回復 / leader_first=リーダー優先 / lowest_hp_first=瀕死度優先 / none=回復しない
-  - item_pickup の詳細
-    - aggressive: 周囲に敵がいなければ積極的に拾いに行く。対象は「自クラスで装備可能な武器・防具・盾」「HPポーション（全クラス）」「MPポーション（魔法使い・ヒーラーのみ）」に限定。それ以外は passive 扱い（経路上なら拾う）
-    - passive: 移動経路上にあれば拾う（寄り道しない）。フィルタなし
-    - avoid: 全アイテムを避ける（拾わない。アイテムのあるマスを避けて移動）
-  - 指示ウィンドウ（OrderWindow）
-    - 全体方針セクション: 6行（move/battle_policy/target/on_low_hp/item_pickup/hp_potion/sp_mp_potion）をチップ形式で表示
-    - メンバーテーブル: ↑↓ で行移動、←→ で列移動。値はチップ形式で横並び表示
-    - battle_policy 変更時は BATTLE_POLICY_PRESET テーブルで全メンバーに一括適用
-  - UnitAI への反映
-    - combat=attack → Strategy.ATTACK（積極的に追従・攻撃）
-    - combat=defense/flee → Strategy.WAIT（待機・隊形維持）
-    - on_low_hp=flee かつ HP50%未満 → Strategy.FLEE（逃走優先）
-    - on_low_hp=retreat かつ HP50%未満 → Strategy.WAIT + move=cluster（リーダー周辺に退避）
-    - パーティーレベルの FLEE（GoblinLeaderAI 等）は常に最優先
-    - move: 隊形制約を満たしていなければ move_to_formation / move_to_explore でリーダーへ移動
-      - follow: リーダーの真後ろ1マスを維持
-      - explore: VisionSystem で未訪問エリアを検出して移動（全訪問済みならランダム巡回）
-      - same_room: MapData.get_area() でリーダーと同じ部屋IDを維持
-      - cluster: マンハッタン距離5以内を維持
-      - standby: その場待機（隣接の敵のみ攻撃）
-    - battle_formation=rear: A*で背後に回り込む（ASTAR_FLANK）
-    - battle_formation=gather: パーティー重心から2タイル以内を維持
-    - target=same_as_leader: リーダーと同じターゲットを攻撃
-    - target=support: HP割合が最低の味方に最も近い敵を攻撃
-  - 統率力・従順度パラメータを CharacterData に追加（当面は値のみ保持）
-  - 操作キャラ切替（Phase 6-3）との連携済み：切替後の新操作キャラには current_order が適用される
-  - hero 自律行動対応：`_hero_manager`（NpcManager）を game_map で生成し、操作外れ時に UnitAI が current_order を反映して動作する
-- [x] Phase 8 Step 1: 未実装行動の追加
-  - 飛行移動：飛行キャラ（is_flying=true）は WALL・OBSTACLE・地上キャラ占有タイルを通過可能
-  - 攻撃タイプ（melee / ranged / dive）を CharacterData に追加し UnitAI が参照
-    - melee: 地上のみ隣接攻撃（飛行→地上OK、地上→飛行NG、飛行→飛行NG）
-    - ranged: 射程内の全対象を飛翔体で攻撃（飛行レイヤー無関係）
-    - dive: 飛行キャラが地上の隣接対象に降下攻撃（方向倍率なし・DiveEffect表示）
-    - カウンター有効：melee・dive　カウンター無効：ranged（カウンター自体は将来実装）
-  - MP フィールド追加（character_data.max_mp / character.mp）
-  - 回復行動（ヒーラー・ダークプリースト）：HP50%以下の味方を優先して回復、MP消費
-  - バフ行動（ダークプリースト）：バフが切れた味方に防御力アップを付与、MP消費
-  - harpy.json / dark_priest.json 作成、enemies_list.json に追加
-- [x] Phase 8 Step 2+3: 種族別AIルーチンの追加・ダンジョン生成への組み込み
-  - UnitAI に `_get_move_interval()`・`_on_after_attack()` 仮想メソッド追加（速度変更・MP消費フック）
-  - 種族別 LeaderAI: HobgoblinLeaderAI（混成パーティー管理）/ WolfLeaderAI（群れ戦術）/ DefaultLeaderAI（汎用）
-  - 種族別 UnitAI: HobgoblinUnitAI / GoblinArcherUnitAI / GoblinMageUnitAI / ZombieUnitAI / WolfUnitAI / HarpyUnitAI / SalamanderUnitAI / DarkKnightUnitAI / DarkMageUnitAI / DarkPriestUnitAI
-  - 特徴実装: ゾンビ低速2倍・直進経路 / 狼高速1.5倍・側面回り込み / 近距離後退（弓・サラマンダー）/ MP消費（メイジ系）
-  - 欠けていたJSONマスターデータ8種作成（hobgoblin / goblin_archer / goblin_mage / zombie / wolf / salamander / dark_knight / dark_mage）
-  - enemies_list.json に11種全て追加
-  - party_manager._create_leader_ai() ファクトリを11種に対応（match文で正確にルーティング）
-  - dungeon_handcrafted.json を11種対応に更新（種族特性・フロア別配置ガイドラインを手作り反映）
-  - 旧 dungeon_handcrafted.json 削除（後続バグ修正で再作成・内容を刷新）
-- [x] Phase 8 バグ修正
-  - party_manager._spawn_member()：enemy_id のハイフンをアンダーバーに変換してJSONファイルを正しく読み込む（例: "goblin-mage" → goblin_mage.json）
-  - dark_priest.json：id を "dark_priest" → "dark-priest" に修正（画像フォルダ名 `dark-priest_...` と一致させる）
-  - dungeon_handcrafted.json を再作成（現行は12部屋×4フロア＋ボス1部屋の5フロア構成）
-    - 起動デフォルト：Claude Code 手作りダンジョン（dungeon_handcrafted.json）を直接読み込む。F5 でシーン再スタート
-    - 入口部屋に hero + archer + healer の3人パーティー
-    - 敵パーティー：goblin・goblin-archer・wolf・zombie・hobgoblin・goblin-mage・dark-knight・dark-mage・dark-priest・salamander
-  - game_map.gd：handcrafted ダンジョン読み込みロジックを復元
+  - [x] Phase 6-0: AIを2層構造（リーダーAI＋個体AI）にリファクタリング。7クラスのJSON定義・キャラクター自動生成・画像フォルダ新フォーマット移行を実施
+  - [x] Phase 6-1: 仲間NPCの配置と基本AI行動。NpcManager/NpcLeaderAI/NpcUnitAIを実装し、パーティーカラー表示・初期3人パーティーでの開始を実現
+  - [x] Phase 6-2: 仲間の加入。Aボタンで隣接NPCに話しかけて仲間にする会話システム（スコア比較方式の承諾判定・共闘/回復ボーナス・敵入室時の会話中断）を実装
+  - [x] Phase 6-3: 操作キャラの切替。指示ウィンドウからパーティーメンバーへ操作を切り替え、旧操作キャラはAI制御に戻る仕組みを実装
+- [x] Phase 7: 指示システム。全体方針7項目（移動/戦闘方針/ターゲット/低HP/アイテム取得/HPポーション/SP・MPポーション）と個別指示4列（隊形/戦闘/ターゲット/特殊攻撃、ヒーラーは+回復列）をチップ形式UIで実装。AIが指示に従って行動する仕組みを完成
+- [x] Phase 8 Step 1: 飛行移動・攻撃タイプ（melee/ranged/dive）・MP・回復/バフ行動（ヒーラー・ダークプリースト）を実装
+- [x] Phase 8 Step 2+3: 敵11種の種族別AI（ゴブリン系・ウルフ・ゾンビ・ハーピー・サラマンダー・暗黒系等）とマスターデータを実装。ダンジョンに全種を配置
+- [x] Phase 8 バグ修正: 敵JSONの読み込み・ダンジョン構成（12部屋x4フロア+ボス1部屋）を整備
 - [x] Phase 9: 操作感・表現強化
-  - [x] Phase 9-1: 歩行アニメーション・滑らか移動
-    - move_to(pos, duration) に持続時間パラメータを追加。視覚位置を _visual_from→_visual_to へ duration 秒かけて線形補間
-    - 衝突判定・grid_pos は半マス到達（進捗50%）で更新。移動中は旧位置+移動先の両方を占有タイルとして返す
-    - スプライトフレームを補間進捗 t=0→1 で駆動: 0%〜25%=walk1, 25%〜50%=top, 50%〜75%=walk2, 75%〜100%=top
-    - walk1/walk2 がない場合は top 固定にフォールバック
-    - is_moving() メソッドを追加（_visual_duration > 0 の間 true）
-    - GlobalConstants に game_speed: float = 1.0 を追加（将来の設定画面から変更）
-    - UnitAI: MOVE_INTERVAL=1.2s（旧0.4s）、WAIT_DURATION=3.0s に変更。_get_move_interval() で game_speed 除算
-    - PlayerController: タイマー方式を廃止し先行入力バッファ方式（_move_buffer）に変更
-      - アニメーション中は is_moving() で移動をブロック、方向入力をバッファに上書き記録
-      - キーを離したらバッファをクリア（ZERO 上書き）→ 1回押しで2マス進む問題を修正
-      - アニメーション完了後にバッファ→現在入力の優先順で次移動を実行（長押し連続移動に対応）
-      - これにより斜め移動（補間途中から別方向補間）・長押し停止の両問題を解消
-    - MOVE_INTERVAL=0.30s（PlayerController 用。game_speed で除算）
-    - テスト用: hero.json の sprite を assets/images/characters/test/ フォルダに一時切替済み
-    - game_map.gd: character_id=="hero" の場合は CharacterData.create_hero()（hero.json）を使用するよう修正
-  - [x] Phase 9-2: ゲームパッド対応
-    - Xbox系コントローラー（Steam標準）を基準に InputMap へ並列登録
-    - attack (Z) → Joypad Button 0（A）（Phase 10-2 で attack_melee から改名・1ボタン統合）
-    - menu_back (X) → Joypad Button 1（B）（メニュー戻る。フィールドでは当面未使用）
-    - open_order_window → Joypad Button 4（Back/Select）のみ。キーボード Tab は _input() で KEY_TAB 直接マッチ
-    - ポーズメニュー開閉 → キーボード Esc は game_map._input() で KEY_ESCAPE 直接マッチ。Start ボタン（JOY_BUTTON_START）は pause_menu.gd の PROCESS_MODE_ALWAYS _input() でトグル処理
-    - 移動（ui_up/down/left/right）は Godot デフォルトで D-pad・左スティック対応済み
-    - デバッグ機能（F1/F5）はキーボードのみ
-    - game_map.gd: ゲームパッドは _process() で is_action_just_pressed ポーリング、キーボード Tab/Esc は _input() で physical_keycode 直接マッチ
-    - 全カスタム描画 Control ノードに focus_mode = FOCUS_NONE を設定（Tab の UI フォーカスナビゲーション干渉を防止）
-    - LB（Joypad Button 9）後退サイクルバグ修正：_refresh_targets() がキャンセル状態を毎フレームリセットしていた問題を修正（was_cancel フラグで保持）
-  - [x] Phase 9-3: 飛翔体グラフィック
-    - 飛翔体画像を assets/images/projectiles/ に配置
-      - arrow.png（矢：弓使い・ゴブリンアーチャー・スケルトンアーチャー）
-      - fire_bullet.png（火属性魔法弾：魔法使い(火)・ゴブリンメイジ・ダークメイジ・サラマンダー）
-      - thunder_bullet.png（雷属性魔法弾：デーモン専用・is_magic=true）
-    - 判定ロジック：`attack_type=="ranged"` かつ `is_magic==false → arrow.png`、`is_magic==true → fire_bullet.png`（thunder_bullet はキャラクター固有指定で上書き）
-    - 飛行方向に合わせて rotation で回転（下向き正方向の画像を `-PI/2` オフセットで補正）。軌道は直線
-    - ヒーラー・ダークプリーストの回復・バフは飛翔体なし（別途エフェクト）
-    - 画像がない場合は黄色の円（フォールバック）を表示
-  - [x] Phase 9-4: 効果音
-    - 素材：Kenney CC0 アセット4パック（RPG Audio / Impact Sounds / Sci-fi Sounds / Interface Sounds）
-    - SoundManager.gd（Autoload）で一元管理。AudioStreamPlayer×8 のプールでポリフォニー対応
-    - ファイルが存在しない場合は無音スキップ（将来の差し替えも容易）
-    - 実装済み効果音と再生箇所：
-      - slash / axe / dagger：近接攻撃時（player_controller._execute_melee / unit_ai._execute_attack）
-      - arrow_shoot：弓発射時（archer / goblin-archer の ranged 攻撃）
-      - magic_shoot：魔法弾発射時（magician-fire / goblin-mage / dark-mage 等）
-      - flame_shoot：炎発射時（salamander の ranged 攻撃）
-      - hit_physical / hit_magic：命中時（攻撃側のタイプで自動判定）
-      - take_damage：character.take_damage() で再生
-      - death：character.die() で再生
-      - heal：character.heal() / unit_ai heal アクションで再生
-      - room_enter：vision_system で新エリア入室時に再生
-      - item_get / stairs：将来実装時に SoundManager.play(SoundManager.ITEM_GET/STAIRS) で呼ぶ
-    - BGMは当面なし
-  - [x] Phase 9-5: 衝突判定改善・移動回転アニメーション
-    - **衝突判定の改善**
-      - `_can_move_to()` を `grid_pos` のみで判定（pending 位置は不使用）。半マス到達で grid_pos が更新されるため、物理的な進入を基準とする先着優先方式
-      - `static var _all_chars: Array` レジストリを character.gd に追加。移動進捗50%（コミット時）に他キャラの grid_pos と比較し、競合があれば `abort_move()` で移動をキャンセル（押し戻し効果）
-      - unit_ai: MOVING ステートで移動先の競合チェックを追加（AI 側の abort 対応）
-      - `is_pending()` / `get_pending_grid_pos()` / `abort_move()` メソッドを character.gd に追加
-    - **向き変更ディレイ（移動ブロック時）**
-      - `player_controller.gd`：`TURN_DELAY = 0.15s` / `game_speed` で除算。移動ブロック時に向きが変わる場合のみ発動
-      - ディレイ中は `GlobalConstants.world_time_running = true`（世界時間を進行させる）
-      - ディレイ完了時に `character.complete_turn()` を呼んで向きを確定
-    - **スプライト回転アニメーション**
-      - `character.gd`：`start_turn_animation(target, duration, last_dir)` / `complete_turn()` / `_calc_turn_delta_rad()` 追加
-      - Tween で最短経路の回転アニメーション。180°は `last_dir.x` で時計回り/反時計回りを決定
-      - `_turn_target_facing: Direction` / `_turn_tween: Tween` フィールド追加
-      - **通常移動時も適用**：`move_to()` が `_apply_direction_rotation()` の代わりに `start_turn_animation()` を呼ぶ。移動時間と同じ duration で回転アニメーション
-    - **パーティーメンバー押し出しシステム**（`player_controller.gd`）
-      - `_try_move()` で移動先に加入済み味方（`is_friendly=true` かつ `blocking_characters` 非登録）がいるとき押し出しを試みる
-      - `_find_pushable_ally(pos)`: 指定座標にいる押し出し可能な味方を返す。`is_flying=true` は対象外
-      - `_try_push(target_char, push_dir, depth)`: 押し出し実行。戻り値は bool（成功/失敗）
-        - 候補方向：前方（移動方向）→ 左90° → 右90° の順で試みる
-        - 押し出し先に別の味方がいる場合は再帰的に押し出す（最大深度3）
-        - 押し出し先が壁・OBSTACLE・敵/未加入NPCのブロッカーの場合はその方向をスキップ
-        - 押し出し成功時はプレイヤーと同じ duration で `move_to()` アニメーション（同時移動）
-      - `_can_push_to(pos, ch)`: 押し出し先の走行可否チェック（タイル＋ブロッカー確認）
-      - 押し出し失敗（全方向塞がれ）時はプレイヤーも移動しない
+  - [x] Phase 9-1: 歩行アニメーション（walk1→top→walk2→topの4フレームループ）・位置補間・先行入力バッファ方式による滑らか移動を実装
+  - [x] Phase 9-2: Xbox系ゲームパッド対応（全操作をキーボードとゲームパッドの並列登録）
+  - [x] Phase 9-3: 飛翔体グラフィック（矢・火弾・雷弾の画像と飛行方向回転）を実装
+  - [x] Phase 9-4: 効果音（Kenney CC0素材。攻撃・命中・被ダメージ・死亡・回復・入室の各SE）を実装
+  - [x] Phase 9-5: 衝突判定改善（先着優先方式・abort_move）・スプライト回転アニメーション・味方の押し出しシステムを実装
 - [ ] Phase 10: アイテム・装備システム
-  - [x] Phase 10-1: アイテムデータ基盤
-    - **ステータス統合（フィールドリネーム）**
-      - `attack` → `attack_power`（物理近接/遠距離の攻撃力）
-      - `heal_power` → `magic_power`（魔法攻撃力＋回復力を統合）
-      - `accuracy: float = 0.0` 追加（現時点は未使用・装備実装時に有効化）
-      - `inventory: Array = []` を CharacterData に追加（アイテムインスタンスの辞書リスト）
-      - `last_attacker: Character` を Character に追加（ドロップ帰属の追跡用）
-      - `attack_type` に "magic" を追加（goblin-mage / dark-mage / salamander / dark-priest）
-    - assets/master/items/ にアイテム種類ごとのマスターデータを定義（sword.json, axe.json, bow.json, dagger.json, staff.json, armor_plate.json, armor_cloth.json, armor_robe.json, shield.json, potion_hp.json, potion_mp.json）
-    - dungeon_handcrafted.json の各 enemy_party に `items` 配列を追加（Claude Code が内容を決定）
-    - ドロップシステム（部屋制圧方式）：部屋の enemy_party 全員が死亡 or 離脱で制圧完了→アイテムが床にランダム散らばり
-    - グレードフィールドは持たない（補正値の強さがグレードを表す）
-    - 複数パーティーによる協力撃破の分配は将来実装
+  - [x] Phase 10-1: アイテムマスターデータ（武器5種・防具4種・消耗品2種）定義・インベントリシステム・部屋制圧方式のドロップシステムを実装
   - [ ] Phase 10-2: 装備システム
-    - [x] ドロップ処理（部屋制圧方式）
-      - party_wiped シグナルを `(items, room_id)` 方式に変更（party_manager.gd）
-      - 部屋の enemy_party 全員が死亡 or 離脱で制圧完了
-      - game_map._floor_items（Vector2i→Dict）に1マス1個でランダム散布
-      - _check_item_pickup()：同じマスに移動で自動取得、inventory へ追加
-      - プレイヤー操作キャラはフィルタなし。AIキャラは item_pickup 指示に従う（avoid=スキップ）
-      - アイテムを床に黄色マーカーで描画（ビジョン外は非表示）
-    - [x] OrderWindow 改修（アイテムUI）
-      - サブメニュー項目を「操作切替 / アイテム」に刷新（旧「操作」列廃止）
-      - アイテム画面：未装備品一覧 → アクションメニュー（装備する / 渡す）→ 受け渡し相手選択 の3層UI
-      - 装備する：CLASS_EQUIP_TYPES で装備可能なアイテムのみ表示。上書き時、旧装備は未装備品に残る
-      - 渡す：リーダー操作中のみ表示。渡す相手をメンバー一覧から選択
-      - 装備欄：equipped_weapon / armor / shield を実際に表示（旧スタブ廃止）
-      - 所持アイテム欄：装備中アイテムを除外した未装備品のみ表示
-    - [x] 操作体系の刷新
-      - attack_melee → attack にリネーム（Z + Joypad Button 0/A）
-      - attack_ranged 削除。攻撃タイプ（melee/ranged）はクラスの slots.Z.action から自動判定
-      - menu_back 新規追加（X + Joypad Button 1/B）
-      - player_controller.gd：AttackSlot.X・_slot_x・DEFAULT_SLOT_X 削除、1ボタン統合
-      - メニュー内ナビゲーション：右キー/Z=決定、左キー/X/Esc=戻る（order_window・dialogue_window 共通）
-      - 名前列：Z=サブメニュー開く、右キー=隣の列へ移動、左キー=ウィンドウ閉じる
-      - ログ行：右キー/Z=ログ開始、左キー/X/Esc=ウィンドウ閉じる
-    - [x] MessageWindow拡張・AIデバッグパネル廃止（Phase 10-2 準備）
-      - RightPanel からAIデバッグ表示（下半分）を削除。敵情報表示のみ残す
-      - MessageLog（Autoload）を新設。メッセージ種別（system=白/combat=黄/ai=水色）と色分け、デバッグフィルタ
-      - MessageWindow をフィールド画面下部5行固定表示にリファクタリング。自動スクロール
-      - OrderWindow のログ行が MessageLog の共有バッファを参照するよう統合
-      - F1キーを DebugWindow の表示/非表示トグルに転用（旧：MessageLog.debug_visibleトグル）
-      - 各リーダーAI（Goblin/Wolf/Hobgoblin/Default/NPC）に戦略変更時のログ出力を追加
-        - ログフォーマット：`[AI] {名前}: {旧}→{新}（{理由}）`（例：`[AI] ゴブリン: 待機→攻撃（敵発見）`）
-        - プレイヤー操作中のメンバーがいるパーティーはログ抑制
-        - 合流前の一時パーティー（初期仲間・hero_manager）はsuppress_ai_logフラグでログ抑制
-      - character.gd に戦闘計算ログ出力（暫定フォーマット）を追加
-      - Strategy enum に EXPLORE を追加（パーティーレベル専用。UnitAI には ATTACK+move=explore に変換）
-      - NPC パーティーのデフォルト戦略を WAIT → EXPLORE に変更（敵なし時は探索行動）
-      - 敵パーティーのデフォルト戦略は WAIT のまま（アクティブ化時に ATTACK に遷移）
-    - [x] 全キャラクター常時行動化（Phase 10-2 準備）
-      - NPC パーティーをゲーム開始時に即座にアクティブ化（VisionSystem 配布後）
-      - 敵パーティーはプレイヤー or NPC が部屋に入ったらアクティブ化（friendly_areas で判定）
-      - 画面外のNPCは非表示のまま自律行動（VisionSystem の既存 visited_areas で表示制御）
-      - デバッグログ（combat/ai）をプレイヤーのいるエリアに限定（MessageLog エリアフィルタ）
-    - [x] 会話UIをMessageWindowに統合（Phase 10-2 準備）
-      - DialogueWindow を廃止。会話の選択肢をMessageWindow下部にインライン表示
-      - NPC パーティー情報（名前・ランク・クラス・状態）をメッセージとして表示
-      - 会話の結果（合流・拒否・中断）もメッセージとして表示
-    - [x] 装備ステータス補正値反映
-      - 装備変更時に Character.refresh_stats_from_equipment() でパラメータに反映（attack_power / magic_power）
-      - 攻撃コードは装備補正込みのパラメータを参照するため変更不要
-      - 戦闘計算ログは武器名・装備補正の内訳を表示しない（補正済みパラメータを表示）
-    - [x] 被ダメージ計算に防御判定・防御強度・耐性を反映（Phase 10-2 準備で実装済み）
-    - [x] 方向判定：atan2 で4象限（正面/背面/左側面/右側面）、近接・遠距離共通（Phase 10-2 準備で実装済み）
-    - [x] 耐性（physical_resistance / magic_resistance）をキャラクターデータに追加（Phase 10-2 準備で実装済み）
-      - クラスごとの素値を設定、他パラメータと同じ生成フローで決定
-      - 能力値（整数）で管理し、軽減率への変換は内部で行う: 軽減率 = 能力値 / (能力値 + 100)
-    - [x] 初期装備の付与（Phase 10-2 準備で実装済み。dungeon_handcrafted.json の items → 装備スロットにセット）
-    - [x] 装備補正値を新仕様に統一（dungeon_handcrafted.json 全装備を更新）
-      - 初期装備（プレイヤー・NPC）は全補正値0（補正なし）
-      - 武器の `skill` 補正を廃止（仕様通り skill は装備で変化しない）
-      - 剣・斧・短剣: `power` + `block_right_front` / 弓・杖: `power` + `block_front`
-      - 盾: `block_left_front` のみ（旧 `physical_resistance` を削除）
-      - 防具: `physical_resistance` + `magic_resistance` の両方を持つように修正
-      - 最深層（フロア4）の敵パーティーはアイテムなし（クリア直結のためドロップ不要）
-      - 敵ドロップ補正値はフロア深度に応じてスケール
+    - [x] ドロップ処理（部屋制圧でアイテムが床に散布・踏んで自動取得）・OrderWindowアイテムUI（装備/渡す/3層UI）・操作体系刷新（1ボタン攻撃統合・メニュー共通ナビゲーション）を実装
+    - [x] MessageLog（Autoload）新設・DebugWindow移行・全キャラクター常時行動化・会話UIのMessageWindow統合を実装
+    - [x] 装備ステータス補正値反映・被ダメージ計算（防御判定・方向判定・耐性）・初期装備付与・装備補正値の仕様統一を実装
     - AI自動装備は将来実装（当面は拾って持つだけ）
-    - [x] UI改善・バグ修正
-      - 左パネル・OrderWindow にクラス名（日本語）・ランクを表示
-      - 左パネルの個別指示表示を OrderWindow の COL_LABELS と完全一致する表記に統一（例：同じ部屋 / 積極攻撃 / 最近傍）
-      - 会話選択の決定を Z/A のみ、キャンセルを X/B のみに限定（左右キー無効化・移動との競合防止）
-      - CharacterGenerator で名前・画像セットの重複防止（使用済みリスト追跡・枯渇時フォールバック）
-      - アイテム一覧の装備可否色分け（不可=灰色）・補正値の日本語表記統一（アイテム一覧・装備欄の両方）
-      - GlobalConstants に CLASS_NAME_JP / STAT_NAME_JP テーブルを追加
-      - 主人公を hero.json 固定からランダム生成に変更（他キャラと同様に CharacterGenerator 使用）
-      - dungeon_handcrafted.json の主人公定義を character_id:"hero" → class_id:"fighter-sword" に変更
-      - 耐性を能力値（整数）に変更。軽減率 = 能力値 / (能力値 + 100) の逓減カーブで内部変換
-      - カメラのデッドゾーン比率を 0.70 → 0.40 に変更（先読みマージン拡大・出会いがしら軽減）
-      - 隣接エリアの先行可視化（通路の端に立つと次の部屋が見える。VisionSystem でタイル隣接チェック）
-      - 移動時の grid_pos 更新を半マス到達（進捗50%）に遅延。占有タイルは旧位置+移動先の両方をカバー
-  - [x] Phase 10-3: 消耗品の使用（Phase 12-5 で操作体系を変更）
-    - HP回復ポーション・MP回復ポーション
-    - C/X **短押し** → アイテム選択UI（ITEM_SELECT→ACTION_SELECT→TRANSFER_SELECT）
-      - 未装備品＋消耗品を一覧表示（装備中アイテムは除外）。消耗品は同種をグループ化
-      - アクション: 使用する / 装備する / 渡す（リーダーのみ）/ キャンセル
-      - 「渡す」→ TRANSFER_SELECT（パーティーメンバーを選択）
-      - Z/A または C/X で決定、B（menu_back）で前の画面へ戻る
-      - LB/RB でカーソル循環（通常時のキャラ切り替えは無効）
-      - UI 中は時間停止
-    - 使用条件：HPポーション→HP満タンでない、MPポーション→MP満タンでない
-    - 使用後：inventoryから削除。MessageLogにシステムメッセージ
-    - **ConsumableBar UI**（ConsumableBar.gd）：画面上部・部屋名ラベルの左側に常時表示
-      - `GlobalConstants.ConsumableDisplayMode` enum: NORMAL / ITEM_SELECT / ACTION_SELECT / TRANSFER_SELECT（パースエラー回避のため GlobalConstants に定義）
-      - NORMAL 時：消耗品を種類ごとにアイコン＋「×個数」で横並び表示。消耗品ゼロなら非表示
-      - ITEM_SELECT 時：アイテム一覧をアイコン付きで表示。V スロットのクールダウン残秒も表示
-      - 操作キャラ切替・アイテム取得・C/X操作・使用後に自動更新
-    - バグ修正：アイテム選択UIから装備中の武器・防具・盾を除外（`is_same()` で判定）
-  - [x] Phase 10-4: 指示／ステータスウィンドウ統合
-    - 既存の OrderWindow を拡張（order_window.gd）
-    - 上部：キャラ一覧テーブル（全体方針プリセット＋5指示項目）
-    - 下部：選択中キャラのステータス詳細・装備スロット（空）・所持アイテム（空）
-    - ステータス表示：素値・補正値・最終値の3列（例：攻撃力　15　+0　→　15）
-    - 開発中は全ステータス項目を表示（HP/MP/攻撃力/防御力/攻撃タイプ/射程/溜め硬直/ランク/飛行/統率力/従順度）
-    - 開いている間も時間進行継続（ポーズなし）
-    - リーダー操作中：指示の変更可。非リーダー操作中：閲覧のみ（タイトルに「閲覧のみ」表示）
-    - 誰を操作中でも Tab / Select でウィンドウを開ける（旧：リーダーのみ）
-    - ステータス欄左側に front.png（なければ face.png、なければプレースホルダー）を表示
-    - カーソル位置記憶：ウィンドウ閉じて再度開いたとき前回位置から再開
-    - 全体方針→個別方針カーソル移動時は1列目（名前）から開始
-    - バグ修正：`_get_char_front_texture()` が sprite_front ファイル不在のとき sprite_face にフォールバックするよう修正（CharacterGenerator 生成キャラは常に sprite_front パスが設定されるため、ファイル存在チェックが必要だった）
+    - [x] UI改善（クラス名日本語表示・装備可否色分け・隣接エリア先行可視化等）・主人公をランダム生成に変更
+  - [x] Phase 10-3: HP/MP回復ポーション。C/X短押しでアイテム選択UI（使用/装備/渡す）を開く仕組みを実装。ConsumableBar UIで消耗品を常時表示
+  - [x] Phase 10-4: OrderWindowに指示テーブル＋ステータス詳細（素値/補正値/最終値）＋装備欄＋所持アイテムを統合表示
 - [x] Phase 11: フロア・ダンジョン拡張
-  - [x] Phase 11-1: 階段実装・フロア遷移
-    - 階段タイル（STAIRS_DOWN=4, STAIRS_UP=5）を TileType に追加。GlobalConstants に定数追加
-    - DungeonBuilder が JSON の `stairs` 配列（type/x/y 形式）から階段タイルを配置
-    - MapData.find_stairs(type) で階段座標を全検索
-    - VisionSystem をフロアインデックスごとに訪問済みエリア・可視タイルを管理（switch_floor()）
-    - game_map.gd: 全フロアの MapData を起動時に一括構築（_all_map_data[]）
-    - game_map.gd: フロアごとに EnemyManager・NpcManager を管理（_per_floor_enemies[], _per_floor_npcs[]）
-    - 未訪問フロアは初訪問時に敵・NPC をセットアップ（遅延初期化）
-    - _check_stairs_step(): hero が静止・階段タイルを踏んでいれば _transition_floor() を呼ぶ
-    - _transition_floor(): フロア番号更新・hero 位置更新・VisionSystem 切替・カメラリミット更新
-    - 階段タイルは茶色/黄土色で塗り、▼/▲ シンボルを重ねて表示
-    - 遷移クールダウン 1.5 秒（連続遷移防止）
-    - 倒した敵はフロアをまたいでも復活しない（EnemyManager が永続保持）
-    - dungeon_handcrafted.json: 5フロア構成（各フロア12部屋・3列×4行レイアウト・部屋サイズ10×8。フロア4のみボス1部屋）
-    - 敵は階段を使わない（hero・パーティーメンバー・未加入 NPC のみ遷移する）
-    - [x] Phase 11-1 バグ修正（フロア遷移後の不具合）
-      - クロスフロアすり抜け・不可視攻撃バグの3点修正
-        1. `_setup_floor_enemies/npcs()` で敵・NPC スポーン時に `current_floor` をセット
-        2. `_transition_floor()` で `blocking_characters` を新フロアの敵・NPC に再構築
-        3. `party_leader_ai._assign_orders()` で別フロアのターゲットを null に排除
-      - NPC アクティブ化を訪問済みエリアのみに限定（起動時・フロア遷移時の両方）
-        - `vision_system.gd`: 未訪問エリアの NPC を `friendly_areas` から除外
-        - `game_map.gd`: 未訪問エリアの NPC は activate() しない
-      - 矢印キー長押しで階段を通り抜けてしまう問題を修正
-        - `player_controller.gd`: 階段タイル静止中は移動バッファをブロック
-        - `stair_just_transitioned` フラグで遷移直後（新フロアの階段タイル上）はブロック解除
-        - `_transition_floor()` でフラグをセット
-      - F2 デバッグキーを追加（`user://debug_floor_info.txt` に出力。MessageWindow でパスを通知）
-      - カメラ X 方向デッドゾーンを 0.40 → 0.20 に変更（進行方向の視野を改善）
-      - DungeonBuilder に `MAP_BORDER = 6` を追加（四方6タイルの境界壁。コンテンツを offset で移動）
-        - キャラがカメラリミット付近に物理的に到達できなくなり、マップ端での画面端寄りを解消
-  - [x] Phase 11-2: 5フロア対応・ゲームクリア実装
-    - dungeon_handcrafted.json を5フロア構成に（各フロア12部屋・3列×4行・部屋10×8タイル・階段3か所）
-      - フロア0（地下1層）: 12部屋。入口1・NPC4・敵7（ゴブリン中心）。下り階段3か所
-      - フロア1（地下2層）: 12部屋。ゴブリン＋アンデッド（zombie/skeleton）混成。上り3・下り3階段
-      - フロア2（地下3層）: 12部屋。アンデッド＋狼＋ハーピー＋暗黒系。上り3・下り3階段
-      - フロア3（地下4層）: 12部屋。暗黒騎士団・デーモン・リッチ・サラマンダー。上り3・下り3階段
-      - フロア4（地下5層・最下層）: 1部屋（深淵の玉座）。ボス構成（dark-lord・dark-knight×2・dark-mage・dark-priest・demon）。上り階段3か所のみ
-    - フロアが深いほど敵が強くドロップアイテムの補正値も高い
-    - ゲームクリア判定: 最終フロア（インデックス4）の全敵パーティー全滅で `_trigger_game_clear()` 発火
-      - プレイヤー入力を無効化（`player_controller.is_blocked = true`）
-      - MessageLog にシステムメッセージ「ダンジョンを制覇した！…」を表示
-      - F5 リスタートは引き続き有効（`game_map._input()` の KEY_F5 直接マッチのため）
-    - Phase 11-2 バグ修正
-      - 魔法敵（ゴブリンメイジ・ダークメイジ・サラマンダー等）が攻撃しない問題: `party_leader_ai.gd` の `magic_power > 0` 条件が魔法攻撃キャラを WAIT に固定していたのを `heal_mp_cost > 0 or buff_mp_cost > 0` に修正
-      - 敵の初動が遅い問題: `unit_ai.gd` の move アクション開始時タイマーを `_get_move_interval()` から `0.0` に変更（最初の1歩の待ち時間を解消）
-      - 敵・NPCの移動速度が遅い問題: `MOVE_INTERVAL` を `1.2` → `0.40` 秒/タイルに変更（プレイヤー速度 0.30 s/タイルに近づけた）
-  - [x] Phase 11-3: MPバー表示・MP消費・アイテム一覧グループ化
-    - 左パネルの MP バー: max_mp > 0 のキャラのみ青いバーと「MP X/Y」テキストを表示
-    - `player_controller.gd`: `_execute_melee` / `_execute_ranged` でスロットの `mp_cost` を消費（`character.use_mp()`）
-    - `magician-fire.json` / `healer.json` に `"mp"` フィールドと各スロットの `"mp_cost"` を追加。healer には `heal_mp_cost` / `buff_mp_cost` も追加
-    - OrderWindow アイテム一覧: 同名アイテムを「剣 ×2」形式でグループ表示（`_cached_grouped` キャッシュ追加、カーソルはグループ単位で操作）
-  - [x] Phase 11-4: ヒーラー操作時の回復実装・回復エフェクト
-    - プレイヤー操作ヒーラーの回復行動
-      - `_get_valid_targets()`: `action=="heal"` または `"buff_defense"` のとき `is_friendly==true` のキャラ（自分除く）を対象にする
-      - ターゲット並び順: 距離順 → HP割合低い順（`_get_sorted_targets()` で heal/buff_defense 専用ソート）
-      - `_enter_targeting()` に MP不足チェックを追加（`mp_cost > character.mp` ならターゲット選択モードに入れない）
-      - `_execute_heal()`: `magic_power × heal_mult` で回復量を計算・`character.heal()` でHP回復・MP消費
-      - `_execute_buff()`: `apply_defense_buff()` でバフ付与・MP消費
-    - 回復射程仕様
-      - ヒーラーの回復は単体・射程あり（`healer.json` の各スロット `range` フィールドで管理。弓・炎と同じ仕組みで射程制限）
-      - `healer.json` の `attack_range`（AI用）および全スロット `range` を 1 → 4 に更新
-      - 将来の範囲魔法: 範囲内の味方全員を対象（実装時に `ranged_area` 相当の heal 版アクションを追加する設計）
-    - 回復エフェクト（案A採用: コード描画）
-      - `scripts/heal_effect.gd` 新規作成（Kenney素材に波紋系が存在しないため案A採用）
-      - キャスト側（ヒーラー）: `mode="cast"` → 白金系（`Color(1.0, 0.95, 0.6)`）の波紋リング3本が外へ広がる
-      - ターゲット側（回復される側）: `mode="hit"` → 緑〜白系のリングが内へ縮まる + 中央グロー
-      - 再生時間 0.6 秒（HitEffect の約 0.375 秒より遅め）、半径 `GRID_SIZE × 0.55`（HitEffect より大きめ）
-      - `_spawn_heal_effect(pos, mode)` を `player_controller.gd` に追加し、キャスト・ターゲット両方に発火
-      - HEAL SE は `character.heal()` 内の既存処理をそのまま使用
-  - [x] Phase 11-5: ガードシステム
-    - X/B ボタン（`menu_back` アクション）ホールドでガード発動
-      - `player_controller._process_normal()`: `Input.is_action_pressed("menu_back")` で `character.is_guarding` をセット/解除
-      - 攻撃キー入力時はガードを先に解除してからターゲット選択モードへ移行
-      - `is_blocked = true`（メニュー等）のとき `character.is_guarding = false` に強制解除
-    - ガード中の向き維持
-      - `character.move_to()`: `is_guarding = true` のとき facing を更新しない（guard_facing を維持）
-      - 後ずさり・横歩きに対応（`_apply_direction_rotation()` もスキップ）
-    - ガード中の移動速度
-      - `player_controller._try_move()`: duration を2倍（通常の50%速度）
-    - ガードグラフィック
-      - `character_data.sprite_top_guard: String = ""`（`sprites.top_guard` キーからロード）
-      - `character_generator.gd`: `data.sprite_top_guard = folder + "/guard.png"`（味方・敵共通）
-      - `character._tex_guard`: 起動時に事前ロード（`_load_walk_sprites()` 内）
-      - `_update_ready_sprite()` 優先順: `guard.png`（ガード中）> `ready.png`（ターゲット/攻撃中）> `top.png`（通常）
-      - guard.png がなければ ready.png にフォールバック、それもなければ top.png
-      - ガード中は歩行アニメをスキップ（`is_guarding` チェックを `is_targeting_mode or is_attacking` と並列追加）
-    - ガードダメージ軽減
-      - `character.take_damage()`: `is_guarding == true` かつ `dir_result == "front"` のとき
-        - 防御判定を自動成功（ダイスロールなし）
-        - `blocked = _calc_block_power_front_guard()`（block_right_front + block_left_front + block_front の合計。判定100%成功）
-      - 正面以外（側面・背面・方向不明）はガード効果なし（通常の防御判定）
-    - 画像フォーマット仕様追加
-      - `guard.png`（256×256 または 1024×1024、ガード姿勢・盾構え）
-      - 配置先: `assets/images/characters/{set}/guard.png`（味方）/ `assets/images/enemies/{set}/guard.png`（敵）
-      - なければフォールバックで ready.png → top.png を使用（敵は当面 guard.png なし）
+  - [x] Phase 11-1: 階段タイル・フロア遷移（5フロア構成）を実装。フロアごとの敵/NPC管理・遅延初期化・各種バグ修正を含む
+  - [x] Phase 11-2: 5フロア対応ダンジョン（フロア0:ゴブリン中心〜フロア4:ボス）とゲームクリア判定を実装
+  - [x] Phase 11-3: MPバー表示（魔法クラスのみ）・攻撃時MP消費・アイテム一覧のグループ化表示を実装
+  - [x] Phase 11-4: プレイヤー操作ヒーラーの回復行動（単体・射程あり・アンデッド特効）とコード描画による回復エフェクトを実装
+  - [x] Phase 11-5: ガードシステム（X/Bホールドで正面防御100%成功・移動速度50%・向き固定・guard.pngスプライト）を実装
 - [ ] Phase 12: ステージ・バランス調整
-  - [x] Phase 12-1: MP/SPシステム実装
-    - **CharacterData に追加したフィールド**
-      - `max_sp: int = 0`（非魔法クラス専用スタミナ上限）
-      - `instant_death_immune: bool = false`（ボス級は true）
-      - `friendly_fire: bool = false`（将来実装・当面 false 固定）
-    - **Character ランタイムフィールド**
-      - `sp: int` / `max_sp: int` を追加（`_init_stats()` で初期化）
-      - 自動回復：`_recover_mp_sp(delta)` を `_process()` から毎フレーム呼ぶ（速度 `MP_SP_RECOVERY_RATE = 3.0` /秒・端数蓄積方式）
-      - `use_sp(cost)` メソッド追加（`use_mp()` と同じ仕組み）
-      - `use_consumable()` に `restore_sp` 対応を追加
-    - **非魔法クラス JSON に追加**（`fighter-sword` / `fighter-axe` / `archer` / `scout`）
-      - `"max_sp": 60` をクラス定義に追加
-      - Z スロットに `"sp_cost": 2` を追加（通常攻撃の微量消費。回復速度と相殺される程度）
-    - **player_controller.gd**：`_execute_melee()` / `_execute_ranged()` で `sp_cost` を `use_sp()` で消費
-    - **左パネル（left_panel.gd）**
-      - `MAGIC_CLASS_IDS = ["magician-fire", "magician-water", "healer"]` 定数追加
-      - 魔法クラスは MPバー（濃い青 `Color(0.2, 0.5, 1.0)`）を表示
-      - 非魔法クラスは SPバー（水色 `Color(0.4, 0.8, 1.0)`）を表示（`max_sp > 0` のとき）
-    - **OrderWindow**：魔法クラスは「MP」行・非魔法クラスは「SP」行を表示（クラスIDで判定）
-    - **SPポーション**（`assets/master/items/potion_sp.json` 新規作成）
-      - `category: consumable` / `effect.restore_sp: 20`
-      - `consumable_bar.gd` に `potion_sp` の水色アイコン色を追加
-    - **ダンジョン**：fighter-sword・archer の初期装備に `potion_sp`（活力薬）を追加。goblin-archer パーティーのドロップにも追加
-  - [x] Phase 12-2: 水魔法使いクラス・スタンシステム実装
-    - **`magician-water` クラス追加**（`assets/master/classes/magician-water.json` 新規作成）
-      - Z: 水弾（ranged magic, range 5, mp_cost 3, damage_mult 0.8）
-      - X: 水流（ranged magic, range 5, mp_cost 10, damage_mult 1.5）
-      - V: 無力化水魔法（water_stun, magic, range 4, mp_cost 15, stun_duration 4.0s）
-      - `max_sp: 0`・`mp: 60`
-    - **スタンシステム（Character）**
-      - `is_stunned: bool` / `stun_timer: float` フィールド追加
-      - `apply_stun(duration)` メソッド：スタン付与・MessageLog に通知。重複スタンは残り時間を延長
-      - `_process()` でタイマー消化・解除時に `_sprite.rotation = 0` リセット
-      - スタン中は `_sprite.rotation += delta * 4.0` で視覚的なスピン表現
-      - `_update_modulate()` でスタン中はシアン点滅に上書き
-    - **UnitAI スタン対応**
-      - `_process()` 冒頭で `is_stunned == true` の場合は行動キューをクリア・IDLE に戻して早期 return
-    - **Projectile 水弾対応**
-      - `_WATER_BULLET_PATH` 定数追加（`water_bullet.png`・画像なければ水色フォールバック）
-      - `_is_water: bool` / `_stun_duration: float` フィールド追加
-      - `setup()` に `stun_duration` / `is_water` オプション引数追加
-      - `_on_arrive()` で `_stun_duration > 0` の場合 `target.apply_stun()` を呼ぶ
-      - フォールバック色：水=水色・火=オレンジ・矢=黄色
-    - **V スロット（player_controller）**
-      - `special_skill` InputAction 追加（V キー + Y ボタン）
-      - `_slot_v: Dictionary` / `_using_v_slot: bool` フィールド追加
-      - `_load_class_slots()` で V スロットをロード
-      - `_get_slot()` で `_using_v_slot == true` のとき `_slot_v` を返す
-      - `_is_slot_held()` で `_using_v_slot` に応じて `special_skill` / `attack` アクションを判定
-      - `_execute_water_stun()` メソッド追加：MP消費・水弾発射（stun_duration 付き）
-      - `_get_valid_targets()` で `water_stun` を `ranged` と同様に射程内の敵を対象
-    - **SPポーションアイコン色変更**：`consumable_bar.gd` の `potion_sp` 色を水色 → 緑（`Color(0.2, 0.8, 0.3)`）に変更
-    - **ボス系敵に `instant_death_immune: true` 追加**：dark_knight / dark_mage / dark_priest / hobgoblin
-    - **ダンジョン**：ゾンビの霊廟（r1_4）の NPC パーティーに `magician-water` メンバー追加（杖・ローブ・MPポーション×2 装備）
-  - [x] Phase 12-3: アイテム画像反映
-  - [x] Phase 12-4: Vスロット特殊スキル実装（7クラス）
-    - **共通基盤（`player_controller.gd`）**
-      - `V_SLOT_COOLDOWN = 2.0` / `_v_slot_cooldown: float` 追加。`_process()` でカウントダウン
-      - `_has_v_slot_resources()`: MP/SP不足チェック
-      - `_start_v_cooldown()`: クールダウン開始＋ConsumableBar 更新
-      - `_execute_v_instant(action)`: インスタント系ディスパッチャ（クールダウン先行開始）
-      - インスタント系（sliding/whirlwind/rush/flame_circle）: `is_action_just_pressed` で発動
-      - ターゲット系（headshot/water_stun/buff_defense）: `is_action_just_pressed` で PRE_DELAY → TARGETING フローへ
-      - `_enter_targeting()` に SP コストチェックを追加
-      - `_execute_pending()` で headshot 対応・V スロット実行後にクールダウン開始
-      - `_get_valid_targets()` に headshot を ranged 相当として追加
-    - **`character.gd`**: `is_sliding: bool = false` 追加。`take_damage()` でスライディング中はスキップ
-    - **`scripts/flame_circle.gd`** 新規作成: 炎陣エフェクト・tick ダメージノード
-    - **`consumable_bar.gd`**: `v_slot_cooldown: float` 追加・`_on_draw()` に "V: X秒" 表示を追加
-    - **スキル実装（`player_controller.gd`）**
-      - `_execute_sliding()`: 3マスダッシュ（await）・壁で止まる・キャラクター通り抜け可・is_blocked=true
-      - `_execute_whirlwind()`: 周囲8マス AoE・即時ダメージ・is_attacking フラグ（await で解除）
-      - `_execute_rush()`: 前方2マス前進（await）・経路の敵にダメージ・壁で止まる・is_blocked=true
-      - `_execute_headshot()`: ターゲット選択後に実行。immune=false→99999ダメージ（実質即死）、immune=true→×3ダメージ
-      - `_execute_flame_circle()`: FlameCircle ノードを map_node に追加・2.5秒間・0.5秒ごとに magic ダメージ
-      - `_find_character_at(pos)`: 指定グリッド座標のキャラクターを返すユーティリティ
-    - **クラス JSON 更新**
-      - `scout.json`: V=スライディング（sp_cost: 20）
-      - `fighter-axe.json`: V=振り回し（sp_cost: 15, damage_mult: 1.0）
-      - `fighter-sword.json`: V=突進斬り（sp_cost: 15, damage_mult: 1.2）
-      - `archer.json`: V=ヘッドショット（sp_cost: 25, range: 6, damage_mult: 3.0）
-      - `magician-fire.json`: V=炎陣（mp_cost: 20, range: 3, damage_mult: 0.8, duration: 2.5s, tick_interval: 0.5s）
-      - `magician-water.json`: V=無力化水魔法（Phase 12-2 から変更なし）
-      - `healer.json`: C スロットを null に変更、V=防御バフ（buff_defense・mp_cost: 8・range: 4）
-    - **床アイテムマーカー（`game_map.gd`）**
-      - `item.get("image", "")` が空のとき `item_type` から `assets/images/items/{item_type}.png` を導出
-      - `_load_item_texture()` 経由でテクスチャロード。画像なし時は黄色マーカーにフォールバック（既存挙動）
-      - 対応画像: `sword.png` / `axe.png` / `dagger.png` / `bow.png` / `staff.png` / `armor_plate.png` / `armor_cloth.png` / `armor_robe.png` / `shield.png` / `potion_hp.png` / `potion_mp.png` / `potion_sp.png`
-    - **OrderWindow アイテム一覧オーバーレイ（`_draw_item_list_overlay`）**
-      - `_item_tex_cache: Dictionary` と `_load_item_tex(item)` を追加（同パス導出ロジック）
-      - 各アイテム行の左端に `row_h - 6` サイズのアイコンを描画。テクスチャなし時はグレーブロック
-      - テキストはアイコン幅＋4px 右にオフセット
-    - **OrderWindow 装備欄（`_draw_status_section`・装備スロット部）**
-      - 武器・防具・盾スロット行の値列左端に `stat_h - 2` サイズのアイコンを描画
-    - **OrderWindow 所持アイテム欄（`_draw_status_section`・インベントリ部）**
-      - 未装備品リスト各行の左端にアイコンを描画
-  - [x] Phase 12-5: 操作体系変更・LB/RBキャラ切り替え・C/X短押しアイテム選択UI
-  - [x] Phase 12-6: 防御バフのバリアエフェクト実装
-    - `scripts/buff_effect.gd` 新規作成（コード描画・永続エフェクト）
-      - 半透明の緑色六角形（塗り＋枠線）を `draw_polygon()` + `draw_polyline()` で描画
-      - 外周リングを `draw_arc()` で重ねる（半径 GRID_SIZE × 0.74）
-      - ゆっくり回転（60°/秒・`ROT_SPEED = PI/3`）
-      - 自身では削除しない（`character.gd` が寿命を管理）
-    - `character.gd` 修正
-      - `_buff_effect: Node2D` フィールド追加
-      - `apply_defense_buff()`: エフェクトを生成して `add_child()`。重複付与時は再生成でリセット
-      - `_remove_buff_effect()` ヘルパー追加
-      - バフタイマー消化時（`defense_buff_timer <= 0`）に `_remove_buff_effect()` を呼ぶ
-    - **LB/RB（通常時）**：パーティーメンバーを表示順で循環切り替え。`switch_char_requested` シグナルで `game_map._on_switch_character_requested()` を呼び出し。`player_controller.party_leader` がパーティーリーダーのときのみ有効（NPC パーティーに合流してリーダーを譲った場合は無効）
-    - **C/X短押し**：アイテム選択UIを開く（ITEM_SELECT→ACTION_SELECT→TRANSFER_SELECT）。UI中は時間停止・LB/RBでカーソル循環
-    - **ConsumableBar**：`GlobalConstants.ConsumableDisplayMode` enum で UI フェーズを管理。`is_selecting` / `select_index` は後方互換用（旧C/Xホールド方式の残留フィールド）
-    - **project.godot**：`switch_char_prev`（LB/Button9）・`switch_char_next`（RB/Button10）を追加。旧 `slot_prev`/`slot_next` を空に（未使用）
-    - **game_map.gd**：`player_controller.switch_char_requested` シグナルを接続。`_party_sorted_members` を初期設定時およびキャラ切り替え後に更新
-  - [x] Phase 12-7: パーティーメンバー・未加入 NPC のフロア遷移
-    - **パーティーメンバーの階段使用**
-      - `unit_ai.gd`: `_generate_queue()` 冒頭で hero と別フロアの仲間を検出 → `_generate_floor_follow_queue()` で適切な階段タイルへ A* 誘導
-      - `game_map.gd`: `_check_party_member_stairs()` で仲間が階段タイルに静止したら `_transition_member_floor()` を呼んで遷移
-      - `_transition_member_floor()`: hero の隣接空きタイルに着地・NpcManager の `map_data` 更新・`blocking_characters` 再構築
-      - `_member_stair_cooldown` 変数でパーティー遷移クールダウンを hero の `_stair_cooldown` とは独立管理
-    - **未加入 NPC のフロアランク判断**
-      - `global_constants.gd`: `FLOOR_RANK = {0:0, 1:8, 2:13, 3:18, 4:24}` / `NPC_HP_THRESHOLD = 0.5` / `NPC_ENERGY_THRESHOLD = 0.3` 追加
-      - `npc_leader_ai.gd`: `_get_explore_move_policy()` 追加（全メンバーの RANK_VALUES（C=3, B=4, A=5, S=6）の**和**と `FLOOR_RANK` を比較して適正フロアを決定。HP最低値・エネルギー平均値が閾値未満なら-1補正。`_calc_recoverable_hp()` / `_calc_recoverable_energy()` ヘルパー追加）
-      - `party_leader_ai.gd`: `_get_explore_move_policy()` 仮想メソッド追加・EXPLORE 戦略の `move_policy` 設定をこのメソッド経由に変更
-      - `unit_ai.gd`: `"stairs_down"` / `"stairs_up"` move_policy で `_generate_stair_queue()` を生成
-      - `game_map.gd`: `_check_npc_member_stairs()` で全フロアの NPC を監視・`_transition_npc_floor()` で NPC パーティーを遷移
-    - **共通基盤**
-      - `unit_ai.gd`: `set_map_data()` 追加・`_is_passable()` に別フロアキャラを除外するクロスフロアフィルターを追加
-      - `party_leader_ai.gd`: `set_map_data()` 追加（UnitAI に伝播）
-      - `party_manager.gd`: `set_map_data()` 追加（LeaderAI に伝播）
-      - `game_map.gd`: `_rebuild_blocking_characters()` 追加（`_transition_floor()` でも流用）・`_find_free_adjacent_to()` 追加・`_member_to_npc_manager` マッピング追加
-      - `global_constants.gd`: `CLASS_NAME_JP` に `"magician-water"` を追加
-  - [x] Phase 12-7 バグ修正
-    - **NPC パーティーがプレイヤーを追従する問題**
-      - 原因：`party_leader_ai._assign_orders()` で formation_ref の決定ロジックが未加入 NPC パーティーにも `_player` を渡していた
-      - 修正：`joined_to_player` フラグを `PartyLeaderAI` / `PartyManager` に追加。合流済みの場合のみ `formation_ref = _player` に設定。未加入 NPC リーダーは `formation_ref = null`（自由行動）
-      - `game_map._merge_npc_into_player_party()` で `nm.set_joined_to_player(true)` を呼んでフラグを伝播
-    - **仲間の「同じ部屋」指示が機能しない問題**
-      - 原因：`unit_ai._formation_satisfied()` の "same_room" 判定で、通路タイル（area_id が空文字）の場合に常に true を返していた
-      - 修正：自分またはリーダーが通路にいる場合はマンハッタン距離 ≤3 のフォールバック判定に切り替え
-      - `_target_in_formation_zone()` の "same_room" でも同様の修正を適用
-    - **ヒーラーが他パーティーの NPC に回復・バフをかける問題**
-      - 原因：`UnitAI._find_heal_target()` / `_find_buff_target()` が `_all_members` 全体を対象にしていた
-      - 修正：`_party_peers: Array[Character]` フィールドを追加し、`PartyLeaderAI.setup()` が `unit_ai.set_party_peers(members)` を呼ぶ。heal/buff ターゲット候補を自パーティーメンバー＋hero に限定
-    - **アイテムが未訪問フロアに出現する問題**
-      - 原因：`_floor_items` が `{Vector2i: item}` のフラット辞書であり、全フロアのアイテムが混在していた
-      - 修正：`_floor_items` を `{floor_idx: {Vector2i: item}}` のネスト構造に変更。`_setup_floor_enemies()` のラムダで floor_idx をキャプチャ。`_check_item_pickup()` と描画処理も `ch.current_floor` / `_current_floor_index` を参照するよう更新
-    - **キャラクターが A* 経路探索で階段タイルを通り抜ける問題**
-      - 原因：`unit_ai._astar()` が階段タイルを中間ノードとして通過可能として扱っていた
-      - 修正：`_astar()` で階段タイルを中間ノードとしてスキップ（`move_policy` が "stairs_down"/"stairs_up" の場合、またはゴールが階段タイルの場合は除外しない）
-      - `_find_adjacent_goal()` で階段でないタイルを優先候補として選択（`best_on_stair` フラグで管理）
-      - `_find_explore_target()` で階段タイルをフィルタリング（非階段タイルが存在する場合のみ）
-      - `_generate_queue()` 冒頭で `move_policy` が階段系以外にもかかわらず階段上にいる場合は隣接の非階段タイルへ移動するフォールバック
-      - `_find_non_stair_adjacent()` / `_is_stair_tile()` ヘルパー追加
-    - **未加入 NPC のフロア遷移：意図しない方向への遷移を防止**
-      - `game_map._check_npc_member_stairs()` で NpcManager の `get_explore_move_policy()` を確認し、`"stairs_down"` / `"stairs_up"` の意図がない場合は遷移をスキップ
-  - [x] Phase 12-7 追加修正（NPC メンバーのワープ問題）
-    - **NPC リーダー遷移時に全メンバーが一括ワープする問題を修正**
-      - 修正前：`_transition_npc_floor()` がパーティー全員を一括で新フロアへ転送していた
-      - 修正方針：プレイヤーパーティーメンバー遷移（`_check_party_member_stairs()`）と同じ個別遷移方式を採用
-      - **`_transition_npc_floor()` の変更**：リーダーのみ新フロアへ遷移。リーダーの UnitAI map_data のみ更新（`nm.set_member_map_data()`）。NpcManager は全メンバー遷移完了まで旧フロアリストに残す
-      - **新規 `_transition_single_npc_member(nm, member, direction)`**：非リーダーメンバーを個別に遷移。全員揃ったら NpcManager の管理フロアを更新（`_per_floor_npcs` 移動・VisionSystem 更新・`_rebuild_blocking_characters()`）
-      - **`_check_npc_member_stairs()` の変更**：リーダーのみ監視 → 全メンバーを個別監視。リーダーは従来通り move_policy チェックで遷移。非リーダーは「リーダーと別フロアかつリーダー方向の階段タイルに静止」で個別遷移
-      - **`party_leader_ai._assign_orders()` の変更**：未加入 NPC の非リーダーメンバーがリーダーと別フロアにいる場合、`move_policy = "stairs_down"/"stairs_up"` を強制設定（戦闘中断して階段へ向かう）
-      - **`PartyLeaderAI.set_member_map_data(member_name, map_data)`** 追加：特定メンバーの UnitAI map_data のみ更新
-      - **`PartyManager.set_member_map_data(member, map_data)`** 追加：LeaderAI への passthrough
-- [x] Phase 12-8: OrderWindowバグ修正・NPC会話専用ウィンドウ・階段複数設置
-  - [x] **OrderWindow 名前列フォーカス時の右キー動作修正**
-    - 修正前：名前列（_col_cursor=0）で右キーを押すとサブメニューが開いていた
-    - 修正後：右キーは常に列移動のみ（col 0→1→…→6→0 の循環）。サブメニューを開くのは Z/A のみ
-    - `order_window.gd` の `ui_right` ハンドラを簡略化（分岐削除）
-  - [x] **NPC会話専用ウィンドウ（`scripts/npc_dialogue_window.gd`）新設**
-    - CanvasLayer（layer=20）・`process_mode = PROCESS_MODE_ALWAYS`
-    - 表示中はゲームを一時停止（`get_tree().paused = true`）、閉じたら再開
-    - **レイアウト**
-      - 画面中央に半透明の暗幕＋パネル
-      - 上部：NPC メンバーの `face.png`（なければ `front.png`、なければグレーブロック）を横並び表示。その下に名前・クラス名（日本語）＋ランク `[S]/[A]/[B]/[C]`（S/A=赤・他=オレンジで色分け）
-      - 下部：選択肢（MAIN 状態）または確認ダイアログ（CONFIRM 状態）
-    - **操作フロー**
-      - MAIN 状態：「仲間にする」（デフォルト）/ 「断る」を↑↓で選択、Z/A で決定、X/B で閉じる
-      - 「仲間にする」→ CONFIRM 状態へ遷移：「本当に仲間にしますか？」＋「はい」「いいえ」（デフォルト：いいえ）
-      - 「はい」→ `choice_confirmed("join_us")` シグナル発火
-      - 「いいえ」・X/B → MAIN 状態に戻る
-      - 「断る」・X/B → `dismissed()` シグナル発火
-    - シグナル：`choice_confirmed(choice_id: String)` / `dismissed()`
-  - [x] **game_map.gd 変更**
-    - `var npc_dialogue_window: NpcDialogueWindow` フィールド追加
-    - `_setup_dialogue_system()`: MessageWindow の dialogue シグナル接続を NpcDialogueWindow に変更
-    - `_on_dialogue_requested()`: MessageWindow.start_dialogue() → NpcDialogueWindow.show_dialogue() に置き換え。MessageLog に会話開始メッセージのみ記録
-    - `_on_dialogue_choice()`: CHOICE_JOIN_THEM（連れて行って）を廃止し join_us のみ対応。結果を MessageLog に記録
-    - `_on_dialogue_dismissed()`: MessageLog に「誘いを断った」を記録してから `_close_dialogue()` を呼ぶ
-    - `_close_dialogue()`: `message_window.end_dialogue()` → `npc_dialogue_window.hide_dialogue()` に変更
-    - MessageWindowの会話モードはNPC会話には使用しない（MessageLogへの記録のみ継続）
-    - LB/RB キャラ切替後に `order_window.set_controlled()` を呼んで指示ウィンドウに反映
-  - [x] **`dungeon_handcrafted.json` 階段配置**（フロアあたり3か所。フロア間で同一座標に対応する上り/下りを設置）
-    - フロア0：下り3か所（r1_8/r1_11/r1_12）
-    - フロア1：上り3か所（r2_1/r2_5/r2_8）・下り3か所（r2_10/r2_11/r2_12）
-    - フロア2：上り3か所（r3_1/r3_5/r3_8）・下り3か所（r3_10/r3_11/r3_12）
-    - フロア3：上り3か所（r4_1/r4_5/r4_8）・下り3か所（r4_10/r4_11/r4_12）
-    - フロア4：上り3か所（r5_1 内に3つ）
-    - 入口部屋（r1_1）には階段を置かない
-  - [x] Phase 12-8 バグ修正
-    - **別フロアのキャラクターが移動をブロックする問題**
-      - 原因：`_rebuild_blocking_characters()` が全フロアの敵・NPC を無差別に追加していた（`current_floor` フィルターなし）。無効参照（freed キャラ）も 18 件混入
-      - 修正：`_rebuild_blocking_characters()` で敵・NPC を1体ずつ `current_floor` フィルタリング＋ `is_instance_valid` チェック。`_can_move_to()` / `_try_move()` / `_get_valid_targets()` にも同フロアフィルターを追加（二重防衛）
-      - デバッグログ出力先：`%APPDATA%\Godot\app_userdata\trpg\debug_floor_info.txt`（F2 キー）
-    - **敵がプレイヤー（英雄）以外を攻撃しない問題**
-      - 原因①：全敵リーダー AI（goblin/wolf/hobgoblin/default）の `_select_target_for()` が `return _player` 固定だった
-      - 原因②：`set_friendly_list()` を呼ぶ時点で `_leader_ai == null`（`activate()` 前）なのでリストが破棄されていた
-      - 修正①：`PartyLeaderAI` に `_friendly_list` と `_find_nearest_friendly()` / `_has_alive_friendly()` を追加。各敵リーダー AI の `_evaluate_party_strategy()` / `_select_target_for()` をこれらを使うよう変更
-      - 修正②：`PartyManager` に `_friendly_list` フィールドを追加して保存し、`_start_ai()` 内で `_leader_ai` 生成直後に `set_friendly_list()` を渡す
-      - `game_map._link_all_character_lists()` でパーティーメンバー＋未加入 NPC を `all_friendlies` としてまとめ、全敵マネージャーに配布
-- [x] Phase 12-9: 左パネル改修・パーティー上限・NPC配置集約
-  - [x] **左パネルから MAP 表示を削除・12人対応**
-    - `left_panel.gd`：`minimap_h`（下25%）を廃止し全高さをキャラクター表示に使用
-    - `MAX_CARD_HEIGHT = 100`（1人あたりカード最大高さ）を定数追加。人数が少なくても大きくなりすぎない
-    - `GlobalConstants.MAX_PARTY_MEMBERS = 12` を追加
-  - [x] **パーティー満員ガード（NpcDialogueWindow）**
-    - `_State.PARTY_FULL` 状態を追加。`show_party_full(nm)` メソッドで表示
-    - 「これ以上仲間にできません（最大 N 人）」とNPC顔画像を表示し、Z/A・X/B で閉じる
-    - `party_full_closed` シグナルを追加。`game_map._on_party_full_closed()` でログ記録・ダイアログを閉じる
-    - `game_map._on_dialogue_requested()` で `party.members.size() >= MAX_PARTY_MEMBERS` をチェックし満員時は会話ウィンドウの代わりに満員メッセージを表示
-  - [x] **NPC配置をフロア0に集約（4部屋・11人）**
-    - `dungeon_handcrafted.json` 修正：フロア0の r1_3〜r1_6 をすべて NPC 専用部屋（敵なし）に変更
-    - r1_2（ゴブリンの集会所）のみ敵部屋として残す
-    - NPC 配置（計11人・クラスバランスを考慮）：
-      - r1_3「傭兵の集会所」: archer + fighter-axe（2人）
-      - r1_4「廃教会」: fighter-sword + healer + magician-water（3人、既存）
-      - r1_5「冒険者の野営地」: scout + magician-fire + archer（3人）
-      - r1_6「探索者の拠点」: fighter-sword + healer + scout（3人）
-    - 各 NPC は初期装備持ち（プレイヤー初期装備相当の弱め装備）
-- [x] Phase 12-10: attack.png スプライト対応・image_set 固定割り当て
-  - [x] **`attack.png` スプライト対応**
-    - `character_data.gd`：`sprite_top_attack: String = ""` フィールド追加（`sprites.top_attack` キーからロード）
-    - `character_generator.gd`：`generate_character()` / `apply_enemy_graphics()` で `sprite_top_attack = folder + "/attack.png"` を設定
-    - `character.gd`：`_tex_attack: Texture2D = null` フィールド追加。`_load_walk_sprites()` でロード
-    - `character.gd`：`_update_ready_sprite()` に `is_attacking` 専用分岐を追加。優先順: `guard.png`（ガード中）> `attack.png`（攻撃中）> `ready.png`（ターゲット選択中）> `top.png`（通常）
-  - [x] **`apply_image_set_override()` 追加と image_set 固定割り当て**
-    - `character_generator.gd`：`apply_image_set_override(data, folder_name)` 静的メソッド追加。フォルダ名からスプライトパスを一括設定し `_used_image_sets` に登録
-    - `npc_manager.gd`：`setup()` で `image_set` フィールドを読み取り `_spawn_member()` に渡す。`_spawn_member()` に `image_set_override: String = ""` 引数追加
-    - `dungeon_handcrafted.json`：プレイヤーパーティー3人・NPC11人の全14キャラに `image_set` を固定割り当て
-      - hero (fighter-sword) → `fighter-sword_male_young_slim_00001`
-      - player archer → `archer_female_young_slim_00006`
-      - player healer → `healer_female_young_slim_00010`
-      - r1_3 archer → `archer_male_young_slim_00005`、r1_3 fighter-axe → `fighter-axe_female_young_slim_00004`
-      - r1_4 fighter-sword → `fighter-sword_female_young_slim_00002`、r1_4 healer → `healer_male_young_slim_00009`、r1_4 magician-water → `magician-water_female_young_slim_00014`
-      - r1_5 scout → `scout_female_young_slim_00012`、r1_5 magician-fire → `magician-fire_male_young_slim_00007`、r1_5 archer → `archer_male_young_slim_00005`
-      - r1_6 fighter-sword → `fighter-sword_female_young_slim_00002`、r1_6 healer → `healer_male_young_slim_00009`、r1_6 scout → `scout_male_young_slim_00011`
-- [x] Phase 12-11: NPC 多層階探索・行動バグ修正
-  - [x] **NPC が同フロア敵全滅後に探索モードへ移行しない問題**
-    - 原因：`npc_leader_ai._evaluate_party_strategy()` が `_enemy_list`（全フロア）を無差別にチェックしていたため、他フロアに敵が生存している限り常に `ATTACK` を返していた
-    - 修正：自パーティーの `current_floor` を取得し、**同フロアの敵のみ** ATTACK トリガーにする。他フロアの敵は無視
-  - [x] **NPC がパーティー強度十分でも階段を使わず他の部屋を探索する問題**（修正済み・値は後続でさらに更新）
-    - Phase 12-11 時点での修正：`global_constants.gd` の `FLOOR_RANK` を平均スコアベースの `{0:5, 1:12, 2:20, 3:30, 4:45}` に変更
-    - **スコアロジック全面改修（Phase 12-11 後）**：平均スコアから和スコアに変更 + 動的スコア（HP/MP/SP）を追加。FLOOR_RANK を和ベースの `{0:200, 1:280, 2:420, 3:580, 4:780}` に更新。`NPC_HP_THRESHOLD = 0.5`・`NPC_ENERGY_THRESHOLD = 0.3` を追加
-    - **スコア方式をランク和に変更（最終版）**：`power + physical_resistance + ...` の stat 和を廃止し、RANK_VALUES（C=3, B=4, A=5, S=6）の合計に変更。FLOOR_RANK を `{0:0, 1:8, 2:13, 3:18, 4:24}` に更新（各フロアの敵パーティー構成を参照した現実的な値）
-  - [x] **NPC の階段探索を視界ベースに変更・ダンジョン階段を増設**
-    - `global_constants.gd`: `NPC_KNOWS_STAIRS_LOCATION: bool = false` 追加（false=視界ベース探索 / true=地図持ち切り替えフラグ）
-    - `party_leader_ai.gd`: `_visited_areas: Dictionary = {}` 追加。`setup()` で全 UnitAI に同一 dict 参照を渡してパーティー単位で訪問情報を共有
-    - `unit_ai.gd`: `_visited_areas: Dictionary` フィールド追加・`set_visited_areas()` 追加・`_generate_queue()` 先頭で現在エリアを記録・`_generate_stair_queue()` に訪問済みフィルタを追加（未発見なら `_generate_explore_queue()` にフォールバック）
-    - `dungeon_handcrafted.json`: 各方向の階段を3か所→6か所に増設し、フロア全体（3列×4行）に均等分散
-  - [x] **NPC がフロア遷移後にプレイヤーと同フロアに降りてくるまで動かない問題**
-    - 原因：`unit_ai._generate_queue()` のフロア追従チェックが `_member.is_friendly` で判定していたため、未加入 NPC が hero と別フロアにいると「hero を追って戻れ」という指示になり階段付近で停止していた。hero が降りてきた瞬間に動き出すという現象
-    - 修正：`unit_ai.gd` に `_follow_hero_floors: bool = false` フラグを追加。フロア追従は `_follow_hero_floors == true` のときのみ発動
-    - `party_leader_ai.setup()` で `joined_to_player` の値を各 UnitAI に初期値として渡す
-    - `party_leader_ai.set_follow_hero_floors()` を追加（全 UnitAI に一括伝播）
-    - `party_manager.set_joined_to_player()` が `set_follow_hero_floors()` 経由で UnitAI まで伝播するよう変更
-    - 結果：合流済みパーティーメンバーのみフロア追従、未加入 NPC は各フロアで自律行動を継続
-  - [x] **NPC がフロア遷移後にすり抜けられる問題**
-    - 原因：`_transition_npc_floor()` で NPC が現フロアに到着した際、`npc_managers` には追加されているが `_rebuild_blocking_characters()` が呼ばれておらず `player_controller.blocking_characters` が未更新だった
-    - 修正：`_transition_npc_floor()` の `new_floor == _current_floor_index` ブロックに `_rebuild_blocking_characters()` 呼び出しを追加
-  - [x] **NPC 死亡・フロア遷移のデバッグログ追加**
-    - `party_manager._on_member_died()` で `is_friendly` キャラ死亡時に `[NPC死亡] 名前（クラス・フロア）` を MessageLog（ai チャンネル）に出力
-    - `game_map._transition_npc_floor()` でフロア遷移時に `[NPC遷移] 名前: F旧 ↓/↑ F新` を MessageLog に出力
-  - [x] **NPC 複数パーティーが同一階段タイルに集中する問題**
-    - 原因：`_transition_npc_floor()` が常に `spawn_stairs[0]`（新フロアの最初の階段）を全パーティーの着地基点にしていたため、異なるパーティーが同じタイルに降り立ち密集していた
-    - 修正：NPC が旧フロアで踏んでいた階段タイルの座標に最も近い新フロアの階段を着地点として選択。`(s - old_stair_pos).length()` で最短距離の階段を探索
-    - 結果：フロア全体に分散した6か所の階段から対応する着地点に散らばるようになった
-- [x] Phase 12-12: アンデッド・新敵種実装
-  - CharacterData に `is_undead: bool = false` フィールド追加
-  - skeleton / skeleton-archer / lich / demon / dark-lord の JSON マスターデータ作成・enemies_list.json に追加
-  - **アンデッド特効（ヒーラー）**
-    - `_get_valid_targets()` に is_undead=true の敵を追加（heal アクション時）
-    - `_execute_heal()` でターゲットがアンデッドの場合は `character.heal()` ではなく `take_damage()` を呼ぶ（回復量をダメージとして適用）
-  - **thunder_bullet 飛翔体**（デーモン専用）
-    - `Projectile` に `_THUNDER_BULLET_PATH` 定数追加（`assets/images/projectiles/thunder_bullet.png`）
-    - demon.json の `projectile_type: "thunder_bullet"` でキャラクター固有指定。画像なし時は紫色フォールバック
-  - **炎陣（FlameCircle）のAI呼び出し対応**
-    - `FlameCircle` を AI 側（DarkLordUnitAI）からも生成できるようスタティックメソッドまたはシグナル経由で map_node に追加できる設計に変更
-    - dark-lord の攻撃アクションとして炎陣を使用
-  - **ワープ移動（DarkLordUnitAI専用）**
-    - `DarkLordUnitAI.gd` 新規作成
-    - 3秒間隔（`game_speed` 除算）でランダムな空きタイルにワープ（`character.sync_position()` で瞬間移動）
-    - ワープ直後に炎陣を設置する行動パターン
-  - **リッチの交互魔法弾**
-    - LichUnitAI が攻撃ごとに fire_bullet / water_bullet を交互に切り替えて発射
-  - dungeon_handcrafted.json のフロア4ボス構成に dark-lord を追加
-- [x] Phase 12-13: バグ修正・ダンジョン再構成
-  - **dungeon_handcrafted.json を全面再生成（12部屋×4フロア＋ボス1部屋）**
-    - フロア0〜3：12部屋（3列×4行・部屋サイズ10×8タイル）・階段3か所
-    - フロア0：入口1・NPC4部屋（11名）・敵7部屋（ゴブリン中心・22体）
-    - フロア1：ゴブリン＋アンデッド（zombie/skeleton/lich）混成・36体
-    - フロア2：アンデッド＋狼＋ハーピー＋暗黒系・38体
-    - フロア3：暗黒騎士団・デーモン・リッチ・サラマンダー・45体
-    - フロア4：ボス1部屋（深淵の玉座）・dark-lord等6体（変更なし）
-    - アイテム補正値はフロア深度に応じてスケール（フロア0: atk 2-5、フロア4: atk 15-22）
-  - **アウトラインシェーダー復活**（`assets/shaders/outline.gdshader`）
-    - ターゲット選択中の敵にシェーダーで白いアウトラインを描画
-    - 8方向隣接サンプリングによるキャンバスアイテムシェーダー
-    - `uniform bool outline_enabled`・`textureSize(TEXTURE, 0)` を使用
-    - **注意**：canvas_item の `fragment()` 内では `return` 使用不可（Godot 4 制限）→ bool フラグ + 三項演算子（`?:`）で代替
-    - `ShaderMaterial` は `_setup_sprite()` 時点で即生成（eager）。GDScript 側は `true`/`false` で渡す
-  - **ターゲット選択時の射程オーバーレイ復活・方向フィルタ追加**（`game_map._draw()`）
-    - ターゲット選択中に射程範囲を赤でオーバーレイ表示
-    - melee: 前方±90°（dot ≥ 0.0）のマスのみ表示
-    - ranged/heal/buff 系: 前方±45°（dot ≥ 0.707）のマスのみ表示
-    - `_was_targeting: bool` フラグで選択モード切替時に `queue_redraw()` を発火
-  - **ConsumableBar.DisplayMode パースエラー修正**
-    - Godot 4 のパース順問題で `ConsumableBar.DisplayMode` が外部から参照できないエラー
-    - `GlobalConstants` に `enum ConsumableDisplayMode { NORMAL, ITEM_SELECT, ACTION_SELECT, TRANSFER_SELECT }` を移動
-    - `consumable_bar.gd` / `player_controller.gd` を `GlobalConstants.ConsumableDisplayMode.X` 参照に統一
-  - **gitignore 修正**：`dungeon_generated.json` をgit追跡対象に変更（gitignoreから除外）
-  - **ConsumableBar アイテム画像表示修正**
-    - ダンジョン JSON のアイテム定義には `image` フィールドがないため、NORMAL モード・ITEM_SELECT モードの両方で `img_path` が空になっていた
-    - `consumable_bar.gd` の両描画関数に `img_path` が空のとき `"assets/images/items/" + itype + ".png"` を導出するフォールバックを追加
-    - `order_window.gd` の `_load_item_tex()` には既にフォールバックあり（変更不要）
-  - **`assets/images/items/daggar.png` → `dagger.png` にリネーム**（typo修正）
-- [x] Phase 12-14: ステータス統合・ガード改修・NPC会話UI刷新
-  - **フィールド名統一**
-    - `attack_power` / `magic_power` → `power`（物理クラスは物理威力・魔法クラスは魔法威力として共用）
-    - `accuracy` → `skill`（物理技量/魔法技量として共用）
-    - 敵 JSON 全16ファイル・クラス JSON・アイテム JSON・ダンジョン JSON の全 items.stats を一括変換
-    - 参照箇所一括更新（player_controller / unit_ai / party_leader_ai / order_window / left_panel 等）
-    - 旧キー（`attack_power`/`magic_power`）は `character_data.gd` でフォールバック互換を維持
-  - **OrderWindow UI ラベル変更**
-    - `power`: 物理クラス=「物理威力」、魔法クラス=「魔法威力」
-    - `skill`: 物理クラス=「物理技量」、魔法クラス=「魔法技量」（heal クラスは非表示）
-    - `defense_accuracy`: 「防御技量」
-  - **「特殊スキル」→「特殊攻撃」全置換**（コード・UI・MessageLog）
-  - **ガード防御改修**（`character.take_damage()` / `_calc_block_power_front_guard()`）
-    - 正面攻撃（±45°）: 防御判定100%成功・防御強度分カット（旧 ×3 乗算廃止）
-    - 側面・背面: 通常防御判定（変更なし）
-  - **NPC会話トリガー変更**（`player_controller.gd`）
-    - バンプ検出方式を廃止。移動方向ではなく A ボタンで隣接 NPC に話しかける方式に変更
-    - `_find_adjacent_npc()` 追加・攻撃入力時に隣接 NPC チェックを挿入
-    - 断られた NPC は `mark_refused()` で再申し出を永続停止（`NpcLeaderAI._was_refused` フラグ）
-  - **NPC会話選択肢の刷新**（`npc_dialogue_window.gd`）
-    - プレイヤー起点: 「仲間にする」「一緒に行く」「キャンセル」の3択（NPC 自発は現在無効）
-    - 「仲間にする」→ CONFIRM 状態（「本当に仲間にしますか？」）経由で確定
-    - 「一緒に行く」→ 直接 `choice_confirmed("join_them")` を発火
-    - 会話UI開き直後2フレームの入力スキップ（ボタンリーク修正）
-  - **「一緒に行く」合流処理修正**（`game_map._merge_player_into_npc_party()`）
-    - 操作キャラ（hero）のハイライトを維持（NPC リーダーへの誤切り替えを防止）
-    - `nm.set_joined_to_player(true)` 追加（NPC メンバーが hero を追従するように）
-    - `player_controller.party_leader` を NPC リーダーに更新
-    - `_switch_character()` の判定を `character.is_leader` ベースに変更（シンプル化）
-- [x] Phase 12-15: ステータス生成システムの完成（設定ファイル方式・全ステータス0-100レンジ化）
-  - **設定ファイル方式へ移行**（`CLASS_STAT_BASES` ハードコード定数を廃止）
-    - `assets/master/stats/class_stats.json`：クラスごとの base / rank を定義
-    - `assets/master/stats/attribute_stats.json`：sex / age / build 補正値・random_max を定義
-    - `CharacterGenerator._load_stat_configs()` が初回呼び出し時にロード・静的キャッシュ
-  - **ステータスキー追加**
-    - `vitality`（0-100）→ `character_data.max_hp` に格納
-    - `energy`（0-100）→ 魔法クラス（magician-fire / magician-water / healer）は `max_mp`、非魔法クラスは `max_sp` に格納
-    - class_json の `"mp"` / `"max_sp"` フィールドは廃止（energy で代替）
-  - **全ステータス 0-100 スケールに統一**（HP/MP/SP を含む全ステータスが同一スケール）
-  - **CharacterGenerator に `MAGIC_CLASS_IDS` 定数追加**（energy の格納先判定）
-  - **`move_speed` の変換**：0-100 スコア → `_convert_move_speed()` で秒/タイルに変換して格納
-  - **`obedience` の変換**：0-100 整数スコア → `/ 100.0` で 0.0〜1.0 に変換して格納、表示は `× 100` で 0-100 整数に戻す
-- [x] Phase 12-17: 敵ステータス生成システム実装（設定ファイル方式・0-100スケール化）
-  - **`assets/master/stats/enemy_class_stats.json`** 新規作成：敵専用ステータスタイプ5種（zombie / wolf / salamander / harpy / dark-lord）の base / rank を定義
-  - **`assets/master/stats/enemy_list.json`** 新規作成：全16敵種の `stat_type`（参照するステータステーブル）/ `rank`（デフォルトランク）/ `stat_bonus`（加算補正・100でクランプ）を定義
-    - 人間クラスを流用する敵（goblin=fighter-axe、dark-knight=fighter-sword 等）は `class_stats.json` を参照
-    - 敵専用タイプ（zombie / wolf / salamander / harpy / dark-lord）は `enemy_class_stats.json` を参照
-    - アンデッド系（skeleton / skeleton-archer / lich）は `physical_resistance: 30` の stat_bonus で物理耐性を底上げ
-  - **`character_generator.gd`** 変更
-    - `ENEMY_CLASS_STATS_JSON_PATH` / `ENEMY_LIST_JSON_PATH` 定数追加
-    - `_enemy_list_cache` / `_enemy_list_loaded` 静的変数追加
-    - `_load_stat_configs()` に enemy_class_stats.json のロード＋`_class_stats_cache` へのマージを追加（`_calc_stats()` が人間クラス・敵専用タイプ両方を参照できるように）
-    - `_load_enemy_list()` 追加（enemy_list.json の遅延ロード）
-    - `apply_enemy_stats(data)` 追加：enemy_list.json を参照して stat_type/rank/stat_bonus を取得 → `_calc_stats()` でステータス生成 → データに格納。敵は energy → max_sp（MP/SP区別なし）
-  - **`party_manager._spawn_member()`**：`apply_enemy_graphics()` の直後に `apply_enemy_stats()` を追加
-- [x] Phase 12-16: クリティカルヒット実装
-  - **判定ロジック**（`character.gd` の `take_damage()`）
-    - クリティカル率 = 攻撃側の `skill ÷ 3`%（例: skill=30 → 10%、skill=60 → 20%）
-    - クリティカル時: `multiplier *= 2.0`（ダメージ2倍）
-    - MessageLog へのメッセージ通知なし
-  - **エフェクト**：クリティカル時は `_spawn_hit_effect(actual)` を2回呼んで二重エフェクトで強調
-  - **SE・グラフィック**：既存の HitEffect / SE をそのまま流用
-- [x] Phase 12-18: バグ修正（フロア遷移クラッシュ・敵未起動・キャラ切替・アウトライン）
-  - **NPC フロア遷移時の freed hero クラッシュ（`game_map.gd`）**
-    - `_transition_npc_floor()` で hero が死亡済み（freed）の状態で `dialogue_trigger.setup(hero, ...)` を呼ぶとクラッシュ
-    - 修正：`is_instance_valid(hero)` チェックを追加してから setup を呼ぶ
-  - **`party.members` の freed キャラへの as キャストクラッシュ（`game_map.gd`）**
-    - 死亡したキャラクターが `party.members` に残留し、`as Character` キャストでクラッシュ
-    - 修正：ループを `for member_var: Variant` に変更し、`is_instance_valid()` チェックを先に実施（4箇所）
-  - **フロア遷移後の敵が動かない問題（`game_map.gd`）**
-    - `_link_all_character_lists()` が起動時にしか呼ばれず、新フロアの EnemyManager が `set_friendly_list()` を受け取れないため WAIT のまま
-    - 修正：`_transition_floor()` 内で `_link_all_character_lists()` を呼ぶ
-  - **`VisionSystem._process` で freed な party メンバーへの as キャストクラッシュ（`vision_system.gd`）**
-    - 死亡キャラが `_party.members` に残り、VisionSystem の3か所でクラッシュ
-    - 修正：`for m: Variant in _party.members` ＋ `is_instance_valid(m)` チェックを3箇所に追加
-  - **LB/RB キャラ切り替えが2人目操作後に効かなくなる問題（`player_controller.gd`）**
-    - `_switch_character()` が `character.is_leader`（現在操作キャラのリーダーフラグ）を判定していたため、非リーダーキャラに切り替えると以降全切り替えが不可に
-    - 修正：`player_is_leader: bool = true` フラグを追加し、NPC パーティーに合流してリーダーを譲った場合のみ `false` に設定する方式に変更
-    - `_merge_player_into_npc_party()` で `player_controller.player_is_leader = false` をセット
-  - **攻撃キャンセル後にアウトラインが操作キャラに残るバグ（`player_controller.gd`）**
-    - `_exit_targeting()` の末尾で `character.set_outline(Color.WHITE, 1.0)` を呼んでいたが、操作キャラは元々アウトラインなしのデザインのため、キャンセルのたびに白アウトラインが付与されていた
-    - あわせて `_exit_targeting()` / `_confirm_target()` のアウトラインクリアを `Character._all_chars`（全キャラ静的レジストリ）の走査に変更し、`_valid_targets` から漏れたアウトラインも確実に除去
-    - 修正：不要な `character.set_outline(Color.WHITE, 1.0)` 呼び出しを削除
-- [x] Phase 12-19: バグ修正（装備仕様統一・回復AI・シェーダー・freed キャスト）
-  - **装備補正値を新仕様に統一（`dungeon_handcrafted.json`）**
-    - 初期装備（プレイヤー・NPC）を全補正値0に変更
-    - 武器の `skill` 補正を廃止。`character.gd` の `refresh_stats_from_equipment()` から skill 加算を削除
-    - `order_window.gd` の skill 行の装備補正表示を 0 固定に変更
-    - 全装備を仕様準拠の stats キーに更新（block_right_front/block_front/block_left_front/physical_resistance/magic_resistance）
-    - 最深層（フロア4）の敵パーティーからアイテムを削除（クリア直結のため不要）
-  - **敵ヒーラーがプレイヤーを回復するバグ（`unit_ai.gd`）**
-    - `_find_heal_target()` / `_find_buff_target()` が `is_friendly == true` でフィルタしていたため、敵ヒーラーが hero を回復対象にしていた
-    - 修正：`ch.is_friendly != my_friendly` に変更し、同じ陣営のキャラのみを対象にする
-  - **回復スキルを持たない敵が回復行動を生成するバグ（`unit_ai.gd`）**
-    - `_generate_heal_queue()` に `heal_mp_cost <= 0` のガードがなく、ゴブリン等（heal_mp_cost=0）が回復行動を実行していた
-    - 修正：`cost <= 0` の場合は早期リターンを追加（`_generate_buff_queue()` と同じ形式）
-  - **アウトラインシェーダーが modulate（HP色変化）を無視するバグ（`outline.gdshader`）**
-    - `COLOR = texture(TEXTURE, UV)` で生テクスチャ色を書き込み、Godot が渡す modulate を上書きしていた
-    - 修正：`COLOR`（modulate 情報）を保持し、テクスチャ色に乗算するよう変更
-  - **hero 死亡後のフロア初期化クラッシュ（`game_map.gd`）**
-    - NPC/仲間のフロア遷移時に hero が freed の状態で `_setup_floor_enemies()` → `em.setup(members, hero, ...)` が呼ばれクラッシュ
-    - 修正：`_setup_floor_enemies()` / `_setup_floor_npcs()` の先頭に `is_instance_valid(hero)` ガードを追加
-  - **`party.sorted_members()` の freed キャラへの as キャストクラッシュ（`party.gd`）**
-    - 死亡キャラが `members` に残留し、`m as Character` でクラッシュ
-    - 修正：キャスト前に `is_instance_valid(m)` チェックを追加
-  - **古い敵画像フォルダ（3/30 作成・22フォルダ）を削除**
-    - コード・マスターデータから未参照の旧画像を整理。新画像（4/7 作成・16種）のみ残す
-- [x] Phase 13: タイトル・セーブ・メニューシステム
-  - [x] **セーブシステム基盤**
-    - `scripts/save_data.gd`（class_name SaveData）：slot_index / exists / hero_name_male / hero_name_female / current_floor / clear_count / playtime / to_dict() / from_dict() / format_playtime()
-    - `scripts/save_manager.gd`（Autoload: SaveManager）：get_save_data() / write_save() / has_any_save() / start_session() / get_active_save() / flush_playtime() / update_floor() / record_clear()
-    - `project.godot`：SaveManager を autoload に追加
-  - [x] **タイトル画面**（`scripts/title_screen.gd` / `scenes/title_screen.tscn`）
-    - 背景画像（assets/images/ui/title_bg.png、なければグラデーションフォールバック）
-    - "Rally the Parties" ゴールド文字＋サブタイトル「リアルタイムタクティクスRPG」
-    - "Press any button / key" 点滅（0.55s間隔）
-    - 任意キー/ボタン押下 → main_menu.tscn へ遷移
-    - `project.godot` メインシーンを game_map.tscn → title_screen.tscn に変更
-  - [x] **メインメニュー**（`scripts/main_menu.gd` / `scenes/main_menu.tscn`）
-    - 状態機械：MAIN / SLOT_SELECT_NEW / OVERWRITE_CONFIRM / NAME_INPUT / SLOT_SELECT_CONT / OPTIONS
-    - 「続きから始める」はセーブがある場合のみ表示
-    - セーブスロット3枠：フロア・クリア回数・プレイ時間・主人公名を表示
-    - 上書き確認ダイアログ
-    - 名前入力（LineEdit ×2：男性名・女性名）。空白時はランダム生成（character_name はゲーム開始後に適用）
-    - オプション画面：音量（←→）・ゲーム速度（←→）・主人公名（表示のみ）・ゲーム終了・← 戻る
-  - [x] **ポーズメニュー**（`scripts/pause_menu.gd`）
-    - `process_mode = PROCESS_MODE_ALWAYS`・`get_tree().paused = true/false`
-    - Startボタン（JOY_BUTTON_START）でトグル開閉（open のみ PROCESS_MODE_ALWAYS で処理）
-    - 状態機械：MAIN / OPTIONS / RETURN_CONFIRM
-    - 項目：オプション・タイトルへ戻る（確認あり・flush_playtime() 後に title_screen.tscn へ遷移）・ゲームに戻る
-    - オプション：音量・ゲーム速度（ゲーム終了は表示しない）
-  - [x] **game_map.gd 修正**
-    - `_setup_hero()` 後に SaveManager.get_active_save() から性別に応じた主人公名を character_data.character_name に適用
-    - `_trigger_game_clear()` で SaveManager.record_clear() を呼ぶ
-    - `_transition_floor()` で SaveManager.update_floor(new_floor) を呼ぶ
-    - `_input()` の KEY_ESCAPE をポーズメニュー開閉に変更（旧 get_tree().quit() を廃止）
-    - `_setup_pause_menu()` で PauseMenu をインスタンス化・add_child
-  - [x] **SoundManager.set_volume()** 追加（linear_to_db 変換して Master バスに適用）
-- [x] Phase 13-1（Phase 14準備）: MessageWindow刷新（アイコン行方式＋戦闘メッセージ自然言語化）
-  - [x] **GlobalConstants** に `DAMAGE_LEVEL_SMALL/MEDIUM/LARGE` 定数を追加（5/15/30）
-  - [x] **MessageLog** に `BATTLE` enum値・`battle_message_added` シグナル・`add_battle()` メソッドを追加。`get_visible_entries()` でデバッグOFF時も BATTLE を表示。`add_battle()` はエントリ dict に `attacker_data`・`defender_data` を格納（アイコン表示用）
-  - [x] **MessageWindow** を全面刷新（アイコン行方式）
-    - 画面中央寄せ（左右マージン最大12%・ただしパネル幅以上を確保）・高さ10行相当
-    - バトルメッセージ：行左端に `[攻撃側face.png] → [被攻撃側face.png]` アイコン2枚を表示。テキストはアイコン右に折り返し
-    - システムメッセージ：アイコンなし（フル幅テキスト）
-    - アイコンサイズ = フォントサイズ × 2（2行分）。face.png がなければグレー正方形フォールバック
-    - スクロール型に統一（左右バスト画像・`MESSAGE_WINDOW_SCROLL_MODE` フラグを廃止）
-    - `_entry_height()` で各エントリの描画高さを動的計算（`Font.get_multiline_string_size()` 使用）
-    - 既存の会話モードスタブを後方互換として維持
-  - [x] **character.gd** に自然言語戦闘メッセージ生成を追加
-    - `_damage_label()`: ダメージ量を「小/中/大/特大ダメージ」に変換（GlobalConstants の定数を参照）
-    - `_battle_name()`: 友軍は `character_name`、敵は `CLASS_NAME_JP[class_id]` で表示名を取得
-    - `_weapon_action()`: 攻撃タイプ・武器種・成否（normal/critical/negative）からアクション動詞を生成
-    - `_emit_damage_battle_msg()`: 全戦闘ケース（通常/0ダメ/クリティカル/完全ブロック/部分ブロック/即死）の自然言語メッセージを `MessageLog.add_battle()` に送信。`suppress_battle_msg` フラグでスタン攻撃の二重メッセージを抑制
-    - `apply_stun()` に `attacker: Character = null` 引数追加・スタンメッセージを add_battle で発火
-    - `die()` で死亡メッセージを add_battle で発火
-    - `log_heal()` で回復メッセージを add_battle で発火
-  - [x] **projectile.gd** 修正: `apply_stun()` に attacker を渡す・スタン攻撃時は `take_damage()` の battle メッセージを抑制（`suppress` フラグ）
-  - [x] **MessageWindow 上半身画像追加**
-    - 左エリア：操作キャラの `front.png`（上半分中央クロップ）を表示。操作キャラ切り替え時にリセット
-    - 右エリア：操作キャラが関わった交戦相手。AI同士の戦闘では更新しない
-    - `set_player_character(data)` / `set_combat_target(data)` の公開 API を追加
-    - `battle_message_added` シグナルを購読し、atk/def が操作キャラと一致したとき右エリアを自動更新
-    - `game_map.gd`: 初期設定・操作キャラ切り替え時に `set_player_character()` を呼ぶ
-    - 全体背景は `[左バスト + 中央テキスト + 右バスト]` を一括描画。中央ログは変更なし
-- [x] Phase 13-2: バランス調整・UI改善
-  - [x] **攻撃タイプ別ダメージ倍率変更**（`GlobalConstants.ATTACK_TYPE_MULT`）
-    - melee: 0.5 → 0.3、dive: 0.5 → 0.3（ranged/magic は 0.2 で変更なし）
-  - [x] **NPC 探索分散**（`unit_ai._find_explore_target()`）
-    - 全員が同じ最近傍エリアを目標にして一塊になる問題を修正
-    - 未訪問エリアを距離順にソートし、`_member.name.hash() % candidates.size()` で NPC ごとに異なるエリアを割り当て
-  - [x] **NPC 目標フロア到達後の探索開始**（`party_leader_ai._assign_orders()`）
-    - EXPLORE 戦略・pol="explore" 時にフレンドリー NPC の move_policy が "same_room" のままになり通路で固まる問題を修正
-    - pol == "explore" のとき全メンバーの move_policy を "explore" に設定
-  - [x] **部屋制圧判定に敵走離脱を追加**（`party_manager._check_room_suppression()`）
-    - 従来は全員死亡のみが発火条件。部屋外にいる + FLEE 戦略のメンバーを離脱扱いにカウント
-    - `_on_member_died()` を `_check_room_suppression()` 呼び出しに変更。`_room_id = ""` で二重発火防止
-  - [x] **MessageLog.battle_message_added に Character 参照を追加**
-    - シグナル・`add_battle()` に `attacker: Character / defender: Character`（省略可）を追加
-    - `character.gd` の4箇所（apply_stun / _emit_damage_battle_msg / log_heal / die）で Character refs を渡す
-  - [x] **MessageWindow: 交戦相手死亡時に右エリアをクリア**
-    - `_on_battle_message` ハンドラで `def_char.hp <= 0` のとき `_combat_target_data = null` にリセット
-  - [x] **MessageWindow: 同アイコンペアのバトルメッセージをグループ表示**
-    - 連続する同 (attacker, defender) ペアのバトルエントリを `\n` 結合して1行に統合
-    - `_build_display_groups()` で前処理・`_group_height()` で高さ計算（旧 `_entry_height` を置き換え）
-  - [x] **リーダー方角インジケーター**（`player_controller.gd`）
-    - 非リーダーキャラ操作中（`character != party_leader`）かつリーダーが画面外のとき表示
-    - 操作キャラから 1.5 マス先、リーダー方向を向く三角形（リーダーの `party_color` 色・alpha 0.80・白輪郭線）
-    - `viewport.get_canvas_transform()` でスクリーン座標変換し `get_visible_rect().has_point()` で画面内外判定
-    - `map_node` セット時に `_setup_leader_indicator()` を即時呼び出し（セッタ経由）
-- [x] Phase 13-3: MessageWindow スムーズスクロール
-  - メッセージ追加時に最新エントリの高さ分だけ `_scroll_offset` を設定し、`SCROLL_DURATION=0.15秒` かけて 0 まで線形補間
-  - 既存エントリが上に流れ、最新エントリがウィンドウ下端から滑り込む視覚効果
-  - **時間停止なし**：スクロール中も `world_time_running` は変更しない
-  - スクロール中にウィンドウ下端を超えるエントリは描画をスキップ（正常な見切れ）
-  - F1 デバッグ表示のデフォルトを ON → OFF に変更（後に DebugWindow 方式へ移行）
-  - 上端パディングを 4px → 8px に拡大（`avail_h = box_h - 12.0`・`entry_y` の最低値を `by + 8.0` に変更）。スクロール後に最上段エントリが上端に食い込む問題を修正
-  - **上端クリッピング修正**：エントリ描画を `SubViewportContainer`（`_svc`）+ `SubViewport`（`_svp`）+ 内部 Control（`_scroll_content`）構成に変更。`_on_scroll_draw()` でローカル座標描画。SubViewport のサイズ境界がピクセル単位のクリップ領域になる。スクロール中に `start_g - 1`（退場中グループ）も y<0 に描画し、上端から滑らかに消えるように修正
-- [x] Phase 13-4: ダンジョン部屋形状・障害物改修
-  - **DungeonBuilder 拡張**（`scripts/dungeon_builder.gd`）：`_carve_room()` に `wall_tiles` / `obstacle_tiles` の処理を追加
-    - `wall_tiles`: 内部をWALLに戻す（L字・T字・多角形など非矩形形状用）。rx/ry は部屋左上隅からの相対座標
-    - `obstacle_tiles`: 内部を OBSTACLE に設定（飛行キャラは通過可・地上キャラは不可）
-    - 処理順：FLOOR で内部を埋める → wall_tiles で WALL 戻し → obstacle_tiles で OBSTACLE 設定 → 後続の corridor 掘削で通路が上書き（FLOOR 以外の場合 CORRIDOR に）
-    - **バグ修正**：`_carve_corridor()` が wall_tiles 設定の WALL を CORRIDOR に上書きしていた問題を修正。条件を `t != FLOOR and t != WALL` に変更し、部屋形状の壁タイルを保護（部屋内部に通路色タイルが現れる視覚バグを解消）
-    - **ルート確保バグ修正**：WALL 上書き禁止が廊下の外壁貫通も妨げていた問題を修正。処理順を `_carve_room()` → `_carve_corridor()` → `_apply_room_overlays()` に変更。wall_tiles/obstacle_tiles は通路掘削後に適用し、CORRIDOR タイルは上書きしない（出入り口を塞がない）
-  - **`dungeon_handcrafted.json` 全49部屋を再設計**
-    - 各フロアに3種以上の異なる形状パターンを使用（切り欠きなし・NE/NW/SE/SW/N/S/全角・対角など8種）
-    - 形状パターン一覧（10×8部屋・interior rx∈[1..8] ry∈[1..6]）：
-      - **cut-NE**: NE角2列×3行をWALL（rx7-8,ry1-3）
-      - **cut-NW**: NW角2列×3行をWALL（rx1-2,ry1-3）
-      - **cut-SE**: SE角2列×3行をWALL（rx7-8,ry4-6）
-      - **cut-SW**: SW角2列×3行をWALL（rx1-2,ry4-6）
-      - **cut-N**: 上部左右2×2ずつカット（rx1-2＋7-8, ry1-2）
-      - **cut-S**: 下部左右2×2ずつカット（rx1-2＋7-8, ry5-6）
-      - **cut-all**: 全4角2×2カット（cut-N＋cut-S）→ 八角形に近い形
-      - **cut-NE+SE**: 右2列全行をWALL（縦長L字型）
-      - **cut-NW+SE**: 対角L字
-      - **pillar-LR**: 右下2×2のWALL島（柱型）
-    - 各部屋に1〜2個のOBSTACLEタイル（岩の列・瓦礫・崩れた柱など）を配置
-    - ボス部屋（r5_1 / 30×22）：4角3×3カット＋4本の2×2障害物柱（戦術的カバーポイント）
-    - キャラクタースポーン・階段タイルとの位置確認済み（衝突なし）
-- [x] Phase 13-5: OrderWindow 全体方針セクション刷新・個別指示テーブル4列化・選択肢横並び表示
-  - **全体方針を 1 行プリセット選択 → 6 行個別設定に刷新（実装済み）**
-    - `GlobalConstants.gd`：12 の新定数を追加（GLOBAL_COMBAT/TARGET/LOW_HP/ITEM_PICKUP/HP_POTION/SP_MP_POTION・MEMBER_FORMATION/COMBAT/ATTACK_TARGET/SPECIAL/HEAL/HEAL_TARGET）
-    - `Party.gd`：`var global_orders: Dictionary` を追加（6 キーのデフォルト値付き）
-    - `OrderWindow.GLOBAL_ROWS`：6 行定義（key/label/options/labels/short_labels を持つ配列）
-    - 全体方針行で ←→ で値切替。変更時は combat/target/on_low_hp/item_pickup を全メンバーの current_order にも同期（AI 互換）
-    - hp_potion / sp_mp_potion は global_orders のみ（AI 未接続・将来実装）
-  - **個別指示テーブルを 6 列 → 4 列に変更（実装済み）**
-    - 旧 `COL_OPTIONS/COL_LABELS/COL_HEADERS/COL_KEYS/PRESETS/PRESET_TABLE` を削除
-    - 新 `MEMBER_COLS`（非ヒーラー）：隊形/戦闘/ターゲット/特殊攻撃（各列に short_labels を追加）
-    - 新 `HEALER_COLS`（ヒーラー専用）：隊形/回復/回復対象/特殊攻撃（各列に short_labels を追加）
-    - `_get_cols_for(ch)` でキャラクター別に列定義を切り替え
-    - `_is_healer(ch)` ヘルパー追加
-    - 移動/低HP/取得列は全体方針に移動（per-member 表からは削除）
-  - **選択肢横並び（チップ形式）表示（実装済み）**
-    - `_draw_option_chips()` ヘルパー追加：全選択肢を横並びで描画し、選択中をハイライト
-    - 全体方針・個別指示ともに `◀ val ▶` 単独表示を廃止しチップ形式に変更
-    - フォーカスあり＋編集可：選択中チップを青背景＋黄文字で強調
-    - フォーカスあり＋閲覧のみ：選択中チップを薄い背景で表示
-    - フォーカスなし：選択中チップを薄い背景・暗めの文字で表示
-    - 幅が足りない場合はチップを均等縮小（省略せず全選択肢を表示）
-    - 全体方針は `fs_body`・個別指示列は `fs_hint` で描画
-  - **行動指示仕様（確定・次フェーズで実装）**
-    - **全体共通設定**（`Party.global_orders`）
-      - `move`（移動）: follow=追従 / cluster=密集 / same_room=同じ部屋 / standby=待機 / explore=探索
-        - 現在コードは `combat`（戦闘方針）キーだが、次フェーズで `move` に差し替える
-      - `target`（攻撃ターゲット）: nearest=最近傍 / weakest=最弱優先 / same_as_leader=リーダーと同じ / support=援護
-        - 「援護」= HP割合が最も低い味方に最も近い敵を狙う。次フェーズで選択肢を追加
-      - `on_low_hp`（低HP時の行動）: keep_fighting=戦闘継続 / retreat=後退 / flee=逃走（3択）
-        - 戦闘継続：HPが低くても行動を変えない
-        - 後退：敵の射程外まで下がる（後衛ポジション）。移動できない場合は防御
-        - 逃走：部屋から出て離脱する。移動できない場合は防御
-      - `item_pickup`（アイテム取得）: aggressive=積極的に拾う / passive=近くなら拾う / avoid=拾わない（3択）
-        - 積極：同じ部屋にアイテムがあれば拾いに行く
-        - 近くなら：現在地から `GlobalConstants.ITEM_PICKUP_RANGE` マス以内なら拾いに行く（デフォルト）
-        - 拾わない：拾わない
-      - `hp_potion`（HPポーション）: use=瀕死なら使う / never=使わない（2択）
-        - 瀕死なら使う：HP割合が `GlobalConstants.NEAR_DEATH_THRESHOLD` 以下で使用（デフォルト）。ヒーラーの回復判定・低HP時行動と閾値を共有
-        - 使わない：使用しない
-      - `sp_mp_potion`（MP/SPポーション）: use=使う / never=使わない（2択）
-        - 使う：特殊攻撃指示の条件を満たす状況でSP/MPが不足していたら使用。特殊攻撃指示が「使わない」の場合は使用しない
-        - 使わない：ポーションは使用しない（自動回復を待つ）
-      - **GlobalConstants に追加予定の定数**（次フェーズで実装）
-        - `ITEM_PICKUP_RANGE`：近くなら拾うの距離閾値（暫定2マス）
-        - `NEAR_DEATH_THRESHOLD`：瀕死判定のHP割合閾値（暫定25%）。HPポーション使用・ヒーラー回復判定・低HP時行動で共有
-        - `DISADVANTAGE_THRESHOLD`：劣勢判定の味方平均HP割合閾値。特殊攻撃「劣勢なら使う」・深層移動判定で共有
-    - **個別設定**（`character.current_order`）
-      - 非ヒーラー 4列（列順変更）：ターゲット / 隊形 / 戦闘 / 特殊攻撃
-        - `target`（ターゲット）: nearest / weakest / same_as_leader / support（全体方針と同値セット）
-        - `battle_formation`（隊形）: surround=包囲 / rush=突進 / rear=後衛（3択に変更。front/same_as_leader を廃止）
-        - `combat`（戦闘）: attack=攻撃 / defense=防御 / flee=逃走（3択に変更。aggressive/support/standby を廃止）
-        - `special_skill`（特殊攻撃）: aggressive=積極的に使う / strong_enemy=強敵なら使う / disadvantage=劣勢なら使う / never=使わない（4択に拡張）
-      - ヒーラー 4列：隊形 / 戦闘 / 回復 / 特殊攻撃
-        - `battle_formation`・`combat`・`special_skill`：非ヒーラーと共通
-        - `heal`（回復）: aggressive=積極回復 / leader_first=リーダー優先 / lowest_hp_first=瀕死度優先 / none=回復しない
-          - heal_mode + heal_target の2列を1列に統合。ターゲットは heal 設定が内包
-    - **各指示の定義**
-      - 移動と戦闘指示は独立（待機中でも戦闘指示が有効）
-      - 隊形（包囲/突進/後衛）は同じ部屋にいる場合のみ適用
-      - 包囲：ターゲットの背後→側面→正面の優先順で位置取る
-      - 突進：ターゲットへ最短経路で向かう
-      - 後衛：射程距離を保つ（マージンあり）
-      - 援護：HP割合が最も低い味方に最も近い敵を狙う
-      - 劣勢判定閾値（`GlobalConstants` 定数として定義予定）：味方パーティーの平均HP割合がこれを下回ると「劣勢」。深層移動判定など他ロジックと共有
-  - **AI 変更なし（今フェーズ）**：character.current_order の既存キーは保持。battle_formation/combat/target は引き続き AI が参照
-- [x] Phase 13-6: Phase 13-5 確定仕様を AI ロジックに反映
-  - **`GlobalConstants.gd`：定数追加・定数配列更新**
-    - `ITEM_PICKUP_RANGE = 2`・`NEAR_DEATH_THRESHOLD = 0.25`・`DISADVANTAGE_THRESHOLD = 0.6` を追加
-    - `GLOBAL_MOVE`（旧 `GLOBAL_COMBAT` の後方互換エイリアス追加）・`GLOBAL_TARGET`・`GLOBAL_HP_POTION`・`GLOBAL_SP_MP_POTION` を更新
-    - `MEMBER_FORMATION`（surround/rush/rear）・`MEMBER_COMBAT`（attack/defense/flee）・`MEMBER_ATTACK_TARGET`・`MEMBER_SPECIAL`・`MEMBER_HEAL`・`MEMBER_HEAL_TARGET` を新規追加
-  - **`Party.gd`：`global_orders` キー・デフォルト値を更新**
-    - `"combat"` → `"move"`（移動方針）にキー名変更。デフォルト `"follow"`
-    - `"item_pickup"` デフォルトを `"aggressive"` → `"passive"` に変更
-    - `"hp_potion"` デフォルトを `"50pct"` → `"use"` に変更
-    - `"sp_mp_potion"` デフォルトを `"save"` → `"use"` に変更（「必要なら使う」）
-    - `"target"` デフォルトを `"nearest"` → `"same_as_leader"` に変更
-    - `"on_low_hp"` デフォルトを `"keep_fighting"` → `"retreat"` に変更
-  - **`OrderWindow.gd`：GLOBAL_ROWS・MEMBER_COLS・HEALER_COLS を更新**
-    - `GLOBAL_ROWS`：`move` キーを `combat` キーから差し替え。`hp_potion`/`sp_mp_potion` 行を追加
-    - `MEMBER_COLS`：`battle_formation`（surround/rush/rear）・`combat`（attack/defense/flee）・`target`・`special_skill`（4択）
-    - `HEALER_COLS`（5列）：`target`・`battle_formation`・`combat`・`heal`（aggressive/leader_first/lowest_hp_first/none）・`special_skill`
-    - `_sync_global_to_members()`：sync_keys を `["move","target","on_low_hp","item_pickup"]` に更新
-    - `_sync_all_global_to_members()`：`setup()` 呼び出し時に全 sync_keys を一括で全メンバーに反映（初回のみ）。`Party.global_orders` のデフォルト値（`"target": "same_as_leader"` 等）をゲーム開始時に `current_order` へ反映する。`battle_policy` の初期値も `_apply_battle_policy_preset()` 経由で適用し、クラスごとの `battle_formation`/`combat` を正しく初期化する
-    - `CLASS_EQUIP_TYPES` に `"magician-water"` を追加
-  - **`PartyLeaderAI.gd`：global_orders 参照・AI ロジック更新**
-    - `_global_orders: Dictionary` フィールド追加。`set_global_orders(orders)` メソッドで Party.global_orders への参照を受け取る
-    - `on_low_hp` 判定閾値を `GlobalConstants.NEAR_DEATH_THRESHOLD` に統一
-    - `combat` match に後方互換値（aggressive/support/standby）を追加
-    - ターゲット `"support"` 方針を実装（`_select_support_target()`：HP割合最低の味方に最も近い敵を選択）
-    - `receive_order()` 呼び出しに `hp_potion`・`sp_mp_potion` フィールドを追加
-  - **`UnitAI.gd`：formation/heal/potion ロジック更新**
-    - `_hp_potion`・`_sp_mp_potion` フィールド追加。`receive_order()` でセット
-    - `follow` move_policy を実装（leader の真後ろ1マスをターゲット。ブロック時は隣接に落ちる）
-    - `_get_path_method()`：`rear`→ASTAR_FLANK、`rush`/その他→ASTAR
-    - `_find_heal_target()` を `heal_mode` 対応に拡張（`_find_heal_target_by_ratio()` ヘルパー追加）
-      - `leader_first`：リーダーが瀕死なら最優先・それ以外は最低 HP 率メンバー
-      - `lowest_hp_first`：HP 率が最低のメンバー（閾値なし・常時回復）
-      - `aggressive`（デフォルト）：`NEAR_DEATH_THRESHOLD` 以下のメンバー
-      - `none`：回復しない（null を返す）
-    - `_generate_potion_queue()` 追加：HP/SP/MP ポーション自動使用ロジック
-      - HPポーション：`hp_potion=="use"` かつ HP率 < `NEAR_DEATH_THRESHOLD` のとき inventory から検索して使用
-      - SP/MPポーション：`sp_mp_potion=="use"` かつ SP/MP率 < 50% のとき使用
-    - `_find_potion_in_inventory()` ヘルパー追加（category=="consumable" + effect キーで検索）
-    - `_generate_queue()` 内で heal/buff より前にポーション使用を優先
-    - `_start_action()` に `"use_potion"` アクション処理を追加（`character.use_consumable(item)` 呼び出し）
-    - **アイテムナビゲーション追加（合流済みメンバー専用）**
-      - `_item_pickup: String` / `_all_floor_items: Dictionary` フィールド追加
-      - `receive_order()` で `"item_pickup"` キーを受け取り格納
-      - `set_floor_items(items)`: `_floor_items` 参照を設定（更新が自動反映される）
-      - `_find_item_pickup_target()`: "aggressive"=同一部屋、"passive"=ITEM_PICKUP_RANGE以内、"avoid"=スキップ
-      - `_generate_queue()` の `Strategy.WAIT` ブランチ先頭でアイテムターゲットチェックを追加（ATTACK/FLEE 時は行わない）
-  - **`PartyManager.gd`：`set_global_orders()` / `set_floor_items()` メソッド追加**（LeaderAI に参照を転送）
-  - **`PartyLeaderAI.gd`：`set_floor_items()` 追加**（全 UnitAI に配布）
-  - **`game_map.gd`：各種 set 呼び出し追加**
-    - `_setup_hero()` で `_hero_manager.set_global_orders()` / `set_floor_items()` を呼ぶ
-    - `_merge_npc_into_player_party()` / `_merge_player_into_npc_party()` で合流 NPC に `set_global_orders()` / `set_floor_items()` を渡す
-- [x] Phase 13-7: 移動前回転実装（向きだけ変える操作）
-  - **`player_controller.gd`**
-    - `_pending_move_dir: Vector2i` フィールド追加（回転中に保留する移動方向）
-    - `_try_move()` を変更：入力方向が現在の向きと異なる場合、まず回転のみ行い移動しない
-      - 旧：移動可能なら `move_to()` を即時呼ぶ。ブロック時のみ向き変更ディレイを使用
-      - 新：向きが異なれば常に `TURN_DELAY` の回転を先行し `_pending_move_dir` に方向を保存して `return`
-      - 向きが一致している場合（または同方向連続移動）は従来通り即時移動
-      - ガード中は向き固定のため回転スキップ
-    - `_process_guard_and_move()` の回転完了処理を変更：
-      - 回転完了時にキーがまだ押されていれば移動を実行
-      - キーが離されていれば向きだけ変わって停止（`_pending_move_dir` をクリア）
-    - `_enter_pre_delay()` と攻撃入力時に `_pending_move_dir` をクリア
-  - **AI（`unit_ai.gd`）は変更なし**：AI は `move_to()` を直接呼ぶため影響なし
-- [x] Phase 13-8: アイテム自動受け渡し・自動装備（NPC パーティー専用）
-  - **`npc_dialogue_window.gd`**：プレイヤー起点の選択肢を「仲間にする」「キャンセル」の2択に変更（「一緒に行く」廃止）
-  - **`npc_leader_ai.gd`**：自動装備・ポーション受け渡しを追加（`joined_to_player == false` のパーティーのみ）
-    - `CLASS_EQUIP_TYPES` 定数をローカルに追加（order_window.gd と同内容）
-    - `_auto_item_timer` フィールドと `AUTO_ITEM_INTERVAL = 2.0` 定数を追加
-    - `_process()` オーバーライド：2秒ごとに `_auto_equip_members()` / `_auto_share_potions()` を呼ぶ
-    - `_auto_equip_members()`：パーティー全体の未装備品を item_type ごとにプール → 現装備が最弱のメンバーから順に最良アイテムを装備。旧装備はインベントリに戻す。`CharacterData._equip_item()` + `refresh_stats_from_equipment()` で反映
-    - `_auto_share_potions()`：HP が NEAR_DEATH_THRESHOLD 未満のメンバーが HP ポーションを持っていない場合、他メンバーから1個受け取る。SP/MP 50%未満も同様（kind="sp"/"mp"）
-    - ヘルパーメソッド：`_item_stats_sum()` / `_get_equipped_for_type()` / `_find_potion_in_cd()` / `_take_potion_from_party()`
-- [x] Phase 13-9: OrderWindow ステータス表示改善（ヘッダー刷新・2列化）
-  - **`order_window.gd`**
-    - `_get_stat_rows()` の戻り値を `Array` → `Dictionary {"left": Array, "right": Array}` に変更
-    - 「ランク」行を廃止（ヘッダー行に統合）
-    - ヒーラーの「魔法技量」行を非表示（`attack_type=="heal"` 時スキップ）
-    - 射程を「str」型で最終値のみ表示（素値・補正値列を省略）
-    - **ヘッダー行を刷新**：`"ステータス：名前"` → `"名前  クラス名(日本語)  ランク"` の1行に変更
-    - **ステータスを2列化**：
-      - 左列：HP / SP・MP / 物理・魔法威力 / 物理・魔法技量 / 右手・左手・両手防御強度（保有時のみ）
-      - 右列：物理耐性 / 魔法耐性 / 防御技量 / 攻撃タイプ / 射程 / 統率力 / 従順度
-      - 各列は独立したサブ列（ラベル 50% / 素値 17% / 補正値 16% / 最終値 17%）
-    - `_draw_one_stat_row()` ヘルパーメソッドを追加（行描画を共通化）
-    - `_on_draw()` の `n_stat` 計算を `maxi(left.size(), right.size())` に更新
-- [x] Phase 13-9（戦闘方針・集結隊形）: 全体方針に `battle_policy` 追加・`gather` 隊形実装
-  - **`global_constants.gd`**：`MEMBER_FORMATION` に `"gather"` を追加（surround/rush/rear/gather の4択）
-  - **`party.gd`**：`global_orders` に `"battle_policy": "attack"` を追加（attack/defense/retreat の3択）
-  - **`order_window.gd`**
-    - `GLOBAL_ROWS` に `battle_policy`（戦闘方針）行を追加（move の直後）
-    - `MEMBER_COLS`（4列）：target/battle_formation/combat/special_skill。`battle_formation` オプションに `"gather"` を追加
-    - `HEALER_COLS`（5列）：target/battle_formation/combat/heal/special_skill。`battle_formation` オプションに `"gather"` を追加。`heal` キー（aggressive/leader_first/lowest_hp_first/none）
-    - `BATTLE_POLICY_PRESET` 定数を追加：クラスID × 戦闘方針 → {battle_formation, combat} のプリセットテーブル（7クラス × 3方針）
-    - `_apply_battle_policy_preset(policy)` メソッド追加：戦闘方針変更時に全メンバーへプリセット一括適用。ヒーラーは専用プリセット（rear/各combat/lowest_hp_first を `"heal"` キーに設定）を適用、非ヒーラーは BATTLE_POLICY_PRESET テーブルを参照
-    - `_get_active_total_cols()` ヘルパー追加：フォーカス中キャラの列数（名前列1+指示列）を動的に返す。`_col_cursor` の循環に使用
-    - `_get_col_xs()` を `max(MEMBER_COLS.size(), HEALER_COLS.size())` ベースの均等幅に変更
-    - `_sync_global_to_members()` に `battle_policy` 変更時のプリセット適用分岐を追加
-  - **`unit_ai.gd`**
-    - `_calc_party_centroid()` ヘルパー追加（`_party_peers` の全メンバーの `grid_pos` 平均を返す）
-    - `_formation_satisfied()` に `"gather"` ケース追加（重心から2タイル以内なら満足）
-    - `_target_in_formation_zone()` に `"gather"` ケース追加（重心から4タイル以内の敵を攻撃）
-    - `_formation_move_goal()` に `"gather"` ケース追加（重心を目標タイルとして返す）
-    - `_generate_queue()` Strategy.ATTACK ブランチに後衛距離制限を追加（`attack_range × 0.8` を超えたら待機 or 射程内なら攻撃）
-- [x] Phase 13-10: 敵縄張り・追跡システム実装
-  - **`CharacterData`** に `chase_range: int = 10`・`territory_range: int = 50` を追加（`load_from_json()` でロード）
-  - **全16敵種 JSON** に `chase_range` / `territory_range` を追加（種族特性に応じた値）
-    - ゴブリン系・ゾンビ・スケルトン系：chase=10・territory=50（広域追跡タイプ）
-    - ウルフ・ホブゴブリン・サラマンダー：chase=6〜8・territory=8（縄張り守備タイプ）
-    - ハーピー：chase=10・territory=12、ダークナイト：chase=10・territory=18
-    - リッチ：chase=8・territory=15、デーモン：chase=10・territory=20
-    - ダークロード：chase=10・territory=50
-  - **`UnitAI`** に `_home_position: Vector2i`（`setup()` で初期化）・`get_home_position()` 追加
-  - **`UnitAI`** に `move_to_home` アクションを追加（`_start_action()` で処理）
-  - **`UnitAI`** に `_generate_guard_room_queue()` 追加（2タイル以内なら待機、それ以外は `move_to_home`）
-  - **`UnitAI._generate_queue()`** の WAIT ブランチに `"guard_room"` ケースを追加（`_generate_guard_room_queue()` 呼び出し）
-  - **`PartyLeaderAI.Strategy`** に `GUARD_ROOM = 5` を追加
-  - **`PartyLeaderAI`** に `_apply_range_check(base_strat)` を追加（`_evaluate_party_strategy()` の結果をラップ）
-    - ATTACK→GUARD_ROOM：全員が縄張り外（dist_home > territory_range）かつ目標が遠い（dist_target > chase_range）
-    - GUARD_ROOM→ATTACK：1体でも縄張り内かつ射程内の目標あり
-    - GUARD_ROOM→WAIT：全員がスポーン地点2タイル以内に帰還完了
-  - **`PartyLeaderAI._assign_orders()`** の effective_strat 決定に GUARD_ROOM ブランチを追加（WAIT + move_policy="guard_room"）
-  - `_strategy_to_preset_name()` / `get_global_orders_hint()` / `_get_strategy_change_reason()` に GUARD_ROOM ケースを追加
-- [x] Phase 13-10 後続修正: ヒーラー回復指示デフォルト変更・OrderWindow UI調整
-  - **ヒーラーの `heal` 指示デフォルトを `"lowest_hp_first"`（瀕死度優先）に変更**
-    - `order_window.gd` HEALER_COLS の `heal.options` を `["lowest_hp_first", "aggressive", "leader_first", "none"]` に並び替え（先頭がデフォルト値）
-    - `unit_ai.gd`：`_find_heal_target()` の `heal_mode` 初期値・`.get("heal", ...)` のフォールバック値を `"lowest_hp_first"` に変更
-    - `character.gd`：`current_order` 辞書に `"heal": "lowest_hp_first"` キーを追加
-  - **非ヒーラー行の「回復」列に「－」をグレー表示**（`order_window.gd`）
-    - HEALER_COLS の `heal` 列（pos=3）位置に `_is_healer(ch) == false` のとき「－」をグレーで描画
-    - 常時5列ヘッダー（HEADER_COLS）との整合性を維持
-- [x] Phase 13-11: フロア0敵構成見直し・NPCデフォルト指示修正
-  - **フロア0をゴブリンのみに変更**（`dungeon_handcrafted.json`）
-    - goblin-archer / goblin-mage / hobgoblin をフロア0から全て除去
-    - 対象7部屋（r1_2, r1_7, r1_8, r1_9, r1_10, r1_11, r1_12）の非ゴブリンをすべて goblin に置換
-    - goblin-archer / goblin-mage / hobgoblin はフロア1以降（r2_*以降）で引き続き登場
-  - **NPCパーティーの `current_order` デフォルト修正**
-    - `character.gd`：`current_order` デフォルト値をプレイヤーパーティーと整合する値に変更
-      - `"move": "cluster"` → `"follow"`
-      - `"combat": "aggressive"` → `"attack"`
-      - `"target": "nearest"` → `"same_as_leader"`
-      - `"on_low_hp": "keep_fighting"` → `"retreat"`
-      - `"item_pickup": "aggressive"` → `"passive"`
-    - `npc_manager.gd`：`_apply_attack_preset_to_member()` 静的メソッドを追加
-      - `setup()` でスポーン後に各メンバーへ battle_policy="attack" のクラス別プリセットを適用
-      - ヒーラー: rear/attack/lowest_hp_first、弓・魔法: rear/attack、斧: rush/attack、その他: surround/attack
-  - **デバッグ時フォグオブウォー無効化**（前セッション実装）
-    - `vision_system.gd`：`debug_show_all: bool` フラグ追加。`get_visible_tiles()` / `update_visibility()` に反映
-    - F1でDebugWindow表示中は全タイル・未訪問エリアの敵・NPCも描画
-  - **NPCが未訪問部屋に入ったとき敵をアクティブ化するよう修正**（前セッション実装）
-    - `vision_system._process()`：NPC エリアの `is_area_visited` チェックを廃止（未訪問でも friendly_areas に追加）
-  - **戦闘中の battle_formation 優先（`unit_ai.gd`）**
-    - `_generate_queue()` の Strategy.ATTACK ブランチ（ターゲットあり）で `_formation_satisfied()` / `_target_in_formation_zone()` を廃止
-    - `_battle_formation` のみで移動先を決定：`"rear"` は射程内なら攻撃・射程外なら接近、それ以外は `move_to_attack` → `attack`
-    - `_move_policy`（follow/cluster/same_room 等）は Strategy.WAIT/EXPLORE 時のみ適用（`standby` は例外として維持）
-  - **follow 追従ロジック修正（`unit_ai.gd` / `party_leader_ai.gd`）**
-    - `_formation_satisfied()` の "follow" 判定を「リーダー後方1タイル以内にいるか」に変更（旧：リーダー隣接距離チェックのみ）
-      - 前方タイルにいる場合は常に不満足（後ろに回り込む）
-      - 後方が通行可：後方から1タイル以内（後方・左後方・右後方）なら満足
-      - 後方が壁・障害物：リーダー隣接なら満足
-    - `_formation_move_goal()` の "follow" フォールバックを優先順位付きに変更：後方→左後方→右後方→左→右の順で候補を探す（旧：任意の隣接タイル）
-    - `party_leader_ai._assign_orders()`：EXPLORE + 未加入NPC の場合、リーダーのみ "explore"、非リーダーメンバーは `current_order["move"]`（= "follow"）を使うよう変更（旧：全員 "explore" に上書きしていたため follow が効いていなかった）
-    - 階段移動判断（stairs_down/stairs_up）時もリーダーのみ階段を目指し、非リーダーはリーダーを追従（`current_order["move"]`）
-  - **デバッグウィンドウにフロア移動状況を表示**
-    - `npc_leader_ai.get_global_orders_hint()`：EXPLORE 戦略時に `_get_explore_move_policy()` の実値（"stairs_down"/"stairs_up"/"explore"）を返す。階段移動中は `"target_floor"` キーで目標フロア番号も追加
-    - `debug_window._label()`："stairs_down" → "↓階段"、"stairs_up" → "↑階段" の特殊変換を追加
-    - `debug_window._draw_party_block()`：`mv_raw` が "stairs_down"/"stairs_up" の場合、目標フロアを "↓階段(F2)" のように付加表示
+  - [x] Phase 12-1: MP/SPシステム（魔法クラス=MP・非魔法クラス=SP・自動回復・SPポーション）を実装
+  - [x] Phase 12-2: 水魔法使いクラス（水弾・水流・無力化水魔法）とスタンシステム（行動停止＋スピン表現）・Vスロット基盤を実装
+  - [x] Phase 12-3: アイテム画像をゲーム内に反映
+  - [x] Phase 12-4: 全7クラスのVスロット特殊攻撃（突進斬り/振り回し/ヘッドショット/炎陣/無力化水魔法/防御バフ/スライディング）を実装。アイテム画像の床・UI表示も対応
+  - [x] Phase 12-5: LB/RBでキャラ循環切り替え・C/X短押しでアイテム選択UIを開く操作体系に変更
+  - [x] Phase 12-6: 防御バフの緑色六角形バリアエフェクト・LB/RBキャラ切り替え・C/Xアイテム選択UIを実装
+  - [x] Phase 12-7: パーティーメンバーと未加入NPCのフロア遷移（個別階段使用・ランク和ベースの適正フロア判断）を実装。関連バグ修正を含む
+  - [x] Phase 12-8: OrderWindow右キー動作修正・NPC会話専用ウィンドウ新設・各フロア階段3か所配置・別フロアキャラのブロック問題修正
+  - [x] Phase 12-9: 左パネル12人対応・パーティー上限12人ガード・NPC配置をフロア0に集約（4部屋11人）
+  - [x] Phase 12-10: attack.pngスプライト対応（攻撃中の専用画像）・プレイヤー/NPC全14キャラにimage_setを固定割り当て
+  - [x] Phase 12-11: NPCの多層階探索（同フロア敵全滅で探索モード移行・視界ベース階段探索・フロア遷移後の自律行動）を修正
+  - [x] Phase 12-12: アンデッド5種（skeleton/skeleton-archer/lich/demon/dark-lord）追加。ヒーラーのアンデッド特効・雷弾飛翔体・魔王のワープ＋炎陣を実装
+  - [x] Phase 12-13: ダンジョン全面再生成（5フロア141体）・アウトラインシェーダー・射程オーバーレイ・各種バグ修正
+  - [x] Phase 12-14: ステータス名統一（power/skill）・ガード防御改修・NPC会話をAボタン方式に変更・「一緒に行く」合流処理修正
+  - [x] Phase 12-15: ステータス生成を設定ファイル方式に移行。全ステータス0-100スケール統一・vitality/energy追加・move_speed/obedience変換を実装
+  - [x] Phase 12-16: クリティカルヒット（skill/3%の確率でダメージ2倍・二重エフェクト）を実装
+  - [x] Phase 12-17: 敵16種のステータス生成を設定ファイル方式（enemy_class_stats.json/enemy_list.json）で実装
+  - [x] Phase 12-18: フロア遷移時のfreedクラッシュ・新フロア敵未起動・LB/RBキャラ切り替え不具合・アウトライン残留バグを修正
+  - [x] Phase 12-19: 装備補正値の仕様統一・敵ヒーラーの回復対象バグ・シェーダーmodulate無視バグ・freedキャストクラッシュを修正。旧敵画像を削除
+- [x] Phase 13: タイトル画面・メインメニュー（セーブ3スロット・名前入力・オプション）・ポーズメニュー・セーブシステムを実装
+- [x] Phase 13-1: MessageWindowをアイコン行方式に刷新。戦闘メッセージを自然言語化し、攻撃側/被攻撃側の顔アイコン＋左右上半身画像を表示
+- [x] Phase 13-2: ダメージ倍率調整・NPC探索分散・部屋制圧に敵走離脱を追加・メッセージのグループ表示・リーダー方角インジケーターを実装
+- [x] Phase 13-3: MessageWindowのスムーズスクロール（0.15秒補間・SubViewportによる上端クリッピング）を実装
+- [x] Phase 13-4: ダンジョン全49部屋に非矩形形状（L字・T字・八角形等10種のパターン）と障害物タイルを配置
+- [x] Phase 13-5: OrderWindow全体方針を6行個別設定に刷新・個別指示テーブル4列化（非ヒーラー:ターゲット/隊形/戦闘/特殊攻撃、ヒーラー:+回復）・選択肢をチップ形式で横並び表示
+- [x] Phase 13-6: Phase 13-5の指示仕様をAIロジックに反映（ポーション自動使用・アイテムナビゲーション・follow追従・support援護ターゲット等）
+- [x] Phase 13-7: 移動前に向きだけ変える回転操作を実装（移動方向が現在の向きと異なる場合、まず回転してから移動）
+- [x] Phase 13-8: 未加入NPCパーティーのアイテム自動装備・ポーション自動受け渡しを実装。会話選択肢を「仲間にする/キャンセル」の2択に変更
+- [x] Phase 13-9: OrderWindowステータス表示を2列化（左:攻撃系/右:防御系）・ヘッダーに名前+クラス+ランクを統合
+- [x] Phase 13-9（戦闘方針・集結隊形）: 全体方針にbattle_policy（攻撃/防衛/撤退）を追加。gather隊形（パーティー重心付近に集結）を実装
+- [x] Phase 13-10: 敵の縄張り・追跡システムを実装。chase_range/territory_rangeで追跡範囲を制限し、範囲外では帰還行動に切り替え
+- [x] Phase 13-10 後続修正: ヒーラーの回復指示デフォルトを瀕死度優先に変更・非ヒーラー行の回復列にグレー「-」表示
+- [x] Phase 13-11: フロア0をゴブリンのみに変更・NPCデフォルト指示をプレイヤーと整合・戦闘中のbattle_formation優先・follow追従ロジック改善
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム
@@ -2100,7 +909,13 @@ rank値: C=0, B=1, A=2, S=3
 - 巻き添え（`friendly_fire`）：範囲攻撃（炎陣など）が味方・他パーティーにも当たる仕様。`CharacterData.friendly_fire: bool`（当面 false 固定）で管理し、将来切り替え可能にする
 - 大型ボスの即死耐性設計：`instant_death_immune: bool`（ボス級は true）。ヘッドショット無効・無力化水魔法持続短縮。敵 JSON でフラグを設定できる設計にする
 - ログ参照の改善（OrderWindowのログをより使いやすく）：現在は最新50件をそのまま表示するだけ。フィルタリング・検索・スクロール操作の改善を検討
-- 移動せずに向きだけ変える操作の追加（専用操作）：通常移動で向きが異なる場合に先に回転する挙動は Phase 13-7 で実装済み。「移動なし・向きだけ変える」専用操作（ボタン長押し中にスティック/矢印で向き変更など）は未実装
+- パーティーシステムのリファクタリング：
+  - [x] Step 1: PartyLeader 基底クラスの抽出（party_leader_ai.gd から共通部分を party_leader.gd に分離）
+  - [x] Step 2: PartyLeaderPlayer の作成（party_leader_player.gd。プレイヤー操作パーティー用）
+  - [x] Step 3: NpcManager / EnemyManager を廃止し PartyManager に統合。hero_manager を PartyManager（party_type="player"）に切り替え、PartyLeaderPlayer を接続
+  - [ ] 戦況判断ルーチン（`_evaluate_combat_situation()`）の実装（PartyLeader の共通メソッド。現在はスタブのみ）
+  - [ ] NpcLeaderAI の撤退ロジック追加（現在 FLEE 判断がない。戦況判断結果を使ってパーティーレベルの撤退を判断する）
+  - [ ] special_skill 指示のAI接続（strong_enemy / disadvantage 等の条件判定。現在はUI定義のみでAI未接続。DISADVANTAGE_THRESHOLD は GlobalConstants に定義済みだが未使用）
 
 ## 参照ファイル
 - docs/spec.md：詳細仕様書（実装前に参照すること）

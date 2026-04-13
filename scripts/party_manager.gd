@@ -2,7 +2,7 @@ class_name PartyManager
 extends Node
 
 ## パーティーマネージャー（敵・NPC・プレイヤーパーティー共通）
-## 旧 EnemyManager を汎用化したクラス
+## 全パーティー種別（敵・NPC・プレイヤー）を統合管理するクラス
 ## リーダーAI（PartyLeaderAI）+ 個体AI（UnitAI）の2層構造でAIを管理する
 ##
 ## 利用可能な party_type: "enemy" / "npc" / "player"
@@ -13,20 +13,22 @@ const ACTIVATION_RANGE: int = 5
 ## 全メンバーが死亡したときに発火する。items: ドロップアイテム配列、room_id: 部屋のエリアID
 signal party_wiped(items: Array, room_id: String)
 
-## パーティー種別
+## パーティー種別（"enemy" / "npc" / "player"）
 var party_type: String = "enemy"
+
+## 攻撃対象の敵リスト（NPC・プレイヤーパーティー用。game_map から設定）
+var _enemy_list: Array[Character] = []
 
 ## パーティーカラー（Character.party_color の一括設定に使用。TRANSPARENT=リング非表示）
 var party_color: Color = Color.TRANSPARENT
 
 ## RightPanel / vision_system からのアクセスに使用する後方互換プロパティ
-## BaseAI 時代の enemy_ai に相当。PartyLeaderAI を返す
-var enemy_ai: PartyLeaderAI:
+var enemy_ai: PartyLeader:
 	get: return _leader_ai
 
 var _members:    Array[Character] = []
 var _leader:     Character
-var _leader_ai:  PartyLeaderAI
+var _leader_ai:  PartyLeader
 var _player:     Character
 var _map_data:   MapData
 var _activated:  bool = false
@@ -37,8 +39,9 @@ var _all_members:    Array[Character] = []  ## 全パーティー合算（AI 起
 var _friendly_list:  Array[Character] = []  ## 攻撃対象の友好キャラ一覧（敵 AI 用・activate 時に渡す）
 var _drop_items:     Array = []             ## ドロップアイテム（全滅時に party_wiped で転送）
 var _room_id:        String = ""            ## このパーティーが属する部屋のエリアID
-var _floor_items_ref: Dictionary = {}       ## フロアアイテム参照（activate 前に set_floor_items が呼ばれた場合に保持）
-var _floor_items_set: bool = false          ## set_floor_items が一度でも呼ばれたか
+var _floor_items:    Dictionary = {}        ## フロアアイテム辞書（activate 前に set_floor_items が呼ばれた場合のキャッシュ）
+var _vision_system_ref: VisionSystem = null ## VisionSystem 参照（activate 前キャッシュ）
+var _global_orders:  Dictionary = {}        ## Party.global_orders 参照（activate 前キャッシュ）
 
 
 ## VisionSystem から呼ばれる。true なら距離ベースのアクティブ化を無効にする
@@ -56,6 +59,7 @@ func set_party_color(color: Color) -> void:
 
 ## VisionSystem を LeaderAI 経由で各 UnitAI に配布する（explore 行動に必要）
 func set_vision_system(vs: VisionSystem) -> void:
+	_vision_system_ref = vs
 	if _leader_ai != null:
 		_leader_ai.set_vision_system(vs)
 
@@ -110,15 +114,14 @@ func set_friendly_list(friendlies: Array[Character]) -> void:
 
 ## Party.global_orders dict への参照を LeaderAI に渡す（hp_potion / sp_mp_potion 設定の反映に使用）
 func set_global_orders(orders: Dictionary) -> void:
+	_global_orders = orders
 	if _leader_ai != null:
 		_leader_ai.set_global_orders(orders)
 
 
 ## フロアアイテム辞書の参照を LeaderAI 経由で全 UnitAI に配布する（game_map から呼ばれる）
-## activate() より前に呼ばれた場合は _floor_items_ref に保持し、_start_ai() で再適用する
 func set_floor_items(items: Dictionary) -> void:
-	_floor_items_ref = items
-	_floor_items_set = true
+	_floor_items = items
 	if _leader_ai != null:
 		_leader_ai.set_floor_items(items)
 
@@ -126,6 +129,38 @@ func set_floor_items(items: Dictionary) -> void:
 ## 後方互換エイリアス（game_map が set_all_enemies() を呼んでいるため）
 func set_all_enemies(all_enemies: Array[Character]) -> void:
 	set_all_members(all_enemies)
+
+
+## 攻撃対象の敵リストを設定する（game_map が全マネージャー生成後に呼ぶ）
+func set_enemy_list(enemies: Array[Character]) -> void:
+	_enemy_list = enemies
+	# AI 起動済みの場合は直接転送
+	if _leader_ai != null:
+		if _leader_ai is NpcLeaderAI:
+			(_leader_ai as NpcLeaderAI).set_enemy_list(enemies)
+		elif _leader_ai is PartyLeaderPlayer:
+			(_leader_ai as PartyLeaderPlayer).set_enemy_list(enemies)
+
+
+## battle_policy="attack" プリセットをクラスに応じてメンバーに適用する
+static func _apply_attack_preset_to_member(ch: Character) -> void:
+	if ch.character_data == null:
+		return
+	var cid := ch.character_data.class_id
+	match cid:
+		"healer":
+			ch.current_order["battle_formation"] = "rear"
+			ch.current_order["combat"]           = "attack"
+			ch.current_order["heal"]             = "lowest_hp_first"
+		"archer", "magician-fire", "magician-water":
+			ch.current_order["battle_formation"] = "rear"
+			ch.current_order["combat"]           = "attack"
+		"fighter-axe":
+			ch.current_order["battle_formation"] = "rush"
+			ch.current_order["combat"]           = "attack"
+		_:  # fighter-sword, scout
+			ch.current_order["battle_formation"] = "surround"
+			ch.current_order["combat"]           = "attack"
 
 
 ## 既存のキャラクターをスポーンせずにAI管理下に置く
@@ -139,28 +174,53 @@ func setup_adopted(member: Character, player: Character, map_data: MapData) -> v
 
 
 ## メンバーをスポーンしてパーティーを構成する
-## spawn_list: [{ "enemy_id" or "character_id": String, "x": int, "y": int }]
+## spawn_list: [{ "enemy_id" or "character_id" or "class_id": String, "x": int, "y": int }]
 ## drop_items: ドロップアイテムの辞書リスト（dungeon_builder から渡される）
 func setup(spawn_list: Array, player: Character, map_data: MapData, drop_items: Array = []) -> void:
 	_player     = player
 	_map_data   = map_data
 	_drop_items = drop_items.duplicate()
-	# スポーン位置の1つ目からエリアID（部屋ID）を検出する
-	if not spawn_list.is_empty():
-		var first := spawn_list[0] as Dictionary
-		var fpos  := Vector2i(int(first.get("x", 0)), int(first.get("y", 0)))
-		_room_id  = map_data.get_area(fpos)
-	for spawn_info: Variant in spawn_list:
-		var info    := spawn_info as Dictionary
-		var char_id: String = info.get("enemy_id", info.get("character_id", ""))
-		var pos     := Vector2i(int(info.get("x", 0)), int(info.get("y", 0)))
-		var member  := _spawn_member(char_id, pos)
-		_members.append(member)
+	if party_type == "npc":
+		_setup_npc(spawn_list)
+	else:
+		_setup_enemy(spawn_list)
 	# 初期リーダーを決定して is_leader フラグを設定する
 	_elect_leader()
 
 
-func _spawn_member(char_id: String, grid_pos: Vector2i) -> Character:
+## 敵パーティーのスポーン処理
+func _setup_enemy(spawn_list: Array) -> void:
+	# スポーン位置の1つ目からエリアID（部屋ID）を検出する
+	if not spawn_list.is_empty():
+		var first := spawn_list[0] as Dictionary
+		var fpos  := Vector2i(int(first.get("x", 0)), int(first.get("y", 0)))
+		_room_id  = _map_data.get_area(fpos)
+	for spawn_info: Variant in spawn_list:
+		var info    := spawn_info as Dictionary
+		var char_id: String = info.get("enemy_id", info.get("character_id", ""))
+		var pos     := Vector2i(int(info.get("x", 0)), int(info.get("y", 0)))
+		var member  := _spawn_enemy_member(char_id, pos)
+		_members.append(member)
+
+
+## NPC パーティーのスポーン処理（CharacterGenerator によるランダム生成＋初期装備付与）
+func _setup_npc(spawn_list: Array) -> void:
+	for spawn_info: Variant in spawn_list:
+		var info              := spawn_info as Dictionary
+		var class_id: String   = info.get("class_id", "fighter-sword") as String
+		var pos               := Vector2i(int(info.get("x", 0)), int(info.get("y", 0)))
+		var items             := info.get("items", []) as Array
+		var image_set_override: String = info.get("image_set", "") as String
+		var member            := _spawn_npc_member(class_id, pos, image_set_override)
+		# 初期装備を付与する
+		if member.character_data != null and not items.is_empty():
+			member.character_data.apply_initial_items(items)
+		# クラス依存の battle_formation / combat を確定する
+		_apply_attack_preset_to_member(member)
+		_members.append(member)
+
+
+func _spawn_enemy_member(char_id: String, grid_pos: Vector2i) -> Character:
 	var member := Character.new()
 	member.grid_pos = grid_pos
 	member.placeholder_color = Color(1.0, 0.4, 0.2)
@@ -173,8 +233,33 @@ func _spawn_member(char_id: String, grid_pos: Vector2i) -> Character:
 	CharacterGenerator.apply_enemy_graphics(member.character_data)
 	# enemy_list.json に基づいてステータスを0-100スケールで生成・上書きする
 	CharacterGenerator.apply_enemy_stats(member.character_data)
-	# name（例: "EnemyManager0"）をプレフィックスにして複数マネージャー間の名前衝突を防ぐ
+	# name をプレフィックスにして複数マネージャー間の名前衝突を防ぐ
 	member.name = name + "_" + char_id.capitalize() + str(_members.size())
+	get_parent().add_child(member)
+	member.sync_position()
+	member.died.connect(_on_member_died)
+	return member
+
+
+## CharacterGenerator でNPCキャラクターを生成してスポーンする
+## image_set_override: JSON で指定されたフォルダ名（空ならランダム選択のまま）
+func _spawn_npc_member(class_id: String, grid_pos: Vector2i, image_set_override: String = "") -> Character:
+	var member := Character.new()
+	member.grid_pos          = grid_pos
+	member.placeholder_color = Color(0.2, 0.9, 0.3)
+	member.is_friendly       = true
+
+	var generated_data := CharacterGenerator.generate_character(class_id)
+	if generated_data != null:
+		if not image_set_override.is_empty():
+			CharacterGenerator.apply_image_set_override(generated_data, image_set_override)
+		member.character_data = generated_data
+	else:
+		var fallback := CharacterData.new()
+		fallback.character_name = class_id
+		member.character_data   = fallback
+
+	member.name = "%s_%s_%d" % [name, class_id.replace("-", "_"), _members.size()]
 	get_parent().add_child(member)
 	member.sync_position()
 	member.died.connect(_on_member_died)
@@ -186,7 +271,7 @@ func get_members() -> Array[Character]:
 	return _members
 
 
-## 後方互換エイリアス（EnemyManager.get_enemies() の置き換え）
+## 後方互換エイリアス（get_enemies() は get_members() と同義）
 func get_enemies() -> Array[Character]:
 	return _members
 
@@ -249,8 +334,25 @@ func _update_leader_flags() -> void:
 			member.is_leader = (member == _leader)
 
 
-## キャラ種に応じた PartyLeaderAI サブクラスを生成するファクトリ
-func _create_leader_ai(leader: Character) -> PartyLeaderAI:
+## パーティー種別・キャラ種に応じた PartyLeader サブクラスを生成するファクトリ
+func _create_leader_ai(leader: Character) -> PartyLeader:
+	match party_type:
+		"player":
+			var ai := PartyLeaderPlayer.new()
+			ai.name = "PartyLeaderPlayer"
+			ai.set_enemy_list(_enemy_list)
+			return ai
+		"npc":
+			var ai := NpcLeaderAI.new()
+			ai.name = "NpcLeaderAI"
+			ai.set_enemy_list(_enemy_list)
+			return ai
+		_:  # "enemy"
+			return _create_enemy_leader_ai(leader)
+
+
+## 敵パーティー用：種族に応じた LeaderAI を生成する
+func _create_enemy_leader_ai(leader: Character) -> PartyLeader:
 	var char_id := ""
 	if leader != null and leader.character_data != null:
 		char_id = leader.character_data.character_id
@@ -271,8 +373,8 @@ func _create_leader_ai(leader: Character) -> PartyLeaderAI:
 
 	# goblin-archer, goblin-mage, zombie, harpy, salamander,
 	# dark-knight, dark-mage, dark_priest, dark-priest など
-	var ai := DefaultLeaderAI.new()
-	ai.name = "DefaultLeaderAI"
+	var ai := EnemyLeaderAI.new()
+	ai.name = "EnemyLeaderAI"
 	return ai
 
 
@@ -309,12 +411,15 @@ func _start_ai() -> void:
 	_leader_ai.joined_to_player = joined_to_player  # 合流フラグを伝播
 	if not _friendly_list.is_empty():
 		_leader_ai.set_friendly_list(_friendly_list)
+	if not _floor_items.is_empty():
+		_leader_ai.set_floor_items(_floor_items)
+	if not _global_orders.is_empty():
+		_leader_ai.set_global_orders(_global_orders)
 	add_child(_leader_ai)
 	_leader_ai.setup(_members, _player, _map_data, _all_members)
-	# activate() より前に set_floor_items が呼ばれていた場合は必ず再適用する
-	# （_floor_items_ref が空でも参照を渡す：後から _floor_items[n] が追加されたとき UnitAI が見えるようにするため）
-	if _floor_items_set:
-		_leader_ai.set_floor_items(_floor_items_ref)
+	# VisionSystem は setup 後に渡す（UnitAI が生成済みである必要があるため）
+	if _vision_system_ref != null:
+		_leader_ai.set_vision_system(_vision_system_ref)
 
 
 ## メンバー死亡時の処理
@@ -356,7 +461,7 @@ func _check_room_suppression() -> void:
 			return
 		# 部屋の外にいる場合：FLEE 戦略なら離脱扱い、それ以外は追跡中
 		var is_fleeing := _leader_ai != null \
-				and _leader_ai._party_strategy == PartyLeaderAI.Strategy.FLEE
+				and _leader_ai._party_strategy == PartyLeader.Strategy.FLEE
 		if not is_fleeing:
 			return  # 追跡で出た可能性があるため制圧対象にしない
 	# 全メンバーが「死亡 or FLEE 離脱」 → 制圧完了

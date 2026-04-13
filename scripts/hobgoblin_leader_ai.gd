@@ -1,12 +1,12 @@
 class_name HobgoblinLeaderAI
-extends PartyLeaderAI
+extends EnemyLeaderAI
 
 ## ホブゴブリンリーダーAI
 ## behavior_description: "配下のゴブリンを指揮する大型の亜人。好戦的で絶対に逃げない。"
 ##
-## 戦略判断:
-##   ATTACK: プレイヤーが生存（常に攻撃。絶対に逃げない）
-##   WAIT  : プレイヤー不在
+## EnemyLeaderAI との差分:
+##   現時点ではなし（FLEEしない＝「狂暴で攻撃的」の特徴はデフォルト動作そのもの）
+##   将来の差別化のためクラスは残す
 ##
 ## 混成パーティー: ホブゴブリン1体+ゴブリン複数を想定
 ##   hobgoblin → HobgoblinUnitAI
@@ -19,15 +19,3 @@ func _create_unit_ai(member: Character) -> UnitAI:
 	if cid == "goblin":
 		return GoblinUnitAI.new()
 	return HobgoblinUnitAI.new()
-
-
-## パーティー全体の戦略を評価する（絶対に FLEE しない）
-func _evaluate_party_strategy() -> Strategy:
-	if _has_alive_friendly():
-		return Strategy.ATTACK
-	return Strategy.WAIT
-
-
-## 攻撃ターゲット: 最近傍の友好キャラ
-func _select_target_for(member: Character) -> Character:
-	return _find_nearest_friendly(member)
