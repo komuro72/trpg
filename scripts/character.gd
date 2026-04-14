@@ -705,17 +705,20 @@ func heal(amount: int) -> void:
 ## item: inventory 内の辞書（category == "consumable"）
 func use_consumable(item: Dictionary) -> void:
 	var effect: Dictionary = item.get("effect", {}) as Dictionary
-	var heal_hp: int = int(effect.get("heal_hp", 0))
+	var restore_hp_val: int = int(effect.get("restore_hp", 0))
 	var restore_mp: int = int(effect.get("restore_mp", 0))
 	var restore_sp: int = int(effect.get("restore_sp", 0))
-	if heal_hp > 0:
-		heal(heal_hp)  # heal() 内で効果音を再生
+	if restore_hp_val > 0:
+		heal(restore_hp_val)  # heal() 内で効果音を再生
 	if restore_mp > 0:
 		mp = mini(mp + restore_mp, max_mp)
 		SoundManager.play_from(SoundManager.HEAL, self)
 	if restore_sp > 0:
 		sp = mini(sp + restore_sp, max_sp)
 		SoundManager.play_from(SoundManager.HEAL, self)
+	# インベントリからアイテムを削除
+	if character_data != null:
+		character_data.inventory.erase(item)
 
 
 ## 防御バフを付与する（重複時はタイマーをリセット・エフェクトも再生成）

@@ -1009,13 +1009,13 @@ func _v_headshot(cost: int) -> void:
 	if is_immune:
 		var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
 		var raw_damage := int(float(_member.power) * 3.0 * type_mult)
-		_target.take_damage(raw_damage, 1.0, _member, false, true)
 		MessageLog.add_battle(_member.character_data, _target.character_data,
 			"%sがヘッドショットで%sに大ダメージを与えた" % [_v_name(), _v_tgt_name()], _member, _target)
+		_target.take_damage(raw_damage, 1.0, _member, false, true)
 	else:
-		_target.take_damage(_target.hp, 1.0, _member, false, true)
 		MessageLog.add_battle(_member.character_data, _target.character_data,
 			"%sがヘッドショットで%sを仕留めた" % [_v_name(), _v_tgt_name()], _member, _target)
+		_target.take_damage(_target.hp, 1.0, _member, false, true)
 	_state = _State.WAITING
 	_timer = 0.5
 
