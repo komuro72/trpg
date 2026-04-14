@@ -504,6 +504,17 @@ func _link_all_character_lists() -> void:
 		_hero_manager.set_all_members(all_combatants)
 		_hero_manager.set_enemy_list(all_enemies)
 
+	# --- デバッグ: _per_floor_npcs の構成を出力 ---
+	for fi: int in range(_per_floor_npcs.size()):
+		var fl_arr: Array = _per_floor_npcs[fi] as Array
+		var nm_names: PackedStringArray = []
+		for nm_v: Variant in fl_arr:
+			var nm := nm_v as PartyManager
+			if is_instance_valid(nm):
+				nm_names.append("%s(%d)" % [nm.name, nm.get_members().size()])
+		if not nm_names.is_empty():
+			print("[DBG_PFN] F%d: %s" % [fi, ",".join(nm_names)])
+
 	# --- デバッグ: _all_members の構成を出力 ---
 	var party_names: PackedStringArray = []
 	for mv: Variant in party.members:
