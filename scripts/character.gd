@@ -713,17 +713,17 @@ func use_consumable(item: Dictionary) -> void:
 	if restore_hp_val > 0:
 		heal(restore_hp_val)  # heal() 内で効果音を再生
 		MessageLog.add_battle(character_data, null,
-			"%sが%sを使った（HP+%d）" % [char_name, item_name, restore_hp_val], self)
+			"%sがHP回復ポーションを使い、自身のHPを回復した" % char_name, self)
 	if restore_mp > 0:
 		mp = mini(mp + restore_mp, max_mp)
 		SoundManager.play_from(SoundManager.HEAL, self)
 		MessageLog.add_battle(character_data, null,
-			"%sが%sを使った（MP+%d）" % [char_name, item_name, restore_mp], self)
+			"%sがMP回復ポーションを使い、自身のMPを回復した" % char_name, self)
 	if restore_sp > 0:
 		sp = mini(sp + restore_sp, max_sp)
 		SoundManager.play_from(SoundManager.HEAL, self)
 		MessageLog.add_battle(character_data, null,
-			"%sが%sを使った（SP+%d）" % [char_name, item_name, restore_sp], self)
+			"%sがSP回復ポーションを使い、自身のSPを回復した" % char_name, self)
 	# インベントリからアイテムを削除
 	if character_data != null:
 		character_data.inventory.erase(item)
