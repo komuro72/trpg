@@ -293,6 +293,9 @@ func _process(delta: float) -> void:
 			# 移動先が他キャラに取られた場合はアボートして再評価
 			# ただし相手がすでにそのタイルを離れる途中（別の場所へ pending 移動中）なら無視する
 			if _member.is_pending() and _is_dest_blocked_by_other(_member.get_pending_grid_pos()):
+				if _member.is_friendly:
+					var my_name := _member.character_data.character_name if _member.character_data != null else String(_member.name)
+					print("[DBG_ABORT] %s@%s → pending=%s ABORT" % [my_name, _member.grid_pos, _member.get_pending_grid_pos()])
 				_member.abort_move()
 				_queue.clear()
 				notify_situation_changed()
@@ -510,6 +513,10 @@ func _step_toward_goal() -> bool:
 		if _move_policy == "stairs_down" or _move_policy == "stairs_up":
 			var push_dir := next - _member.grid_pos
 			_try_push_friendly_at(next, push_dir)
+		if _member.is_friendly:
+			var my_name := _member.character_data.character_name if _member.character_data != null else String(_member.name)
+			var passable := _is_passable(next)
+			print("[DBG_MOVE] %s@%s → next=%s passable=%s goal=%s" % [my_name, _member.grid_pos, next, str(passable), _goal])
 		_member.move_to(next, _get_move_interval())
 		_dbg_stuck_count = 0
 		return _member.grid_pos != _goal
