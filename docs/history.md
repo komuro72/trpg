@@ -665,3 +665,42 @@
   - `unit_ai.gd:_generate_move_queue()` 冒頭で「move_policy が cluster/follow/same_room かつリーダーが別フロア」を判定し、`_generate_stair_queue(dir, ignore_visited=true)` を返す
   - `_generate_stair_queue` に `ignore_visited` パラメータを追加。フロア間追従時はリーダーが既に使った階段なので未踏でも候補にする
 - 影響範囲: 個別指示の cluster/follow/same_room を選んだ NPC メンバーが、リーダー降下後に必ず追従するようになる。他の移動方針（standby/explore/guard_room）はフロア間追従の対象外（自律行動を維持）
+
+### バグ修正: ヒーラーAIが非アンデッド敵にダメージを与えていた
+- 症状: ヒーラー（attack_type="heal"）が回復対象もアンデッド敵もないとき、ATTACK 戦略で `attack` アクションを生成 → `_execute_attack` の match に "heal" ケースなく default(melee) に落ち、非アンデッドにダメージを与えていた
+- 修正:
+  - `unit_ai.gd:_generate_queue` ATTACK分岐: `atype == "heal"` かつターゲット非アンデッドなら `_generate_move_queue()` にフォールバック
+  - `unit_ai.gd:_execute_attack` 冒頭: `atype == "heal"` でターゲット非アンデッドなら return（防御的二重チェック）
+
+### バグ修正: NPCデバッグ表示 戦力(0/0)・enemy_list 初期転送漏れ
+- 症状: DebugWindow で NPC パーティーの戦力が常に「○○(0/0)」と表示
+- 原因①: `NpcLeaderAI.get_global_orders_hint()` が PartyLeader のオーバーライドだが、my_rank_sum / enemy_rank_sum を hint に追加していなかった
+- 原因②: `PartyManager._start_ai()` が AI 起動時に `_enemy_list` を leader_ai に転送しておらず、起動前に set_enemy_list された分が反映されていなかった
+- 修正: 両方とも転送するよう追加
+
+### バグ修正: NPCリーダー降下後の追従遅延・FLEE阻害
+- 症状: NPCリーダーが階段を降りても、cluster 指示の非リーダーメンバーが付いてこない
+- 原因① (遅延): 敵がいない時はメンバーが3秒の wait アクション中で再評価されず、リーダーのフロア変化を検知できなかった
+- 原因② (阻害): リーダーが下フロアに単独で降りると戦況評価が「リーダー1人 vs F1の敵集団」になり PowerBalance 劣勢→ Strategy.FLEE。非リーダーは party_fleeing=true → ATTACK/FLEE/WAIT 分岐の中で `[wait]` を返して固定
+- 修正:
+  - `party_leader.gd:_process` でリーダーの current_floor 変化を毎フレーム検知 → 全 UnitAI に `notify_situation_changed()`
+  - `unit_ai.gd:notify_situation_changed` が WAIT 中なら IDLE に戻してキューを破棄
+  - `unit_ai.gd:_generate_queue` 冒頭にクロスフロア追従判定を移動（FLEE/WAIT/ATTACK 何の戦略でも cluster/follow/same_room メンバーは階段優先）
+  - `_step_toward_goal` の友好キャラ押し出しもクロスフロア追従時に有効化
+
+### 設計変更: メッセージウィンドウのアイコン縮小と各種改善
+- アイコン縮小（試験的）:
+  - `ICON_SCALE_RATIO = 1.0/3.0`（旧 2.0/3.0 の半分）
+  - `ICON_MIN_SIZE = 20` / `LINE_HEIGHT_RATIO = 1.25`（旧 1.5）
+  - 元に戻す場合は `ICON_SCALE_RATIO = 2.0/3.0` / `LINE_HEIGHT_RATIO = 1.5`
+- バトル行高さ計算修正: `box_h` を `line_h * VISIBLE_LINES` から `max(line_h, icon_sz+4) * VISIBLE_LINES` に変更（最上段が見切れる問題）
+- 対象なしバトルメッセージ（ポーション・スライディング等）で右側アイコン・矢印を非表示
+- 突進斬り/振り回しを敵ごとに「○○が突進斬りで△△を攻撃し、大ダメージを与えた」形式で per-target 表示。プレイヤー側 `_execute_rush`/`_execute_whirlwind` で `add_combat`→`add_battle` に変更し、`take_damage` に `suppress_battle_msg=true` を渡す
+
+### DebugWindow 機能拡張
+- 各メンバーの行動目的を3行目に表示（`UnitAI.get_debug_goal_str()` に集約）
+  - 例: `→DOWN階段(15,3)` / `→攻撃Goblin` / `L追従(DOWN/キュー空/WAIT)` / `[cluster]キュー空(IDLE)`
+  - 末尾に `_state` ラベル（IDLE/MOV/WAIT/ATKp/ATKpost）併記
+- パーティー表示順を プレイヤー → NPC → 敵 に変更（行数不足時に重要情報を優先）
+- パーティーブロック間の 2px 空白を撤去
+- 別フロアにいるメンバーも全員表示（名前頭に `[Fx]` 注釈）。表示条件は「いずれか1人が表示フロアにいること」

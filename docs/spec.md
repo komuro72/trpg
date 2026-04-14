@@ -4004,3 +4004,53 @@ if _move_policy in ["cluster", "follow", "same_room"] \
 ### 既存仕様との関係
 - 廃止: `party_leader.gd:_assign_orders()` の「クロスフロア追従ブロック」（move_policy を stairs_down/up に書き換える特殊処理）
 - 維持: 既存の階段使用フロー（`_generate_stair_queue` → 階段タイル到達 → `_check_npc_member_stairs` → `_transition_single_npc_member`）
+
+## DebugWindow メンバー目的表示
+
+`UnitAI.get_debug_goal_str()` が現在の状態・キュー先頭・move_policy・leader_ref から短い説明文を返す。`_state` ラベル（IDLE/MOV/WAIT/ATKp/ATKpost）を末尾に併記する。
+
+### 主な出力例
+| 出力 | 状況 |
+|------|------|
+| `→DOWN階段(15,3)[MOV]` | 階段に向かって移動中 |
+| `→攻撃Goblin[MOV]` | 攻撃対象に接近中 |
+| `→Mary回復[MOV]` | 回復対象へ移動中 |
+| `L追従(DOWN/キュー空/IDLE)` | リーダー追従系・別フロア・IDLE で再評価待ち |
+| `L追従(DOWN/キュー空/WAIT)` | 同上・wait アクション執行中（3秒） |
+| `[cluster]キュー空(IDLE)` | 同フロア・IDLE で再評価待ち |
+| `攻撃→Goblin[ATKp]` | 攻撃前隙中 |
+
+### 経路: PartyManager → PartyLeader → UnitAI
+- `PartyManager.get_member_goal_str(member)` → `_leader_ai.get_member_goal_str(name)` → `unit_ai.get_debug_goal_str()`
+- DebugWindow `_draw_members_goals_row` が各メンバーの結果を1行に横並び描画
+
+## NPCリーダー降下時の追従ロジック（最終形）
+
+### 配置: `unit_ai.gd:_generate_queue` 冒頭
+戦略分岐（FLEE/ATTACK/WAIT）の前にクロスフロア追従を判定する。これによりリーダー単独降下で `Strategy.FLEE` になったときも、cluster/follow/same_room メンバーは階段優先で追従する。
+
+```gdscript
+if _move_policy in ["cluster", "follow", "same_room"] \
+        and _leader_ref != null and is_instance_valid(_leader_ref) \
+        and _leader_ref != _member \
+        and _leader_ref.current_floor != _member.current_floor:
+    var follow_dir: int = sign(_leader_ref.current_floor - _member.current_floor)
+    return _generate_stair_queue(follow_dir, true)
+```
+
+### 即時通知: `party_leader.gd:_process`
+リーダーの `current_floor` 変化を毎フレーム検知し、変化したら全 UnitAI に `notify_situation_changed()` を発火。
+
+### WAIT中断: `unit_ai.gd:notify_situation_changed`
+WAIT 中なら `_state = IDLE`、`_queue.clear()` で 3秒待たずに再評価できるようにする。
+
+### 押し出し: `unit_ai.gd:_step_toward_goal`
+明示的な `stairs_down/up` だけでなく、クロスフロア追従中（cluster/follow/same_room + leader 別フロア）も `_try_push_friendly_at` を呼んで階段周辺の友好キャラを押し出す。
+
+## メッセージウィンドウ（追加）
+
+### 対象なしバトルメッセージ
+`add_battle(attacker_data, defender_data=null, ...)` で `defender_data` が null のときは矢印 `→` と右側アイコンを描画しない（ポーション使用・スライディング・空振り等の単独行動メッセージ用）。テキスト位置（`battle_text_x`）は不変なので対象ありメッセージと左揃えで揃う。
+
+### per-target 表示
+突進斬り・振り回しは敵1体ごとに「○○が突進斬りで△△を攻撃し、大ダメージを与えた」形式で `add_battle` を呼ぶ。`take_damage(...,suppress_battle_msg=true)` で per-hit の通常ダメージメッセージを抑止し、`_emit_v_skill_battle_msg(skill_name, atk, def, dmg)` ヘルパが HP 差分から `Character._damage_label()` で段階ラベル付与する。
