@@ -211,18 +211,26 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 	var content_y := bar_y + bar_h + 4.0   # バー直下の開始 y
 	var class_id := c.character_data.class_id if c.character_data != null else ""
 	if class_id in MAGIC_CLASS_IDS:
-		# 魔法クラス：MPバー（濃い青）
+		# 魔法クラス：MPバー（濃い青 / 特殊攻撃不可時は濃い紫）
 		if c.max_mp > 0:
 			var mp_cur_r := minf(float(c.mp)    / MP_REF, 1.0)
 			var mp_max_r := minf(float(c.max_mp)/ MP_REF, 1.0)
-			_draw_bar(tx, content_y, tw, bar_h, mp_cur_r, Color(0.2, 0.5, 1.0), mp_max_r)
+			var mp_color := Color(0.2, 0.5, 1.0)
+			var v_cost := c.character_data.v_slot_mp_cost if c.character_data != null else 0
+			if v_cost > 0 and c.mp < v_cost:
+				mp_color = Color(0.5, 0.2, 0.8)  # 濃い紫
+			_draw_bar(tx, content_y, tw, bar_h, mp_cur_r, mp_color, mp_max_r)
 			content_y += bar_h + 4.0
 	else:
-		# 非魔法クラス：SPバー（水色）
+		# 非魔法クラス：SPバー（水色 / 特殊攻撃不可時は明るい紫）
 		if c.max_sp > 0:
 			var sp_cur_r := minf(float(c.sp)    / SP_REF, 1.0)
 			var sp_max_r := minf(float(c.max_sp)/ SP_REF, 1.0)
-			_draw_bar(tx, content_y, tw, bar_h, sp_cur_r, Color(0.4, 0.8, 1.0), sp_max_r)
+			var sp_color := Color(0.4, 0.8, 1.0)
+			var v_cost := c.character_data.v_slot_sp_cost if c.character_data != null else 0
+			if v_cost > 0 and c.sp < v_cost:
+				sp_color = Color(0.7, 0.4, 1.0)  # 明るい紫
+			_draw_bar(tx, content_y, tw, bar_h, sp_cur_r, sp_color, sp_max_r)
 			content_y += bar_h + 4.0
 
 	# 指示状態（current_order から読み込み。move/on_low_hp/item_pickup は全体方針から同期）

@@ -128,6 +128,12 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	data.attack_range       = int(class_json.get("attack_range", 1))
 	data.heal_mp_cost       = int(class_json.get("heal_mp_cost",  0))
 	data.buff_mp_cost       = int(class_json.get("buff_mp_cost",  0))
+	# Vスロット特殊攻撃のコストを読み取る
+	var slots: Dictionary = class_json.get("slots", {}) as Dictionary
+	var v_data: Variant = slots.get("V")
+	if v_data != null and v_data is Dictionary:
+		data.v_slot_mp_cost = int((v_data as Dictionary).get("mp_cost", 0))
+		data.v_slot_sp_cost = int((v_data as Dictionary).get("sp_cost", 0))
 
 	var folder: String = GRAPHIC_SET_DIR + str(chosen_set.get("folder", ""))
 	data.image_set         = folder

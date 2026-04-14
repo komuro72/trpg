@@ -51,6 +51,10 @@ var heal_mp_cost: int = 0
 ## バフスキルのMP消費（防御力アップなど）
 var buff_mp_cost: int = 0
 
+## Vスロット特殊攻撃のコスト（クラスJSONから読み込み。MP系クラスは mp_cost、SP系クラスは sp_cost）
+var v_slot_mp_cost: int = 0
+var v_slot_sp_cost: int = 0
+
 ## 耐性（能力値。内部で軽減率に変換。クラス素値＋装備補正。Phase 10-2〜）
 ## 変換式: 軽減率 = 能力値 / (能力値 + 100.0)（逓減カーブ・100で50%軽減）
 var physical_resistance: int = 0  ## 物理耐性の能力値
