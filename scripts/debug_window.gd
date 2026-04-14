@@ -257,15 +257,9 @@ func _draw_party_state(font: Font, x: float, y_start: float,
 	var ems: Array = _get_enemy_managers.call() if _get_enemy_managers.is_valid() else []
 	var nms: Array = _get_npc_managers.call()   if _get_npc_managers.is_valid()   else []
 
-	# 敵パーティー
-	for em_v: Variant in ems:
-		if cy >= bottom:
-			break
-		var em := em_v as PartyManager
-		if em == null or not is_instance_valid(em):
-			continue
-		cy = _draw_party_block(font, em, "敵", Color(1.0, 0.45, 0.45),
-				x, cy, w, bottom, floor_idx, false)
+	# プレイヤーパーティーを先頭に表示（情報量が多く優先表示する）
+	if _party != null and cy < bottom:
+		cy = _draw_player_party(font, x, cy, w, bottom, floor_idx)
 
 	# NPC パーティー
 	for nm_v: Variant in nms:
@@ -277,9 +271,15 @@ func _draw_party_state(font: Font, x: float, y_start: float,
 		cy = _draw_party_block(font, nm, "NPC", Color(0.45, 1.0, 0.55),
 				x, cy, w, bottom, floor_idx, true)
 
-	# プレイヤーパーティー
-	if _party != null and cy < bottom:
-		_draw_player_party(font, x, cy, w, bottom, floor_idx)
+	# 敵パーティー
+	for em_v: Variant in ems:
+		if cy >= bottom:
+			break
+		var em := em_v as PartyManager
+		if em == null or not is_instance_valid(em):
+			continue
+		cy = _draw_party_block(font, em, "敵", Color(1.0, 0.45, 0.45),
+				x, cy, w, bottom, floor_idx, false)
 
 
 ## 描画順のリーダーキャラ一覧を構築する（上下キー選択の対象リスト）
