@@ -103,15 +103,6 @@ func set_all_members(all_members: Array[Character]) -> void:
 	_all_members = all_members
 	if _leader_ai != null:
 		_leader_ai.set_all_members(all_members)
-	# --- デバッグ ---
-	if party_type == "npc":
-		var own_in := 0
-		for m: Character in _members:
-			if is_instance_valid(m) and m in all_members:
-				own_in += 1
-		print("[DBG_PM_SAM] %s: all=%d own_members=%d own_in_all=%d ai=%s" % [
-			name, all_members.size(), _members.size(), own_in,
-			"yes" if _leader_ai != null else "no"])
 
 
 ## 攻撃対象となる友好キャラ一覧を保存し、LeaderAI が既に起動済みなら即座に渡す

@@ -66,7 +66,6 @@ var _combat_situation:  Dictionary = {}       ## 戦況判断結果（PartyLeade
 var _leader_ref:       Character = null  ## 隊形計算の基準となるリーダーキャラ
 var _guard_room_area:  String    = ""    ## guard_room 時の記憶部屋ID（初回設定後不変）
 var _home_position:    Vector2i  = Vector2i.ZERO  ## スポーン地点（帰還の基点。setup() で初期化）
-var _dbg_stuck_count:  int       = 0              ## デバッグ: 連続停滞回数
 var _all_floor_items:  Dictionary = {}  ## {floor_idx: {Vector2i: item}} 参照（game_map から設定）
 
 
@@ -86,18 +85,6 @@ func get_home_position() -> Vector2i:
 
 func set_all_members(all_members: Array[Character]) -> void:
 	_all_members = all_members
-	# --- デバッグ: _all_members の構成をログ出力（初回のみ） ---
-	if _member != null and is_instance_valid(_member) and _member.is_friendly:
-		var my_name := _member.character_data.character_name if _member.character_data != null else String(_member.name)
-		var friendly_count := 0
-		var friendly_names: PackedStringArray = []
-		for m: Character in _all_members:
-			if is_instance_valid(m) and m.is_friendly:
-				friendly_count += 1
-				var n := m.character_data.character_name if m.character_data != null else String(m.name)
-				friendly_names.append(n)
-		print("[DBG_AM] %s: _all_members=%d friendly=%d(%s)" % [
-			my_name, _all_members.size(), friendly_count, ",".join(friendly_names)])
 
 
 ## heal/buff ターゲット検索に使う同一パーティーメンバーリストを設定する
@@ -233,8 +220,6 @@ func get_debug_info() -> Dictionary:
 # ステートマシン
 # --------------------------------------------------------------------------
 
-var _dbg_process_timer: float = 0.0  ## デバッグ: _process 動作確認用タイマー
-
 func _process(delta: float) -> void:
 	if _member == null or not is_instance_valid(_member):
 		return
@@ -245,24 +230,6 @@ func _process(delta: float) -> void:
 	if not GlobalConstants.world_time_running:
 		return
 
-	# --- デバッグ: AI が動作しているか3秒ごとに確認 ---
-	if _member.is_friendly:
-		_dbg_process_timer += delta
-		if _dbg_process_timer >= 3.0:
-			_dbg_process_timer = 0.0
-			var my_name := _member.character_data.character_name if _member.character_data != null else String(_member.name)
-			var eff := _determine_effective_action()
-			var safe := _is_combat_safe()
-			var tgt_name := ""
-			if _target != null and is_instance_valid(_target) and _target.character_data != null:
-				tgt_name = _target.character_data.character_name
-			var is_moving := _member.is_moving() if _member.has_method("is_moving") else false
-			var pending := _member.is_pending()
-			print("[DBG_AI] %s F%d@%s st=%d q=%d eff=%d safe=%s combat=%s mv=%s tgt=%s moving=%s pending=%s goal=%s timer=%.1f _all=%d" % [
-				my_name, _member.current_floor, _member.grid_pos,
-				int(_state), _queue.size(), eff, str(safe), _combat, _move_policy,
-				tgt_name if not tgt_name.is_empty() else "-",
-				str(is_moving), str(pending), _goal, _timer, _all_members.size()])
 
 	# スタン中は行動をスキップしてキューをクリア
 	if _member.is_stunned:
@@ -293,9 +260,6 @@ func _process(delta: float) -> void:
 			# 移動先が他キャラに取られた場合はアボートして再評価
 			# ただし相手がすでにそのタイルを離れる途中（別の場所へ pending 移動中）なら無視する
 			if _member.is_pending() and _is_dest_blocked_by_other(_member.get_pending_grid_pos()):
-				if _member.is_friendly:
-					var my_name := _member.character_data.character_name if _member.character_data != null else String(_member.name)
-					print("[DBG_ABORT] %s@%s → pending=%s ABORT" % [my_name, _member.grid_pos, _member.get_pending_grid_pos()])
 				_member.abort_move()
 				_queue.clear()
 				notify_situation_changed()
@@ -513,56 +477,8 @@ func _step_toward_goal() -> bool:
 		if _move_policy == "stairs_down" or _move_policy == "stairs_up":
 			var push_dir := next - _member.grid_pos
 			_try_push_friendly_at(next, push_dir)
-		if _member.is_friendly:
-			var my_name := _member.character_data.character_name if _member.character_data != null else String(_member.name)
-			var passable := _is_passable(next)
-			# 移動先に誰がいるか調べる
-			var occupant := ""
-			for other: Character in _all_members:
-				if is_instance_valid(other) and other != _member and next in other.get_occupied_tiles():
-					occupant = other.character_data.character_name if other.character_data != null else String(other.name)
-					occupant += "(F%d,fly=%s)" % [other.current_floor, str(other.is_flying)]
-					break
-			if occupant.is_empty() and _player != null and is_instance_valid(_player) and _player != _member \
-					and next in _player.get_occupied_tiles():
-				occupant = "hero"
-			print("[DBG_MOVE] %s@%s → next=%s passable=%s occupant=%s goal=%s" % [my_name, _member.grid_pos, next, str(passable), occupant if not occupant.is_empty() else "-", _goal])
 		_member.move_to(next, _get_move_interval())
-		_dbg_stuck_count = 0
 		return _member.grid_pos != _goal
-
-	# --- デバッグ: 移動先が見つからず停滞している場合 ---
-	if _member.is_friendly:
-		_dbg_stuck_count += 1
-		if _dbg_stuck_count >= 5:  # 5回連続で動けなかったらログ出力
-			_dbg_stuck_count = 0
-			var my_name := _member.character_data.character_name if _member.character_data != null else String(_member.name)
-			var dbg_act := _current_action.get("action", "?") as String
-			# 隣接タイルのブロック状況を調べる
-			var dirs: Array[Vector2i] = [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1)]
-			var block_info: PackedStringArray = []
-			for d: Vector2i in dirs:
-				var adj := _member.grid_pos + d
-				var passable := _is_passable(adj)
-				if not passable:
-					# 誰がブロックしているか特定
-					var blocker_name := ""
-					for other: Character in _all_members:
-						if is_instance_valid(other) and other != _member \
-								and other.current_floor == _member.current_floor \
-								and adj in other.get_occupied_tiles():
-							blocker_name = other.character_data.character_name if other.character_data != null else String(other.name)
-							break
-					if blocker_name.is_empty() and _player != null and is_instance_valid(_player) \
-							and _player != _member and adj in _player.get_occupied_tiles():
-						blocker_name = "hero"
-					if blocker_name.is_empty():
-						blocker_name = "wall/tile"
-					block_info.append("%s=%s" % [adj, blocker_name])
-			print("[DBG_STUCK] %s@%s F%d act=%s goal=%s mv=%s blocks=[%s] _all=%d" % [
-				my_name, _member.grid_pos, _member.current_floor,
-				dbg_act, _goal, _move_policy,
-				",".join(block_info), _all_members.size()])
 
 	return false
 
@@ -1438,20 +1354,6 @@ func _is_passable(pos: Vector2i) -> bool:
 		# → 複数メンバーが同一タイルを目標に選んで衝突するのを防ぐ
 		if other.is_pending() and other.get_pending_grid_pos() == pos:
 			return false
-	# --- デバッグ: passable 判定で味方を見逃していないか確認 ---
-	if _member != null and _member.is_friendly and _dbg_stuck_count > 0:
-		# Character 静的レジストリで同じタイルにいるキャラを検索
-		for ch: Character in Character._all_chars:
-			if not is_instance_valid(ch) or ch == _member:
-				continue
-			if ch.current_floor != _member.current_floor:
-				continue
-			if pos in ch.get_occupied_tiles():
-				var in_all := ch in _all_members
-				var ch_name := ch.character_data.character_name if ch.character_data != null else String(ch.name)
-				var my_name := _member.character_data.character_name if _member.character_data != null else String(_member.name)
-				print("[DBG_PASS] %s: pos=%s occupied by %s, in_all=%s, fly=%s/%s" % [my_name, pos, ch_name, str(in_all), str(_member.is_flying), str(ch.is_flying)])
-
 	# _player == _member の場合（hero の自己AI）は自分のタイルをブロックしない
 	if _player != null and is_instance_valid(_player) and _player != _member:
 		if _player.current_floor == _member.current_floor \

@@ -504,45 +504,6 @@ func _link_all_character_lists() -> void:
 		_hero_manager.set_all_members(all_combatants)
 		_hero_manager.set_enemy_list(all_enemies)
 
-	# --- デバッグ: _per_floor_npcs の構成を出力 ---
-	for fi: int in range(_per_floor_npcs.size()):
-		var fl_arr: Array = _per_floor_npcs[fi] as Array
-		var nm_names: PackedStringArray = []
-		for nm_v: Variant in fl_arr:
-			var nm := nm_v as PartyManager
-			if is_instance_valid(nm):
-				nm_names.append("%s(%d)" % [nm.name, nm.get_members().size()])
-		if not nm_names.is_empty():
-			print("[DBG_PFN] F%d: %s" % [fi, ",".join(nm_names)])
-
-	# --- デバッグ: all_combatants の構成を出力 ---
-	var comb_friendly := 0
-	var comb_enemy := 0
-	for ch: Character in all_combatants:
-		if is_instance_valid(ch):
-			if ch.is_friendly:
-				comb_friendly += 1
-			else:
-				comb_enemy += 1
-	print("[DBG_COMB] all_combatants=%d (friendly=%d enemy=%d) party=%d" % [
-		all_combatants.size(), comb_friendly, comb_enemy, party.members.size()])
-	# --- デバッグ: _all_members の構成を出力 ---
-	var party_names: PackedStringArray = []
-	for mv: Variant in party.members:
-		var ch := mv as Character
-		if is_instance_valid(ch) and ch.character_data != null:
-			party_names.append("%s(F%d)" % [ch.character_data.character_name, ch.current_floor])
-	var combatant_count := all_combatants.size()
-	var party_in_combatants := 0
-	for mv: Variant in party.members:
-		var ch := mv as Character
-		if is_instance_valid(ch) and ch in all_combatants:
-			party_in_combatants += 1
-	print("[DBG_LINK] party=%d(%s) combatants=%d party_in_comb=%d enemies=%d friendlies=%d hero_mgr=%s" % [
-		party_names.size(), ",".join(party_names),
-		combatant_count, party_in_combatants,
-		all_enemies.size(), all_friendlies.size(),
-		"yes" if _hero_manager != null else "no"])
 
 
 func _setup_controller() -> void:
