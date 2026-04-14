@@ -62,6 +62,7 @@ const MP_SP_RECOVERY_RATE: float = 3.0
 ## スタン状態（水魔法等で発生。is_stunned=true 中は UnitAI が行動をスキップする）
 var is_stunned:   bool  = false
 var stun_timer:   float = 0.0
+var _stun_effect: Node2D = null  ## スタンエフェクトノード（スタン中のみ存在）
 
 ## スライディング中フラグ（斥候の特殊攻撃中は take_damage() を無視する）
 var is_sliding:   bool  = false
@@ -197,11 +198,13 @@ func _process(delta: float) -> void:
 			is_stunned = false
 			if _sprite != null:
 				_sprite.rotation = 0.0
+			_remove_stun_effect()
 	elif is_stunned:
 		# 念のため（タイマーが0なのに stunned のまま残るケースの保護）
 		is_stunned = false
 		if _sprite != null:
 			_sprite.rotation = 0.0
+		_remove_stun_effect()
 	# スタン中はスプライトを回転させてふらふら表現
 	if is_stunned and _sprite != null:
 		_sprite.rotation += delta * 4.0
@@ -737,6 +740,10 @@ func _remove_buff_effect() -> void:
 func apply_stun(duration: float, attacker: Character = null) -> void:
 	is_stunned = true
 	stun_timer = maxf(stun_timer, duration)  # 残り時間が長い方を採用
+	# スタンエフェクトを生成（既存があればタイマーリセットのみ）
+	if _stun_effect == null or not is_instance_valid(_stun_effect):
+		_stun_effect = StunEffect.new()
+		add_child(_stun_effect)
 	var char_name := character_data.character_name if character_data != null else str(name)
 	MessageLog.add_combat("[スタン] %s がスタンした（%.1f秒）" % [char_name, duration])
 	# 自然言語バトルメッセージ
@@ -747,6 +754,13 @@ func apply_stun(duration: float, attacker: Character = null) -> void:
 				if attacker != null and is_instance_valid(attacker) else null
 		var msg := "%sが%sに水魔法を放ち、動きを封じた" % [atk_name, def_name]
 		MessageLog.add_battle(atk_data, character_data, msg, attacker, self)
+
+
+## スタンエフェクトを削除する
+func _remove_stun_effect() -> void:
+	if _stun_effect != null and is_instance_valid(_stun_effect):
+		_stun_effect.queue_free()
+	_stun_effect = null
 
 
 ## バフ込みの防御力を返す
