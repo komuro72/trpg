@@ -506,18 +506,13 @@ func _step_toward_goal() -> bool:
 
 	var next := _get_next_step(_goal)
 	if next != _member.grid_pos:
-		# 次のタイルに友好キャラがいれば押し出しを試みる
-		if not _is_passable(next):
+		# 階段を目指しているとき、次のタイルに友好キャラがいれば押し出しを試みる
+		if _move_policy == "stairs_down" or _move_policy == "stairs_up":
 			var push_dir := next - _member.grid_pos
-			if _try_push_friendly_at(next, push_dir):
-				_member.move_to(next, _get_move_interval())
-				_dbg_stuck_count = 0
-				return _member.grid_pos != _goal
-			# 押し出し失敗: 動けない扱い（下のスタック検出に進む）
-		else:
-			_member.move_to(next, _get_move_interval())
-			_dbg_stuck_count = 0
-			return _member.grid_pos != _goal
+			_try_push_friendly_at(next, push_dir)
+		_member.move_to(next, _get_move_interval())
+		_dbg_stuck_count = 0
+		return _member.grid_pos != _goal
 
 	# --- デバッグ: 移動先が見つからず停滞している場合 ---
 	if _member.is_friendly:
@@ -562,7 +557,11 @@ func _get_next_step(goal: Vector2i) -> Vector2i:
 	var path := _astar(_member.grid_pos, goal)
 	if path.is_empty():
 		return _next_step_direct(goal)
-	return path[0]
+	# A* の最初の1歩が通行可能ならそのまま使う
+	if _is_passable(path[0]):
+		return path[0]
+	# 味方等にブロックされている場合: ゴール方向の別の隣接タイルを試す
+	return _next_step_direct(goal)
 
 
 func _next_step_direct(goal: Vector2i) -> Vector2i:
@@ -1131,11 +1130,7 @@ func _astar(start: Vector2i, goal: Vector2i) -> Array[Vector2i]:
 			if _is_stair_tile(neighbor) and neighbor != goal \
 					and _move_policy != "stairs_down" and _move_policy != "stairs_up":
 				continue
-			# 移動コスト: 味方キャラがいるタイルは高コスト（迂回を優先するが通行は可能）
-			var step_cost := 1
-			if neighbor != goal and not _is_passable(neighbor):
-				step_cost = 20  # 迂回経路がなければ味方を通過する経路を選択
-			var tentative_g: int = (g_score.get(current, 99999) as int) + step_cost
+			var tentative_g: int = (g_score.get(current, 99999) as int) + 1
 			if tentative_g < (g_score.get(neighbor, 99999) as int):
 				came_from[neighbor] = current
 				g_score[neighbor]   = tentative_g
