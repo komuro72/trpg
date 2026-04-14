@@ -11,6 +11,14 @@ extends CanvasLayer
 const VISIBLE_LINES: int = 7
 const MSG_FONT_SIZE:  int = 20
 
+## 中央テキスト部の顔アイコン表示サイズ係数（GRID_SIZE に対する比率）
+## 旧値: 2.0/3.0（≈64px）。試験的に半分（≈32px）に縮小して1メッセージあたりの縦幅を抑える
+## 元に戻す場合は 2.0/3.0 に戻す
+const ICON_SCALE_RATIO: float = 1.0 / 3.0
+const ICON_MIN_SIZE: int = 20
+## 行間倍率（旧値: 1.5）。アイコン縮小に合わせて行間も詰めることで表示行数を増やす
+const LINE_HEIGHT_RATIO: float = 1.25
+
 ## スクロールアニメーションの所要時間（秒）
 const SCROLL_DURATION: float = 0.15
 
@@ -234,8 +242,8 @@ func _on_draw() -> void:
 
 	## MSG_FONT_SIZE は固定値。アイコンは右パネルと同サイズ（gs * 2/3）
 	var fs      := MSG_FONT_SIZE
-	var icon_sz := float(maxi(20, gs * 2 / 3))
-	var line_h  := float(fs) * 1.5
+	var icon_sz := float(maxi(ICON_MIN_SIZE, int(float(gs) * ICON_SCALE_RATIO)))
+	var line_h  := float(fs) * LINE_HEIGHT_RATIO
 
 	# ── 中央テキストエリアのウィンドウサイズ
 	var margin_x := maxf(vw * 0.28, float(pw) + 4.0)
@@ -292,8 +300,8 @@ func _on_scroll_draw() -> void:
 	var pw       := GlobalConstants.PANEL_TILES * gs
 	var vw       := _control.size.x
 	var fs       := MSG_FONT_SIZE
-	var icon_sz  := float(maxi(20, gs * 2 / 3))
-	var line_h   := float(fs) * 1.5
+	var icon_sz  := float(maxi(ICON_MIN_SIZE, int(float(gs) * ICON_SCALE_RATIO)))
+	var line_h   := float(fs) * LINE_HEIGHT_RATIO
 	var margin_x := maxf(vw * 0.28, float(pw) + 4.0)
 	var box_w    := vw - 2.0 * margin_x
 	var box_h    := line_h * float(VISIBLE_LINES) + 16.0

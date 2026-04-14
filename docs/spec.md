@@ -3959,3 +3959,20 @@ PartyLeader._assign_orders() が `strategy` を算出して渡す方式を廃止
 - ブランチ: master
 - `.godot/` フォルダはGitignore済み
 - `.uid` ファイルはコミット対象（Godot 4 のリソース解決に必要）
+
+## メッセージウィンドウ アイコンサイズ調整（試験的）
+
+### 目的
+中央テキスト部の顔アイコンが大きく、メッセージが速く流れると追えない問題への対応。1メッセージあたりの縦幅を縮小して表示行数を増やす。
+
+### 定数（`message_window.gd` 冒頭）
+- `ICON_SCALE_RATIO = 1.0 / 3.0`：旧 2.0/3.0 の半分。GRID_SIZE に対する顔アイコン比率
+- `ICON_MIN_SIZE = 20`：最小ピクセルサイズ
+- `LINE_HEIGHT_RATIO = 1.25`：旧 1.5 から縮小。fs * この比率 = 行間
+
+### 影響範囲
+- 中央テキスト部の attacker/defender 顔アイコン（face.png）のみ
+- 左右の上半身画像（front.png）は変更なし（`img_size = box_h` で背景高さ依存）
+
+### 元に戻す手順
+- `ICON_SCALE_RATIO = 2.0 / 3.0`、`LINE_HEIGHT_RATIO = 1.5` に戻す
