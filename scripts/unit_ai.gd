@@ -1438,6 +1438,20 @@ func _is_passable(pos: Vector2i) -> bool:
 		# → 複数メンバーが同一タイルを目標に選んで衝突するのを防ぐ
 		if other.is_pending() and other.get_pending_grid_pos() == pos:
 			return false
+	# --- デバッグ: passable 判定で味方を見逃していないか確認 ---
+	if _member != null and _member.is_friendly and _dbg_stuck_count > 0:
+		# Character 静的レジストリで同じタイルにいるキャラを検索
+		for ch: Character in Character._all_chars:
+			if not is_instance_valid(ch) or ch == _member:
+				continue
+			if ch.current_floor != _member.current_floor:
+				continue
+			if pos in ch.get_occupied_tiles():
+				var in_all := ch in _all_members
+				var ch_name := ch.character_data.character_name if ch.character_data != null else String(ch.name)
+				var my_name := _member.character_data.character_name if _member.character_data != null else String(_member.name)
+				print("[DBG_PASS] %s: pos=%s occupied by %s, in_all=%s, fly=%s/%s" % [my_name, pos, ch_name, str(in_all), str(_member.is_flying), str(ch.is_flying)])
+
 	# _player == _member の場合（hero の自己AI）は自分のタイルをブロックしない
 	if _player != null and is_instance_valid(_player) and _player != _member:
 		if _player.current_floor == _member.current_floor \
