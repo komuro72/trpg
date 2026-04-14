@@ -1713,13 +1713,21 @@ func _should_use_special_skill() -> bool:
 func _generate_special_attack_queue(target: Character) -> Array:
 	if _member == null or _member.character_data == null:
 		return []
-	if not _should_use_special_skill():
+	var should := _should_use_special_skill()
+	if not should:
+		if _member.is_friendly:
+			var pb: int = _combat_situation.get("power_balance", -1) as int
+			print("[DBG_VSKILL] %s: should=false skill=%s pb=%d" % [
+				_member.character_data.character_name, _special_skill, pb])
 		return []
 	var cd := _member.character_data
 	# MP/SP コスト確認
 	var has_mp := cd.v_slot_mp_cost > 0 and _member.mp >= cd.v_slot_mp_cost
 	var has_sp := cd.v_slot_sp_cost > 0 and _member.sp >= cd.v_slot_sp_cost
 	if not has_mp and not has_sp:
+		if _member.is_friendly:
+			print("[DBG_VSKILL] %s: cost_fail mp=%d/%d sp=%d/%d" % [
+				cd.character_name, _member.mp, cd.v_slot_mp_cost, _member.sp, cd.v_slot_sp_cost])
 		return []  # コスト不足 → 通常攻撃にフォールバック
 	# クラスごとの特殊攻撃使用判定
 	match cd.class_id:
