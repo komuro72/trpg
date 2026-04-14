@@ -545,6 +545,7 @@ rank値: C=0, B=1, A=2, S=3
 - [x] Phase 13-10 後続修正: ヒーラーの回復指示デフォルトを瀕死度優先に変更・非ヒーラー行の回復列にグレー「-」表示
 - [x] Phase 13-11: フロア0をゴブリンのみに変更・NPCデフォルト指示をプレイヤーと整合・戦闘中のbattle_formation優先・follow追従ロジック改善
 - [x] Phase 13-12: バグ修正完了（フロア2以降の敵が攻撃しない問題・未加入NPCがアイテムを素通りする問題）
+- [x] 味方キャラ同士が重なる・味方を迂回できない問題を修正（`_link_all_character_lists` を全フロア走査に変更・フロア遷移/合流時の `_all_members` 更新漏れを修正・A* 1歩目の味方迂回フォールバック追加）
 - [x] パーティーシステムリファクタリング: 敵リーダーAI継承構造リファクタリング（EnemyLeaderAI）・PartyLeader基底クラス抽出・NpcManager/EnemyManager廃止しPartyManagerに統合・パーティー戦力評価メソッド追加
 - [ ] Phase 14: Steam配布準備
 
