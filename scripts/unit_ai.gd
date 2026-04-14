@@ -751,9 +751,9 @@ func _is_combat_safe() -> bool:
 func set_floor_items(items: Dictionary) -> void:
 	_all_floor_items = items
 	if _member != null and is_instance_valid(_member) and _member.is_friendly:
-		print("[DBG_SFI] %s: set_floor_items id=%d size=%d" % [
+		print("[DBG_SFI] %s: set_floor_items size=%d keys=%s" % [
 			_member.character_data.character_name if _member.character_data != null else _member.name,
-			items.get_instance_id(), items.size()])
+			items.size(), str(items.keys())])
 
 
 ## item_pickup 指示に従って取得すべきフィールドアイテムのタイル座標を返す
