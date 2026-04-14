@@ -248,7 +248,11 @@ func _on_draw() -> void:
 	# ── 中央テキストエリアのウィンドウサイズ
 	var margin_x := maxf(vw * 0.28, float(pw) + 4.0)
 	var box_w    := vw - 2.0 * margin_x
-	var box_h    := line_h * float(VISIBLE_LINES) + 16.0
+	# 行高はバトル行最小高さ（icon_sz + 4）と line_h の大きい方を使う
+	# 旧計算（line_h のみ）だとアイコン縮小時にバトル行が VISIBLE_LINES 分入らずに
+	# 最上段が見切れる問題が発生していたため
+	var row_h    := maxf(line_h, icon_sz + 4.0)
+	var box_h    := row_h * float(VISIBLE_LINES) + 16.0
 	var bx       := margin_x
 	var by       := vh - box_h - 6.0
 
@@ -304,7 +308,11 @@ func _on_scroll_draw() -> void:
 	var line_h   := float(fs) * LINE_HEIGHT_RATIO
 	var margin_x := maxf(vw * 0.28, float(pw) + 4.0)
 	var box_w    := vw - 2.0 * margin_x
-	var box_h    := line_h * float(VISIBLE_LINES) + 16.0
+	# 行高はバトル行最小高さ（icon_sz + 4）と line_h の大きい方を使う
+	# 旧計算（line_h のみ）だとアイコン縮小時にバトル行が VISIBLE_LINES 分入らずに
+	# 最上段が見切れる問題が発生していたため
+	var row_h    := maxf(line_h, icon_sz + 4.0)
+	var box_h    := row_h * float(VISIBLE_LINES) + 16.0
 	var avail_h  := box_h - 12.0
 
 	# ローカル X オフセット（_svc.position.x = bx のため x=0 が bx に対応）
@@ -322,14 +330,11 @@ func _on_scroll_draw() -> void:
 	var groups := _build_display_groups(visible)
 
 	# ── 下から積み上げて収まるグループ範囲を決定
-	# スクロールアニメーション中に上端が見切れないよう1行分のマージンを確保する
-	# （新メッセージが下から流入する間、最上段の旧メッセージは上方向にずれずに残る）
-	var fit_avail_h := avail_h - line_h
 	var total_h := 0.0
 	var start_g := groups.size()
 	for i: int in range(groups.size() - 1, -1, -1):
 		var gh := _group_height(groups[i], battle_text_w, sys_text_w, fs, line_h, icon_sz)
-		if total_h + gh > fit_avail_h:
+		if total_h + gh > avail_h:
 			break
 		total_h += gh
 		start_g = i
