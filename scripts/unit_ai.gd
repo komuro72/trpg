@@ -272,9 +272,15 @@ func _process(delta: float) -> void:
 				if _dbg_safe and _item_pickup != "avoid":
 					var item_pos := _find_item_pickup_target()
 					if _member.is_friendly:
-						print("[DBG_ITEM_STEP] %s@%s safe=%s pickup=%s item=%s" % [
+						var fi := _member.current_floor
+						var has_fi := _all_floor_items.has(fi)
+						var fi_count := 0
+						if has_fi:
+							fi_count = (_all_floor_items[fi] as Dictionary).size()
+						print("[DBG_ITEM_STEP] %s@%s F%d safe=%s pickup=%s item=%s floor_items=%s(%d)" % [
 							_member.character_data.character_name if _member.character_data != null else _member.name,
-							_member.grid_pos, str(_dbg_safe), _item_pickup, item_pos])
+							_member.grid_pos, fi, str(_dbg_safe), _item_pickup, item_pos,
+							str(has_fi), fi_count])
 					if item_pos != Vector2i(-1, -1) and item_pos != _member.grid_pos:
 						_queue = [{"action": "move_to_explore", "goal": item_pos}]
 						_state = _State.IDLE
