@@ -268,13 +268,22 @@ func _process(delta: float) -> void:
 			_timer -= delta
 			if _timer <= 0.0:
 				# 1マス移動完了ごとにアイテムチェック（SAFE 時のみ）
-				if _is_combat_safe() and _item_pickup != "avoid":
+				var _dbg_safe := _is_combat_safe()
+				if _dbg_safe and _item_pickup != "avoid":
 					var item_pos := _find_item_pickup_target()
+					if _member.is_friendly:
+						print("[DBG_ITEM_STEP] %s@%s safe=%s pickup=%s item=%s" % [
+							_member.character_data.character_name if _member.character_data != null else _member.name,
+							_member.grid_pos, str(_dbg_safe), _item_pickup, item_pos])
 					if item_pos != Vector2i(-1, -1) and item_pos != _member.grid_pos:
 						_queue = [{"action": "move_to_explore", "goal": item_pos}]
 						_state = _State.IDLE
 						_complete_action()
 						return
+				elif _member.is_friendly and not _dbg_safe:
+					print("[DBG_ITEM_STEP] %s@%s safe=false SKIP" % [
+						_member.character_data.character_name if _member.character_data != null else _member.name,
+						_member.grid_pos])
 				var still_moving := _step_toward_goal()
 				if still_moving:
 					_timer = _get_move_interval()
