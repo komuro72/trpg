@@ -20,7 +20,7 @@ var _use_sprite: bool = false
 
 
 func _ready() -> void:
-	z_index = 1  # スプライトより手前
+	z_index = -1  # キャラクタースプライトより奥に表示
 	# 画像があればスプライトで表示
 	if ResourceLoader.exists(EFFECT_IMAGE_PATH):
 		var tex := load(EFFECT_IMAGE_PATH) as Texture2D
