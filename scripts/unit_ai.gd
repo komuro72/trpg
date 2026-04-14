@@ -1118,9 +1118,11 @@ func _astar(start: Vector2i, goal: Vector2i) -> Array[Vector2i]:
 		open_set.erase(current)
 		for offset: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 			var neighbor := current + offset
-			# A* はタイル（壁・障害物）のみチェックし、キャラクター占有は無視する
-			# 実際の移動ステップでは _is_passable() で占有チェックするため問題ない
+			# タイル（壁・障害物）チェック
 			if _map_data != null and not _map_data.is_walkable_for(neighbor, _member.is_flying):
+				continue
+			# 味方キャラの占有チェック（ゴールタイルは除外して経路を確保する）
+			if neighbor != goal and not _is_passable(neighbor):
 				continue
 			# 階段タイルはゴール以外では中間経由地点として使わない
 			# （意図しない階段使用を防ぐ。ゴールが階段 or stairs ポリシー時は除く）
