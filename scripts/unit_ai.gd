@@ -267,6 +267,14 @@ func _process(delta: float) -> void:
 				return
 			_timer -= delta
 			if _timer <= 0.0:
+				# 1マス移動完了ごとにアイテムチェック（SAFE 時のみ）
+				if _is_combat_safe() and _item_pickup != "avoid":
+					var item_pos := _find_item_pickup_target()
+					if item_pos != Vector2i(-1, -1) and item_pos != _member.grid_pos:
+						_queue = [{"action": "move_to_explore", "goal": item_pos}]
+						_state = _State.IDLE
+						_complete_action()
+						return
 				var still_moving := _step_toward_goal()
 				if still_moving:
 					_timer = _get_move_interval()

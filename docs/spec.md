@@ -3808,6 +3808,7 @@ ratio = 自軍戦力 / 敵戦力
 UnitAI は `_combat_situation` フィールドに保存し、以下で参照する:
 - `_is_combat_safe()`: 戦況が SAFE かどうかを返すヘルパー
 - アイテム取得ナビゲーション: `_is_combat_safe()` が true のときのみ `item_pickup` 指示に従って拾いに行く（旧: `Strategy.WAIT` のときのみ）
+- SAFE 時の1マス移動完了ごとにアイテムチェックを実行（`_State.MOVING` の `_timer <= 0` タイミング）。範囲内にアイテムがあればキューを差し替えてアイテムに向かう
 - 将来: 特殊攻撃の AI 接続で DISADVANTAGE 時の積極使用判断に参照予定
 
 ### NpcLeaderAI の撤退ロジック
