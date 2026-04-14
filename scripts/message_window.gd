@@ -370,15 +370,15 @@ func _draw_group(group: Dictionary, y: float, arrow_str: String, arrow_w: float,
 		# 攻撃側アイコン
 		_draw_face_icon(atk_data, 8.0, y, icon_sz)
 
-		# 矢印（アイコンの縦中央に揃える）
-		var arrow_y := y + icon_sz * 0.5 + float(fs) * 0.35
-		_scroll_content.draw_string(_font,
-				Vector2(8.0 + icon_sz + 2.0, arrow_y),
-				arrow_str, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
-				Color(0.70, 0.70, 0.70))
-
-		# 被攻撃側アイコン
-		_draw_face_icon(def_data, 8.0 + icon_sz + arrow_w, y, icon_sz)
+		# 対象がいる場合のみ矢印＋被攻撃側アイコンを描画
+		# テキスト位置（battle_text_x）は不変なのでメッセージ位置は揃う
+		if def_data != null:
+			var arrow_y := y + icon_sz * 0.5 + float(fs) * 0.35
+			_scroll_content.draw_string(_font,
+					Vector2(8.0 + icon_sz + 2.0, arrow_y),
+					arrow_str, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
+					Color(0.70, 0.70, 0.70))
+			_draw_face_icon(def_data, 8.0 + icon_sz + arrow_w, y, icon_sz)
 
 		# テキスト（\n 区切りで複数行）
 		_scroll_content.draw_multiline_string(_font,
