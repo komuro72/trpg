@@ -34,7 +34,7 @@ const CLASS_NAME_JP: Dictionary = {
 	"fighter-sword":   "剣士",
 	"fighter-axe":     "斧戦士",
 	"archer":          "弓使い",
-	"magician-fire":   "魔法使い",
+	"magician-fire":   "魔法使い(火)",
 	"magician-water":  "魔法使い(水)",
 	"healer":          "ヒーラー",
 	"scout":           "斥候",
