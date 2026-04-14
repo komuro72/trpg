@@ -3976,3 +3976,31 @@ PartyLeader._assign_orders() が `strategy` を算出して渡す方式を廃止
 
 ### 元に戻す手順
 - `ICON_SCALE_RATIO = 2.0 / 3.0`、`LINE_HEIGHT_RATIO = 1.5` に戻す
+
+## フロア間メンバー追従（UnitAI 側に移行）
+
+### 設計
+個別指示の移動方針はフロアの概念を持たないため、`cluster` / `follow` / `same_room`（リーダーを追う系）は UnitAI が「リーダーが別フロアにいるなら階段で追う」と解釈する。
+
+### 実装
+`unit_ai.gd:_generate_move_queue()` 冒頭で判定:
+```gdscript
+if _move_policy in ["cluster", "follow", "same_room"] \
+        and _leader_ref != null and is_instance_valid(_leader_ref) \
+        and _leader_ref != _member \
+        and _leader_ref.current_floor != _member.current_floor:
+    var dir = sign(_leader_ref.current_floor - _member.current_floor)
+    return _generate_stair_queue(dir, true)
+```
+
+- `_leader_ref` は `receive_order` の `leader` フィールドから取得（`_assign_orders()` で formation_ref として渡される）
+- `ignore_visited=true` で訪問済み制限を緩和（リーダーが既に階段を使っているため未踏でも追従可能）
+
+### 適用範囲
+- 対象: cluster / follow / same_room（リーダー追従系）
+- 対象外: standby / explore / guard_room / stairs_down / stairs_up（自律 or 既に階段方針）
+- 合流済みパーティー（joined_to_player=true）は `_generate_queue` 冒頭の `_generate_floor_follow_queue()`（hero 追従）が先に処理するため、ここには到達しない
+
+### 既存仕様との関係
+- 廃止: `party_leader.gd:_assign_orders()` の「クロスフロア追従ブロック」（move_policy を stairs_down/up に書き換える特殊処理）
+- 維持: 既存の階段使用フロー（`_generate_stair_queue` → 階段タイル到達 → `_check_npc_member_stairs` → `_transition_single_npc_member`）

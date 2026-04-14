@@ -657,3 +657,11 @@
     - fighter-axe: 隣接2体以上（既存ロジックを定数化）
     - scout: 隣接2体以上（包囲脱出兼ダメージ）
   - archer / magician-* / healer は変更なし（従来通り）
+
+### 設計変更: フロア間メンバー追従ロジックを UnitAI に移動
+- 理由: PartyLeader._assign_orders 内のクロスフロア追従が move_policy を直接 stairs_down/up に上書きしており、他の上書きと混在して挙動が追いづらかった。NPC リーダーが階段を降りてもメンバーが付いてこないバグの原因切り分けも難しかった
+- 変更内容:
+  - `party_leader.gd:_assign_orders()` のクロスフロア追従ブロック（move_policy を stairs_down/up に書き換える処理）を削除
+  - `unit_ai.gd:_generate_move_queue()` 冒頭で「move_policy が cluster/follow/same_room かつリーダーが別フロア」を判定し、`_generate_stair_queue(dir, ignore_visited=true)` を返す
+  - `_generate_stair_queue` に `ignore_visited` パラメータを追加。フロア間追従時はリーダーが既に使った階段なので未踏でも候補にする
+- 影響範囲: 個別指示の cluster/follow/same_room を選んだ NPC メンバーが、リーダー降下後に必ず追従するようになる。他の移動方針（standby/explore/guard_room）はフロア間追従の対象外（自律行動を維持）

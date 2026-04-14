@@ -461,6 +461,12 @@ rank値: C=0, B=1, A=2, S=3
 - NPCは仲間に加入できる（加入の仕組みはPhase 6-2で実装予定）
 - 加入形態は2種類：プレイヤーがリーダー維持で相手を引き入れる／相手パーティーのリーダーに自分が加わる
 
+### フロア間メンバー追従
+- 移動方針が **`cluster` / `follow` / `same_room`** のメンバーは「リーダー追従系」とみなし、リーダーが別フロアに居る場合は `_generate_stair_queue(dir, ignore_visited=true)` で対応する階段を目指す
+- `standby` / `explore` / `guard_room` はリーダーを追わない（自律行動を維持）
+- 判定は `unit_ai.gd` の `_generate_move_queue()` 冒頭で行う（PartyLeader の `_assign_orders()` では move_policy を上書きしない）
+- 合流済みパーティー（`joined_to_player=true`）は別途 `_generate_floor_follow_queue()` がヒーローを基準に追従する（`_generate_queue` 冒頭の早期分岐）
+
 ## ドキュメント運用
 - CLAUDE.md：人間・AI共通の概要・方針・ゲーム仕様・フェーズ進捗サマリー。ここでの相談をもとに更新する
 - docs/spec.md：AI管理用の詳細仕様・実装メモ。Claude Codeが作成・更新する

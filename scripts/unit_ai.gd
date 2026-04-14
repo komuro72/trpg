@@ -647,6 +647,16 @@ func _generate_queue(strategy: int, target: Character) -> Array:
 
 ## 移動方針（_move_policy）に従ってキューを生成する（WAIT/ATTACK(ターゲットなし)共通）
 func _generate_move_queue() -> Array:
+	# リーダー追従系の移動方針（cluster/follow/same_room）は、リーダーが別フロアにいるなら
+	# 階段で追いかける。standby/explore/guard_room はフロア間追従の対象外
+	if _move_policy in ["cluster", "follow", "same_room"] \
+			and _leader_ref != null and is_instance_valid(_leader_ref) \
+			and _leader_ref != _member and _member != null and is_instance_valid(_member) \
+			and _leader_ref.current_floor != _member.current_floor:
+		var dir: int = sign(_leader_ref.current_floor - _member.current_floor)
+		# ignore_visited=true: リーダーが既に使った階段なので未踏でも追従する
+		return _generate_stair_queue(dir, true)
+
 	match _move_policy:
 		"explore":
 			return _generate_explore_queue()
@@ -701,11 +711,13 @@ func _generate_floor_follow_queue() -> Array:
 	return [{"action": "move_to_explore", "goal": best}]
 
 
-## 階段移動キューを生成する（move_policy == "stairs_down"/"stairs_up" 時に使用）
+## 階段移動キューを生成する（move_policy == "stairs_down"/"stairs_up" 時 or フロア間追従）
 ## 未加入 NPC のフロアランク判断による階段移動に使用する
 ## GlobalConstants.NPC_KNOWS_STAIRS_LOCATION が false の場合は訪問済みエリアの階段のみ対象
+## ignore_visited=true（フロア間追従時）は訪問済み制限を無視して全階段を候補にする
+##   理由: リーダーが既に使った階段なので未踏でも追従する必要があるため
 ## 訪問済みエリアに目的の階段がなければ通常の探索行動にフォールバック
-func _generate_stair_queue(direction: int) -> Array:
+func _generate_stair_queue(direction: int, ignore_visited: bool = false) -> Array:
 	if _map_data == null or _member == null or not is_instance_valid(_member):
 		return [{"action": "wait"}]
 	var stair_type := MapData.TileType.STAIRS_DOWN if direction > 0 \
@@ -719,7 +731,7 @@ func _generate_stair_queue(direction: int) -> Array:
 		return [{"action": "wait"}]
 
 	# 視界ベース：訪問済みエリアの階段のみ対象（フラグで地図持ちに切り替え可）
-	if not GlobalConstants.NPC_KNOWS_STAIRS_LOCATION:
+	if not ignore_visited and not GlobalConstants.NPC_KNOWS_STAIRS_LOCATION:
 		var known: Array[Vector2i] = []
 		for s: Vector2i in stairs:
 			var area := _map_data.get_area(s)

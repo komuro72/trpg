@@ -263,14 +263,9 @@ func _assign_orders() -> void:
 				and target.current_floor != member.current_floor:
 			target = null
 
-		# フロアをまたいだ追従（未加入 NPC 非リーダーメンバー専用）
-		if not joined_to_player and member.is_friendly \
-				and leader_char != null and is_instance_valid(leader_char) \
-				and member != leader_char \
-				and member.current_floor != leader_char.current_floor:
-			var floor_dir: int = sign(leader_char.current_floor - member.current_floor)
-			move_policy = "stairs_down" if floor_dir > 0 else "stairs_up"
-			target = null
+		# フロア間追従は UnitAI 側（_generate_move_queue）で move_policy が
+		# cluster/follow/same_room の場合に判定する（リーダーが別フロアなら階段へ）
+		# ここで move_policy を上書きすることはしない
 
 		unit_ai.receive_order({
 			"target":            target,
