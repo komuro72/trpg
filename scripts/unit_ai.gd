@@ -257,11 +257,12 @@ func _process(delta: float) -> void:
 			if _target != null and is_instance_valid(_target) and _target.character_data != null:
 				tgt_name = _target.character_data.character_name
 			var is_moving := _member.is_moving() if _member.has_method("is_moving") else false
-			MessageLog.add_ai("[DBG_AI] %s F%d@%s st=%d q=%d eff=%d safe=%s combat=%s mv=%s tgt=%s moving=%s _all=%d" % [
+			var pending := _member.is_pending()
+			MessageLog.add_ai("[DBG_AI] %s F%d@%s st=%d q=%d eff=%d safe=%s combat=%s mv=%s tgt=%s moving=%s pending=%s goal=%s timer=%.1f _all=%d" % [
 				my_name, _member.current_floor, _member.grid_pos,
 				int(_state), _queue.size(), eff, str(safe), _combat, _move_policy,
 				tgt_name if not tgt_name.is_empty() else "-",
-				str(is_moving), _all_members.size()])
+				str(is_moving), str(pending), _goal, _timer, _all_members.size()])
 
 	# スタン中は行動をスキップしてキューをクリア
 	if _member.is_stunned:
