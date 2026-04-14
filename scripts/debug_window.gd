@@ -411,7 +411,7 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 		_draw_members_goals_row(font, pm, floor_members, x + INDENT, y, w - INDENT * 2)
 		y += LINE_H
 
-	return y + 2.0
+	return y
 
 
 func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
@@ -488,7 +488,7 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 		_draw_members_goals_row(font, _hero_manager, floor_members, x + INDENT, y, w - INDENT * 2)
 		y += LINE_H
 
-	return y + 2.0
+	return y
 
 
 ## 各メンバーの行動目的を1行に横並びで描画する（PartyManager.get_member_goal_str を利用）
