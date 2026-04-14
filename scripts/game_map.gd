@@ -253,6 +253,10 @@ func _setup_hero() -> void:
 			spawn_pos  = Vector2i(int(m.get("x", 2)), int(m.get("y", 2)))
 			class_id   = m.get("class_id", m.get("character_id", "fighter-sword")) as String
 			hero_items = m.get("items",    []) as Array
+	# デバッグ: クラスをランダムに変更
+	var all_classes: Array[String] = ["fighter-sword", "fighter-axe", "archer", "magician-fire", "magician-water", "healer", "scout"]
+	class_id = all_classes[randi() % all_classes.size()]
+	hero_items = []  # ランダムクラスに合わない初期装備をクリア
 
 	hero = Character.new()
 	hero.grid_pos = spawn_pos
