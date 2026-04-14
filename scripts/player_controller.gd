@@ -1116,7 +1116,7 @@ func _execute_whirlwind() -> void:
 		MessageLog.add_combat("[振り回し] %s が振り回した！（空振り）" % _char_name(character))
 
 
-## 剣士：突進斬り（向いている方向に最大2マス前進、経路上の敵にダメージ）
+## 剣士：突進斬り（向いている方向に最大2マス前進、経路上の敵全員にダメージ、次の空きマスに着地）
 func _execute_rush() -> void:
 	var sp_cost    := int(_slot_v.get("sp_cost", 15))
 	if sp_cost > 0:
@@ -1129,19 +1129,27 @@ func _execute_rush() -> void:
 	character.is_attacking = true
 	is_blocked = true
 	var hit_count := 0
-	for _step: int in range(2):
+	# 経路上の最大2マスを走査してダメージを与え、着地位置を決定する
+	var landing_pos := character.grid_pos  # 着地位置（空きマスに更新していく）
+	for step: int in range(1, 4):  # 最大3マス先まで探索（2マス攻撃 + 1マス着地余地）
 		if not is_instance_valid(character):
 			break
-		var next_pos := character.grid_pos + Vector2i(dir)
-		if map_data == null or not map_data.is_walkable_for(next_pos, false):
-			break
-		# 経路上の敵にダメージ
-		var enemy_here := _find_character_at(next_pos)
+		var check_pos := character.grid_pos + Vector2i(dir) * step
+		if map_data == null or not map_data.is_walkable_for(check_pos, false):
+			break  # 壁・障害物で停止
+		var enemy_here := _find_character_at(check_pos)
 		if enemy_here != null and not enemy_here.is_friendly:
-			enemy_here.take_damage(raw_damage, 1.0, character, false)
-			SoundManager.play_attack(character)
-			hit_count += 1
-		character.move_to(next_pos, step_dur)
+			# 攻撃範囲は最大2マス
+			if step <= 2:
+				enemy_here.take_damage(raw_damage, 1.0, character, false)
+				SoundManager.play_attack(character)
+				hit_count += 1
+			continue  # 敵がいるマスは着地せず通過
+		landing_pos = check_pos  # 空きマスを着地位置に更新
+		break  # 空きマスに到達したら停止
+	# 着地位置に移動（元の位置と異なる場合のみ）
+	if landing_pos != character.grid_pos and is_instance_valid(character):
+		character.move_to(landing_pos, step_dur)
 		await get_tree().create_timer(step_dur + 0.02).timeout
 	if is_instance_valid(character):
 		character.is_attacking = false
