@@ -155,10 +155,32 @@ func set_floor_items(items: Dictionary) -> void:
 # 定期処理
 # --------------------------------------------------------------------------
 
+## リーダーの前回フロア（変化検知用。リーダーが階段で別フロアに移動したら全メンバーに通知）
+var _prev_leader_floor: int = -999
+
 func _process(delta: float) -> void:
 	# 時間停止中（プレイヤーのターゲット選択中など）は再評価を止める
 	if not GlobalConstants.world_time_running:
 		return
+
+	# リーダーのフロア変化を検知し、全メンバーに即時再評価を促す
+	# （非リーダーが wait 中でも 3 秒待たずに階段追従に切り替わる）
+	var leader_floor := -999
+	for lm: Character in _party_members:
+		if is_instance_valid(lm) and lm.is_leader:
+			leader_floor = lm.current_floor
+			break
+	if leader_floor != _prev_leader_floor:
+		if _prev_leader_floor != -999:
+			# 初回以外: 全 UnitAI に状況変化を通知（wait 中のキューを破棄して再評価）
+			for ua_v: Variant in _unit_ais.values():
+				var ua := ua_v as UnitAI
+				if ua != null:
+					ua.notify_situation_changed()
+			# PartyLeader 自身も即時再評価する
+			_reeval_timer = 0.0
+		_prev_leader_floor = leader_floor
+
 	_reeval_timer -= delta
 	if _reeval_timer <= 0.0:
 		_reeval_timer = REEVAL_INTERVAL

@@ -304,8 +304,13 @@ func receive_order(order: Dictionary) -> void:
 
 
 ## 状況変化通知（PartyLeaderAI から呼ばれる）
+## WAIT 中なら即座に中断してキューを破棄し、IDLE に戻す。次フレームで receive_order が再生成する
 func notify_situation_changed() -> void:
 	_reeval_timer = 0.0
+	if _state == _State.WAITING:
+		_state = _State.IDLE
+		_queue.clear()
+		_current_action = {}
 
 
 ## デバッグ情報を返す（RightPanel / PartyLeaderAI.get_debug_info() が収集）
