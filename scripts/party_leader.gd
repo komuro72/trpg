@@ -668,7 +668,7 @@ func _evaluate_combat_situation() -> Dictionary:
 		area_enemies.append(opp)
 
 	# 敵がいなければ安全
-	if not area_enemies.is_empty() and log_enabled:
+	if not area_enemies.is_empty():
 		var names: PackedStringArray = []
 		for ae: Character in area_enemies:
 			var n := ae.character_data.character_name if ae.character_data != null else String(ae.name)
