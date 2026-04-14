@@ -1015,7 +1015,10 @@ func _v_headshot(cost: int) -> void:
 	else:
 		MessageLog.add_battle(_member.character_data, _target.character_data,
 			"%sがヘッドショットで%sを仕留めた" % [_v_name(), _v_tgt_name()], _member, _target)
-		_target.take_damage(_target.hp, 1.0, _member, false, true)
+		# 即死: 防御・耐性を無視して即座に倒す
+		_target.last_attacker = _member
+		_target.hp = 0
+		_target.die()
 	_state = _State.WAITING
 	_timer = 0.5
 
