@@ -120,8 +120,10 @@ func _deal_damage_tick() -> void:
 	if not is_instance_valid(_attacker):
 		return
 	for entry: Variant in _targets:
-		var ch: Character = entry as Character
-		if not is_instance_valid(ch) or ch.is_friendly or ch.hp <= 0:
+		if not is_instance_valid(entry):
+			continue
+		var ch := entry as Character
+		if ch == null or ch.is_friendly or ch.hp <= 0:
 			continue
 		var dist := Vector2(_center_grid).distance_to(Vector2(ch.grid_pos))
 		if dist <= float(_radius):
