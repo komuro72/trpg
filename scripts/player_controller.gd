@@ -1058,7 +1058,7 @@ func _execute_v_instant(action: String) -> void:
 		"flame_circle": _execute_flame_circle()
 
 
-## 斥候：スライディング（3マスダッシュ・移動中無敵）
+## 斥候：スライディング（3マスダッシュ・移動中無敵・敵をすり抜け可能）
 func _execute_sliding() -> void:
 	var sp_cost := int(_slot_v.get("sp_cost", 20))
 	if sp_cost > 0:
@@ -1067,15 +1067,22 @@ func _execute_sliding() -> void:
 	var step_dur := 0.12 / GlobalConstants.game_speed
 	character.is_sliding = true
 	is_blocked = true
-	for _i: int in range(3):
+	# 3マス先まで走査し、壁・障害物で停止。敵はすり抜ける（着地位置は空きマス）
+	var landing_pos := character.grid_pos
+	for step: int in range(1, 4):
 		if not is_instance_valid(character):
 			break
-		var next_pos := character.grid_pos + Vector2i(dir)
-		# 壁・障害物で止まる（キャラクターは通り抜け）
-		if map_data == null or not map_data.is_walkable_for(next_pos, character.is_flying):
-			break
-		character.move_to(next_pos, step_dur)
-		await get_tree().create_timer(step_dur + 0.02).timeout
+		var check_pos := character.grid_pos + Vector2i(dir) * step
+		if map_data == null or not map_data.is_walkable_for(check_pos, character.is_flying):
+			break  # 壁・障害物で停止
+		var occupant := _find_character_at(check_pos)
+		if occupant != null:
+			continue  # 敵・味方をすり抜ける
+		landing_pos = check_pos
+	# 着地位置に移動
+	if landing_pos != character.grid_pos and is_instance_valid(character):
+		character.move_to(landing_pos, step_dur * 3.0)
+		await get_tree().create_timer(step_dur * 3.0 + 0.02).timeout
 	if is_instance_valid(character):
 		character.is_sliding = false
 	is_blocked = false
