@@ -133,9 +133,10 @@ func get_debug_goal_str() -> String:
 		if pol_str in ["cluster", "follow", "same_room"] and _leader_ref != null \
 				and is_instance_valid(_leader_ref) and _leader_ref != _member \
 				and _leader_ref.current_floor != _member.current_floor:
-			var dir_lbl: String = "↓" if _leader_ref.current_floor > _member.current_floor else "↑"
-			return "Lに%sF追従" % dir_lbl
-		return "[%s]待機" % pol_str
+			var dir_lbl: String = "DOWN" if _leader_ref.current_floor > _member.current_floor \
+				else "UP"
+			return "L追従(%s/キュー空)" % dir_lbl
+		return "[%s]キュー空" % pol_str
 	var head := _queue[0] as Dictionary
 	var act: String = head.get("action", "?") as String
 	match act:
