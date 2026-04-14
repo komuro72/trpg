@@ -706,6 +706,37 @@ rank値: C=0, B=1, A=2, S=3
 - 撤退後に敵がいなくなると SAFE に戻り、探索・アイテム取得に復帰する
 - 目標フロアの再計算で HP チェックが×なら上の階に撤退する
 
+### 戦力比（PowerBalance）
+- ランク和のみで比較（HP を含めない純粋な戦力比較）
+- 敵がいない場合は OVERWHELMING
+
+| 段階 | 自軍ランク和 / 敵ランク和 |
+|------|--------------------------|
+| OVERWHELMING | ≥ 2.0 |
+| SUPERIOR | ≥ 1.2 |
+| EVEN | ≥ 0.8 |
+| INFERIOR | ≥ 0.5 |
+| DESPERATE | < 0.5 |
+
+### HP充足率（HpStatus）
+- 自軍パーティー全体のHP充足率（ポーション込み）
+
+| 段階 | 充足率 |
+|------|--------|
+| FULL | ≥ 0.75 |
+| STABLE | ≥ 0.5 |
+| LOW | ≥ 0.25 |
+| CRITICAL | < 0.25 |
+
+### 特殊攻撃の指示と発動条件
+
+| 指示 | 発動条件 |
+|------|---------|
+| 積極的に使う | MP/SP が足りていれば常に使う |
+| 強敵なら使う | PowerBalance が INFERIOR 以下かつ MP/SP が足りている |
+| 劣勢なら使う | HpStatus が LOW 以下かつ MP/SP が足りている |
+| 使わない | 使わない |
+
 ### キャラクターステータス
 | ステータス | フィールド名（実装） | 説明 |
 |-----------|-------------------|------|
@@ -948,7 +979,7 @@ rank値: C=0, B=1, A=2, S=3
 - パーティーシステムの残作業：
   - [x] 戦況判断ルーチン（`_evaluate_combat_situation()`）の実装（PartyLeader の共通メソッド。同エリア敵との戦力比較で CombatSituation を返す）
   - [x] NpcLeaderAI の撤退ロジック追加（CombatSituation.CRITICAL 時に FLEE に切り替え。SAFE 復帰で EXPLORE に戻る）
-  - [ ] special_skill 指示のAI接続（strong_enemy / disadvantage 等の条件判定。現在はUI定義のみでAI未接続。DISADVANTAGE_THRESHOLD は GlobalConstants に定義済みだが未使用）
+  - [x] special_skill 指示のAI接続（strong_enemy / disadvantage 等の条件判定。PowerBalance / HpStatus で判定。_generate_special_attack_queue で発動）
 - NpcLeaderAI のアイテム収集方針の動的切り替え：目標フロアに到達している場合（余裕がある状態）、item_pickup を "passive"（近くなら拾う）から "aggressive"（積極的に拾う）に切り替える。装備強化のために能動的にアイテムを回収する行動
 
 ## 参照ファイル

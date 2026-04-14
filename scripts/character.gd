@@ -104,6 +104,7 @@ var current_order: Dictionary = {
 	"target":           "same_as_leader",
 	"on_low_hp":        "retreat",
 	"item_pickup":      "passive",
+	"special_skill":    "strong_enemy",
 	"heal":             "lowest_hp_first",
 }
 

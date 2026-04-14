@@ -147,6 +147,7 @@ static func _apply_attack_preset_to_member(ch: Character) -> void:
 	if ch.character_data == null:
 		return
 	var cid := ch.character_data.class_id
+	ch.current_order["special_skill"] = "strong_enemy"
 	match cid:
 		"healer":
 			ch.current_order["battle_formation"] = "rear"

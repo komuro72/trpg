@@ -571,3 +571,13 @@
   - `set_floor_items()` の空チェックを削除（常に渡す）
   - 1マス移動完了ごとにアイテムチェックを実行（SAFE 時のみ）
   - 既に同じアイテムに向かっている場合はキュー差し替えをスキップ
+
+### 設計変更: 特殊攻撃のAI接続
+- 理由: special_skill 指示がUI定義のみでAI未接続だった
+- 変更内容:
+  - `_evaluate_combat_situation()` の戻り値に `power_balance`（ランク和のみの戦力比）と `hp_status`（HP充足率）を追加
+  - `_generate_special_attack_queue()` を UnitAI に追加。クラスごとの使用条件に基づいて特殊攻撃を発動
+  - `_should_use_special_skill()` で special_skill 指示（aggressive / strong_enemy / disadvantage / never）と戦況を照合
+  - ヒーラーの `_generate_buff_queue()` も `_should_use_special_skill()` を参照するよう統合
+  - `receive_order()` に `special_skill` フィールドを追加
+  - `current_order` のデフォルトに `special_skill: "strong_enemy"` を追加

@@ -62,6 +62,7 @@ var _battle_formation: String    = "surround"
 var _hp_potion:        String    = "never"  ## "use" = 瀕死時に自動使用
 var _sp_mp_potion:     String    = "never"  ## "use" = 特殊攻撃前に自動使用
 var _item_pickup:      String    = "passive"  ## "aggressive" / "passive" / "avoid"
+var _special_skill:    String    = "strong_enemy"  ## "aggressive" / "strong_enemy" / "disadvantage" / "never"
 var _combat_situation:  Dictionary = {}       ## 戦況判断結果（PartyLeader から receive_order 経由で受信）
 var _leader_ref:       Character = null  ## 隊形計算の基準となるリーダーキャラ
 var _guard_room_area:  String    = ""    ## guard_room 時の記憶部屋ID（初回設定後不変）
@@ -143,6 +144,7 @@ func receive_order(order: Dictionary) -> void:
 	_hp_potion         = order.get("hp_potion",    "never") as String
 	_sp_mp_potion      = order.get("sp_mp_potion", "never") as String
 	_item_pickup       = order.get("item_pickup",  "passive") as String
+	_special_skill     = order.get("special_skill", "strong_enemy") as String
 	_combat_situation  = order.get("combat_situation", {}) as Dictionary
 	_combat            = order.get("combat",       "attack") as String
 	_on_low_hp         = order.get("on_low_hp",    "retreat") as String
@@ -592,6 +594,10 @@ func _generate_queue(strategy: int, target: Character) -> Array:
 		if target == null or not is_instance_valid(target):
 			# ターゲットがいない場合は move_policy に従って行動
 			return _generate_move_queue()
+		# --- 特殊攻撃の発動判定 ---
+		var special_q := _generate_special_attack_queue(target)
+		if not special_q.is_empty():
+			return special_q
 		var atype := _get_attack_type()
 		# standby: 移動せず射程内のみ攻撃
 		if _move_policy == "standby":
@@ -1441,7 +1447,8 @@ func _generate_heal_queue() -> Array:
 	return []
 
 
-## バフ行動キューを返す。バフを付与すべき状況でなければ空配列
+## バフ行動キューを返す。special_skill 指示に従って判定する。
+## バフを付与すべき状況でなければ空配列
 func _generate_buff_queue() -> Array:
 	if _member == null or _member.character_data == null:
 		return []
@@ -1449,12 +1456,93 @@ func _generate_buff_queue() -> Array:
 		return []
 	if _member.mp < _member.character_data.buff_mp_cost:
 		return []
+	# special_skill 指示による発動判定
+	if not _should_use_special_skill():
+		return []
 	# バフが切れているパーティーメンバーを探す
 	var buff_target := _find_buff_target()
 	if buff_target == null:
 		return []
 	return [{"action": "move_to_buff", "target": buff_target},
 			{"action": "buff", "target": buff_target}]
+
+
+## special_skill 指示に基づいて特殊攻撃を使うべきかを返す
+func _should_use_special_skill() -> bool:
+	match _special_skill:
+		"aggressive":
+			return true
+		"strong_enemy":
+			var pb: int = _combat_situation.get("power_balance",
+				int(GlobalConstants.PowerBalance.OVERWHELMING)) as int
+			return pb >= int(GlobalConstants.PowerBalance.INFERIOR)
+		"disadvantage":
+			var hs: int = _combat_situation.get("hp_status",
+				int(GlobalConstants.HpStatus.FULL)) as int
+			return hs >= int(GlobalConstants.HpStatus.LOW)
+		"never":
+			return false
+	return false
+
+
+## 特殊攻撃（Vスロット）のキューを生成する。使うべきでない状況なら空配列を返す
+## クラスの攻撃タイプに応じて、通常攻撃の代わりに特殊攻撃を使用する
+func _generate_special_attack_queue(target: Character) -> Array:
+	if _member == null or _member.character_data == null:
+		return []
+	if not _should_use_special_skill():
+		return []
+	var cd := _member.character_data
+	# MP/SP コスト確認
+	var has_mp := cd.v_slot_mp_cost > 0 and _member.mp >= cd.v_slot_mp_cost
+	var has_sp := cd.v_slot_sp_cost > 0 and _member.sp >= cd.v_slot_sp_cost
+	if not has_mp and not has_sp:
+		return []  # コスト不足 → 通常攻撃にフォールバック
+	# クラスごとの特殊攻撃使用判定
+	match cd.class_id:
+		"fighter-sword", "scout":
+			# 突進斬り / スライディング: ターゲット方向に使用（通常攻撃の代わり）
+			if target != null and is_instance_valid(target):
+				return [{"action": "move_to_attack"}, {"action": "v_attack"}]
+		"fighter-axe":
+			# 振り回し: 隣接敵が2体以上いるとき優先使用
+			if _count_adjacent_enemies() >= 2:
+				return [{"action": "move_to_attack"}, {"action": "v_attack"}]
+		"archer":
+			# ヘッドショット: ターゲットに使用（通常攻撃の代わり）
+			if target != null and is_instance_valid(target):
+				return [{"action": "move_to_attack"}, {"action": "v_attack"}]
+		"magician-fire":
+			# 炎陣: 敵が密集しているとき（隣接2体以上）使用
+			if _count_adjacent_enemies() >= 2:
+				return [{"action": "v_attack"}]
+		"magician-water":
+			# 無力化水魔法: ターゲットに使用（通常攻撃の代わり）
+			if target != null and is_instance_valid(target) and not target.is_stunned:
+				return [{"action": "move_to_attack"}, {"action": "v_attack"}]
+		# ヒーラーの防御バフは _generate_buff_queue() で処理するためここでは扱わない
+	return []
+
+
+## 自分の周囲（隣接4方向）にいる敵の数を返す
+func _count_adjacent_enemies() -> int:
+	if _member == null or not is_instance_valid(_member):
+		return 0
+	var count := 0
+	var dirs: Array[Vector2i] = [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1)]
+	for d: Vector2i in dirs:
+		var pos := _member.grid_pos + d
+		for other: Character in _all_members:
+			if not is_instance_valid(other) or other == _member:
+				continue
+			if other.is_friendly == _member.is_friendly:
+				continue  # 同じ陣営はスキップ
+			if other.hp <= 0:
+				continue
+			if pos in other.get_occupied_tiles():
+				count += 1
+				break
+	return count
 
 
 ## 回復対象を返す。heal（current_order.heal）に従って選定する。

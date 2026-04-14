@@ -116,6 +116,19 @@ const COMBAT_RATIO_DISADVANTAGE: float = 0.5  ## 劣勢
 ## 戦況の分類値（_evaluate_combat_situation の戻り値 "situation" キー）
 enum CombatSituation { SAFE, OVERWHELMING, ADVANTAGE, EVEN, DISADVANTAGE, CRITICAL }
 
+## 戦力比の段階（ランク和のみ。HP を含めない純粋な戦力比較）
+enum PowerBalance { OVERWHELMING, SUPERIOR, EVEN, INFERIOR, DESPERATE }
+const POWER_BALANCE_OVERWHELMING: float = 2.0
+const POWER_BALANCE_SUPERIOR:     float = 1.2
+const POWER_BALANCE_EVEN:         float = 0.8
+const POWER_BALANCE_INFERIOR:     float = 0.5
+
+## 自軍HP充足率の段階（ポーション込み）
+enum HpStatus { FULL, STABLE, LOW, CRITICAL }
+const HP_STATUS_FULL:    float = 0.75
+const HP_STATUS_STABLE:  float = 0.5
+const HP_STATUS_LOW:     float = 0.25
+
 ## ダメージ段階の閾値（battle メッセージの「小/中/大/特大ダメージ」判定に使用）
 const DAMAGE_LEVEL_SMALL:  int = 5   ## 小ダメージの上限（これ以下）
 const DAMAGE_LEVEL_MEDIUM: int = 15  ## 中ダメージの上限（これ以下）

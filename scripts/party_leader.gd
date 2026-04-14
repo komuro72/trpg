@@ -272,6 +272,7 @@ func _assign_orders() -> void:
 			"hp_potion":         _global_orders.get("hp_potion",    "never") as String,
 			"sp_mp_potion":      _global_orders.get("sp_mp_potion", "never") as String,
 			"item_pickup":       member.current_order.get("item_pickup", "passive") as String,
+			"special_skill":     order.get("special_skill", "strong_enemy") as String,
 			"combat_situation":  _combat_situation,
 		})
 
@@ -667,16 +668,18 @@ func _evaluate_combat_situation() -> Dictionary:
 				continue
 		area_enemies.append(opp)
 
+	# --- 自軍の HP 充足率（ポーション込み）を算出 ---
+	var hp_status := _calc_hp_status()
+
 	# 敵がいなければ安全
 	if area_enemies.is_empty():
 		return {
 			"situation": int(GlobalConstants.CombatSituation.SAFE),
-			"ratio": 0.0,
-			"my_strength": _evaluate_party_strength(),
-			"enemy_strength": 0.0,
+			"power_balance": int(GlobalConstants.PowerBalance.OVERWHELMING),
+			"hp_status": hp_status,
 		}
 
-	# 戦力比較
+	# 戦力比較（ランク和 × HP充足率）
 	var my_strength := _evaluate_party_strength()
 	var enemy_strength := _evaluate_party_strength_for(area_enemies, true)
 
@@ -698,12 +701,65 @@ func _evaluate_combat_situation() -> Dictionary:
 		else:
 			situation = int(GlobalConstants.CombatSituation.CRITICAL)
 
+	# --- 戦力比（ランク和のみ、HP を含めない）を算出 ---
+	var my_rank_sum := _calc_rank_sum(_party_members)
+	var enemy_rank_sum := _calc_rank_sum(area_enemies)
+	var power_balance: int
+	if enemy_rank_sum <= 0:
+		power_balance = int(GlobalConstants.PowerBalance.OVERWHELMING)
+	else:
+		var rank_ratio := float(my_rank_sum) / float(enemy_rank_sum)
+		if rank_ratio >= GlobalConstants.POWER_BALANCE_OVERWHELMING:
+			power_balance = int(GlobalConstants.PowerBalance.OVERWHELMING)
+		elif rank_ratio >= GlobalConstants.POWER_BALANCE_SUPERIOR:
+			power_balance = int(GlobalConstants.PowerBalance.SUPERIOR)
+		elif rank_ratio >= GlobalConstants.POWER_BALANCE_EVEN:
+			power_balance = int(GlobalConstants.PowerBalance.EVEN)
+		elif rank_ratio >= GlobalConstants.POWER_BALANCE_INFERIOR:
+			power_balance = int(GlobalConstants.PowerBalance.INFERIOR)
+		else:
+			power_balance = int(GlobalConstants.PowerBalance.DESPERATE)
+
 	return {
 		"situation": situation,
-		"ratio": ratio,
-		"my_strength": my_strength,
-		"enemy_strength": enemy_strength,
+		"power_balance": power_balance,
+		"hp_status": hp_status,
 	}
+
+
+## 生存メンバーのランク和を返す（HP を含めない純粋な戦力比較用）
+func _calc_rank_sum(members: Array) -> int:
+	var total := 0
+	for mv: Variant in members:
+		var m := mv as Character
+		if m == null or not is_instance_valid(m) or m.hp <= 0:
+			continue
+		if m.character_data != null:
+			total += RANK_VALUES.get(m.character_data.rank, 3) as int
+	return total
+
+
+## 自軍パーティーの HP 充足率の段階を返す
+func _calc_hp_status() -> int:
+	var total_hp := 0
+	var total_max := 0
+	var total_potion := 0
+	for m: Character in _party_members:
+		if not is_instance_valid(m) or m.hp <= 0:
+			continue
+		total_hp += m.hp
+		total_max += m.max_hp
+		total_potion += _calc_total_potion_hp(m)
+	if total_max <= 0:
+		return int(GlobalConstants.HpStatus.CRITICAL)
+	var ratio := clampf(float(total_hp + total_potion) / float(total_max), 0.0, 1.0)
+	if ratio >= GlobalConstants.HP_STATUS_FULL:
+		return int(GlobalConstants.HpStatus.FULL)
+	elif ratio >= GlobalConstants.HP_STATUS_STABLE:
+		return int(GlobalConstants.HpStatus.STABLE)
+	elif ratio >= GlobalConstants.HP_STATUS_LOW:
+		return int(GlobalConstants.HpStatus.LOW)
+	return int(GlobalConstants.HpStatus.CRITICAL)
 
 
 ## 対立するキャラクターのリストを返す（サブクラスでオーバーライド）
