@@ -181,10 +181,18 @@ func receive_order(order: Dictionary) -> void:
 				if _member != null and is_instance_valid(_member):
 					_member.is_attacking = false
 			return
-	# 特殊攻撃が使える状態になった場合もキューを再生成する（攻撃中は除く）
-	var v_available := not is_mid_move \
-			and _state != _State.ATTACKING_PRE and _state != _State.ATTACKING_POST \
-			and _should_use_special_skill() and _has_v_slot_cost()
+	# 特殊攻撃が使える状態になった場合もキューを再生成する（攻撃中・既にキューに含まれている場合は除く）
+	var v_available := false
+	if not is_mid_move and _state != _State.ATTACKING_PRE and _state != _State.ATTACKING_POST \
+			and _should_use_special_skill() and _has_v_slot_cost():
+		# キューに既に v_attack が含まれていれば再生成不要
+		var has_v_in_queue := false
+		for q_item: Variant in _queue:
+			if (q_item as Dictionary).get("action", "") == "v_attack":
+				has_v_in_queue = true
+				break
+		if not has_v_in_queue:
+			v_available = true
 	if not on_stair and not policy_changed \
 			and new_effective == _strategy and ordered_target == _target \
 			and (_queue.size() >= QUEUE_MIN_LEN or is_mid_move) \
