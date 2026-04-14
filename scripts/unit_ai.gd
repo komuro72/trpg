@@ -756,11 +756,19 @@ func set_floor_items(items: Dictionary) -> void:
 ## アイテムがない・avoid の場合は Vector2i(-1,-1) を返す
 func _find_item_pickup_target() -> Vector2i:
 	if _item_pickup == "avoid" or _all_floor_items.is_empty():
+		if _member != null and _member.is_friendly:
+			print("[DBG_FIPT] %s: early_exit pickup=%s floor_items_empty=%s" % [
+				_member.character_data.character_name if _member.character_data != null else _member.name,
+				_item_pickup, str(_all_floor_items.is_empty())])
 		return Vector2i(-1, -1)
 	if _map_data == null or _member == null or not is_instance_valid(_member):
 		return Vector2i(-1, -1)
 	var floor_idx := _member.current_floor
 	if not _all_floor_items.has(floor_idx):
+		if _member.is_friendly:
+			print("[DBG_FIPT] %s: no_floor_key F%d keys=%s" % [
+				_member.character_data.character_name if _member.character_data != null else _member.name,
+				floor_idx, str(_all_floor_items.keys())])
 		return Vector2i(-1, -1)
 	var floor_dict := _all_floor_items[floor_idx] as Dictionary
 	if floor_dict.is_empty():
