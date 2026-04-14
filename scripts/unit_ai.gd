@@ -960,7 +960,8 @@ func _v_rush_slash(cost: int) -> void:
 	_state = _State.WAITING
 	_timer = 0.3
 	if hit_count > 0:
-		MessageLog.add_combat("[突進斬り] %s が %d 体を攻撃！" % [_v_name(), hit_count])
+		MessageLog.add_battle(_member.character_data, null,
+			"%sが突進斬りで%d体を攻撃した" % [_v_name(), hit_count], _member)
 
 
 ## 斧戦士: 振り回し（周囲8マスの敵全員にダメージ）
@@ -980,7 +981,8 @@ func _v_whirlwind(cost: int) -> void:
 				hit_count += 1
 	if hit_count > 0:
 		SoundManager.play_attack_from(_member)
-		MessageLog.add_combat("[振り回し] %s が %d 体を攻撃！" % [_v_name(), hit_count])
+		MessageLog.add_battle(_member.character_data, null,
+			"%sが振り回しで%d体を攻撃した" % [_v_name(), hit_count], _member)
 	_state = _State.WAITING
 	_timer = 0.5
 
@@ -1000,10 +1002,12 @@ func _v_headshot(cost: int) -> void:
 		var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
 		var raw_damage := int(float(_member.power) * 3.0 * type_mult)
 		_target.take_damage(raw_damage, 1.0, _member, false)
-		MessageLog.add_combat("[ヘッドショット] %s → %s に大ダメージ！" % [_v_name(), _v_tgt_name()])
+		MessageLog.add_battle(_member.character_data, _target.character_data,
+			"%sがヘッドショットで%sに大ダメージを与えた" % [_v_name(), _v_tgt_name()], _member, _target)
 	else:
 		_target.take_damage(_target.hp, 1.0, _member, false)
-		MessageLog.add_combat("[ヘッドショット] %s → %s を仕留めた！" % [_v_name(), _v_tgt_name()])
+		MessageLog.add_battle(_member.character_data, _target.character_data,
+			"%sがヘッドショットで%sを仕留めた" % [_v_name(), _v_tgt_name()], _member, _target)
 	_state = _State.WAITING
 	_timer = 0.5
 
@@ -1023,7 +1027,8 @@ func _v_flame_circle(cost: int) -> void:
 	flame.setup(_member.position, _member.grid_pos, 3, damage,
 			2.5, 0.5, _member, _all_members)
 	SoundManager.play(SoundManager.FLAME_SHOOT)
-	MessageLog.add_combat("[炎陣] %s が炎を設置！" % _v_name())
+	MessageLog.add_battle(_member.character_data, null,
+		"%sが炎陣を設置した" % _v_name(), _member)
 	_state = _State.WAITING
 	_timer = 0.5
 
@@ -1075,7 +1080,8 @@ func _v_sliding(cost: int) -> void:
 		_member.grid_pos = landing_pos
 		_member.sync_position()
 	SoundManager.play(SoundManager.MELEE_DAGGER)
-	MessageLog.add_combat("[スライディング] %s が突進！" % _v_name())
+	MessageLog.add_battle(_member.character_data, null,
+		"%sがスライディングで突進した" % _v_name(), _member)
 	_state = _State.WAITING
 	_timer = 0.3
 
