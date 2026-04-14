@@ -181,22 +181,26 @@ func receive_order(order: Dictionary) -> void:
 				if _member != null and is_instance_valid(_member):
 					_member.is_attacking = false
 			return
-	# 特殊攻撃が使える状態になった場合もキューを再生成する（攻撃中・既にキューに含まれている場合は除く）
+	# 特殊攻撃の状態が変わった場合はキューを再生成する（攻撃中は除く）
+	# v_available=true: 特殊攻撃が使えるようになったのにキューに無い → 再生成して追加
+	# v_should_clear=true: 特殊攻撃条件が満たされないのにキューに残っている → 再生成して除去
 	var v_available := false
-	if not is_mid_move and _state != _State.ATTACKING_PRE and _state != _State.ATTACKING_POST \
-			and _should_use_special_skill() and _has_v_slot_cost():
-		# キューに既に v_attack が含まれていれば再生成不要
+	var v_should_clear := false
+	if not is_mid_move and _state != _State.ATTACKING_PRE and _state != _State.ATTACKING_POST:
 		var has_v_in_queue := false
 		for q_item: Variant in _queue:
 			if (q_item as Dictionary).get("action", "") == "v_attack":
 				has_v_in_queue = true
 				break
-		if not has_v_in_queue:
+		var should_use_v := _should_use_special_skill() and _has_v_slot_cost()
+		if should_use_v and not has_v_in_queue:
 			v_available = true
+		elif not should_use_v and has_v_in_queue:
+			v_should_clear = true
 	if not on_stair and not policy_changed \
 			and new_effective == _strategy and ordered_target == _target \
 			and (_queue.size() >= QUEUE_MIN_LEN or is_mid_move) \
-			and not v_available:
+			and not v_available and not v_should_clear:
 		return
 
 	_strategy = new_effective

@@ -38,6 +38,12 @@ var _visited_areas:  Dictionary = {}  ## 訪問済みエリアID集合（全 Uni
 ## パーティー全体方針（Party.global_orders の参照。hp_potion/sp_mp_potion 等を UnitAI に伝達）
 ## set_global_orders() で Party.global_orders dict への参照を受け取る（参照共有なので変更が反映される）
 var _global_orders:  Dictionary = {}
+var _party_ref: Party = null  ## プレイヤーパーティー参照（合流済みNPC含む。戦況判断の自軍メンバー評価に使用）
+
+
+## プレイヤーパーティー参照を設定する（プレイヤー・合流済みNPCパーティー両方で使用）
+func set_party_ref(party: Party) -> void:
+	_party_ref = party
 
 
 # --------------------------------------------------------------------------
@@ -92,8 +98,13 @@ func set_follow_hero_floors(value: bool) -> void:
 			unit_ai.set_follow_hero_floors(value)
 
 
+## 全パーティー合算メンバーリスト（戦況判断で同陣営他パーティーの戦力加算に使用）
+var _all_members: Array[Character] = []
+
+
 ## 全パーティー合算メンバーリストを各 UnitAI に反映する
 func set_all_members(all_members: Array[Character]) -> void:
+	_all_members = all_members
 	for unit_ai_var: Variant in _unit_ais.values():
 		var unit_ai := unit_ai_var as UnitAI
 		if unit_ai != null:
@@ -696,7 +707,30 @@ func _evaluate_combat_situation() -> Dictionary:
 				continue
 		my_area_members.append(m)
 
-	# --- 自軍の HP 充足率（ポーション込み）を算出 ---
+	# 同陣営の他パーティーのうち対象エリア内にいる生存メンバーを収集（戦力加算用）
+	# is_friendly が同じかつ my_members に含まれないキャラを対象とする
+	# （area_enemies は敵陣営の全キャラを含むため追加収集は不要）
+	var my_faction: bool = true
+	if not my_area_members.is_empty():
+		my_faction = my_area_members[0].is_friendly
+	elif not my_members.is_empty():
+		my_faction = my_members[0].is_friendly
+	var ally_area_others: Array[Character] = []
+	for c: Character in _all_members:
+		if not is_instance_valid(c) or c.hp <= 0:
+			continue
+		if c.is_friendly != my_faction:
+			continue
+		if my_members.has(c):
+			continue  # 自パーティー・合流済み同陣営は my_area_members で既にカウント
+		if my_floor >= 0 and c.current_floor != my_floor:
+			continue
+		if _map_data != null and not my_area.is_empty():
+			if not target_areas.has(_map_data.get_area(c.grid_pos)):
+				continue
+		ally_area_others.append(c)
+
+	# --- 自軍の HP 充足率は自パーティーのみで算出（他パーティーのポーションは把握不可） ---
 	var hp_status := _calc_hp_status_for(my_area_members)
 
 	# 敵がいなければ安全
@@ -705,12 +739,13 @@ func _evaluate_combat_situation() -> Dictionary:
 			"situation": int(GlobalConstants.CombatSituation.SAFE),
 			"power_balance": int(GlobalConstants.PowerBalance.OVERWHELMING),
 			"hp_status": hp_status,
-			"my_rank_sum": _calc_rank_sum(my_area_members),
+			"my_rank_sum": _calc_rank_sum(my_area_members) + _calc_rank_sum(ally_area_others),
 			"enemy_rank_sum": 0,
 		}
 
-	# 戦力比較（ランク和 × HP充足率）
-	var my_strength := _evaluate_party_strength_for(my_area_members, false)
+	# 戦力比較（ランク和 × HP充足率）。自軍側は同陣営の他パーティーのエリア内メンバーも加算
+	var my_strength := _evaluate_party_strength_for(my_area_members, false) \
+			+ _evaluate_party_strength_for(ally_area_others, true)
 	var enemy_strength := _evaluate_party_strength_for(area_enemies, true)
 
 	var ratio := 0.0
@@ -732,7 +767,8 @@ func _evaluate_combat_situation() -> Dictionary:
 			situation = int(GlobalConstants.CombatSituation.CRITICAL)
 
 	# --- 戦力比（ランク和のみ、HP を含めない）を算出 ---
-	var my_rank_sum := _calc_rank_sum(my_area_members)
+	# 自軍側は同陣営の他パーティーのエリア内メンバーも加算
+	var my_rank_sum := _calc_rank_sum(my_area_members) + _calc_rank_sum(ally_area_others)
 	var enemy_rank_sum := _calc_rank_sum(area_enemies)
 	var power_balance: int
 	if enemy_rank_sum <= 0:
@@ -760,9 +796,17 @@ func _evaluate_combat_situation() -> Dictionary:
 
 
 ## 自軍として扱うメンバー一覧を返す（戦況判断用）
-## デフォルトは `_party_members`。PartyLeaderPlayer では合流済み NPC も含めた Party.sorted_members() を返す
+## _party_ref が設定されている場合（プレイヤー・合流済みNPCパーティー）は Party.sorted_members() を使う
+## 未設定の場合（敵・未合流NPC）は _party_members のみ
 func _get_my_combat_members() -> Array[Character]:
-	return _party_members
+	if _party_ref == null:
+		return _party_members
+	var result: Array[Character] = []
+	for mv: Variant in _party_ref.sorted_members():
+		var m := mv as Character
+		if m != null and is_instance_valid(m):
+			result.append(m)
+	return result
 
 
 ## 生存メンバーのランク和を返す（HP を含めない純粋な戦力比較用）

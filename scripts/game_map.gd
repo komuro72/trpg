@@ -1020,6 +1020,8 @@ func _merge_npc_into_player_party(nm: PartyManager) -> void:
 			_member_to_npc_manager[member] = nm
 	# 合流済みフラグを立てる（NPC が hero を隊形基準として追従するようになる）
 	nm.set_joined_to_player(true)
+	# Party 参照を渡す（戦況判断で合流後の全員を自軍として評価するため）
+	nm.set_party_ref(party)
 	# Party.global_orders を合流済み NPC パーティー AI に反映する
 	nm.set_global_orders(party.global_orders)
 	# フロアアイテム辞書への参照を渡す（アイテムナビゲーションに使用）
@@ -1067,6 +1069,8 @@ func _merge_player_into_npc_party(nm: PartyManager) -> void:
 		player_controller.player_is_leader = false  # NPC がリーダー：LB/RB 切り替えを無効化
 	# 合流済みフラグを立てる（NPC メンバーが hero を隊形基準として追従するようになる）
 	nm.set_joined_to_player(true)
+	# Party 参照を渡す（戦況判断で合流後の全員を自軍として評価するため）
+	nm.set_party_ref(party)
 	# Party.global_orders を合流済み NPC パーティー AI に反映する
 	nm.set_global_orders(party.global_orders)
 	# フロアアイテム辞書への参照を渡す（アイテムナビゲーションに使用）

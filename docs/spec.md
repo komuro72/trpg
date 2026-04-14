@@ -3801,7 +3801,17 @@ ratio = 自軍戦力 / 敵戦力
 
 `GlobalConstants.CombatSituation` enum で定義。
 
-**自軍側のフィルタ**: `_get_my_combat_members()` で取得したメンバーも `target_areas` に属するエリアに絞ってランク和・戦力・HP充足率を算出する（別フロア・離れた部屋の仲間は戦闘に参加できないため）。
+**自軍側のフィルタ**: `_get_my_combat_members()` で取得したメンバーも `target_areas` に属するエリアに絞ってランク和・戦力を算出する（別フロア・離れた部屋の仲間は戦闘に参加できないため）。
+
+**同陣営の他パーティー加算**: `_all_members` から以下の条件を満たすキャラを `ally_area_others` として収集し、そのランク和・戦力を自軍側に加算する:
+- `is_friendly` が自軍と同じ（プレイヤー/NPC連合、または敵パーティー同士）
+- 自パーティーのメンバーではない（二重カウント防止）
+- 同フロアかつ `target_areas` に属するエリアにいる生存メンバー
+- ポーション回復量は加算せず、HP状態は condition ラベルから推定（`use_estimated_hp=true`）
+
+これにより、プレイヤー＋未加入NPCが同じ部屋で戦っているとき、敵はより逃げやすくなり、逆に敵が密集しているエリアでは敵が強気になる。
+
+**HP充足率（HpStatus）は自パーティーのみ**で算出する（他パーティーのポーション所持数は把握不可のため）。
 
 **戻り値**: `{ "situation": int, "power_balance": int, "hp_status": int, "my_rank_sum": int, "enemy_rank_sum": int }`
 

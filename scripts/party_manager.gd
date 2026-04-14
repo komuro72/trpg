@@ -143,12 +143,12 @@ func set_enemy_list(enemies: Array[Character]) -> void:
 
 
 ## プレイヤーパーティー参照を設定する（合流済み NPC を含む戦力評価用）
-## party_type == "player" の場合のみ使用
+## プレイヤーパーティーと合流済み NPC パーティー両方に設定する
 var _party_ref: Party = null
 func set_party_ref(party: Party) -> void:
 	_party_ref = party
-	if _leader_ai is PartyLeaderPlayer:
-		(_leader_ai as PartyLeaderPlayer).set_party_ref(party)
+	if _leader_ai != null:
+		_leader_ai.set_party_ref(party)
 
 
 ## battle_policy="attack" プリセットをクラスに応じてメンバーに適用する
@@ -423,8 +423,8 @@ func _start_ai() -> void:
 		_leader_ai.set_friendly_list(_friendly_list)
 	if not _global_orders.is_empty():
 		_leader_ai.set_global_orders(_global_orders)
-	if _party_ref != null and _leader_ai is PartyLeaderPlayer:
-		(_leader_ai as PartyLeaderPlayer).set_party_ref(_party_ref)
+	if _party_ref != null:
+		_leader_ai.set_party_ref(_party_ref)
 	add_child(_leader_ai)
 	_leader_ai.setup(_members, _player, _map_data, _all_members)
 	# setup 後に渡す（UnitAI が生成済みである必要があるため）
