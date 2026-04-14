@@ -411,13 +411,12 @@ func _start_ai() -> void:
 	_leader_ai.joined_to_player = joined_to_player  # 合流フラグを伝播
 	if not _friendly_list.is_empty():
 		_leader_ai.set_friendly_list(_friendly_list)
-	# _floor_items は参照型のため、空でも渡す（後からアイテムが追加されたとき反映されるようにする）
-	_leader_ai.set_floor_items(_floor_items)
 	if not _global_orders.is_empty():
 		_leader_ai.set_global_orders(_global_orders)
 	add_child(_leader_ai)
 	_leader_ai.setup(_members, _player, _map_data, _all_members)
-	# VisionSystem は setup 後に渡す（UnitAI が生成済みである必要があるため）
+	# setup 後に渡す（UnitAI が生成済みである必要があるため）
+	_leader_ai.set_floor_items(_floor_items)
 	if _vision_system_ref != null:
 		_leader_ai.set_vision_system(_vision_system_ref)
 
