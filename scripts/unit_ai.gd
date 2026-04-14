@@ -516,7 +516,17 @@ func _step_toward_goal() -> bool:
 		if _member.is_friendly:
 			var my_name := _member.character_data.character_name if _member.character_data != null else String(_member.name)
 			var passable := _is_passable(next)
-			print("[DBG_MOVE] %s@%s → next=%s passable=%s goal=%s" % [my_name, _member.grid_pos, next, str(passable), _goal])
+			# 移動先に誰がいるか調べる
+			var occupant := ""
+			for other: Character in _all_members:
+				if is_instance_valid(other) and other != _member and next in other.get_occupied_tiles():
+					occupant = other.character_data.character_name if other.character_data != null else String(other.name)
+					occupant += "(F%d,fly=%s)" % [other.current_floor, str(other.is_flying)]
+					break
+			if occupant.is_empty() and _player != null and is_instance_valid(_player) and _player != _member \
+					and next in _player.get_occupied_tiles():
+				occupant = "hero"
+			print("[DBG_MOVE] %s@%s → next=%s passable=%s occupant=%s goal=%s" % [my_name, _member.grid_pos, next, str(passable), occupant if not occupant.is_empty() else "-", _goal])
 		_member.move_to(next, _get_move_interval())
 		_dbg_stuck_count = 0
 		return _member.grid_pos != _goal
