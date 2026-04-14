@@ -581,3 +581,39 @@
   - ヒーラーの `_generate_buff_queue()` も `_should_use_special_skill()` を参照するよう統合
   - `receive_order()` に `special_skill` フィールドを追加
   - `current_order` のデフォルトに `special_skill: "strong_enemy"` を追加
+
+### 設計変更: AI Vスロット攻撃の実行処理を追加
+- 理由: `_generate_special_attack_queue()` がキューを生成しても、`v_attack` アクションの実行処理が UnitAI になかった
+- 変更内容:
+  - `_start_action` に `"v_attack"` ケースを追加
+  - クラスごとの特殊攻撃実行メソッドを追加（_v_rush_slash / _v_whirlwind / _v_headshot / _v_flame_circle / _v_water_stun / _v_sliding）
+  - 特殊攻撃の `take_damage` に `suppress_battle_msg=true` を追加（通常攻撃メッセージとの2重表示防止）
+  - SP回復後に特殊攻撃が使われない問題を修正（`receive_order` の early return にVスロットコストチェックを追加）
+  - キューに `v_attack` が含まれている場合はキュー再生成をスキップ（移動中のリセット防止）
+
+### バグ修正: ヘッドショットの即死が防御・耐性で軽減されていた
+- 原因: `take_damage(_target.hp)` で現在HPをダメージとして渡していたが、防御判定・耐性適用で軽減された
+- 修正: `instant_death_immune=false` の場合は `take_damage` を経由せず直接 `hp=0` + `die()` で即座に倒す
+
+### バグ修正: ポーション使用時にインベントリから削除されない（無限使用）
+- 原因: `use_consumable()` が効果を適用するだけでインベントリからアイテムを削除していなかった
+- 修正: `character_data.inventory.erase(item)` を追加
+
+### バグ修正: HPポーションの効果キーが間違っていた
+- 原因: `use_consumable()` が `heal_hp` を参照していたが、JSON定義は `restore_hp`
+- 修正: `restore_hp` に変更
+
+### 設計変更: メッセージ表記方針の策定
+- バトルメッセージは自然言語で記述し、記号的表現（`HP+30` 等）を避ける
+- アイテム名を統一: HP回復ポーション / MP回復ポーション / SP回復ポーション
+- 上級ポーションは設けない方針
+
+### 設計変更: 突進斬り・スライディングの修正
+- 突進斬り: 敵のマスに着地していた → 敵を通過して次の空きマスに着地するよう修正
+- スライディング: 敵をすり抜けできなかった → 敵・味方をスキップして空きマスに着地するよう修正
+
+### 設計変更: エフェクト画像の統合
+- `assets/images/projectiles/` を `assets/images/effects/` に統合
+- StunEffect → WhirlpoolEffect にリネーム（画像: whirlpool.png）
+- 炎陣エフェクトを画像ベースに変更（flame.png、スケール脈動＋アルファ揺らぎ）
+- 左パネルのMP/SPバーに特殊攻撃不可時の紫色変化を追加
