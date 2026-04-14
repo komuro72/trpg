@@ -993,6 +993,8 @@ func _merge_npc_into_player_party(nm: PartyManager) -> void:
 	npc_managers.erase(nm)
 	# dialogue_trigger の参照リストも更新
 	dialogue_trigger.setup(hero, npc_managers, enemy_managers, vision_system, map_data)
+	# 全マネージャーの _all_members を再構築（新メンバーを占有チェック対象に含める）
+	_link_all_character_lists()
 	# LB/RB キャラ切り替えリストを更新
 	if player_controller != null:
 		player_controller._party_sorted_members.assign(party.sorted_members())
@@ -1038,6 +1040,8 @@ func _merge_player_into_npc_party(nm: PartyManager) -> void:
 		vision_system.remove_npc_manager(nm)
 	npc_managers.erase(nm)
 	dialogue_trigger.setup(hero, npc_managers, enemy_managers, vision_system, map_data)
+	# 全マネージャーの _all_members を再構築（新メンバーを占有チェック対象に含める）
+	_link_all_character_lists()
 	# LB/RB キャラ切り替えリストを更新
 	if player_controller != null:
 		player_controller._party_sorted_members.assign(party.sorted_members())
