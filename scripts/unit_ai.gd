@@ -115,6 +115,79 @@ func set_visited_areas(d: Dictionary) -> void:
 	_visited_areas = d
 
 
+## デバッグウィンドウ用: 現在の目的地・行動の短い説明文を返す
+## 例: "→F1階段(15,3)" / "→explore(8,3)" / "→敵Goblin(10,5)" / "wait"
+func get_debug_goal_str() -> String:
+	if _member == null or not is_instance_valid(_member):
+		return "?"
+	# 攻撃中
+	if _state == _State.ATTACKING_PRE or _state == _State.ATTACKING_POST:
+		if _attack_target != null and is_instance_valid(_attack_target) \
+				and _attack_target.character_data != null:
+			return "攻撃→%s" % _attack_target.character_data.character_name
+		return "攻撃中"
+	# キュー先頭の action から推測
+	if _queue.is_empty():
+		# move_policy ベース
+		var pol_str := _move_policy
+		if pol_str in ["cluster", "follow", "same_room"] and _leader_ref != null \
+				and is_instance_valid(_leader_ref) and _leader_ref != _member \
+				and _leader_ref.current_floor != _member.current_floor:
+			var dir_lbl: String = "↓" if _leader_ref.current_floor > _member.current_floor else "↑"
+			return "Lに%sF追従" % dir_lbl
+		return "[%s]待機" % pol_str
+	var head := _queue[0] as Dictionary
+	var act: String = head.get("action", "?") as String
+	match act:
+		"move_to_explore":
+			var goal_v: Variant = head.get("goal", Vector2i.ZERO)
+			var g := goal_v as Vector2i
+			# 階段タイルかチェック
+			if _map_data != null:
+				var tile := _map_data.get_tile(g)
+				if tile == MapData.TileType.STAIRS_DOWN:
+					return "→↓階段(%d,%d)" % [g.x, g.y]
+				if tile == MapData.TileType.STAIRS_UP:
+					return "→↑階段(%d,%d)" % [g.x, g.y]
+			return "→探索(%d,%d)" % [g.x, g.y]
+		"move_to_attack":
+			if _target != null and is_instance_valid(_target) \
+					and _target.character_data != null:
+				return "→攻撃%s" % _target.character_data.character_name
+			return "→攻撃位置"
+		"move_to_heal", "move_to_buff":
+			var t_v: Variant = head.get("target", null)
+			var t := t_v as Character
+			if t != null and is_instance_valid(t) and t.character_data != null:
+				return "→%s回復" % t.character_data.character_name
+			return "→回復対象"
+		"move_to_formation":
+			if _leader_ref != null and is_instance_valid(_leader_ref):
+				var dir_lbl2: String = ""
+				if _leader_ref.current_floor != _member.current_floor:
+					dir_lbl2 = "↓" if _leader_ref.current_floor > _member.current_floor else "↑"
+				return "→隊形%s" % dir_lbl2
+			return "→隊形"
+		"move_to_home":
+			return "→帰還"
+		"flee":
+			return "逃走"
+		"wait":
+			return "待機"
+		"attack":
+			return "攻撃準備"
+		"v_attack":
+			return "特殊攻撃"
+		"heal":
+			return "回復実行"
+		"buff":
+			return "バフ実行"
+		"use_potion":
+			return "ポーション"
+		_:
+			return act
+
+
 ## PartyLeaderAI からオーダーを受け取る
 ## order: { "target": Character, "combat": String, "on_low_hp": String,
 ##          "move": String, "battle_formation": String, "leader": Character,

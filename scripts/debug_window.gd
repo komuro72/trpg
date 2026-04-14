@@ -406,6 +406,11 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 		_draw_members_row(font, floor_members, x + INDENT, y, w - INDENT * 2)
 		y += LINE_H
 
+	# 目的（goal）行：各メンバーの現在の行動目的を表示
+	if y < bottom:
+		_draw_members_goals_row(font, pm, floor_members, x + INDENT, y, w - INDENT * 2)
+		y += LINE_H
+
 	return y + 2.0
 
 
@@ -478,7 +483,44 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 		_draw_members_row(font, floor_members, x + INDENT, y, w - INDENT * 2)
 		y += LINE_H
 
+	# プレイヤーパーティーは PartyManager（_hero_manager）経由で goal を取得
+	if y < bottom and _hero_manager != null and is_instance_valid(_hero_manager):
+		_draw_members_goals_row(font, _hero_manager, floor_members, x + INDENT, y, w - INDENT * 2)
+		y += LINE_H
+
 	return y + 2.0
+
+
+## 各メンバーの行動目的を1行に横並びで描画する（PartyManager.get_member_goal_str を利用）
+func _draw_members_goals_row(font: Font, pm: PartyManager, members: Array,
+		x: float, y: float, w: float) -> void:
+	if pm == null or members.is_empty():
+		return
+	const SEP := " / "
+	var sep_w: float = font.get_string_size(SEP, HORIZONTAL_ALIGNMENT_LEFT, -1, FS).x
+	var cx := x
+	for i: int in range(members.size()):
+		var m_v: Variant = members[i]
+		var m := m_v as Character
+		if not is_instance_valid(m) or m.character_data == null:
+			continue
+		var goal: String = pm.get_member_goal_str(m)
+		if goal.is_empty():
+			continue
+		var name_s: String = m.character_data.character_name
+		var part := "%s:%s" % [name_s, goal]
+		var part_w: float = font.get_string_size(part, HORIZONTAL_ALIGNMENT_LEFT, -1, FS).x
+		if cx + part_w > x + w:
+			_control.draw_string(font, Vector2(cx, y + FS), "...",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, FS, Color(0.5, 0.5, 0.5))
+			break
+		_control.draw_string(font, Vector2(cx, y + FS), part,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, FS, Color(0.65, 0.85, 1.0))
+		cx += part_w
+		if i < members.size() - 1:
+			_control.draw_string(font, Vector2(cx, y + FS), SEP,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, FS, Color(0.4, 0.4, 0.5))
+			cx += sep_w
 
 
 ## メンバー全員を1行に横並びで描画する

@@ -135,6 +135,14 @@ func set_member_map_data(member_name: String, new_map_data: MapData) -> void:
 		unit_ai.set_map_data(new_map_data)
 
 
+## デバッグウィンドウ用: 指定メンバーの行動目的の短い説明を返す
+func get_member_goal_str(member_name: String) -> String:
+	var unit_ai := _unit_ais.get(member_name) as UnitAI
+	if unit_ai == null:
+		return ""
+	return unit_ai.get_debug_goal_str()
+
+
 ## フロアアイテム辞書の参照を全 UnitAI に配布する（game_map から呼ばれる）
 func set_floor_items(items: Dictionary) -> void:
 	for unit_ai_var: Variant in _unit_ais.values():

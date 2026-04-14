@@ -78,6 +78,13 @@ func get_global_orders_hint() -> Dictionary:
 	return {}
 
 
+## デバッグ用: メンバーの行動目的の短い説明を返す（UnitAI に委譲）
+func get_member_goal_str(member: Character) -> String:
+	if _leader_ai == null or member == null:
+		return ""
+	return _leader_ai.get_member_goal_str(member.name)
+
+
 ## 現在の探索移動方針を返す（game_map が NPC の階段使用意図を判定するために使用）
 func get_explore_move_policy() -> String:
 	if _leader_ai != null:
