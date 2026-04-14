@@ -7,10 +7,10 @@ extends Node2D
 
 const SPEED := 2000.0  # px/秒（移動での回避不可）
 
-const _ARROW_PATH          := "res://assets/images/projectiles/arrow.png"
-const _FIRE_BULLET_PATH    := "res://assets/images/projectiles/fire_bullet.png"
-const _WATER_BULLET_PATH   := "res://assets/images/projectiles/water_bullet.png"
-const _THUNDER_BULLET_PATH := "res://assets/images/projectiles/thunder_bullet.png"
+const _ARROW_PATH          := "res://assets/images/effects/arrow.png"
+const _FIRE_BULLET_PATH    := "res://assets/images/effects/fire_bullet.png"
+const _WATER_BULLET_PATH   := "res://assets/images/effects/water_bullet.png"
+const _THUNDER_BULLET_PATH := "res://assets/images/effects/thunder_bullet.png"
 
 var _dest:           Vector2
 var _will_hit:       bool

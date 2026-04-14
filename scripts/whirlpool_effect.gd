@@ -1,13 +1,13 @@
-class_name StunEffect
+class_name WhirlpoolEffect
 extends Node2D
 
-## スタンエフェクト（水魔法の無力化で発生）
+## 渦エフェクト（水魔法の無力化スタンで発生）
 ## スタン中キャラクターに重ねて表示する渦エフェクト。
-## 画像（assets/images/effects/water_stun.png）があればスプライト表示、
+## 画像（assets/images/effects/whirlpool.png）があればスプライト表示、
 ## なければシアン色の渦を _draw() で描画する。
 ## 外部から queue_free() されるまで回転を継続する。
 
-const EFFECT_IMAGE_PATH := "res://assets/images/effects/water_stun.png"
+const EFFECT_IMAGE_PATH := "res://assets/images/effects/whirlpool.png"
 
 ## 回転速度（rad/s）
 const ROT_SPEED: float = PI * 1.5  # 270°/秒

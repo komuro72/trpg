@@ -1990,10 +1990,12 @@ Phase 8 Step 3 で削除した手作りダンジョンを再作成。Claude Code
 
 #### 画像ファイル
 ```
-assets/images/projectiles/
+assets/images/effects/
   arrow.png        矢（弓使い・ゴブリンアーチャー）
-  magic_bullet.png 魔法弾（魔法使い・ゴブリンメイジ・ダークメイジ）
-  flame.png        炎（サラマンダー）
+  fire_bullet.png  火弾（魔法使い(火)・ゴブリンメイジ・サラマンダー）
+  water_bullet.png 水弾（魔法使い(水)・リッチ）
+  thunder_bullet.png 雷弾（デーモン）
+  whirlpool.png    渦（水魔法スタンエフェクト）
 ```
 - 当面は magic_bullet.png と flame.png は同じ画像でも可
 

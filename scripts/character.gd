@@ -742,7 +742,7 @@ func apply_stun(duration: float, attacker: Character = null) -> void:
 	stun_timer = maxf(stun_timer, duration)  # 残り時間が長い方を採用
 	# スタンエフェクトを生成（既存があればタイマーリセットのみ）
 	if _stun_effect == null or not is_instance_valid(_stun_effect):
-		_stun_effect = StunEffect.new()
+		_stun_effect = WhirlpoolEffect.new()
 		add_child(_stun_effect)
 	var char_name := character_data.character_name if character_data != null else str(name)
 	MessageLog.add_combat("[スタン] %s がスタンした（%.1f秒）" % [char_name, duration])
