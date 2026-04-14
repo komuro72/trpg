@@ -120,12 +120,13 @@ func set_visited_areas(d: Dictionary) -> void:
 func get_debug_goal_str() -> String:
 	if _member == null or not is_instance_valid(_member):
 		return "?"
+	var state_lbl := _state_label(_state)
 	# 攻撃中
 	if _state == _State.ATTACKING_PRE or _state == _State.ATTACKING_POST:
 		if _attack_target != null and is_instance_valid(_attack_target) \
 				and _attack_target.character_data != null:
-			return "攻撃→%s" % _attack_target.character_data.character_name
-		return "攻撃中"
+			return "攻撃→%s[%s]" % [_attack_target.character_data.character_name, state_lbl]
+		return "攻撃中[%s]" % state_lbl
 	# キュー先頭の action から推測
 	if _queue.is_empty():
 		# move_policy ベース
@@ -135,8 +136,8 @@ func get_debug_goal_str() -> String:
 				and _leader_ref.current_floor != _member.current_floor:
 			var dir_lbl: String = "DOWN" if _leader_ref.current_floor > _member.current_floor \
 				else "UP"
-			return "L追従(%s/キュー空)" % dir_lbl
-		return "[%s]キュー空" % pol_str
+			return "L追従(%s/キュー空/%s)" % [dir_lbl, state_lbl]
+		return "[%s]キュー空(%s)" % [pol_str, state_lbl]
 	var head := _queue[0] as Dictionary
 	var act: String = head.get("action", "?") as String
 	match act:
@@ -187,6 +188,17 @@ func get_debug_goal_str() -> String:
 			return "ポーション"
 		_:
 			return act
+
+
+## _State enum を短いラベルに変換する（デバッグ表示用）
+func _state_label(s: int) -> String:
+	match s:
+		_State.IDLE: return "IDLE"
+		_State.MOVING: return "MOV"
+		_State.WAITING: return "WAIT"
+		_State.ATTACKING_PRE: return "ATKp"
+		_State.ATTACKING_POST: return "ATKpost"
+	return "?"
 
 
 ## PartyLeaderAI からオーダーを受け取る
