@@ -645,3 +645,15 @@
     - `POTION_SP_MP_AUTOUSE_THRESHOLD = 0.5`（SP/MPポーション自動使用）
     - `PARTY_FLEE_ALIVE_RATIO = 0.5`（goblin/wolf リーダーの FLEE 判定）
 - CLAUDE.md に「ゲーム内閾値一覧」セクションを新設し、HP系/MP/SP系/パーティー系/戦況系/ヒーラー回復モードの全閾値を表で記載
+
+### 設計変更: 近接クラス特殊攻撃の発動状況判定を追加
+- 理由: 剣士・斧戦士・斥候の特殊攻撃は囲まれた状況で効果を発揮するが、敵1体相手でも発動して無駄遣いしていた
+- 変更内容:
+  - `GlobalConstants.SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES = 2` を追加
+  - `_count_adjacent_enemies()` を4方向→8方向に拡張（斜め隣接も含む）
+  - `_can_rush_slash_through()` ヘルパを新設（前方2マス内に敵+着地マス確認）
+  - `_generate_special_attack_queue()` のクラス分岐を更新:
+    - fighter-sword: 隣接2体以上 かつ 前方に敵+着地可能マス
+    - fighter-axe: 隣接2体以上（既存ロジックを定数化）
+    - scout: 隣接2体以上（包囲脱出兼ダメージ）
+  - archer / magician-* / healer は変更なし（従来通り）

@@ -76,6 +76,9 @@ const POTION_SP_MP_AUTOUSE_THRESHOLD: float = 0.5
 const SELF_FLEE_HP_THRESHOLD: float = 0.3
 ## パーティー逃走の生存率閾値（goblin/wolf リーダー：生存メンバー率がこれ未満で FLEE 戦略に切り替え）
 const PARTY_FLEE_ALIVE_RATIO: float = 0.5
+## 特殊攻撃の状況判定で使う「隣接敵数の最小値」
+## 近接3クラス（剣士・斧戦士・斥候）と magician-fire の発動条件: 隣接8マスの敵がこの数以上
+const SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES: int = 2
 ## 劣勢判定閾値（特殊攻撃「劣勢なら使う」用の参考値。現在は HpStatus enum で代替されており未使用）
 const DISADVANTAGE_THRESHOLD: float = 0.6
 

@@ -1770,14 +1770,23 @@ func _generate_special_attack_queue(target: Character) -> Array:
 	if not has_mp and not has_sp:
 		return []  # コスト不足 → 通常攻撃にフォールバック
 	# クラスごとの特殊攻撃使用判定
+	# 近接3クラス（剣士・斧戦士・斥候）は囲まれた状況で効果を発揮するため、隣接8マスの敵数で発動判定する
+	var min_adj := GlobalConstants.SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES
 	match cd.class_id:
-		"fighter-sword", "scout":
-			# 突進斬り / スライディング: ターゲット方向に使用（通常攻撃の代わり）
-			if target != null and is_instance_valid(target):
+		"fighter-sword":
+			# 突進斬り: 隣接2体以上 かつ 前方に敵＋着地可能マスがある場合に発動
+			if target != null and is_instance_valid(target) \
+					and _count_adjacent_enemies() >= min_adj \
+					and _can_rush_slash_through():
+				return [{"action": "move_to_attack"}, {"action": "v_attack"}]
+		"scout":
+			# スライディング: 隣接2体以上のとき発動（脱出兼ダメージ）
+			if target != null and is_instance_valid(target) \
+					and _count_adjacent_enemies() >= min_adj:
 				return [{"action": "move_to_attack"}, {"action": "v_attack"}]
 		"fighter-axe":
-			# 振り回し: 隣接敵が2体以上いるとき優先使用
-			if _count_adjacent_enemies() >= 2:
+			# 振り回し: 隣接2体以上のとき発動
+			if _count_adjacent_enemies() >= min_adj:
 				return [{"action": "move_to_attack"}, {"action": "v_attack"}]
 		"archer":
 			# ヘッドショット: ターゲットに使用（通常攻撃の代わり）
@@ -1785,7 +1794,7 @@ func _generate_special_attack_queue(target: Character) -> Array:
 				return [{"action": "move_to_attack"}, {"action": "v_attack"}]
 		"magician-fire":
 			# 炎陣: 敵が密集しているとき（隣接2体以上）使用
-			if _count_adjacent_enemies() >= 2:
+			if _count_adjacent_enemies() >= min_adj:
 				return [{"action": "v_attack"}]
 		"magician-water":
 			# 無力化水魔法: ターゲットに使用（通常攻撃の代わり）
@@ -1795,12 +1804,16 @@ func _generate_special_attack_queue(target: Character) -> Array:
 	return []
 
 
-## 自分の周囲（隣接4方向）にいる敵の数を返す
+## 自分の周囲（隣接8マス・斜め含む）にいる敵の数を返す
+## 特殊攻撃の発動状況判定（振り回し・スライディング・突進斬り・炎陣）で使用
 func _count_adjacent_enemies() -> int:
 	if _member == null or not is_instance_valid(_member):
 		return 0
 	var count := 0
-	var dirs: Array[Vector2i] = [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1)]
+	var dirs: Array[Vector2i] = [
+		Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+		Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
+	]
 	for d: Vector2i in dirs:
 		var pos := _member.grid_pos + d
 		for other: Character in _all_members:
@@ -1814,6 +1827,60 @@ func _count_adjacent_enemies() -> int:
 				count += 1
 				break
 	return count
+
+
+## 突進斬り発動可否を判定する
+## 前方最大2マスの経路上に敵がいて、その先（または通過先）に着地可能な空きマスがあるか
+## 着地可能 = MapData.is_walkable_for で歩行可かつ誰も占有していない
+func _can_rush_slash_through() -> bool:
+	if _member == null or not is_instance_valid(_member):
+		return false
+	var dir := Character.dir_to_vec(_member.facing)
+	if dir == Vector2i.ZERO:
+		return false
+	var pos1 := _member.grid_pos + dir
+	var pos2 := _member.grid_pos + dir * 2
+	var has_enemy_on_path := _enemy_on_tile(pos1) or _enemy_on_tile(pos2)
+	if not has_enemy_on_path:
+		return false
+	# 着地候補: pos2 が空きなら pos2、ダメなら pos1（敵を貫通して停止する場合）
+	if _is_empty_floor(pos2):
+		return true
+	if _is_empty_floor(pos1):
+		return true
+	return false
+
+
+## 指定タイルに敵キャラが占有しているか
+func _enemy_on_tile(pos: Vector2i) -> bool:
+	for other: Character in _all_members:
+		if not is_instance_valid(other) or other == _member:
+			continue
+		if other.is_friendly == _member.is_friendly:
+			continue
+		if other.hp <= 0:
+			continue
+		if other.current_floor != _member.current_floor:
+			continue
+		if pos in other.get_occupied_tiles():
+			return true
+	return false
+
+
+## 指定タイルが歩行可能でかつ誰も占有していないか（突進斬りの着地判定）
+func _is_empty_floor(pos: Vector2i) -> bool:
+	if _map_data == null or not _map_data.is_walkable_for(pos, false):
+		return false
+	for other: Character in _all_members:
+		if not is_instance_valid(other) or other == _member:
+			continue
+		if other.hp <= 0:
+			continue
+		if other.current_floor != _member.current_floor:
+			continue
+		if pos in other.get_occupied_tiles():
+			return false
+	return true
 
 
 ## 回復対象を返す。heal（current_order.heal）に従って選定する。
