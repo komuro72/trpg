@@ -244,6 +244,8 @@ func get_global_orders_hint() -> Dictionary:
 	hint["combat_situation"] = sit
 	hint["power_balance"] = _combat_situation.get("power_balance", 0)
 	hint["hp_status"] = _combat_situation.get("hp_status", 0)
+	hint["my_rank_sum"] = _combat_situation.get("my_rank_sum", 0)
+	hint["enemy_rank_sum"] = _combat_situation.get("enemy_rank_sum", 0)
 	return hint
 
 

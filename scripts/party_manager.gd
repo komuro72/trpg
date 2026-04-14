@@ -425,6 +425,12 @@ func _start_ai() -> void:
 		_leader_ai.set_global_orders(_global_orders)
 	if _party_ref != null:
 		_leader_ai.set_party_ref(_party_ref)
+	# _enemy_list は set_enemy_list() で先にキャッシュされている可能性があるため、ここで転送する
+	if not _enemy_list.is_empty():
+		if _leader_ai is NpcLeaderAI:
+			(_leader_ai as NpcLeaderAI).set_enemy_list(_enemy_list)
+		elif _leader_ai is PartyLeaderPlayer:
+			(_leader_ai as PartyLeaderPlayer).set_enemy_list(_enemy_list)
 	add_child(_leader_ai)
 	_leader_ai.setup(_members, _player, _map_data, _all_members)
 	# setup 後に渡す（UnitAI が生成済みである必要があるため）
