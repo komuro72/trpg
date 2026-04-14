@@ -282,10 +282,12 @@ func _process(delta: float) -> void:
 							_member.grid_pos, fi, str(_dbg_safe), _item_pickup, item_pos,
 							str(has_fi), fi_count])
 					if item_pos != Vector2i(-1, -1) and item_pos != _member.grid_pos:
-						_queue = [{"action": "move_to_explore", "goal": item_pos}]
-						_state = _State.IDLE
-						_complete_action()
-						return
+						# 既に同じアイテムに向かっている場合はキューを差し替えない
+						if _goal != item_pos:
+							_queue = [{"action": "move_to_explore", "goal": item_pos}]
+							_state = _State.IDLE
+							_complete_action()
+							return
 				elif _member.is_friendly and not _dbg_safe:
 					var sit_val: int = _combat_situation.get("situation", -1) as int
 					print("[DBG_ITEM_STEP] %s@%s safe=false sit=%d cs_keys=%s SKIP" % [
