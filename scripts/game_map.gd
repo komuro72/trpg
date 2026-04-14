@@ -1412,6 +1412,8 @@ func _transition_member_floor(ch: Character, direction: int) -> void:
 		nm.set_map_data(new_map)
 	# blocking_characters を再構築
 	_rebuild_blocking_characters()
+	# 全マネージャーの _all_members を再構築（フロア遷移で占有リストが変わるため）
+	_link_all_character_lists()
 	# キャラクター表示を更新
 	_update_character_visibility()
 	var dir_str := "下" if direction > 0 else "上"
@@ -1638,9 +1640,11 @@ func _transition_single_npc_member(nm: PartyManager, member: Character, directio
 			if dialogue_trigger != null and is_instance_valid(hero):
 				dialogue_trigger.setup(hero, npc_managers, enemy_managers, vision_system, map_data)
 		_rebuild_blocking_characters()
+		_link_all_character_lists()
 	else:
 		# まだ旧フロアにいるメンバーがいる：旧フロアの blocking を再構築
 		_rebuild_blocking_characters()
+		_link_all_character_lists()
 	_update_character_visibility()
 	queue_redraw()
 
