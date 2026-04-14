@@ -675,7 +675,8 @@ func _setup_panels() -> void:
 			return all_nms,
 		func() -> int: return _current_floor_index,
 		func() -> MapData: return _all_map_data[_current_floor_index] if _current_floor_index < _all_map_data.size() else null,
-		hero
+		hero,
+		_hero_manager
 	)
 	debug_window.leader_selected.connect(_on_debug_leader_selected)
 

@@ -22,6 +22,7 @@ var _get_npc_managers:    Callable           ## () -> Array
 var _get_floor:           Callable           ## () -> int
 var _get_map_data:        Callable           ## () -> MapData
 var _hero:                Character = null
+var _hero_manager:        PartyManager = null  ## プレイヤーパーティーの戦況表示用
 
 var _control:       Control
 var _redraw_timer:  float = 0.0
@@ -53,13 +54,15 @@ func _ready() -> void:
 
 ## game_map から呼ぶ。Callable を渡すことで常に最新のフロアデータを参照できる
 func setup(p_party: Party, get_enemy_managers: Callable, get_npc_managers: Callable,
-		get_floor: Callable, get_map_data: Callable, p_hero: Character) -> void:
+		get_floor: Callable, get_map_data: Callable, p_hero: Character,
+		p_hero_manager: PartyManager = null) -> void:
 	_party              = p_party
 	_get_enemy_managers = get_enemy_managers
 	_get_npc_managers   = get_npc_managers
 	_get_floor          = get_floor
 	_get_map_data       = get_map_data
 	_hero               = p_hero
+	_hero_manager       = p_hero_manager
 
 
 func _input(event: InputEvent) -> void:
@@ -442,10 +445,19 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 	var tgt_str:    String = _label("target",        go.get("target",        "-") as String)
 	var hp_str:     String = _label("on_low_hp",     go.get("on_low_hp",     "-") as String)
 	var item_str:   String = _label("item_pickup",   go.get("item_pickup",   "-") as String)
+	# 戦況表示（_hero_manager から取得）
+	var sit_str := "?"
+	var pb_str := "?"
+	var hs_str := "?"
+	if _hero_manager != null and is_instance_valid(_hero_manager):
+		var hint: Dictionary = _hero_manager.get_global_orders_hint()
+		sit_str = _combat_situation_label(hint.get("combat_situation", 0) as int)
+		pb_str = _power_balance_label(hint.get("power_balance", 0) as int)
+		hs_str = _hp_status_label(hint.get("hp_status", 0) as int)
 
-	var header := "[プレイヤー] %s(%s)  生存:%d/%d  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
+	var header := "[プレイヤー] %s(%s)  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
 		leader_name, first_class, alive, floor_members.size(),
-		mv_str, battle_str, tgt_str, hp_str, item_str]
+		sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str, item_str]
 	if y + LINE_H > bottom:
 		return y
 
