@@ -459,6 +459,9 @@ func _start_action(action: Dictionary) -> void:
 			_state = _State.WAITING
 			_timer = 0.3  # 使用後の短い硬直
 
+		"v_attack":
+			_execute_v_attack()
+
 		"wait":
 			_state = _State.WAITING
 			_timer = WAIT_DURATION / GlobalConstants.game_speed
@@ -887,6 +890,226 @@ func _spawn_dive_effect() -> void:
 	var effect := DiveEffect.new()
 	effect.position = _member.position
 	map_node.add_child(effect)
+
+
+## Vスロット特殊攻撃を実行する（クラスごとに分岐）
+func _execute_v_attack() -> void:
+	if _member == null or not is_instance_valid(_member) or _member.character_data == null:
+		_complete_action()
+		return
+	var cd := _member.character_data
+	# MP/SP コスト確認
+	var mp_cost := cd.v_slot_mp_cost
+	var sp_cost := cd.v_slot_sp_cost
+	if mp_cost > 0 and _member.mp < mp_cost:
+		_complete_action()  # コスト不足 → スキップ
+		return
+	if sp_cost > 0 and _member.sp < sp_cost:
+		_complete_action()
+		return
+
+	match cd.class_id:
+		"fighter-sword":
+			_v_rush_slash(sp_cost)
+		"fighter-axe":
+			_v_whirlwind(sp_cost)
+		"archer":
+			_v_headshot(sp_cost)
+		"magician-fire":
+			_v_flame_circle(mp_cost)
+		"magician-water":
+			_v_water_stun(mp_cost)
+		"scout":
+			_v_sliding(sp_cost)
+		_:
+			_complete_action()
+
+
+## 剣士: 突進斬り（ターゲット方向に最大2マス前進・経路上の敵にダメージ）
+func _v_rush_slash(cost: int) -> void:
+	_member.use_sp(cost)
+	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
+	var raw_damage := int(float(_member.power) * 1.2 * type_mult)
+	if _target != null and is_instance_valid(_target):
+		_member.face_toward(_target.grid_pos)
+	var dir := Character.dir_to_vec(_member.facing)
+	var hit_count := 0
+	var landing_pos := _member.grid_pos
+	for step: int in range(1, 4):
+		var check_pos := _member.grid_pos + Vector2i(dir) * step
+		if _map_data == null or not _map_data.is_walkable_for(check_pos, false):
+			break
+		var enemy_here := _find_enemy_at(check_pos)
+		if enemy_here != null:
+			if step <= 2:
+				enemy_here.take_damage(raw_damage, 1.0, _member, false)
+				SoundManager.play_attack_from(_member)
+				hit_count += 1
+			continue
+		landing_pos = check_pos
+		break
+	if landing_pos != _member.grid_pos:
+		_member.grid_pos = landing_pos
+		_member.sync_position()
+	_member.is_attacking = true
+	_state = _State.WAITING
+	_timer = 0.3
+	if hit_count > 0:
+		MessageLog.add_combat("[突進斬り] %s が %d 体を攻撃！" % [_v_name(), hit_count])
+
+
+## 斧戦士: 振り回し（周囲8マスの敵全員にダメージ）
+func _v_whirlwind(cost: int) -> void:
+	_member.use_sp(cost)
+	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
+	var raw_damage := int(float(_member.power) * 1.0 * type_mult)
+	var hit_count := 0
+	for dy: int in range(-1, 2):
+		for dx: int in range(-1, 2):
+			if dx == 0 and dy == 0:
+				continue
+			var pos := _member.grid_pos + Vector2i(dx, dy)
+			var enemy := _find_enemy_at(pos)
+			if enemy != null:
+				enemy.take_damage(raw_damage, 1.0, _member, false)
+				hit_count += 1
+	if hit_count > 0:
+		SoundManager.play_attack_from(_member)
+		MessageLog.add_combat("[振り回し] %s が %d 体を攻撃！" % [_v_name(), hit_count])
+	_state = _State.WAITING
+	_timer = 0.5
+
+
+## 弓使い: ヘッドショット（即死耐性なし→即死、あり→×3ダメージ）
+func _v_headshot(cost: int) -> void:
+	_member.use_sp(cost)
+	if _target == null or not is_instance_valid(_target):
+		_complete_action()
+		return
+	_member.face_toward(_target.grid_pos)
+	SoundManager.play(SoundManager.ARROW_SHOOT)
+	var is_immune := false
+	if _target.character_data != null:
+		is_immune = bool(_target.character_data.instant_death_immune)
+	if is_immune:
+		var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
+		var raw_damage := int(float(_member.power) * 3.0 * type_mult)
+		_target.take_damage(raw_damage, 1.0, _member, false)
+		MessageLog.add_combat("[ヘッドショット] %s → %s に大ダメージ！" % [_v_name(), _v_tgt_name()])
+	else:
+		_target.take_damage(_target.hp, 1.0, _member, false)
+		MessageLog.add_combat("[ヘッドショット] %s → %s を仕留めた！" % [_v_name(), _v_tgt_name()])
+	_state = _State.WAITING
+	_timer = 0.5
+
+
+## 魔法使い(火): 炎陣（自分を中心に半径3マスの炎ゾーン設置）
+func _v_flame_circle(cost: int) -> void:
+	_member.use_mp(cost)
+	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("magic", 1.0)
+	var damage := maxi(1, int(float(_member.power) * 0.8 * type_mult))
+	var map_node := _member.get_parent()
+	if map_node == null:
+		_complete_action()
+		return
+	var flame := FlameCircle.new()
+	flame.z_index = 1
+	map_node.add_child(flame)
+	flame.setup(_member.position, _member.grid_pos, 3, damage,
+			2.5, 0.5, _member, _all_members)
+	SoundManager.play(SoundManager.FLAME_SHOOT)
+	MessageLog.add_combat("[炎陣] %s が炎を設置！" % _v_name())
+	_state = _State.WAITING
+	_timer = 0.5
+
+
+## 魔法使い(水): 無力化水魔法（ターゲットをスタン）
+func _v_water_stun(cost: int) -> void:
+	_member.use_mp(cost)
+	if _target == null or not is_instance_valid(_target):
+		_complete_action()
+		return
+	_member.face_toward(_target.grid_pos)
+	# 飛翔体で水弾を飛ばしてスタン適用
+	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("magic", 1.0)
+	var raw_damage := int(float(_member.power) * 0.5 * type_mult)
+	var map_node := _member.get_parent()
+	if map_node != null:
+		var proj := Projectile.new()
+		proj.z_index = 2
+		map_node.add_child(proj)
+		proj.setup(_member.position, _target.position,
+				true, _target, raw_damage, 1.0, _member, true,
+				0.0, true, "")
+	_target.apply_stun(2.5, _member)
+	_target.take_damage(raw_damage, 1.0, _member, true, true)
+	_state = _State.WAITING
+	_timer = 0.5
+
+
+## 斥候: スライディング（3マスダッシュ・敵すり抜け）
+func _v_sliding(cost: int) -> void:
+	_member.use_sp(cost)
+	if _target != null and is_instance_valid(_target):
+		_member.face_toward(_target.grid_pos)
+	var dir := Character.dir_to_vec(_member.facing)
+	var landing_pos := _member.grid_pos
+	for step: int in range(1, 4):
+		var check_pos := _member.grid_pos + Vector2i(dir) * step
+		if _map_data == null or not _map_data.is_walkable_for(check_pos, _member.is_flying):
+			break
+		var occupant := _find_enemy_at(check_pos)
+		if occupant != null:
+			continue  # すり抜け
+		# 味方もすり抜け
+		var ally := _find_ally_at(check_pos)
+		if ally != null:
+			continue
+		landing_pos = check_pos
+	if landing_pos != _member.grid_pos:
+		_member.grid_pos = landing_pos
+		_member.sync_position()
+	SoundManager.play(SoundManager.MELEE_DAGGER)
+	MessageLog.add_combat("[スライディング] %s が突進！" % _v_name())
+	_state = _State.WAITING
+	_timer = 0.3
+
+
+## 指定位置にいる敵キャラを返す（なければ null）
+func _find_enemy_at(pos: Vector2i) -> Character:
+	for other: Character in _all_members:
+		if not is_instance_valid(other) or other == _member:
+			continue
+		if other.is_friendly == _member.is_friendly:
+			continue
+		if other.hp <= 0:
+			continue
+		if pos in other.get_occupied_tiles():
+			return other
+	return null
+
+
+## 指定位置にいる味方キャラを返す（なければ null）
+func _find_ally_at(pos: Vector2i) -> Character:
+	for other: Character in _all_members:
+		if not is_instance_valid(other) or other == _member:
+			continue
+		if other.is_friendly != _member.is_friendly:
+			continue
+		if pos in other.get_occupied_tiles():
+			return other
+	return null
+
+
+## Vスロット用: 自分の名前を返す
+func _v_name() -> String:
+	return _member.character_data.character_name if _member.character_data != null else String(_member.name)
+
+## Vスロット用: ターゲットの名前を返す
+func _v_tgt_name() -> String:
+	if _target == null or not is_instance_valid(_target):
+		return "?"
+	return _target.character_data.character_name if _target.character_data != null else String(_target.name)
 
 
 # --------------------------------------------------------------------------

@@ -242,6 +242,8 @@ func get_global_orders_hint() -> Dictionary:
 	# 戦況判断を追加
 	var sit: int = _combat_situation.get("situation", int(GlobalConstants.CombatSituation.SAFE)) as int
 	hint["combat_situation"] = sit
+	hint["power_balance"] = _combat_situation.get("power_balance", 0)
+	hint["hp_status"] = _combat_situation.get("hp_status", 0)
 	return hint
 
 

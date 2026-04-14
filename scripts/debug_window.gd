@@ -368,17 +368,19 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 	var tgt_str:    String = _label("target",        hint.get("target",        "-") as String)
 	var hp_str:     String = _label("on_low_hp",     hint.get("on_low_hp",     "-") as String)
 	var sit_str:    String = _combat_situation_label(hint.get("combat_situation", 0) as int)
+	var pb_str:     String = _power_balance_label(hint.get("power_balance", 0) as int)
+	var hs_str:     String = _hp_status_label(hint.get("hp_status", 0) as int)
 
 	var header: String
 	if show_orders:
 		var item_str: String = _label("item_pickup", hint.get("item_pickup", "-") as String)
-		header = "[%s] %s(%s)  生存:%d/%d  戦況:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
+		header = "[%s] %s(%s)  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
 			type_label, leader_name, first_class, alive, floor_members.size(),
-			sit_str, mv_str, battle_str, tgt_str, hp_str, item_str]
+			sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str, item_str]
 	else:
-		header = "[%s] %s(%s)  生存:%d/%d  戦況:%s  mv=%s  battle=%s  tgt=%s  hp=%s" % [
+		header = "[%s] %s(%s)  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s" % [
 			type_label, leader_name, first_class, alive, floor_members.size(),
-			sit_str, mv_str, battle_str, tgt_str, hp_str]
+			sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str]
 
 	# ヘッダーが描画可能か確認
 	if y + LINE_H > bottom:
@@ -608,6 +610,25 @@ func _combat_situation_label(sit: int) -> String:
 		int(GlobalConstants.CombatSituation.EVEN):          return "互角"
 		int(GlobalConstants.CombatSituation.DISADVANTAGE):  return "劣勢"
 		int(GlobalConstants.CombatSituation.CRITICAL):      return "危険"
+	return "?"
+
+
+func _power_balance_label(pb: int) -> String:
+	match pb:
+		int(GlobalConstants.PowerBalance.OVERWHELMING):  return "圧倒"
+		int(GlobalConstants.PowerBalance.SUPERIOR):      return "優位"
+		int(GlobalConstants.PowerBalance.EVEN):          return "互角"
+		int(GlobalConstants.PowerBalance.INFERIOR):      return "劣位"
+		int(GlobalConstants.PowerBalance.DESPERATE):     return "絶望"
+	return "?"
+
+
+func _hp_status_label(hs: int) -> String:
+	match hs:
+		int(GlobalConstants.HpStatus.FULL):     return "満"
+		int(GlobalConstants.HpStatus.STABLE):   return "安"
+		int(GlobalConstants.HpStatus.LOW):      return "低"
+		int(GlobalConstants.HpStatus.CRITICAL): return "危"
 	return "?"
 
 
