@@ -275,7 +275,7 @@ PartyManager（パーティー管理。全パーティー種別で共通）
 ### PartyLeader（意思決定層の基底クラス）
 - パーティー全体の戦略を決定し、各メンバーの UnitAI に指示を伝達する
 - `_evaluate_party_strength()`: パーティーの戦力値を算出する共通メソッド（ランク和 × HP充足率。HPポーション回復量を加味）
-- `_evaluate_combat_situation()`: 戦況判断の共通ルーチン。全サブクラスで共有する。結果は `_assign_orders()` → `receive_order()` でメンバーに伝達する
+- `_evaluate_combat_situation()`: 戦況判断の共通ルーチン（リーダーのエリア＋隣接エリアを対象）。全サブクラスで共有する。結果は `_assign_orders()` → `receive_order()` でメンバーに伝達する
 - `_evaluate_party_strategy()`: 仮想メソッド。戦略決定（ATTACK / WAIT / FLEE 等）。サブクラスがオーバーライドする
 - `_select_target_for()`: 仮想メソッド。ターゲット選択。サブクラスがオーバーライドする
 - `_assign_orders()`: 戦略に応じてメンバーの UnitAI に `receive_order()` で指示を伝達する（共通ロジック）
@@ -358,7 +358,7 @@ game_map
 | 種族固有AI | `goblin_leader_ai.gd` 等 | ✅ 実装済み。extends EnemyLeaderAI |
 | NpcLeaderAI | `npc_leader_ai.gd` | ✅ 実装済み。extends PartyLeaderAI |
 | PartyLeaderPlayer | `party_leader_player.gd` | ✅ 実装済み。hero_manager に接続済み（party_type="player" で PartyLeaderPlayer を生成） |
-| `_evaluate_combat_situation()` | `party_leader.gd` | ✅ 実装済み。同エリア敵との戦力比較で CombatSituation を返す |
+| `_evaluate_combat_situation()` | `party_leader.gd` | ✅ 実装済み。リーダーのエリア＋隣接エリアの敵との戦力比較で CombatSituation を返す |
 
 ## ゲームデザイン方針
 - レベルアップなし。装備と仲間の強化が成長の主軸
@@ -696,7 +696,10 @@ rank値: C=0, B=1, A=2, S=3
 - 将来：視界内の敵は大まかな状態のみ（healthy／wounded／critical）
 
 ### 戦況判断（CombatSituation）
-- `_evaluate_combat_situation()` が同エリアの敵との戦力比から判定する
+- `_evaluate_combat_situation()` が「リーダーのエリア＋隣接エリア」にいる敵との戦力比から判定する
+- 通路にもエリアID（`c{フロア番号}_{連番}`。例：`c1_1`）が付与されており、`部屋 ←→ 通路 ←→ 部屋` が隣接として扱われる
+- これにより部屋の境界付近で戦っても戦況がぶれない
+- 自軍側も同じ「対象エリア」に絞ってランク和・戦力・HP充足率を算出する
 - 戦力比 = 自軍戦力 / 敵戦力（`_evaluate_party_strength_for()` で算出）
 
 | 戦況 | 戦力比 | NPC行動への影響 | アイテム拾い |

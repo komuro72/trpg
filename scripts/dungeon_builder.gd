@@ -55,12 +55,14 @@ static func build_floor(floor_data: Dictionary) -> MapData:
 		var from_id := c.get("from", "") as String
 		var to_id   := c.get("to",   "") as String
 		if room_map.has(from_id) and room_map.has(to_id):
-			# 通路名をエリア名テーブルに登録（タイル展開前に設定）
-			var corr_area_id := "corridor_%s_%s" % [from_id, to_id]
+			# 通路エリアID（JSONの id フィールドを優先。未指定時は従来形式でフォールバック）
+			var corr_area_id := c.get("id", "") as String
+			if corr_area_id.is_empty():
+				corr_area_id = "corridor_%s_%s" % [from_id, to_id]
 			var corr_name := c.get("name", "") as String
 			if not corr_name.is_empty():
 				data.set_area_name(corr_area_id, corr_name)
-			_carve_corridor(data, room_map[from_id] as Dictionary, room_map[to_id] as Dictionary, offset)
+			_carve_corridor(data, room_map[from_id] as Dictionary, room_map[to_id] as Dictionary, corr_area_id, offset)
 
 	# Step3: 通路掘削後に wall_tiles / obstacle_tiles を適用
 	# （通路が先に開通しているため CORRIDOR タイルは上書きしない。部屋形状の壁と障害物のみ設定）
@@ -134,14 +136,13 @@ static func _apply_room_overlays(data: MapData, room: Dictionary, offset: Vector
 
 
 ## 2部屋間をL字通路で接続する
-static func _carve_corridor(data: MapData, from_room: Dictionary, to_room: Dictionary, offset: Vector2i) -> void:
+static func _carve_corridor(data: MapData, from_room: Dictionary, to_room: Dictionary, area_id: String, offset: Vector2i) -> void:
 	var fx: int = int(from_room.get("x", 0)) + int(from_room.get("width",  10)) / 2 + offset.x
 	var fy: int = int(from_room.get("y", 0)) + int(from_room.get("height", 10)) / 2 + offset.y
 	var tx: int = int(to_room.get("x",   0)) + int(to_room.get("width",   10)) / 2 + offset.x
 	var ty: int = int(to_room.get("y",   0)) + int(to_room.get("height",  10)) / 2 + offset.y
 
 	var hw := CORRIDOR_HALF_WIDTH
-	var area_id := "corridor_%s_%s" % [from_room.get("id", ""), to_room.get("id", "")]
 
 	# 横方向（fx → tx）をまず伸ばす
 	var min_x := mini(fx, tx)

@@ -330,6 +330,8 @@ func _setup_hero() -> void:
 	_hero_manager.set_vision_controlled(true)  # VisionSystem には登録しない
 	_hero_manager.suppress_ai_log = true  # プレイヤー操作中はログ不要
 	_hero_manager.activate()
+	# Party 参照を渡す（戦況判断で合流済みNPCを含む全メンバーを評価するため）
+	_hero_manager.set_party_ref(party)
 	# Party.global_orders への参照を渡す（hp_potion / sp_mp_potion 設定を AI に反映）
 	_hero_manager.set_global_orders(party.global_orders)
 	# フロアアイテム辞書への参照を渡す（UnitAI がアイテムへ向かうナビゲーションに使用）

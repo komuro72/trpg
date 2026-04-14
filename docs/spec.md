@@ -3776,9 +3776,11 @@ func _evaluate_party_strength_for(members: Array, use_estimated_hp: bool = false
 
 ### `_evaluate_combat_situation()` 実装
 
-PartyLeader の共通メソッド。自パーティーと同じエリアにいる敵の戦力を比較して戦況を分類する。
+PartyLeader の共通メソッド。自パーティーのリーダーのエリア＋隣接エリアにいる敵の戦力を比較して戦況を分類する。
 
-**対象の敵**: `_get_opposing_characters()` 仮想メソッドで取得し、`_map_data.get_area()` でエリアフィルタ。
+**対象エリアの決定**: リーダー（生存メンバー先頭）のエリア `my_area` と、`MapData.get_adjacent_areas(my_area)` で取得した隣接エリアを `target_areas` 辞書に収集する。通路にもエリアID（`c{フロア番号}_{連番}`。例：`c1_1`）が付与されているため、`部屋 ←→ 通路 ←→ 部屋` が隣接として扱われる。これにより部屋の境界付近で戦っても戦況がぶれない。
+
+**対象の敵**: `_get_opposing_characters()` 仮想メソッドで取得し、同フロアかつ `target_areas` に属するエリアにいる敵のみフィルタ。
 - EnemyLeaderAI（デフォルト）: `_friendly_list`（プレイヤー・NPC）
 - NpcLeaderAI: `_enemy_list`（敵キャラ）
 - PartyLeaderPlayer: `_enemy_list`（敵キャラ）
@@ -3799,7 +3801,16 @@ ratio = 自軍戦力 / 敵戦力
 
 `GlobalConstants.CombatSituation` enum で定義。
 
-**戻り値**: `{ "situation": int, "ratio": float, "my_strength": float, "enemy_strength": float }`
+**自軍側のフィルタ**: `_get_my_combat_members()` で取得したメンバーも `target_areas` に属するエリアに絞ってランク和・戦力・HP充足率を算出する（別フロア・離れた部屋の仲間は戦闘に参加できないため）。
+
+**戻り値**: `{ "situation": int, "power_balance": int, "hp_status": int, "my_rank_sum": int, "enemy_rank_sum": int }`
+
+### 通路のエリアID
+
+- ダンジョンJSON（`dungeon_handcrafted.json`）の各 `corridors` エントリに `id` フィールド（例：`c1_1`）を付与する
+- 命名規則：`c{フロア番号}_{連番}`。連番は各フロアで1から開始
+- `DungeonBuilder._carve_corridor()` は JSON の `id` を優先して corridor タイルに設定する（未指定時は従来形式 `corridor_{from}_{to}` にフォールバック）
+- 隣接関係は `MapData.build_adjacency()` がタイル隣接から自動構築するため、明示的な隣接定義は不要
 
 ### 呼び出しタイミング
 

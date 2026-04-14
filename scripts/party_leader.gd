@@ -396,6 +396,8 @@ func get_global_orders_hint() -> Dictionary:
 	hint["combat_situation"] = sit
 	hint["power_balance"] = _combat_situation.get("power_balance", 0)
 	hint["hp_status"] = _combat_situation.get("hp_status", 0)
+	hint["my_rank_sum"] = _combat_situation.get("my_rank_sum", 0)
+	hint["enemy_rank_sum"] = _combat_situation.get("enemy_rank_sum", 0)
 	return hint
 
 
@@ -643,7 +645,10 @@ func _calc_total_potion_hp(member: Character) -> int:
 ## 自パーティーの戦力と、同じエリアにいる敵の戦力を比較して戦況を分類する
 ## 結果は _assign_orders() → receive_order() の combat_situation フィールドに含めてメンバーに伝達する
 func _evaluate_combat_situation() -> Dictionary:
-	# 自パーティーのフロアとエリアを取得
+	# 自軍メンバー（プレイヤーの場合は合流済みNPCを含む全員。サブクラスで拡張可）
+	var my_members := _get_my_combat_members()
+
+	# 自パーティーのリーダー（先頭の生存者）のフロアとエリアを取得
 	var my_floor := -1
 	var my_area := ""
 	for m: Character in _party_members:
@@ -653,7 +658,16 @@ func _evaluate_combat_situation() -> Dictionary:
 				my_area = _map_data.get_area(m.grid_pos)
 			break
 
-	# 同じエリアにいる敵を収集
+	# 戦況評価対象エリア: リーダーのエリア＋その隣接エリア（部屋境界付近で戦況がぶれないように拡張）
+	# 通路にもエリアIDが付与されているため、部屋←→通路←→部屋 が隣接として扱われる
+	var target_areas: Dictionary = {}
+	if not my_area.is_empty():
+		target_areas[my_area] = true
+		if _map_data != null:
+			for adj: String in _map_data.get_adjacent_areas(my_area):
+				target_areas[adj] = true
+
+	# 対象エリアにいる敵を収集
 	var area_enemies: Array[Character] = []
 	# 敵 AI → _friendly_list が攻撃対象（プレイヤー・NPC）。自分が敵の場合、_friendly_list が「敵」
 	# 味方 AI → _enemy_list は PartyLeaderPlayer / NpcLeaderAI が保持。PartyLeader には直接ない
@@ -666,12 +680,24 @@ func _evaluate_combat_situation() -> Dictionary:
 			continue
 		if _map_data != null:
 			var opp_area := _map_data.get_area(opp.grid_pos)
-			if my_area.is_empty() or opp_area != my_area:
+			if my_area.is_empty() or not target_areas.has(opp_area):
 				continue
 		area_enemies.append(opp)
 
+	# 自軍も対象エリアに絞る（別フロア・離れた部屋の仲間は戦闘に参加できない）
+	var my_area_members: Array[Character] = []
+	for m: Character in my_members:
+		if not is_instance_valid(m) or m.hp <= 0:
+			continue
+		if my_floor >= 0 and m.current_floor != my_floor:
+			continue
+		if _map_data != null and not my_area.is_empty():
+			if not target_areas.has(_map_data.get_area(m.grid_pos)):
+				continue
+		my_area_members.append(m)
+
 	# --- 自軍の HP 充足率（ポーション込み）を算出 ---
-	var hp_status := _calc_hp_status()
+	var hp_status := _calc_hp_status_for(my_area_members)
 
 	# 敵がいなければ安全
 	if area_enemies.is_empty():
@@ -679,10 +705,12 @@ func _evaluate_combat_situation() -> Dictionary:
 			"situation": int(GlobalConstants.CombatSituation.SAFE),
 			"power_balance": int(GlobalConstants.PowerBalance.OVERWHELMING),
 			"hp_status": hp_status,
+			"my_rank_sum": _calc_rank_sum(my_area_members),
+			"enemy_rank_sum": 0,
 		}
 
 	# 戦力比較（ランク和 × HP充足率）
-	var my_strength := _evaluate_party_strength()
+	var my_strength := _evaluate_party_strength_for(my_area_members, false)
 	var enemy_strength := _evaluate_party_strength_for(area_enemies, true)
 
 	var ratio := 0.0
@@ -704,7 +732,7 @@ func _evaluate_combat_situation() -> Dictionary:
 			situation = int(GlobalConstants.CombatSituation.CRITICAL)
 
 	# --- 戦力比（ランク和のみ、HP を含めない）を算出 ---
-	var my_rank_sum := _calc_rank_sum(_party_members)
+	var my_rank_sum := _calc_rank_sum(my_area_members)
 	var enemy_rank_sum := _calc_rank_sum(area_enemies)
 	var power_balance: int
 	if enemy_rank_sum <= 0:
@@ -726,7 +754,15 @@ func _evaluate_combat_situation() -> Dictionary:
 		"situation": situation,
 		"power_balance": power_balance,
 		"hp_status": hp_status,
+		"my_rank_sum": my_rank_sum,
+		"enemy_rank_sum": enemy_rank_sum,
 	}
+
+
+## 自軍として扱うメンバー一覧を返す（戦況判断用）
+## デフォルトは `_party_members`。PartyLeaderPlayer では合流済み NPC も含めた Party.sorted_members() を返す
+func _get_my_combat_members() -> Array[Character]:
+	return _party_members
 
 
 ## 生存メンバーのランク和を返す（HP を含めない純粋な戦力比較用）
@@ -743,11 +779,17 @@ func _calc_rank_sum(members: Array) -> int:
 
 ## 自軍パーティーの HP 充足率の段階を返す
 func _calc_hp_status() -> int:
+	return _calc_hp_status_for(_party_members)
+
+
+## 指定メンバーリストの HP 充足率の段階を返す
+func _calc_hp_status_for(members: Array) -> int:
 	var total_hp := 0
 	var total_max := 0
 	var total_potion := 0
-	for m: Character in _party_members:
-		if not is_instance_valid(m) or m.hp <= 0:
+	for mv: Variant in members:
+		var m := mv as Character
+		if m == null or not is_instance_valid(m) or m.hp <= 0:
 			continue
 		total_hp += m.hp
 		total_max += m.max_hp

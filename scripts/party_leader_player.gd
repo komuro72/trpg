@@ -12,6 +12,7 @@ extends PartyLeader
 
 
 var _enemy_list: Array[Character] = []  ## 攻撃対象の敵リスト（game_map から設定）
+var _party_ref: Party = null            ## プレイヤーパーティー参照（合流済みNPCを含む）
 
 
 ## 攻撃対象とする敵リストを設定する（game_map から呼ばれる）
@@ -19,9 +20,27 @@ func set_enemy_list(enemies: Array[Character]) -> void:
 	_enemy_list = enemies
 
 
+## プレイヤーパーティー参照を設定する（game_map から呼ばれる）
+## 合流済み NPC を含む全メンバーの戦力評価に使用する
+func set_party_ref(party: Party) -> void:
+	_party_ref = party
+
+
 ## 対立するキャラクターのリスト（敵リスト）を返す
 func _get_opposing_characters() -> Array[Character]:
 	return _enemy_list
+
+
+## 自軍として扱うメンバー一覧を返す（合流済み NPC を含む）
+func _get_my_combat_members() -> Array[Character]:
+	if _party_ref == null:
+		return _party_members
+	var result: Array[Character] = []
+	for mv: Variant in _party_ref.sorted_members():
+		var m := mv as Character
+		if m != null and is_instance_valid(m):
+			result.append(m)
+	return result
 
 
 ## パーティー全体の戦略を評価する

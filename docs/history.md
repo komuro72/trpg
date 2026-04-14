@@ -617,3 +617,13 @@
 - StunEffect → WhirlpoolEffect にリネーム（画像: whirlpool.png）
 - 炎陣エフェクトを画像ベースに変更（flame.png、スケール脈動＋アルファ揺らぎ）
 - 左パネルのMP/SPバーに特殊攻撃不可時の紫色変化を追加
+
+### 設計変更: 戦況判断を「リーダーのエリア＋隣接エリア」方式に変更
+- 理由: 部屋単位のみで敵・味方を収集すると、部屋境界付近で戦況がフレーム単位でぶれる
+- 変更内容:
+  - ダンジョンJSONの各 corridor に `id` フィールド（`c{フロア番号}_{連番}`）を追加
+  - `DungeonBuilder._carve_corridor()` が corridor の JSON `id` をタイルの area_id に設定（未指定時は従来形式 `corridor_{from}_{to}` にフォールバック）
+  - `PartyLeader._evaluate_combat_situation()` が `MapData.get_adjacent_areas()` を使ってリーダーのエリア＋隣接エリアを対象にキャラクターを収集
+  - 自軍側も同じ対象エリアに絞ってランク和・戦力・HP充足率を算出
+- 通路は従来どおり敵・階段配置なし。area_id を持つのみ
+- 視界システム（VisionSystem）は変更なし。敵アクティブ化は部屋単位のまま
