@@ -949,6 +949,7 @@ rank値: C=0, B=1, A=2, S=3
   - [x] 戦況判断ルーチン（`_evaluate_combat_situation()`）の実装（PartyLeader の共通メソッド。同エリア敵との戦力比較で CombatSituation を返す）
   - [x] NpcLeaderAI の撤退ロジック追加（CombatSituation.CRITICAL 時に FLEE に切り替え。SAFE 復帰で EXPLORE に戻る）
   - [ ] special_skill 指示のAI接続（strong_enemy / disadvantage 等の条件判定。現在はUI定義のみでAI未接続。DISADVANTAGE_THRESHOLD は GlobalConstants に定義済みだが未使用）
+- NpcLeaderAI のアイテム収集方針の動的切り替え：目標フロアに到達している場合（余裕がある状態）、item_pickup を "passive"（近くなら拾う）から "aggressive"（積極的に拾う）に切り替える。装備強化のために能動的にアイテムを回収する行動
 
 ## 参照ファイル
 - docs/spec.md：詳細仕様書（実装前に参照すること）
