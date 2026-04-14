@@ -205,6 +205,13 @@ func receive_order(order: Dictionary) -> void:
 	if new_queue.is_empty():
 		return
 	_queue = new_queue
+	# --- デバッグ: キュー生成ログ ---
+	if _member != null and _member.is_friendly and _member.character_data != null:
+		var actions: PackedStringArray = []
+		for q: Variant in new_queue:
+			actions.append((q as Dictionary).get("action", "?"))
+		print("[DBG_Q] %s: queue=[%s] eff=%d v_avail=%s" % [
+			_member.character_data.character_name, ",".join(actions), new_effective, str(v_available)])
 
 	if _state != _State.ATTACKING_PRE and _state != _State.ATTACKING_POST:
 		_current_action = {}
