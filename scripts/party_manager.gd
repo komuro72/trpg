@@ -411,8 +411,8 @@ func _start_ai() -> void:
 	_leader_ai.joined_to_player = joined_to_player  # 合流フラグを伝播
 	if not _friendly_list.is_empty():
 		_leader_ai.set_friendly_list(_friendly_list)
-	if not _floor_items.is_empty():
-		_leader_ai.set_floor_items(_floor_items)
+	# _floor_items は参照型のため、空でも渡す（後からアイテムが追加されたとき反映されるようにする）
+	_leader_ai.set_floor_items(_floor_items)
 	if not _global_orders.is_empty():
 		_leader_ai.set_global_orders(_global_orders)
 	add_child(_leader_ai)
