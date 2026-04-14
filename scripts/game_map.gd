@@ -515,6 +515,17 @@ func _link_all_character_lists() -> void:
 		if not nm_names.is_empty():
 			print("[DBG_PFN] F%d: %s" % [fi, ",".join(nm_names)])
 
+	# --- デバッグ: all_combatants の構成を出力 ---
+	var comb_friendly := 0
+	var comb_enemy := 0
+	for ch: Character in all_combatants:
+		if is_instance_valid(ch):
+			if ch.is_friendly:
+				comb_friendly += 1
+			else:
+				comb_enemy += 1
+	print("[DBG_COMB] all_combatants=%d (friendly=%d enemy=%d) party=%d" % [
+		all_combatants.size(), comb_friendly, comb_enemy, party.members.size()])
 	# --- デバッグ: _all_members の構成を出力 ---
 	var party_names: PackedStringArray = []
 	for mv: Variant in party.members:
