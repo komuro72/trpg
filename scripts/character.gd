@@ -708,14 +708,22 @@ func use_consumable(item: Dictionary) -> void:
 	var restore_hp_val: int = int(effect.get("restore_hp", 0))
 	var restore_mp: int = int(effect.get("restore_mp", 0))
 	var restore_sp: int = int(effect.get("restore_sp", 0))
+	var char_name := character_data.character_name if character_data != null else str(name)
+	var item_name: String = item.get("item_name", "ポーション") as String
 	if restore_hp_val > 0:
 		heal(restore_hp_val)  # heal() 内で効果音を再生
+		MessageLog.add_battle(character_data, null,
+			"%sが%sを使った（HP+%d）" % [char_name, item_name, restore_hp_val], self)
 	if restore_mp > 0:
 		mp = mini(mp + restore_mp, max_mp)
 		SoundManager.play_from(SoundManager.HEAL, self)
+		MessageLog.add_battle(character_data, null,
+			"%sが%sを使った（MP+%d）" % [char_name, item_name, restore_mp], self)
 	if restore_sp > 0:
 		sp = mini(sp + restore_sp, max_sp)
 		SoundManager.play_from(SoundManager.HEAL, self)
+		MessageLog.add_battle(character_data, null,
+			"%sが%sを使った（SP+%d）" % [char_name, item_name, restore_sp], self)
 	# インベントリからアイテムを削除
 	if character_data != null:
 		character_data.inventory.erase(item)
