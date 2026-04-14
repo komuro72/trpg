@@ -668,18 +668,6 @@ func _evaluate_combat_situation() -> Dictionary:
 		area_enemies.append(opp)
 
 	# 敵がいなければ安全
-	if not area_enemies.is_empty():
-		var names: PackedStringArray = []
-		for ae: Character in area_enemies:
-			var n := ae.character_data.character_name if ae.character_data != null else String(ae.name)
-			names.append("%s(hp=%d,area=%s)" % [n, ae.hp, _map_data.get_area(ae.grid_pos) if _map_data != null else "?"])
-		var leader_name := ""
-		if not _party_members.is_empty():
-			for pm: Character in _party_members:
-				if is_instance_valid(pm) and pm.character_data != null:
-					leader_name = pm.character_data.character_name
-					break
-		print("[DBG_COMBAT_SIT] %s: my_area=%s area_enemies=%d [%s]" % [leader_name, my_area, area_enemies.size(), ",".join(names)])
 	if area_enemies.is_empty():
 		return {
 			"situation": int(GlobalConstants.CombatSituation.SAFE),

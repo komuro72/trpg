@@ -560,3 +560,14 @@
   - `_transition_npc_floor` / `_transition_member_floor` / `_merge_npc_into_player_party` / `_merge_player_into_npc_party` に `_link_all_character_lists()` 呼び出しを追加
   - `party.members` を `all_combatants` に含めるよう変更
   - A* の1歩目が `_is_passable` で false の場合に `_next_step_direct` にフォールバックして迂回
+
+### バグ修正: item_pickup=passive でもアイテムを拾いに行かない（NPC パーティー）
+- 原因1: `_start_ai()` で `set_floor_items()` が `setup()` より前に呼ばれていたため、`_unit_ais` が空で UnitAI にフロアアイテム辞書が届かなかった
+- 原因2: `set_floor_items()` に空チェック（`is_empty()`）があり、セットアップ時に空の辞書を渡さなかった。Dictionary は参照型なので空でも渡しておけば後からアイテム追加時に反映される
+- 原因3: 1マス移動完了ごとのアイテムチェックがなく、移動中にアイテムを見逃していた
+- 原因4: アイテムチェックでキューを差し替えるたびに移動がリセットされ、同じアイテムに向かっている場合に無限ループしていた
+- 修正:
+  - `_start_ai()` で `set_floor_items()` を `setup()` の後に移動
+  - `set_floor_items()` の空チェックを削除（常に渡す）
+  - 1マス移動完了ごとにアイテムチェックを実行（SAFE 時のみ）
+  - 既に同じアイテムに向かっている場合はキュー差し替えをスキップ

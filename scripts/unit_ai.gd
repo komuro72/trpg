@@ -268,19 +268,8 @@ func _process(delta: float) -> void:
 			_timer -= delta
 			if _timer <= 0.0:
 				# 1マス移動完了ごとにアイテムチェック（SAFE 時のみ）
-				var _dbg_safe := _is_combat_safe()
-				if _dbg_safe and _item_pickup != "avoid":
+				if _is_combat_safe() and _item_pickup != "avoid":
 					var item_pos := _find_item_pickup_target()
-					if _member.is_friendly:
-						var fi := _member.current_floor
-						var has_fi := _all_floor_items.has(fi)
-						var fi_count := 0
-						if has_fi:
-							fi_count = (_all_floor_items[fi] as Dictionary).size()
-						print("[DBG_ITEM_STEP] %s@%s F%d safe=%s pickup=%s item=%s floor_items=%s(%d)" % [
-							_member.character_data.character_name if _member.character_data != null else _member.name,
-							_member.grid_pos, fi, str(_dbg_safe), _item_pickup, item_pos,
-							str(has_fi), fi_count])
 					if item_pos != Vector2i(-1, -1) and item_pos != _member.grid_pos:
 						# 既に同じアイテムに向かっている場合はキューを差し替えない
 						if _goal != item_pos:
@@ -288,11 +277,6 @@ func _process(delta: float) -> void:
 							_state = _State.IDLE
 							_complete_action()
 							return
-				elif _member.is_friendly and not _dbg_safe:
-					var sit_val: int = _combat_situation.get("situation", -1) as int
-					print("[DBG_ITEM_STEP] %s@%s safe=false sit=%d cs_keys=%s SKIP" % [
-						_member.character_data.character_name if _member.character_data != null else _member.name,
-						_member.grid_pos, sit_val, str(_combat_situation.keys())])
 				var still_moving := _step_toward_goal()
 				if still_moving:
 					_timer = _get_move_interval()
@@ -752,29 +736,17 @@ func _is_combat_safe() -> bool:
 
 func set_floor_items(items: Dictionary) -> void:
 	_all_floor_items = items
-	if _member != null and is_instance_valid(_member) and _member.is_friendly:
-		print("[DBG_SFI] %s: set_floor_items size=%d keys=%s" % [
-			_member.character_data.character_name if _member.character_data != null else _member.name,
-			items.size(), str(items.keys())])
 
 
 ## item_pickup 指示に従って取得すべきフィールドアイテムのタイル座標を返す
 ## アイテムがない・avoid の場合は Vector2i(-1,-1) を返す
 func _find_item_pickup_target() -> Vector2i:
 	if _item_pickup == "avoid" or _all_floor_items.is_empty():
-		if _member != null and _member.is_friendly:
-			print("[DBG_FIPT] %s: early_exit pickup=%s floor_items_empty=%s" % [
-				_member.character_data.character_name if _member.character_data != null else _member.name,
-				_item_pickup, str(_all_floor_items.is_empty())])
 		return Vector2i(-1, -1)
 	if _map_data == null or _member == null or not is_instance_valid(_member):
 		return Vector2i(-1, -1)
 	var floor_idx := _member.current_floor
 	if not _all_floor_items.has(floor_idx):
-		if _member.is_friendly:
-			print("[DBG_FIPT] %s: no_floor_key F%d keys=%s" % [
-				_member.character_data.character_name if _member.character_data != null else _member.name,
-				floor_idx, str(_all_floor_items.keys())])
 		return Vector2i(-1, -1)
 	var floor_dict := _all_floor_items[floor_idx] as Dictionary
 	if floor_dict.is_empty():

@@ -1188,8 +1188,6 @@ func _on_enemy_party_wiped(items: Array, room_id: String, floor_idx: int) -> voi
 		floor_dict[candidates[placed]] = item_v as Dictionary
 		placed += 1
 	if placed > 0:
-		print("[DBG_DROP] F%d items=%d total_keys=%s" % [
-			floor_idx, placed, str(_floor_items.keys())])
 		queue_redraw()
 		print("[GameMap] アイテム %d 個をフロア%d 部屋 %s に散布" % [placed, floor_idx, room_id])
 		# 操作キャラがいる部屋のイベントのみ音とメッセージを出す
