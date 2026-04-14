@@ -253,10 +253,42 @@ func _setup_hero() -> void:
 			spawn_pos  = Vector2i(int(m.get("x", 2)), int(m.get("y", 2)))
 			class_id   = m.get("class_id", m.get("character_id", "fighter-sword")) as String
 			hero_items = m.get("items",    []) as Array
-	# デバッグ: クラスをランダムに変更
+	# デバッグ: クラスをランダムに変更（初期装備もクラスに合わせて設定）
 	var all_classes: Array[String] = ["fighter-sword", "fighter-axe", "archer", "magician-fire", "magician-water", "healer", "scout"]
 	class_id = all_classes[randi() % all_classes.size()]
-	hero_items = []  # ランダムクラスに合わない初期装備をクリア
+	var _dbg_items: Dictionary = {
+		"fighter-sword": [
+			{"item_type": "sword", "category": "weapon", "item_name": "古びた片手剣", "stats": {"power": 0, "block_right_front": 0}, "equipped": true},
+			{"item_type": "armor_plate", "category": "armor", "item_name": "古い革鎧", "stats": {"physical_resistance": 0, "magic_resistance": 0}, "equipped": true},
+			{"item_type": "shield", "category": "shield", "item_name": "木の盾", "stats": {"block_left_front": 0}, "equipped": true},
+		],
+		"fighter-axe": [
+			{"item_type": "axe", "category": "weapon", "item_name": "古びた斧", "stats": {"power": 0, "block_right_front": 0}, "equipped": true},
+			{"item_type": "armor_plate", "category": "armor", "item_name": "古い革鎧", "stats": {"physical_resistance": 0, "magic_resistance": 0}, "equipped": true},
+			{"item_type": "shield", "category": "shield", "item_name": "木の盾", "stats": {"block_left_front": 0}, "equipped": true},
+		],
+		"archer": [
+			{"item_type": "bow", "category": "weapon", "item_name": "古びた弓", "stats": {"power": 0, "block_front": 0}, "equipped": true},
+			{"item_type": "armor_cloth", "category": "armor", "item_name": "古い布服", "stats": {"physical_resistance": 0, "magic_resistance": 0}, "equipped": true},
+		],
+		"scout": [
+			{"item_type": "dagger", "category": "weapon", "item_name": "古びた短剣", "stats": {"power": 0, "block_right_front": 0}, "equipped": true},
+			{"item_type": "armor_cloth", "category": "armor", "item_name": "古い布服", "stats": {"physical_resistance": 0, "magic_resistance": 0}, "equipped": true},
+		],
+		"magician-fire": [
+			{"item_type": "staff", "category": "weapon", "item_name": "古びた杖", "stats": {"power": 0, "block_front": 0}, "equipped": true},
+			{"item_type": "armor_robe", "category": "armor", "item_name": "古いローブ", "stats": {"physical_resistance": 0, "magic_resistance": 0}, "equipped": true},
+		],
+		"magician-water": [
+			{"item_type": "staff", "category": "weapon", "item_name": "古びた杖", "stats": {"power": 0, "block_front": 0}, "equipped": true},
+			{"item_type": "armor_robe", "category": "armor", "item_name": "古いローブ", "stats": {"physical_resistance": 0, "magic_resistance": 0}, "equipped": true},
+		],
+		"healer": [
+			{"item_type": "staff", "category": "weapon", "item_name": "古びた杖", "stats": {"power": 0, "block_front": 0}, "equipped": true},
+			{"item_type": "armor_robe", "category": "armor", "item_name": "古いローブ", "stats": {"physical_resistance": 0, "magic_resistance": 0}, "equipped": true},
+		],
+	}
+	hero_items = _dbg_items.get(class_id, []) as Array
 
 	hero = Character.new()
 	hero.grid_pos = spawn_pos
