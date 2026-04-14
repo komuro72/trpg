@@ -454,11 +454,18 @@ func _link_all_character_lists() -> void:
 		var ch := member_var as Character
 		if ch != null:
 			all_combatants.append(ch)
-	for em: PartyManager in enemy_managers:
-		all_combatants.append_array(em.get_enemies())
-		all_enemies.append_array(em.get_enemies())
-	for nm: PartyManager in npc_managers:
-		all_combatants.append_array(nm.get_members())
+	# 全フロアの敵・NPC を対象にする（フロア遷移後も旧フロアのキャラを認識するため）
+	for floor_ems: Variant in _per_floor_enemies:
+		for em_v: Variant in (floor_ems as Array):
+			var em := em_v as PartyManager
+			if is_instance_valid(em):
+				all_combatants.append_array(em.get_enemies())
+				all_enemies.append_array(em.get_enemies())
+	for floor_nms: Variant in _per_floor_npcs:
+		for nm_v: Variant in (floor_nms as Array):
+			var nm := nm_v as PartyManager
+			if is_instance_valid(nm):
+				all_combatants.append_array(nm.get_members())
 	# 敵 AI に渡す友好キャラ一覧（プレイヤーパーティー＋未加入 NPC）
 	var all_friendlies: Array[Character] = []
 	for member_var: Variant in party.members:
@@ -467,14 +474,23 @@ func _link_all_character_lists() -> void:
 		var ch := member_var as Character
 		if ch != null:
 			all_friendlies.append(ch)
-	for nm: PartyManager in npc_managers:
-		if is_instance_valid(nm):
-			all_friendlies.append_array(nm.get_members())
-	for em: PartyManager in enemy_managers:
-		em.set_all_members(all_combatants)
-		em.set_friendly_list(all_friendlies)
-	for nm: PartyManager in npc_managers:
-		nm.set_all_members(all_combatants)
+	for floor_nms: Variant in _per_floor_npcs:
+		for nm_v: Variant in (floor_nms as Array):
+			var nm := nm_v as PartyManager
+			if is_instance_valid(nm):
+				all_friendlies.append_array(nm.get_members())
+	# 全フロアの敵・NPC に配布する
+	for floor_ems: Variant in _per_floor_enemies:
+		for em_v: Variant in (floor_ems as Array):
+			var em := em_v as PartyManager
+			if is_instance_valid(em):
+				em.set_all_members(all_combatants)
+				em.set_friendly_list(all_friendlies)
+	for floor_nms: Variant in _per_floor_npcs:
+		for nm_v: Variant in (floor_nms as Array):
+			var nm := nm_v as PartyManager
+			if is_instance_valid(nm):
+				nm.set_all_members(all_combatants)
 	# 合流済み NPC パーティー（npc_managers から除外されている）にも配布する
 	var joined_nms: Dictionary = {}  # PartyManager -> true（重複排除用）
 	for nm_v: Variant in _member_to_npc_manager.values():
