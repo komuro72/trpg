@@ -181,9 +181,14 @@ func receive_order(order: Dictionary) -> void:
 				if _member != null and is_instance_valid(_member):
 					_member.is_attacking = false
 			return
+	# 特殊攻撃が使える状態になった場合もキューを再生成する（攻撃中は除く）
+	var v_available := not is_mid_move \
+			and _state != _State.ATTACKING_PRE and _state != _State.ATTACKING_POST \
+			and _should_use_special_skill() and _has_v_slot_cost()
 	if not on_stair and not policy_changed \
 			and new_effective == _strategy and ordered_target == _target \
-			and (_queue.size() >= QUEUE_MIN_LEN or is_mid_move):
+			and (_queue.size() >= QUEUE_MIN_LEN or is_mid_move) \
+			and not v_available:
 		return
 
 	_strategy = new_effective
@@ -1688,6 +1693,18 @@ func _generate_buff_queue() -> Array:
 		return []
 	return [{"action": "move_to_buff", "target": buff_target},
 			{"action": "buff", "target": buff_target}]
+
+
+## Vスロット特殊攻撃の MP/SP コストが足りているか返す
+func _has_v_slot_cost() -> bool:
+	if _member == null or _member.character_data == null:
+		return false
+	var cd := _member.character_data
+	if cd.v_slot_mp_cost > 0 and _member.mp >= cd.v_slot_mp_cost:
+		return true
+	if cd.v_slot_sp_cost > 0 and _member.sp >= cd.v_slot_sp_cost:
+		return true
+	return false
 
 
 ## special_skill 指示に基づいて特殊攻撃を使うべきかを返す
