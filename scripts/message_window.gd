@@ -322,11 +322,14 @@ func _on_scroll_draw() -> void:
 	var groups := _build_display_groups(visible)
 
 	# ── 下から積み上げて収まるグループ範囲を決定
+	# スクロールアニメーション中に上端が見切れないよう1行分のマージンを確保する
+	# （新メッセージが下から流入する間、最上段の旧メッセージは上方向にずれずに残る）
+	var fit_avail_h := avail_h - line_h
 	var total_h := 0.0
 	var start_g := groups.size()
 	for i: int in range(groups.size() - 1, -1, -1):
 		var gh := _group_height(groups[i], battle_text_w, sys_text_w, fs, line_h, icon_sz)
-		if total_h + gh > avail_h:
+		if total_h + gh > fit_avail_h:
 			break
 		total_h += gh
 		start_g = i
