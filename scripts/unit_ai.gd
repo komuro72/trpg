@@ -596,8 +596,15 @@ func _step_toward_goal() -> bool:
 
 	var next := _get_next_step(_goal)
 	if next != _member.grid_pos:
-		# 階段を目指しているとき、次のタイルに友好キャラがいれば押し出しを試みる
-		if _move_policy == "stairs_down" or _move_policy == "stairs_up":
+		# 階段を目指しているとき（明示的な stairs 方針 or クロスフロア追従）に
+		# 次のタイルに友好キャラがいれば押し出しを試みる
+		var is_stair_seek := _move_policy in ["stairs_down", "stairs_up"]
+		if not is_stair_seek and _move_policy in ["cluster", "follow", "same_room"] \
+				and _leader_ref != null and is_instance_valid(_leader_ref) \
+				and _leader_ref != _member \
+				and _leader_ref.current_floor != _member.current_floor:
+			is_stair_seek = true
+		if is_stair_seek:
 			var push_dir := next - _member.grid_pos
 			_try_push_friendly_at(next, push_dir)
 		_member.move_to(next, _get_move_interval())
@@ -670,6 +677,15 @@ func _generate_queue(strategy: int, target: Character) -> Array:
 		if off_stair != _member.grid_pos:
 			return [{"action": "move_to_explore", "goal": off_stair}]
 
+	# リーダー追従系のメンバーは、リーダーが別フロアにいるなら戦略に関わらず階段で追う
+	# （FLEE戦略時の wait や、敵戦闘中の attack より優先する）
+	if _move_policy in ["cluster", "follow", "same_room"] \
+			and _leader_ref != null and is_instance_valid(_leader_ref) \
+			and _leader_ref != _member \
+			and _leader_ref.current_floor != _member.current_floor:
+		var follow_dir: int = sign(_leader_ref.current_floor - _member.current_floor)
+		return _generate_stair_queue(follow_dir, true)
+
 	# HPポーション自動使用（瀕死かつ在庫あり・heal/buff より前に処理）
 	var potion_q := _generate_potion_queue()
 	if not potion_q.is_empty():
@@ -737,17 +753,8 @@ func _generate_queue(strategy: int, target: Character) -> Array:
 
 
 ## 移動方針（_move_policy）に従ってキューを生成する（WAIT/ATTACK(ターゲットなし)共通）
+## 注意: cluster/follow/same_room のクロスフロア追従は _generate_queue 冒頭で先に処理する
 func _generate_move_queue() -> Array:
-	# リーダー追従系の移動方針（cluster/follow/same_room）は、リーダーが別フロアにいるなら
-	# 階段で追いかける。standby/explore/guard_room はフロア間追従の対象外
-	if _move_policy in ["cluster", "follow", "same_room"] \
-			and _leader_ref != null and is_instance_valid(_leader_ref) \
-			and _leader_ref != _member and _member != null and is_instance_valid(_member) \
-			and _leader_ref.current_floor != _member.current_floor:
-		var dir: int = sign(_leader_ref.current_floor - _member.current_floor)
-		# ignore_visited=true: リーダーが既に使った階段なので未踏でも追従する
-		return _generate_stair_queue(dir, true)
-
 	match _move_policy:
 		"explore":
 			return _generate_explore_queue()
