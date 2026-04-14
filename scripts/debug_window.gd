@@ -335,29 +335,45 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 	if members.is_empty():
 		return y
 
-	# 現在フロアのメンバーのみ対象
+	# パーティーブロック表示の条件: いずれかのメンバーが表示フロアにいる場合
+	# ただし表示するメンバー一覧は全フロアにまたがって含める（リーダーだけ別フロアでも全員見えるように）
+	var any_on_floor := false
+	for m_v: Variant in members:
+		var mc := m_v as Character
+		if is_instance_valid(mc) and mc.current_floor == floor_idx:
+			any_on_floor = true
+			break
+	if not any_on_floor:
+		return y
+
+	# 表示対象は全生存メンバー（フロアに関わらず）
 	var floor_members: Array[Character] = []
 	for m_v: Variant in members:
 		var m := m_v as Character
-		if is_instance_valid(m) and m.current_floor == floor_idx:
+		if is_instance_valid(m):
 			floor_members.append(m)
 	if floor_members.is_empty():
 		return y
 
-	# 生存数カウント（フロア内のみ）
+	# 生存数カウント（パーティー全体）
 	var alive: int = 0
 	for m: Character in floor_members:
 		if m.hp > 0:
 			alive += 1
 
-	# リーダー名・クラス
+	# リーダー名・クラス（is_leader を優先、なければ先頭）
 	var leader_name: String = ""
 	var first_class: String = ""
-	if not floor_members.is_empty():
-		var first: Character = floor_members[0]
-		if is_instance_valid(first) and first.character_data != null:
-			leader_name = first.character_data.character_name
-			first_class = GlobalConstants.CLASS_NAME_JP.get(first.character_data.class_id, "")
+	var leader_member: Character = null
+	for m: Character in floor_members:
+		if is_instance_valid(m) and m.is_leader:
+			leader_member = m
+			break
+	if leader_member == null and not floor_members.is_empty():
+		leader_member = floor_members[0]
+	if leader_member != null and leader_member.character_data != null:
+		leader_name = leader_member.character_data.character_name
+		first_class = GlobalConstants.CLASS_NAME_JP.get(leader_member.character_data.class_id, "")
 
 	# 全体指示ヒント
 	var hint: Dictionary = pm.get_global_orders_hint()
@@ -391,7 +407,7 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 		return y
 
 	# 選択中リーダーの「▶」マーカー
-	var leader_char: Character = floor_members[0] if not floor_members.is_empty() else null
+	var leader_char: Character = leader_member
 	var is_selected: bool = (leader_char != null and _selected_leader != null
 		and is_instance_valid(_selected_leader) and _selected_leader == leader_char)
 	if is_selected:
@@ -403,12 +419,12 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 
 	# メンバー全員を1行に横並び表示
 	if y < bottom:
-		_draw_members_row(font, floor_members, x + INDENT, y, w - INDENT * 2)
+		_draw_members_row(font, floor_members, x + INDENT, y, w - INDENT * 2, floor_idx)
 		y += LINE_H
 
 	# 目的（goal）行：各メンバーの現在の行動目的を表示
 	if y < bottom:
-		_draw_members_goals_row(font, pm, floor_members, x + INDENT, y, w - INDENT * 2)
+		_draw_members_goals_row(font, pm, floor_members, x + INDENT, y, w - INDENT * 2, floor_idx)
 		y += LINE_H
 
 	return y
@@ -419,15 +435,18 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 	if y >= bottom or _party == null:
 		return y
 
-	# 現在フロアのメンバーのみ対象
+	# 全メンバー（フロア問わず）を表示。表示条件はいずれか1人が表示フロアにいることのみ
 	var sorted: Array = _party.sorted_members()
+	var any_on_floor := false
 	var floor_members: Array = []
 	for m_v: Variant in sorted:
 		var m := m_v as Character
-		if is_instance_valid(m) and m.current_floor == floor_idx:
-			floor_members.append(m)
-
-	if floor_members.is_empty():
+		if not is_instance_valid(m):
+			continue
+		floor_members.append(m)
+		if m.current_floor == floor_idx:
+			any_on_floor = true
+	if not any_on_floor or floor_members.is_empty():
 		return y
 
 	var alive: int = 0
@@ -436,13 +455,20 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 		if m.hp > 0:
 			alive += 1
 
-	# リーダー名・クラス
+	# リーダー名・クラス（is_leader 優先・なければ先頭）
 	var leader_name: String = ""
 	var first_class: String = ""
-	var first_m := floor_members[0] as Character
-	if is_instance_valid(first_m) and first_m.character_data != null:
-		leader_name = first_m.character_data.character_name
-		first_class = GlobalConstants.CLASS_NAME_JP.get(first_m.character_data.class_id, "")
+	var leader_member: Character = null
+	for m_v: Variant in floor_members:
+		var m := m_v as Character
+		if is_instance_valid(m) and m.is_leader:
+			leader_member = m
+			break
+	if leader_member == null and not floor_members.is_empty():
+		leader_member = floor_members[0] as Character
+	if leader_member != null and leader_member.character_data != null:
+		leader_name = leader_member.character_data.character_name
+		first_class = GlobalConstants.CLASS_NAME_JP.get(leader_member.character_data.class_id, "")
 
 	# 全体指示（party.global_orders を直接参照）
 	var go: Dictionary = _party.global_orders
@@ -468,7 +494,7 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 	if y + LINE_H > bottom:
 		return y
 
-	var player_leader: Character = floor_members[0] as Character if not floor_members.is_empty() else null
+	var player_leader: Character = leader_member
 	var is_selected: bool = (player_leader != null and _selected_leader != null
 		and is_instance_valid(_selected_leader) and _selected_leader == player_leader)
 	if is_selected:
@@ -478,22 +504,24 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 		HORIZONTAL_ALIGNMENT_LEFT, w - INDENT, FS, Color(0.45, 0.75, 1.0))
 	y += LINE_H
 
-	# メンバー全員を1行に横並び表示
+	# メンバー全員を1行に横並び表示（別フロアメンバーには [Fx] を付加）
 	if y < bottom:
-		_draw_members_row(font, floor_members, x + INDENT, y, w - INDENT * 2)
+		_draw_members_row(font, floor_members, x + INDENT, y, w - INDENT * 2, floor_idx)
 		y += LINE_H
 
 	# プレイヤーパーティーは PartyManager（_hero_manager）経由で goal を取得
 	if y < bottom and _hero_manager != null and is_instance_valid(_hero_manager):
-		_draw_members_goals_row(font, _hero_manager, floor_members, x + INDENT, y, w - INDENT * 2)
+		_draw_members_goals_row(font, _hero_manager, floor_members,
+				x + INDENT, y, w - INDENT * 2, floor_idx)
 		y += LINE_H
 
 	return y
 
 
 ## 各メンバーの行動目的を1行に横並びで描画する（PartyManager.get_member_goal_str を利用）
+## display_floor: 表示中のフロア。これと異なるフロアにいるメンバーには "[Fx]" を付加する
 func _draw_members_goals_row(font: Font, pm: PartyManager, members: Array,
-		x: float, y: float, w: float) -> void:
+		x: float, y: float, w: float, display_floor: int = -1) -> void:
 	if pm == null or members.is_empty():
 		return
 	const SEP := " / "
@@ -508,7 +536,10 @@ func _draw_members_goals_row(font: Font, pm: PartyManager, members: Array,
 		if goal.is_empty():
 			continue
 		var name_s: String = m.character_data.character_name
-		var part := "%s:%s" % [name_s, goal]
+		var floor_s: String = ""
+		if display_floor >= 0 and m.current_floor != display_floor:
+			floor_s = "[F%d]" % m.current_floor
+		var part := "%s%s:%s" % [floor_s, name_s, goal]
 		var part_w: float = font.get_string_size(part, HORIZONTAL_ALIGNMENT_LEFT, -1, FS).x
 		if cx + part_w > x + w:
 			_control.draw_string(font, Vector2(cx, y + FS), "...",
@@ -525,7 +556,9 @@ func _draw_members_goals_row(font: Font, pm: PartyManager, members: Array,
 
 ## メンバー全員を1行に横並びで描画する
 ## 各メンバー：★名前[ランク] HP:x/y [ス][ガ]  （幅を超えたら打ち切り）
-func _draw_members_row(font: Font, members: Array, x: float, y: float, w: float) -> void:
+## display_floor: 表示中のフロア。これと異なるフロアにいるメンバーには "[Fx]" を付加する
+func _draw_members_row(font: Font, members: Array, x: float, y: float, w: float,
+		display_floor: int = -1) -> void:
 	var cx: float = x
 	const SEP: String = "  "
 	var sep_w: float = font.get_string_size(SEP, HORIZONTAL_ALIGNMENT_LEFT, -1, FS).x
@@ -552,7 +585,10 @@ func _draw_members_row(font: Font, members: Array, x: float, y: float, w: float)
 		if m.is_guarding: status += "ガ"
 		if not status.is_empty(): status = "[%s]" % status
 
-		var part := "%s%s[%s] HP:%d/%d%s" % [star_s, name_s, rank_s, m.hp, m.max_hp, status]
+		var floor_s: String = ""
+		if display_floor >= 0 and m.current_floor != display_floor:
+			floor_s = "[F%d]" % m.current_floor
+		var part := "%s%s%s[%s] HP:%d/%d%s" % [floor_s, star_s, name_s, rank_s, m.hp, m.max_hp, status]
 		var part_w: float = font.get_string_size(part, HORIZONTAL_ALIGNMENT_LEFT, -1, FS).x
 
 		if cx + part_w > x + w:
