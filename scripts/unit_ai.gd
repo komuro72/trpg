@@ -281,9 +281,10 @@ func _process(delta: float) -> void:
 						_complete_action()
 						return
 				elif _member.is_friendly and not _dbg_safe:
-					print("[DBG_ITEM_STEP] %s@%s safe=false SKIP" % [
+					var sit_val: int = _combat_situation.get("situation", -1) as int
+					print("[DBG_ITEM_STEP] %s@%s safe=false sit=%d cs_keys=%s SKIP" % [
 						_member.character_data.character_name if _member.character_data != null else _member.name,
-						_member.grid_pos])
+						_member.grid_pos, sit_val, str(_combat_situation.keys())])
 				var still_moving := _step_toward_goal()
 				if still_moving:
 					_timer = _get_move_interval()
@@ -734,32 +735,11 @@ func _generate_guard_room_queue() -> Array:
 
 ## フロアアイテム辞書の参照を設定する（game_map から一度だけ呼ばれる）
 ## Dictionary は参照型なので、以降の追加・削除が自動的に反映される
-## 自分のエリアが安全（同エリアに生存敵なし）かどうかを返す
-## リーダーの戦況判断ではなく、自分の位置で個別に判定する
+## 戦況が SAFE（同エリアに敵なし）かどうかを返す
 func _is_combat_safe() -> bool:
-	if _member == null or not is_instance_valid(_member):
-		return true
-	if _map_data == null:
-		# MapData がない場合はリーダーの戦況判断にフォールバック
-		var sit: int = _combat_situation.get("situation",
-			int(GlobalConstants.CombatSituation.SAFE)) as int
-		return sit == int(GlobalConstants.CombatSituation.SAFE)
-	var my_area := _map_data.get_area(_member.grid_pos)
-	if my_area.is_empty():
-		return true  # 通路にいる場合は安全扱い
-	for other: Character in _all_members:
-		if not is_instance_valid(other) or other == _member:
-			continue
-		if other.is_friendly == _member.is_friendly:
-			continue  # 同じ陣営はスキップ
-		if other.hp <= 0:
-			continue
-		if other.current_floor != _member.current_floor:
-			continue
-		var other_area := _map_data.get_area(other.grid_pos)
-		if other_area == my_area:
-			return false  # 同エリアに敵が生存
-	return true
+	var sit: int = _combat_situation.get("situation",
+		int(GlobalConstants.CombatSituation.SAFE)) as int
+	return sit == int(GlobalConstants.CombatSituation.SAFE)
 
 
 func set_floor_items(items: Dictionary) -> void:
