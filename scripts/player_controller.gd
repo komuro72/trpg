@@ -1088,7 +1088,8 @@ func _execute_sliding() -> void:
 	is_blocked = false
 	SoundManager.play(SoundManager.MELEE_DAGGER)
 	if is_instance_valid(character):
-		MessageLog.add_combat("[スライディング] %s が突進！" % _char_name(character))
+		MessageLog.add_battle(character.character_data, null,
+			"%sがスライディングで突進した" % _char_name(character), character)
 
 
 ## 斧戦士：振り回し（周囲8マスの敵全員にダメージ）
@@ -1110,7 +1111,7 @@ func _execute_whirlwind() -> void:
 				if not is_instance_valid(ch) or ch.is_friendly or ch.hp <= 0:
 					continue
 				if check_pos in ch.get_occupied_tiles():
-					ch.take_damage(raw_damage, 1.0, character, false)
+					ch.take_damage(raw_damage, 1.0, character, false, true)
 					hit_count += 1
 					break
 	SoundManager.play_attack(character)
@@ -1118,9 +1119,11 @@ func _execute_whirlwind() -> void:
 	if is_instance_valid(character):
 		character.is_attacking = false
 	if hit_count > 0:
-		MessageLog.add_combat("[振り回し] %s が周囲 %d 体を攻撃！" % [_char_name(character), hit_count])
+		MessageLog.add_battle(character.character_data, null,
+			"%sが振り回しで%d体を攻撃した" % [_char_name(character), hit_count], character)
 	else:
-		MessageLog.add_combat("[振り回し] %s が振り回した！（空振り）" % _char_name(character))
+		MessageLog.add_battle(character.character_data, null,
+			"%sが振り回したが空振りに終わった" % _char_name(character), character)
 
 
 ## 剣士：突進斬り（向いている方向に最大2マス前進、経路上の敵全員にダメージ、次の空きマスに着地）
@@ -1148,7 +1151,7 @@ func _execute_rush() -> void:
 		if enemy_here != null and not enemy_here.is_friendly:
 			# 攻撃範囲は最大2マス
 			if step <= 2:
-				enemy_here.take_damage(raw_damage, 1.0, character, false)
+				enemy_here.take_damage(raw_damage, 1.0, character, false, true)
 				SoundManager.play_attack(character)
 				hit_count += 1
 			continue  # 敵がいるマスは着地せず通過
@@ -1162,9 +1165,11 @@ func _execute_rush() -> void:
 		character.is_attacking = false
 	is_blocked = false
 	if hit_count > 0:
-		MessageLog.add_combat("[突進斬り] %s が %d 体を攻撃！" % [_char_name(character), hit_count])
+		MessageLog.add_battle(character.character_data, null,
+			"%sが突進斬りで%d体を攻撃した" % [_char_name(character), hit_count], character)
 	else:
-		MessageLog.add_combat("[突進斬り] %s が突進！" % _char_name(character))
+		MessageLog.add_battle(character.character_data, null,
+			"%sが突進斬りを放ったが敵に当たらなかった" % _char_name(character), character)
 
 
 ## 弓使い：ヘッドショット（即死耐性なし→即死、あり→×3ダメージ）
