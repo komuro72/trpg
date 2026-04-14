@@ -96,7 +96,7 @@ func set_all_members(all_members: Array[Character]) -> void:
 				friendly_count += 1
 				var n := m.character_data.character_name if m.character_data != null else String(m.name)
 				friendly_names.append(n)
-		MessageLog.add_ai("[DBG_AM] %s: _all_members=%d friendly=%d(%s)" % [
+		print("[DBG_AM] %s: _all_members=%d friendly=%d(%s)" % [
 			my_name, _all_members.size(), friendly_count, ",".join(friendly_names)])
 
 
@@ -258,7 +258,7 @@ func _process(delta: float) -> void:
 				tgt_name = _target.character_data.character_name
 			var is_moving := _member.is_moving() if _member.has_method("is_moving") else false
 			var pending := _member.is_pending()
-			MessageLog.add_ai("[DBG_AI] %s F%d@%s st=%d q=%d eff=%d safe=%s combat=%s mv=%s tgt=%s moving=%s pending=%s goal=%s timer=%.1f _all=%d" % [
+			print("[DBG_AI] %s F%d@%s st=%d q=%d eff=%d safe=%s combat=%s mv=%s tgt=%s moving=%s pending=%s goal=%s timer=%.1f _all=%d" % [
 				my_name, _member.current_floor, _member.grid_pos,
 				int(_state), _queue.size(), eff, str(safe), _combat, _move_policy,
 				tgt_name if not tgt_name.is_empty() else "-",
@@ -542,7 +542,7 @@ func _step_toward_goal() -> bool:
 					if blocker_name.is_empty():
 						blocker_name = "wall/tile"
 					block_info.append("%s=%s" % [adj, blocker_name])
-			MessageLog.add_ai("[DBG_STUCK] %s@%s F%d act=%s goal=%s mv=%s blocks=[%s] _all=%d" % [
+			print("[DBG_STUCK] %s@%s F%d act=%s goal=%s mv=%s blocks=[%s] _all=%d" % [
 				my_name, _member.grid_pos, _member.current_floor,
 				dbg_act, _goal, _move_policy,
 				",".join(block_info), _all_members.size()])

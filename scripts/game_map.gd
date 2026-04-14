@@ -500,7 +500,7 @@ func _link_all_character_lists() -> void:
 		var ch := mv as Character
 		if is_instance_valid(ch) and ch in all_combatants:
 			party_in_combatants += 1
-	MessageLog.add_ai("[DBG_LINK] party=%d(%s) combatants=%d party_in_comb=%d enemies=%d friendlies=%d hero_mgr=%s" % [
+	print("[DBG_LINK] party=%d(%s) combatants=%d party_in_comb=%d enemies=%d friendlies=%d hero_mgr=%s" % [
 		party_names.size(), ",".join(party_names),
 		combatant_count, party_in_combatants,
 		all_enemies.size(), all_friendlies.size(),
