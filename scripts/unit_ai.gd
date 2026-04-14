@@ -969,7 +969,9 @@ func _v_rush_slash(cost: int) -> void:
 		var enemy_here := _find_enemy_at(check_pos)
 		if enemy_here != null:
 			if step <= 2:
+				var hp_before := enemy_here.hp
 				enemy_here.take_damage(raw_damage, 1.0, _member, false, true)
+				_emit_v_skill_battle_msg("突進斬り", enemy_here, hp_before - enemy_here.hp)
 				SoundManager.play_attack_from(_member)
 				hit_count += 1
 			continue
@@ -981,9 +983,9 @@ func _v_rush_slash(cost: int) -> void:
 	_member.is_attacking = true
 	_state = _State.WAITING
 	_timer = 0.3
-	if hit_count > 0:
+	if hit_count == 0:
 		MessageLog.add_battle(_member.character_data, null,
-			"%sが突進斬りで%d体を攻撃した" % [_v_name(), hit_count], _member)
+			"%sが突進斬りを放ったが敵に当たらなかった" % _v_name(), _member)
 
 
 ## 斧戦士: 振り回し（周囲8マスの敵全員にダメージ）
@@ -999,12 +1001,12 @@ func _v_whirlwind(cost: int) -> void:
 			var pos := _member.grid_pos + Vector2i(dx, dy)
 			var enemy := _find_enemy_at(pos)
 			if enemy != null:
+				var hp_before := enemy.hp
 				enemy.take_damage(raw_damage, 1.0, _member, false, true)
+				_emit_v_skill_battle_msg("振り回し", enemy, hp_before - enemy.hp)
 				hit_count += 1
 	if hit_count > 0:
 		SoundManager.play_attack_from(_member)
-		MessageLog.add_battle(_member.character_data, null,
-			"%sが振り回しで%d体を攻撃した" % [_v_name(), hit_count], _member)
 	_state = _State.WAITING
 	_timer = 0.5
 
@@ -1146,6 +1148,19 @@ func _v_tgt_name() -> String:
 	if _target == null or not is_instance_valid(_target):
 		return "?"
 	return _target.character_data.character_name if _target.character_data != null else String(_target.name)
+
+
+## V スロット特殊攻撃の被弾メッセージを1体ずつ MessageLog に積む
+## "○○が{skill_name}で△△を攻撃し、{大}ダメージを与えた" の形式
+## attacker / defender の両方の character_data を渡してアイコン行を表示する
+func _emit_v_skill_battle_msg(skill_name: String, def: Character, dmg: int) -> void:
+	if MessageLog == null or _member == null or def == null:
+		return
+	var def_name: String = def.character_data.character_name \
+			if def.character_data != null else String(def.name)
+	var dmg_label := Character._damage_label(maxi(1, dmg))
+	var msg := "%sが%sで%sを攻撃し、%sを与えた" % [_v_name(), skill_name, def_name, dmg_label]
+	MessageLog.add_battle(_member.character_data, def.character_data, msg, _member, def)
 
 
 # --------------------------------------------------------------------------

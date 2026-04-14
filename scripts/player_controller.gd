@@ -1023,6 +1023,20 @@ func _char_name(c: Character) -> String:
 	return str(c.name)
 
 
+## V スロット特殊攻撃の被弾メッセージを1体ずつ MessageLog に積む
+## "○○が{skill_name}で△△を攻撃し、{大}ダメージを与えた" の形式
+## attacker / defender の両方の character_data を渡してアイコン行を表示する
+func _emit_v_skill_battle_msg(skill_name: String, atk: Character, def: Character, dmg: int) -> void:
+	if MessageLog == null or atk == null or def == null:
+		return
+	var atk_data: CharacterData = atk.character_data
+	var def_data: CharacterData = def.character_data
+	var dmg_label := Character._damage_label(maxi(1, dmg))
+	var msg := "%sが%sで%sを攻撃し、%sを与えた" % \
+			[_char_name(atk), skill_name, _char_name(def), dmg_label]
+	MessageLog.add_battle(atk_data, def_data, msg, atk, def)
+
+
 # --------------------------------------------------------------------------
 # V スロット特殊攻撃
 # --------------------------------------------------------------------------
@@ -1111,17 +1125,16 @@ func _execute_whirlwind() -> void:
 				if not is_instance_valid(ch) or ch.is_friendly or ch.hp <= 0:
 					continue
 				if check_pos in ch.get_occupied_tiles():
+					var hp_before := ch.hp
 					ch.take_damage(raw_damage, 1.0, character, false, true)
+					_emit_v_skill_battle_msg("振り回し", character, ch, hp_before - ch.hp)
 					hit_count += 1
 					break
 	SoundManager.play_attack(character)
 	await get_tree().create_timer(0.5 / GlobalConstants.game_speed).timeout
 	if is_instance_valid(character):
 		character.is_attacking = false
-	if hit_count > 0:
-		MessageLog.add_battle(character.character_data, null,
-			"%sが振り回しで%d体を攻撃した" % [_char_name(character), hit_count], character)
-	else:
+	if hit_count == 0:
 		MessageLog.add_battle(character.character_data, null,
 			"%sが振り回したが空振りに終わった" % _char_name(character), character)
 
@@ -1151,7 +1164,9 @@ func _execute_rush() -> void:
 		if enemy_here != null and not enemy_here.is_friendly:
 			# 攻撃範囲は最大2マス
 			if step <= 2:
+				var hp_before := enemy_here.hp
 				enemy_here.take_damage(raw_damage, 1.0, character, false, true)
+				_emit_v_skill_battle_msg("突進斬り", character, enemy_here, hp_before - enemy_here.hp)
 				SoundManager.play_attack(character)
 				hit_count += 1
 			continue  # 敵がいるマスは着地せず通過
@@ -1164,10 +1179,7 @@ func _execute_rush() -> void:
 	if is_instance_valid(character):
 		character.is_attacking = false
 	is_blocked = false
-	if hit_count > 0:
-		MessageLog.add_battle(character.character_data, null,
-			"%sが突進斬りで%d体を攻撃した" % [_char_name(character), hit_count], character)
-	else:
+	if hit_count == 0:
 		MessageLog.add_battle(character.character_data, null,
 			"%sが突進斬りを放ったが敵に当たらなかった" % _char_name(character), character)
 
