@@ -205,13 +205,6 @@ func receive_order(order: Dictionary) -> void:
 	if new_queue.is_empty():
 		return
 	_queue = new_queue
-	# --- デバッグ: キュー生成ログ ---
-	if _member != null and _member.is_friendly and _member.character_data != null:
-		var actions: PackedStringArray = []
-		for q: Variant in new_queue:
-			actions.append((q as Dictionary).get("action", "?"))
-		print("[DBG_Q] %s: queue=[%s] eff=%d v_avail=%s" % [
-			_member.character_data.character_name, ",".join(actions), new_effective, str(v_available)])
 
 	if _state != _State.ATTACKING_PRE and _state != _State.ATTACKING_POST:
 		_current_action = {}
@@ -962,7 +955,7 @@ func _v_rush_slash(cost: int) -> void:
 		var enemy_here := _find_enemy_at(check_pos)
 		if enemy_here != null:
 			if step <= 2:
-				enemy_here.take_damage(raw_damage, 1.0, _member, false)
+				enemy_here.take_damage(raw_damage, 1.0, _member, false, true)
 				SoundManager.play_attack_from(_member)
 				hit_count += 1
 			continue
@@ -992,7 +985,7 @@ func _v_whirlwind(cost: int) -> void:
 			var pos := _member.grid_pos + Vector2i(dx, dy)
 			var enemy := _find_enemy_at(pos)
 			if enemy != null:
-				enemy.take_damage(raw_damage, 1.0, _member, false)
+				enemy.take_damage(raw_damage, 1.0, _member, false, true)
 				hit_count += 1
 	if hit_count > 0:
 		SoundManager.play_attack_from(_member)
@@ -1016,11 +1009,11 @@ func _v_headshot(cost: int) -> void:
 	if is_immune:
 		var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
 		var raw_damage := int(float(_member.power) * 3.0 * type_mult)
-		_target.take_damage(raw_damage, 1.0, _member, false)
+		_target.take_damage(raw_damage, 1.0, _member, false, true)
 		MessageLog.add_battle(_member.character_data, _target.character_data,
 			"%sがヘッドショットで%sに大ダメージを与えた" % [_v_name(), _v_tgt_name()], _member, _target)
 	else:
-		_target.take_damage(_target.hp, 1.0, _member, false)
+		_target.take_damage(_target.hp, 1.0, _member, false, true)
 		MessageLog.add_battle(_member.character_data, _target.character_data,
 			"%sがヘッドショットで%sを仕留めた" % [_v_name(), _v_tgt_name()], _member, _target)
 	_state = _State.WAITING
@@ -1751,21 +1744,13 @@ func _should_use_special_skill() -> bool:
 func _generate_special_attack_queue(target: Character) -> Array:
 	if _member == null or _member.character_data == null:
 		return []
-	var should := _should_use_special_skill()
-	if not should:
-		if _member.is_friendly:
-			var pb: int = _combat_situation.get("power_balance", -1) as int
-			print("[DBG_VSKILL] %s: should=false skill=%s pb=%d" % [
-				_member.character_data.character_name, _special_skill, pb])
+	if not _should_use_special_skill():
 		return []
 	var cd := _member.character_data
 	# MP/SP コスト確認
 	var has_mp := cd.v_slot_mp_cost > 0 and _member.mp >= cd.v_slot_mp_cost
 	var has_sp := cd.v_slot_sp_cost > 0 and _member.sp >= cd.v_slot_sp_cost
 	if not has_mp and not has_sp:
-		if _member.is_friendly:
-			print("[DBG_VSKILL] %s: cost_fail mp=%d/%d sp=%d/%d" % [
-				cd.character_name, _member.mp, cd.v_slot_mp_cost, _member.sp, cd.v_slot_sp_cost])
 		return []  # コスト不足 → 通常攻撃にフォールバック
 	# クラスごとの特殊攻撃使用判定
 	match cd.class_id:
