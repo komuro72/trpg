@@ -17,7 +17,7 @@ func _init() -> void:
 func _should_self_flee() -> bool:
 	if _member != null and is_instance_valid(_member):
 		var hp_ratio := float(_member.hp) / float(maxi(_member.max_hp, 1))
-		if hp_ratio < 0.3:
+		if hp_ratio < GlobalConstants.SELF_FLEE_HP_THRESHOLD:
 			return true
 	return false
 

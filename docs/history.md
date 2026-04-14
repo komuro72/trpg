@@ -633,3 +633,15 @@
 - 変更内容: `PartyLeader._evaluate_combat_situation()` が `_all_members` から同陣営の他パーティー（同 `is_friendly`）のエリア内生存メンバーを収集し、ランク和・戦力値に加算するよう変更
 - HpStatus は従来どおり自パーティーのみで計算（他パーティーのポーション所持を把握できないため）
 - 敵パーティー同士でも同じルールが適用され、敵の密集エリアでは強気になる
+
+### 設計変更: ヒーラー回復閾値の追加と各種閾値の定数化
+- 理由: `lowest_hp_first` モードが閾値1.0（満タン以外全員）で動作しており、微量ダメージでもMP浪費していた
+- 変更内容:
+  - `GlobalConstants.HEALER_HEAL_THRESHOLD = 0.5` を追加。`lowest_hp_first` / `leader_first`（リーダー判定）の閾値に使用
+  - `lowest_hp_first` を「HP率 < 0.5 のうち最もHP率が低い1人」に変更
+  - `leader_first` のリーダー判定閾値を `NEAR_DEATH_THRESHOLD (0.25)` から `HEALER_HEAL_THRESHOLD (0.5)` に変更
+  - ハードコードされていた閾値を定数化:
+    - `SELF_FLEE_HP_THRESHOLD = 0.3`（goblin系 `_should_self_flee`）
+    - `POTION_SP_MP_AUTOUSE_THRESHOLD = 0.5`（SP/MPポーション自動使用）
+    - `PARTY_FLEE_ALIVE_RATIO = 0.5`（goblin/wolf リーダーの FLEE 判定）
+- CLAUDE.md に「ゲーム内閾値一覧」セクションを新設し、HP系/MP/SP系/パーティー系/戦況系/ヒーラー回復モードの全閾値を表で記載

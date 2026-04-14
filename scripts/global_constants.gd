@@ -66,9 +66,17 @@ const NPC_ENERGY_THRESHOLD: float = 0.3
 
 ## アイテム取得範囲（item_pickup=passive 設定時の取得判定距離・マンハッタン距離）
 const ITEM_PICKUP_RANGE: int = 2
-## 瀕死判定閾値（HP率がこれ以下で「瀕死」と判定。HPポーション使用・on_low_hp発動・heal対象選定に使用）
+## 瀕死判定閾値（HP率がこれ以下で「瀕死」と判定。HPポーション自動使用・on_low_hp発動・heal "aggressive" モード対象選定に使用）
 const NEAR_DEATH_THRESHOLD: float = 0.25
-## 劣勢判定閾値（パーティーの生存率がこれ以下で「劣勢」と判定。special_skill「劣勢なら使う」に使用）
+## ヒーラー回復閾値（heal "lowest_hp_first" / "leader_first" モードの対象判定。HP率がこれ未満のメンバーが回復対象）
+const HEALER_HEAL_THRESHOLD: float = 0.5
+## SP/MPポーション自動使用閾値（sp_mp_potion="use" 設定時、SP率/MP率がこれ未満で自動使用）
+const POTION_SP_MP_AUTOUSE_THRESHOLD: float = 0.5
+## 種族固有自己逃走HP閾値（goblin系の _should_self_flee がこの値未満で true を返す）
+const SELF_FLEE_HP_THRESHOLD: float = 0.3
+## パーティー逃走の生存率閾値（goblin/wolf リーダー：生存メンバー率がこれ未満で FLEE 戦略に切り替え）
+const PARTY_FLEE_ALIVE_RATIO: float = 0.5
+## 劣勢判定閾値（特殊攻撃「劣勢なら使う」用の参考値。現在は HpStatus enum で代替されており未使用）
 const DISADVANTAGE_THRESHOLD: float = 0.6
 
 ## NPC が階段の位置を最初から知っているか（true: 地図持ち / false: 探索して発見）

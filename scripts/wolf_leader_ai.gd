@@ -20,7 +20,7 @@ func _evaluate_party_strategy() -> Strategy:
 		if is_instance_valid(member) and member.hp > 0:
 			alive += 1
 	var alive_ratio := float(alive) / float(maxi(_initial_count, 1))
-	if alive_ratio < 0.5:
+	if alive_ratio < GlobalConstants.PARTY_FLEE_ALIVE_RATIO:
 		return Strategy.FLEE
 	return super._evaluate_party_strategy()
 

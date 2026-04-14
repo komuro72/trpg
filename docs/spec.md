@@ -3198,9 +3198,9 @@ Godot 4 では Tab・Esc キーが UI フォーカスナビゲーション / ui_
 - 逃走（flee）：戦闘を避けて離脱する
 
 **回復**（ヒーラー専用・`heal_mode` キーで管理）
-- 積極回復（aggressive）：`NEAR_DEATH_THRESHOLD` 以下の味方がいれば回復する
-- リーダー優先（leader_first）：リーダーが瀕死なら最優先・それ以外は最低HP率の味方を回復
-- 瀕死度優先（lowest_hp_first）：HP割合が最も低い味方を優先（閾値なし・常時回復）
+- 積極回復（aggressive）：HP率 < `NEAR_DEATH_THRESHOLD` (0.25) のうち最もHP率が低い1人を回復
+- リーダー優先（leader_first）：リーダーが HP率 < `HEALER_HEAL_THRESHOLD` (0.5) なら最優先、それ以外は `aggressive` と同じ
+- 瀕死度優先（lowest_hp_first）：HP率 < `HEALER_HEAL_THRESHOLD` (0.5) のうち最もHP率が低い1人を回復（無駄回復防止）
 - 回復しない（none）：回復行動を取らない（ヒーラーが戦闘に集中する）
 - 自分優先は選択肢に含めない（ヒーラーは他者優先のキャラクター設定）
 

@@ -619,6 +619,11 @@ func _generate_queue(strategy: int, target: Character) -> Array:
 		if not special_q.is_empty():
 			return special_q
 		var atype := _get_attack_type()
+		# ヒーラー（attack_type="heal"）は通常攻撃を持たない
+		# 回復対象なし＋アンデッド敵なしの場合、ターゲットが非アンデッドなら attack を積まず移動方針に従う
+		if atype == "heal":
+			if target.character_data == null or not target.character_data.is_undead:
+				return _generate_move_queue()
 		# standby: 移動せず射程内のみ攻撃
 		if _move_policy == "standby":
 			if _can_attack_target(target, atype):
@@ -867,6 +872,11 @@ func _execute_attack() -> void:
 	if _attack_target == null or not is_instance_valid(_attack_target):
 		return
 	var atype := _get_attack_type()
+	# ヒーラーは通常攻撃を持たない。アンデッド以外への heal 攻撃はスキップする
+	if atype == "heal":
+		var t_data := _attack_target.character_data
+		if t_data == null or not t_data.is_undead:
+			return
 	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get(atype, 1.0)
 	var dmg_power := int(float(_member.power) * type_mult)
 	match atype:
@@ -1836,14 +1846,15 @@ func _find_heal_target() -> Character:
 			if _leader_ref != null and is_instance_valid(_leader_ref) \
 					and _leader_ref.hp > 0 and _leader_ref.is_friendly == my_friendly:
 				var lr := float(_leader_ref.hp) / float(maxi(_leader_ref.max_hp, 1))
-				if lr < GlobalConstants.NEAR_DEATH_THRESHOLD:
+				if lr < GlobalConstants.HEALER_HEAL_THRESHOLD:
 					return _leader_ref
-			# その後 aggressive と同じ挙動
+			# その後 aggressive と同じ挙動（NEAR_DEATH_THRESHOLD で再選定）
 			return _find_heal_target_by_ratio(candidates, my_friendly,
 					GlobalConstants.NEAR_DEATH_THRESHOLD)
 		"lowest_hp_first":
-			# 閾値なし・最もHP割合が低い者（HP > 0 のみ）
-			return _find_heal_target_by_ratio(candidates, my_friendly, 1.0)
+			# HP割合が HEALER_HEAL_THRESHOLD 未満のうち最も低い者（無駄回復防止）
+			return _find_heal_target_by_ratio(candidates, my_friendly,
+					GlobalConstants.HEALER_HEAL_THRESHOLD)
 		_:  # "aggressive"
 			return _find_heal_target_by_ratio(candidates, my_friendly,
 					GlobalConstants.NEAR_DEATH_THRESHOLD)
@@ -1906,11 +1917,13 @@ func _generate_potion_queue() -> Array:
 	# SP/MPポーション
 	if _sp_mp_potion == "use":
 		var is_magic := cd.class_id in ["magician-fire", "magician-water", "healer"]
-		if is_magic and _member.max_mp > 0 and float(_member.mp) / float(_member.max_mp) < 0.5:
+		if is_magic and _member.max_mp > 0 \
+				and float(_member.mp) / float(_member.max_mp) < GlobalConstants.POTION_SP_MP_AUTOUSE_THRESHOLD:
 			var potion: Variant = _find_potion_in_inventory(cd, "mp")
 			if potion != null:
 				return [{"action": "use_potion", "item": potion}]
-		elif not is_magic and _member.max_sp > 0 and float(_member.sp) / float(_member.max_sp) < 0.5:
+		elif not is_magic and _member.max_sp > 0 \
+				and float(_member.sp) / float(_member.max_sp) < GlobalConstants.POTION_SP_MP_AUTOUSE_THRESHOLD:
 			var potion: Variant = _find_potion_in_inventory(cd, "sp")
 			if potion != null:
 				return [{"action": "use_potion", "item": potion}]

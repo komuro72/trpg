@@ -388,13 +388,13 @@ func _auto_share_potions() -> void:
 		var use_mp := needer.max_mp > 0
 		if use_mp:
 			var mp_ratio := float(needer.mp) / float(needer.max_mp) if needer.max_mp > 0 else 1.0
-			if mp_ratio < 0.5 and _find_potion_in_cd(cd, "mp") == null:
+			if mp_ratio < GlobalConstants.POTION_SP_MP_AUTOUSE_THRESHOLD and _find_potion_in_cd(cd, "mp") == null:
 				var pot: Variant = _take_potion_from_party(needer, "mp")
 				if pot != null:
 					cd.inventory.append(pot)
 		elif needer.max_sp > 0:
 			var sp_ratio := float(needer.sp) / float(needer.max_sp)
-			if sp_ratio < 0.5 and _find_potion_in_cd(cd, "sp") == null:
+			if sp_ratio < GlobalConstants.POTION_SP_MP_AUTOUSE_THRESHOLD and _find_potion_in_cd(cd, "sp") == null:
 				var pot: Variant = _take_potion_from_party(needer, "sp")
 				if pot != null:
 					cd.inventory.append(pot)

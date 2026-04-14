@@ -752,6 +752,45 @@ rank値: C=0, B=1, A=2, S=3
 | 劣勢なら使う | HpStatus が LOW 以下かつ MP/SP が足りている |
 | 使わない | 使わない |
 
+### ゲーム内閾値一覧
+
+主要な閾値は `GlobalConstants` に定数として定義する。コード内に数値をハードコードしない。
+
+#### HP系
+| 用途 | 定数名 | 値 |
+|------|-------|-----|
+| 状態ラベル "healthy" の境界（HP%≥この値） | `CONDITION_HEALTHY_THRESHOLD` | 0.75 |
+| 状態ラベル "wounded" の境界（HP%≥この値、未満は "critical"） | `CONDITION_WOUNDED_THRESHOLD` | 0.35 |
+| 瀕死判定（HPポーション自動使用・on_low_hp 発動・heal "aggressive" モード対象） | `NEAR_DEATH_THRESHOLD` | 0.25 |
+| ヒーラー回復モード "lowest_hp_first" / "leader_first"（リーダー判定） | `HEALER_HEAL_THRESHOLD` | 0.5 |
+| 種族固有自己逃走（ゴブリン系 `_should_self_flee`） | `SELF_FLEE_HP_THRESHOLD` | 0.3 |
+
+#### MP/SP系
+| 用途 | 定数名 | 値 |
+|------|-------|-----|
+| MP/SPポーション自動使用（sp_mp_potion="use" 設定時） | `POTION_SP_MP_AUTOUSE_THRESHOLD` | 0.5 |
+
+#### パーティー系
+| 用途 | 定数名 | 値 |
+|------|-------|-----|
+| パーティー逃走（ゴブリン/ウルフ：生存メンバー率がこれ未満で FLEE 戦略） | `PARTY_FLEE_ALIVE_RATIO` | 0.5 |
+| NPC フロア遷移の最低 HP 閾値（最低 HP 率がこれを下回ると適正フロア-1） | `NPC_HP_THRESHOLD` | 0.5 |
+| NPC フロア遷移の最低エネルギー（MP/SP）閾値 | `NPC_ENERGY_THRESHOLD` | 0.3 |
+
+#### 戦況系
+本セクション上部の「戦況判断（CombatSituation）」「戦力比（PowerBalance）」「HP充足率（HpStatus）」表の閾値は、それぞれ以下の定数で定義されている:
+- `COMBAT_RATIO_OVERWHELMING / ADVANTAGE / EVEN / DISADVANTAGE` (2.0 / 1.2 / 0.8 / 0.5)
+- `POWER_BALANCE_OVERWHELMING / SUPERIOR / EVEN / INFERIOR` (2.0 / 1.2 / 0.8 / 0.5)
+- `HP_STATUS_FULL / STABLE / LOW` (0.75 / 0.5 / 0.25)
+
+#### ヒーラー回復モードの選定ロジック
+| モード | 対象 |
+|--------|------|
+| `aggressive`（積極回復） | HP率 < `NEAR_DEATH_THRESHOLD` (0.25) のうち最もHP率が低い1人 |
+| `lowest_hp_first`（瀕死度優先） | HP率 < `HEALER_HEAL_THRESHOLD` (0.5) のうち最もHP率が低い1人 |
+| `leader_first`（リーダー優先） | リーダーが HP率 < `HEALER_HEAL_THRESHOLD` (0.5) なら最優先、それ以外は `aggressive` と同じ |
+| `none`（回復しない） | 対象なし（null を返す） |
+
 ### キャラクターステータス
 | ステータス | フィールド名（実装） | 説明 |
 |-----------|-------------------|------|
