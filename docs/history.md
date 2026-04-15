@@ -704,3 +704,104 @@
 - パーティー表示順を プレイヤー → NPC → 敵 に変更（行数不足時に重要情報を優先）
 - パーティーブロック間の 2px 空白を撤去
 - 別フロアにいるメンバーも全員表示（名前頭に `[Fx]` 注釈）。表示条件は「いずれか1人が表示フロアにいること」
+
+## ダンジョン再構成（5フロア×20部屋）
+
+### 設計変更: CLAUDE.md NPC加入形態を1種類に統一
+- 理由: 実装上も「プレイヤーがリーダーのまま相手パーティーを引き入れる」1種類のみ（相手パーティーに自分が加わる形態は未実装かつ仕様としても維持不要）
+- 変更内容: CLAUDE.md NPC仕様セクションの記述を「加入形態：プレイヤーがリーダーのまま、相手パーティーを丸ごと引き入れる（1種類のみ）」に修正
+
+### 設計変更: ダンジョン構成を12部屋→20部屋に拡張・上り階段部屋は敵初期配置なし
+- 理由: プレイヤーの探索感と戦闘密度を上げるため。特に上り階段部屋は遷移直後の安全地帯として機能させたい
+- 変更内容:
+  - 各フロア 4列 × 5行 = 20部屋の格子レイアウトに変更
+  - 階段 3か所（上り・下り）。上り階段部屋は敵初期配置なし（追跡してきた敵は入れる）
+  - フロア0：主人公1人 + NPC 8パーティー（1人×5+2人×2+3人×1=12人）+ 敵11部屋（下り階段3部屋含む）
+  - フロア1-3：上り階段3部屋（敵なし）+ 敵17部屋（下り階段3部屋含む）
+  - フロア4：上り階段3部屋（敵なし）+ 敵17部屋（r5_18にボス dark_lord + 取り巻き4体）
+- 生成方式: `work/gen_dungeon.py`（Python）で JSON を直接出力。乱数シード固定（20260415）で再現性確保
+- 非矩形部屋パターン: 占有マス（敵/NPC/プレイヤー/階段）と衝突しないパターン10種に絞り約25%の部屋に適用。入口・ボス部屋は適用外
+
+### 設計変更: NPC構成を主人公1人スタート・12人に拡張
+- 変更前: 初期パーティー4人（主人公+仲間3人）でスタート、フロア0に未加入NPC 11人
+- 変更後: 主人公1人のみでスタート、フロア0に未加入NPC 12人（1人×5+2人×2+3人×1=8パーティー）
+- 理由: 序盤の「仲間集め」を強調した設計に統一
+
+## UI・操作感の改善
+
+### 機能追加: 時間停止中の画面暗転オーバーレイ（瞬時切替）
+- 目的: `world_time_running=false` の状態をプレイヤーに視覚的に知らせる
+- 実装: `time_stop_overlay.gd`（CanvasLayer layer=5）にアンカー全画面の ColorRect（Color(0,0,0.05,0.35)）を配置し、`_process` で visible を切替
+- フェードはせず瞬時切替
+- `game_map.gd:_finish_setup()` から生成
+
+### バグ修正: 階段上に静止していると反対側の階段に再遷移してしまう
+- 症状: プレイヤーが階段を下りて遷移先の階段（反対側）の上に静止したまま 1.5秒の `_stair_cooldown` が切れると、`_check_stairs_step()` が反対側の階段タイルを検知して再遷移していた
+- 原因: `_stair_cooldown` 切れ後に `stair_just_transitioned` をチェックせず、階段タイルに静止しているだけで遷移条件が成立していた
+- 修正: `game_map.gd:_check_stairs_step()` に `player_controller.stair_just_transitioned` をチェックするガードを追加。プレイヤーが階段タイルから一度外に出るまで再遷移を抑止
+
+## 安全部屋システム
+
+### 設計変更: フロア0中央に安全部屋を新設
+- 変更前: フロア0は主人公1部屋 + NPC 8部屋（各部屋1パーティー） + 敵11部屋 = 20部屋
+- 変更後: フロア0は安全部屋1つ（主人公+NPC全8パーティー集約） + 敵19部屋 = 20部屋
+- 理由: 序盤の「仲間集め」体験を集中化。プレイヤーが1か所でパーティー状態を確認できる拠点を作る
+- 実装:
+  - `map_data.gd`: `_safe_tiles` 辞書・`mark_safe_tile`/`is_safe_tile`/`is_walkable_for_enemy` メソッドを追加
+  - `dungeon_builder.gd`: 部屋JSONの `"is_safe_room": true` フラグを読み、内部FLOORタイルを `mark_safe_tile()` でマーク。`"npc_parties_multi"` 配列（1部屋に複数NPCパーティー）もサポート。入口部屋にもNPC配置を許可
+  - `unit_ai.gd`: `_is_walkable_for_self(pos)` ヘルパで `_member.is_friendly == false` かつ `is_safe_tile(pos)` を拒否。A*経路探索・移動可否判定など約10箇所を置換
+- 動作: 敵は安全部屋に隣接する通路まで侵入できるが、部屋内部のFLOORタイルはA*経路探索で除外されるため進入不可。追跡してきた敵が通路で立ち往生する形になる
+- サイズ: 15×11（通常部屋 9×7 より大きい）・フロア中央のグリッド (col=1, row=2) に配置・上下左右4部屋と通路接続
+
+## 撤退先ロジックの変更
+
+### 機能追加: 味方パーティーの撤退先を明確化
+- 変更前: `Strategy.FLEE` になると味方・敵ともに `_find_flee_goal(threat)` で脅威の反対方向へ5マス逃げるだけ（目的地が不明確で撤退判定が曖昧）
+- 変更後:
+  - 味方（`_member.is_friendly == true`）：
+    - フロア0：最寄りの安全タイル（安全部屋 r1_10 の内部）を目指す
+    - フロア1以降：最寄りの上り階段（`STAIRS_UP`）を目指す
+  - 敵：従来通り（脅威反対方向 + 縄張り帰還）
+- 理由: 安全部屋実装に合わせて味方の撤退先を「安全な拠点」に統一。上り階段は安全部屋に通じる経路にもなるため、フロアを跨いで安全部屋に逃げ帰るフローが自然に成立
+- 実装:
+  - `map_data.gd`: `get_safe_tiles() -> Array[Vector2i]` を追加
+  - `unit_ai.gd`:
+    - `_find_friendly_retreat_goal() -> Vector2i` を新設（安全タイル優先・なければ最寄り上り階段）
+    - FLEE 分岐（`_generate_queue` strategy==1）で味方は `move_to_explore` に撤退先 goal を積む
+- 復帰: 撤退先に到達後はキュー再生成のたびに戦況が再評価される。安全部屋に入ると `CombatSituation.SAFE` になり通常行動（ATTACK / EXPLORE）に戻る
+
+## 今セッションのバグ修正・UI調整まとめ
+
+### バグ修正
+- **HPポーションが使えない**: `_use_item_from_ui` が effect キーを `heal_hp` で読んでいたが実データは `restore_hp`。`restore_hp` に修正（player_controller.gd）
+- **ポーション使用で2個減る**: `use_consumable()` 内部の `inventory.erase(item)` と `_use_item_from_ui` の追加削除ループが重複。追加削除ループを削除（player_controller.gd）
+- **水魔導士の弾が赤い**: `_spawn_projectile` が `is_water` 引数を渡さず `fire_bullet.png` にフォールバック。`class_id == "magician-water"` で `is_water=true` を設定（player_controller.gd）
+- **初期ポーション数が1表示になる**: ConsumableBar はエントリ数で `×n` を表示、`use_consumable` は辞書 erase するため `quantity:5` のエントリ1つでは ×1 にしかならず使用1回で消える。5個の独立エントリに変更（work/gen_dungeon.py, game_map.gd）
+- **プレイヤーキャラだけ初期ポーションなし**: `_dbg_items` で装備上書きされポーションが捨てられていた。クラス確定後に HP×5 + SP/MP×5 を追加（game_map.gd）
+- **フォーカス不一致**: ITEM_SELECT 開始時に通常バーの `selected_consumable_index` と同じ item_type を探して `_last_item_index` を合わせる。カーソル移動時も逆方向に同期（player_controller.gd）
+- **階段上で再遷移バグ**: 遷移後の階段タイルに留まると 1.5秒後に反対側の階段へ再遷移。`stair_just_transitioned` チェックを `_check_stairs_step()` に追加（game_map.gd）
+- **ブロック時に時間停止**: 壁や味方に塞がれると `_try_move` が何もせず `is_moving()=false` で時間停止。`Character.walk_in_place()` 新設し、入力継続中は足踏みアニメを再生して時間を流す（character.gd, player_controller.gd）
+- **DebugWindow 表示順と選択順の不一致**: `_build_leader_list` を描画順（プレイヤー→NPC→敵）に統一、`_get_any_leader` を `is_leader` 優先に変更（debug_window.gd）
+
+### UI・メッセージ調整
+- **時間停止オーバーレイ**: `Color(0,0,0.05,0.35)` の半透明レイヤーを `layer=5` に追加。切替時は 0.1秒の Tween でフェード（time_stop_overlay.gd 新設）
+- **NPCリング非表示**: 未接触NPCパーティーは `party_ring_visible=false` でリング非表示。会話時に `mark_contacted()` で全員点灯（character.gd, party_manager.gd, game_map.gd）
+- **DebugWindow 1行化**: ヘッダーとメンバー一覧を同一行に描画、移動ログ行を削除（debug_window.gd）
+- **DebugWindow にメンバー目的を復活**: 各メンバー末尾に `get_member_goal_str()` の結果を薄シアンで付記（debug_window.gd）
+- **キャンセル時のメッセージ抑止**: 「誘いを断った」はNPC起点時のみ。プレイヤー起点キャンセルは「○○のパーティーに話しかけた」に切替（game_map.gd）
+- **勧誘メッセージ**: 「仲間にする」選択時のみ「○○のパーティーに話しかけ、仲間にならないかと誘った」を表示（game_map.gd）
+- **NPC起点会話の削除**: `wants_to_initiate()=false` で実質無効化済みの分岐を整理（game_map.gd）
+- **NPC に話しかける向き判定**: `_find_adjacent_npc` を隣接4方向 → 正面1マスに変更（player_controller.gd）
+- **勧誘理由メッセージ**: `will_accept_with_reason` で主要因 reason を返し、承諾・拒否に応じた台詞メッセージを「」形式で表示（npc_leader_ai.gd, game_map.gd）
+
+### アイテムUI統合
+- 従来の ACTION_SELECT / TRANSFER_SELECT のポップアップを廃止し、ITEM_SELECT と同じアイコン列＋右側詳細パネル方式に統合
+- 数量表示を `×n` の横並びからアイコン右下コーナーのオーバーレイ（影付き）に変更
+- 使用/装備不可アイテムをグレーアウト
+- 装備時の補正差分を「威力 3→11 (+8)」形式で表示
+- 「渡して装備させる」アクションを追加
+- 「渡す」「渡して装備させる」の可視条件から「リーダー限定」「他メンバー存在」を撤廃（非リーダー操作時でも譲渡可能。渡し先0人時は「渡せる相手がいない」ログ表示で ACTION_SELECT に留まる）
+
+### ヒーラー支援行動
+- 回復・バフの対象に **自分自身** を含める
+- 友軍対象時は方向制限撤廃（360°）。アンデッド特効は通常攻撃扱いで前方コーン制限を維持

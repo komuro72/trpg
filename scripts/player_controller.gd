@@ -96,6 +96,7 @@ var _item_action_list:   Array[String] = []
 var _transfer_cursor:    int = 0
 var _item_ui_inv:        Array = []       # inventory スナップショット（生データ）
 var _item_ui_display:    Array = []       # 表示用リスト（消耗品をグループ化した辞書配列）
+var _transfer_equip_mode: bool = false    # 渡し先で自動装備させるかどうか
 ## 表示エントリ構造: { item, count, inv_index, image, item_name, item_type, category }
 
 ## クラスID → 装備可能アイテムタイプ一覧（OrderWindow.CLASS_EQUIP_TYPES と同一）
@@ -478,6 +479,12 @@ func _process_guard_and_move(_delta: float) -> void:
 
 	_try_move(effective_dir)
 
+	# 壁や他キャラに阻まれて移動できなかった場合、入力キーが押されている限り
+	# その場で歩行アニメーションを再生する（時間停止を防ぐ）
+	if not character.is_moving() and not _is_turning \
+			and _get_input_direction() != Vector2i.ZERO:
+		character.walk_in_place(MOVE_INTERVAL / GlobalConstants.game_speed)
+
 
 func _process_pre_delay(delta: float) -> void:
 	# pre_delay を消化しながらターゲット候補を表示
@@ -842,6 +849,11 @@ func _get_valid_targets() -> Array[Character]:
 		if character != null and character.character_data != null else 0
 	var range_val: int = int(sd.get("range", 1)) + range_bonus
 	var result: Array[Character] = []
+
+	# heal / buff_defense の支援行動は「自分自身」も対象に含める（距離0=常に射程内）
+	if action == "heal" or action == "buff_defense":
+		result.append(character)
+
 	for c: Character in blocking_characters:
 		if not is_instance_valid(c):
 			continue
@@ -851,15 +863,15 @@ func _get_valid_targets() -> Array[Character]:
 			var dist: float = Vector2(character.grid_pos).distance_to(Vector2(c.grid_pos))
 			if dist > float(range_val):
 				continue
-			# 正面±45°コーン外は対象にしない（ranged と同じ方向制限）
-			if not _is_in_forward_cone(c):
-				continue
-			# "heal" のみ：アンデッド敵（is_undead=true）も特効ターゲットとして含める
+			# "heal" でアンデッド敵（is_undead=true）は通常攻撃扱い：前方コーン制限を維持
 			if action == "heal" and not c.is_friendly \
 					and c.character_data != null and c.character_data.is_undead:
+				if not _is_in_forward_cone(c):
+					continue
 				result.append(c)
 				continue
-			# 射程内の is_friendly な味方（自分を除く）が対象
+			# 味方への支援（回復・バフ）：方向制限なし（全方向 OK）
+			# 自分は上で追加済みなのでスキップ
 			if not c.is_friendly or c == character:
 				continue
 			result.append(c)
@@ -961,8 +973,11 @@ func _spawn_projectile(target: Character, raw_damage: int, is_magic: bool = fals
 	var proj := Projectile.new()
 	proj.z_index = 2
 	map_node.add_child(proj)
+	# 水の魔法使いの遠距離攻撃は水弾として描画する
+	var is_water: bool = character != null and character.character_data != null \
+			and character.character_data.class_id == "magician-water"
 	proj.setup(character.position, target.position, true, target, raw_damage, 1.0,
-			character, is_magic)
+			character, is_magic, 0.0, is_water)
 
 
 func _execute_heal(target: Character, slot_data: Dictionary) -> void:
@@ -1296,11 +1311,13 @@ func _try_move(dir: Vector2i) -> void:
 	# NPC との会話は Aボタン押下で起動（バンプ検出は廃止）
 
 
-## マンハッタン距離1の未加入NPCキャラクターを返す（いなければ null）
+## 正面（facing 方向）1マスの未加入NPCキャラクターを返す（いなければ null）
 ## blocking_characters に残っている is_friendly キャラ＝未加入NPC
+## 話しかけは「NPCの方を向いていること」が条件（単なる隣接では不可）
 func _find_adjacent_npc() -> Character:
 	if character == null:
 		return null
+	var front: Vector2i = character.grid_pos + Character.dir_to_vec(character.facing)
 	for blocker: Character in blocking_characters:
 		if not is_instance_valid(blocker):
 			continue
@@ -1308,8 +1325,7 @@ func _find_adjacent_npc() -> Character:
 			continue
 		if not blocker.is_friendly:
 			continue
-		var d := blocker.grid_pos - character.grid_pos
-		if abs(d.x) + abs(d.y) == 1:
+		if blocker.grid_pos == front:
 			return blocker
 	return null
 
@@ -1470,6 +1486,12 @@ func _enter_item_select() -> void:
 			var img := item.get("image", "") as String
 			if img.is_empty():
 				img = "assets/images/items/" + itype + ".png"
+			# 現在の操作キャラが使用/装備できるかを判定（UI のグレーアウト用）
+			var usable: bool
+			if cat == "consumable":
+				usable = _is_consumable_usable_by_char(item)
+			else:
+				usable = _can_equip_item(item)
 			var entry := {
 				"item":      item,
 				"count":     1,
@@ -1478,6 +1500,9 @@ func _enter_item_select() -> void:
 				"item_name": item.get("item_name", itype) as String,
 				"item_type": itype,
 				"category":  cat,
+				"usable":    usable,
+				"stats":     item.get("stats", {}),
+				"effect":    item.get("effect", {}),
 			}
 			_item_ui_display.append(entry)
 			if cat == "consumable":
@@ -1485,7 +1510,28 @@ func _enter_item_select() -> void:
 
 	if _item_ui_display.is_empty():
 		return
-	_last_item_index = clampi(_last_item_index, 0, _item_ui_display.size() - 1)
+	# 通常バーの選択（get_selected_consumable）に ITEM_SELECT の初期フォーカスを合わせる
+	# 同じ item_type のエントリが display 内にあればそれを選ぶ。なければ先頭の消耗品 → 先頭
+	var cur_sel: Dictionary = cd.get_selected_consumable()
+	var sel_type: String = cur_sel.get("item_type", "") as String
+	var matched_idx: int = -1
+	var first_consumable_idx: int = -1
+	for idx: int in range(_item_ui_display.size()):
+		var de := _item_ui_display[idx] as Dictionary
+		var dc := de.get("category", "") as String
+		if dc != "consumable":
+			continue
+		if first_consumable_idx < 0:
+			first_consumable_idx = idx
+		if not sel_type.is_empty() and (de.get("item_type", "") as String) == sel_type:
+			matched_idx = idx
+			break
+	if matched_idx >= 0:
+		_last_item_index = matched_idx
+	elif first_consumable_idx >= 0:
+		_last_item_index = first_consumable_idx
+	else:
+		_last_item_index = 0
 	_item_ui_phase = _ItemUIPhase.ITEM_SELECT
 	_cycle_direction = 0
 	if consumable_bar != null:
@@ -1536,11 +1582,27 @@ func _process_item_select() -> void:
 
 
 ## ConsumableBar の ITEM_SELECT 表示を現在の _last_item_index で更新
+## 同時に通常バーの選択（character_data.selected_consumable_index）も同期する
 func _sync_item_select_bar() -> void:
-	if consumable_bar == null:
+	if consumable_bar != null:
+		consumable_bar.item_index = _last_item_index
+		consumable_bar.refresh()
+	# 通常バーとフォーカスを共有：現在のエントリが消耗品なら、同タイプの最初のエントリに合わせる
+	if character == null or character.character_data == null:
 		return
-	consumable_bar.item_index = _last_item_index
-	consumable_bar.refresh()
+	if _last_item_index < 0 or _last_item_index >= _item_ui_display.size():
+		return
+	var entry := _item_ui_display[_last_item_index] as Dictionary
+	if (entry.get("category", "") as String) != "consumable":
+		return
+	var itype := entry.get("item_type", "") as String
+	if itype.is_empty():
+		return
+	var cons := character.character_data.get_consumables()
+	for i: int in range(cons.size()):
+		if (cons[i] as Dictionary).get("item_type", "") == itype:
+			character.character_data.selected_consumable_index = i
+			return
 
 
 ## 選択中アイテムに対して実行できるアクションリストを構築して ACTION_SELECT へ移行
@@ -1554,22 +1616,39 @@ func _enter_action_select() -> void:
 	_item_action_cursor = 0
 
 	var cat := item.get("category", "") as String
-	# 使用する（消耗品で効果がある場合）
+	var is_equipment := cat in ["weapon", "armor", "shield"]
+	# 使用する（消耗品で使用可能な場合）
 	if cat == "consumable" and _is_consumable_usable_by_char(item):
 		_item_action_list.append("使用する")
-	# 装備する
-	if _can_equip_item(item):
+	# 装備する（装備品で装備可能な場合）
+	if is_equipment and _can_equip_item(item):
 		_item_action_list.append("装備する")
-	# 渡す（リーダーのみ・未装備アイテム）
-	if character != null and character.is_leader \
-			and not _is_item_equipped(item) \
-			and _party_sorted_members.size() > 1:
+	# 渡す（未装備アイテムなら誰が操作中でも可。装備可否は問わない）
+	# 渡し先が0人の場合は _enter_transfer_select 側で「渡せる相手がいない」を表示
+	if not _is_item_equipped(item):
 		_item_action_list.append("渡す")
+	# 渡して装備させる（装備品・未装備）
+	if is_equipment and not _is_item_equipped(item):
+		_item_action_list.append("渡して装備させる")
 	_item_action_list.append("キャンセル")
+
+	# 各アクションのサブ情報（右側パネル詳細用）：装備時の補正差分など
+	var action_info: Array = []
+	for act: String in _item_action_list:
+		var lines: Array[String] = []
+		match act:
+			"使用する":
+				lines = _build_effect_lines(item)
+			"装備する":
+				lines = _build_equip_diff_lines(character, item)
+			_:
+				pass
+		action_info.append({"label": act, "lines": lines})
 
 	_item_ui_phase = _ItemUIPhase.ACTION_SELECT
 	if consumable_bar != null:
 		consumable_bar.action_list  = _item_action_list
+		consumable_bar.action_info  = action_info
 		consumable_bar.action_index = 0
 		consumable_bar.display_mode = GlobalConstants.ConsumableDisplayMode.ACTION_SELECT
 		consumable_bar.refresh()
@@ -1608,7 +1687,9 @@ func _process_action_select() -> void:
 				consumable_bar.item_index   = _last_item_index
 				consumable_bar.refresh()
 		elif action == "渡す":
-			_enter_transfer_select()
+			_enter_transfer_select(false)
+		elif action == "渡して装備させる":
+			_enter_transfer_select(true)
 		else:
 			_execute_item_action(action)
 		return
@@ -1623,21 +1704,45 @@ func _process_action_select() -> void:
 
 
 ## TRANSFER_SELECT フェーズへ移行する（リーダーが他メンバーにアイテムを渡す）
-func _enter_transfer_select() -> void:
-	var targets: Array[String] = []
-	for ch: Character in _party_sorted_members:
-		if is_instance_valid(ch) and ch != character:
-			var nm := ch.character_data.character_name if ch.character_data != null else ""
-			if nm.is_empty():
-				nm = str(ch.name)
-			targets.append(nm)
-	if targets.is_empty():
+## auto_equip=true で「渡して装備させる」フロー（相手の装備可否と補正差分を表示）
+func _enter_transfer_select(auto_equip: bool) -> void:
+	if _last_item_index >= _item_ui_display.size():
 		_exit_item_ui()
+		return
+	var item := (_item_ui_display[_last_item_index] as Dictionary)["item"] as Dictionary
+	_transfer_equip_mode = auto_equip
+	# 対象一覧（self を除く生存メンバー）
+	var targets: Array[String] = []
+	var transfer_info: Array = []
+	for ch: Character in _party_sorted_members:
+		if not is_instance_valid(ch) or ch == character:
+			continue
+		var nm := ch.character_data.character_name if ch.character_data != null else ""
+		if nm.is_empty():
+			nm = str(ch.name)
+		targets.append(nm)
+		# 装備可否・装備時の差分を計算
+		var can_equip := _can_equip_item_for_char(ch, item)
+		var lines: Array[String] = []
+		if auto_equip:
+			if can_equip:
+				lines = _build_equip_diff_lines(ch, item)
+			else:
+				lines.append("装備不可")
+		else:
+			if not can_equip and (item.get("category", "") as String) in ["weapon","armor","shield"]:
+				lines.append("装備不可（譲渡のみ）")
+		transfer_info.append({"name": nm, "can_equip": can_equip, "lines": lines})
+	if targets.is_empty():
+		# 渡し先がいない場合は ACTION_SELECT に留めてメッセージ表示
+		MessageLog.add_system("渡せる相手がいない")
 		return
 	_transfer_cursor = 0
 	_item_ui_phase = _ItemUIPhase.TRANSFER_SELECT
 	if consumable_bar != null:
 		consumable_bar.transfer_list  = targets
+		consumable_bar.transfer_info  = transfer_info
+		consumable_bar.transfer_label = "渡して装備させる：渡す先" if auto_equip else "渡す：渡す先"
 		consumable_bar.transfer_index = 0
 		consumable_bar.display_mode   = GlobalConstants.ConsumableDisplayMode.TRANSFER_SELECT
 		consumable_bar.refresh()
@@ -1701,23 +1806,16 @@ func _use_item_from_ui(item: Dictionary) -> void:
 		return
 	var cd     := character.character_data
 	var effect := item.get("effect", {}) as Dictionary
-	var heal_hp    := int(effect.get("heal_hp",    0))
+	# 効果キーは restore_hp / restore_mp / restore_sp（旧キー heal_hp は廃止）
+	var restore_hp := int(effect.get("restore_hp", 0))
 	var restore_mp := int(effect.get("restore_mp", 0))
 	var restore_sp := int(effect.get("restore_sp", 0))
-	if heal_hp == 0 and restore_mp == 0 and restore_sp == 0:
+	if restore_hp == 0 and restore_mp == 0 and restore_sp == 0:
 		return
 
-	var used_type := item.get("item_type", "") as String
+	# use_consumable() が内部で inventory.erase(item) を呼ぶため、
+	# ここで追加削除を行うと 2個減ってしまう（二重削除バグ）
 	character.use_consumable(item)
-
-	# inventory から該当アイテムを1個削除
-	var inv := cd.inventory
-	for i: int in range(inv.size()):
-		var entry := inv[i] as Dictionary
-		if entry.get("item_type", "") == used_type \
-				and entry.get("category", "") == "consumable":
-			inv.remove_at(i)
-			break
 
 	var item_name := item.get("item_name", "アイテム") as String
 	var char_name := cd.character_name if not cd.character_name.is_empty() else String(character.name)
@@ -1781,7 +1879,23 @@ func _execute_transfer(transfer_idx: int) -> void:
 	var item_name   := item.get("item_name", "アイテム") as String
 	var src_name    := character.character_data.character_name
 	var target_name := target_ch.character_data.character_name
-	MessageLog.add_system("%s は %s を %s に渡した" % [src_name, item_name, target_name])
+
+	# 渡して装備させるモード：対象キャラが装備可能なら装備させる
+	var equipped := false
+	if _transfer_equip_mode and _can_equip_item_for_char(target_ch, item):
+		var cat := item.get("category", "") as String
+		var tcd := target_ch.character_data
+		match cat:
+			"weapon": tcd.equipped_weapon = item
+			"armor":  tcd.equipped_armor  = item
+			"shield": tcd.equipped_shield = item
+		target_ch.refresh_stats_from_equipment()
+		equipped = true
+
+	if equipped:
+		MessageLog.add_system("%s は %s を %s に渡して装備させた" % [src_name, item_name, target_name])
+	else:
+		MessageLog.add_system("%s は %s を %s に渡した" % [src_name, item_name, target_name])
 
 	_exit_item_ui()
 
@@ -1803,12 +1917,75 @@ func _exit_item_ui() -> void:
 
 ## アイテムがこのキャラのクラスで装備可能かチェック
 func _can_equip_item(item: Dictionary) -> bool:
-	if character == null or character.character_data == null:
+	return _can_equip_item_for_char(character, item)
+
+
+## 指定キャラがこのアイテムを装備できるかチェック（クラス制限）
+func _can_equip_item_for_char(ch: Character, item: Dictionary) -> bool:
+	if ch == null or ch.character_data == null:
 		return false
-	var class_id := character.character_data.class_id
+	var class_id := ch.character_data.class_id
 	var allowed: Array = CLASS_EQUIP_TYPES.get(class_id, []) as Array
 	var itype    := item.get("item_type", "") as String
 	return allowed.has(itype)
+
+
+## 消耗品の効果行を返す（使用する アクションの右パネル用）
+func _build_effect_lines(item: Dictionary) -> Array[String]:
+	var lines: Array[String] = []
+	var eff: Dictionary = item.get("effect", {}) as Dictionary
+	var hp: int = int(eff.get("restore_hp", 0))
+	var mp: int = int(eff.get("restore_mp", 0))
+	var sp: int = int(eff.get("restore_sp", 0))
+	if hp > 0: lines.append("HP回復 %d" % hp)
+	if mp > 0: lines.append("MP回復 %d" % mp)
+	if sp > 0: lines.append("SP回復 %d" % sp)
+	return lines
+
+
+## 装備時の補正差分を行配列で返す（「威力 3→11 (+8)」など）
+func _build_equip_diff_lines(ch: Character, item: Dictionary) -> Array[String]:
+	var lines: Array[String] = []
+	if ch == null or ch.character_data == null:
+		return lines
+	var cat: String = item.get("category", "") as String
+	if cat == "":
+		return lines
+	var cd := ch.character_data
+	var current: Dictionary = {}
+	match cat:
+		"weapon": current = cd.equipped_weapon
+		"armor":  current = cd.equipped_armor
+		"shield": current = cd.equipped_shield
+		_:        return lines
+	var cur_stats: Dictionary = current.get("stats", {}) as Dictionary
+	var new_stats: Dictionary = item.get("stats",    {}) as Dictionary
+	const STAT_LABELS: Dictionary = {
+		"power":              "威力",
+		"block_right_front":  "右手防御",
+		"block_left_front":   "左手防御",
+		"block_front":        "両手防御",
+		"physical_resistance":"物理耐性",
+		"magic_resistance":   "魔法耐性",
+		"range_bonus":        "射程",
+	}
+	# 装備前後に影響する全キー
+	var keys: Array = []
+	for k: Variant in cur_stats.keys():
+		if not keys.has(k): keys.append(k)
+	for k: Variant in new_stats.keys():
+		if not keys.has(k): keys.append(k)
+	for k_v: Variant in keys:
+		var k := k_v as String
+		var c := int(cur_stats.get(k, 0))
+		var n := int(new_stats.get(k, 0))
+		if c == n and c == 0:
+			continue
+		var label: String = STAT_LABELS.get(k, k) as String
+		var diff := n - c
+		var sign_s := "+" if diff >= 0 else ""
+		lines.append("%s %d→%d (%s%d)" % [label, c, n, sign_s, diff])
+	return lines
 
 
 ## アイテムが現在装備中かどうか（value comparison）

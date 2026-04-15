@@ -22,6 +22,11 @@ var _enemy_list: Array[Character] = []
 ## パーティーカラー（Character.party_color の一括設定に使用。TRANSPARENT=リング非表示）
 var party_color: Color = Color.TRANSPARENT
 
+## プレイヤーが話しかけたことがあるかどうか（NPCパーティーのみ意味を持つ）
+## 未接触のNPCは party_color を持っていてもリングを非表示にする
+## player / enemy は常に true
+var contacted: bool = true
+
 ## RightPanel / vision_system からのアクセスに使用する後方互換プロパティ
 var enemy_ai: PartyLeader:
 	get: return _leader_ai
@@ -50,11 +55,23 @@ func set_vision_controlled(enabled: bool) -> void:
 
 
 ## パーティーカラーを設定し、全メンバーの party_color を更新する
+## 未接触NPCパーティー（contacted=false）のメンバーは party_ring_visible=false にする
 func set_party_color(color: Color) -> void:
 	party_color = color
 	for member: Character in _members:
 		if is_instance_valid(member):
 			member.party_color = color
+			member.party_ring_visible = contacted
+
+
+## プレイヤーが話しかけたことを記録する。全メンバーのリング表示を有効化する
+func mark_contacted() -> void:
+	if contacted:
+		return
+	contacted = true
+	for member: Character in _members:
+		if is_instance_valid(member):
+			member.party_ring_visible = true
 
 
 ## VisionSystem を LeaderAI 経由で各 UnitAI に配布する（explore 行動に必要）
@@ -197,7 +214,9 @@ func setup(spawn_list: Array, player: Character, map_data: MapData, drop_items: 
 	_player     = player
 	_map_data   = map_data
 	_drop_items = drop_items.duplicate()
+	# NPCパーティーは未接触状態でスタート（話しかけるまでリング非表示）
 	if party_type == "npc":
+		contacted = false
 		_setup_npc(spawn_list)
 	else:
 		_setup_enemy(spawn_list)

@@ -38,6 +38,10 @@ var _area_names: Dictionary = {}  # String -> String
 ## build_adjacency() で構築。VisionSystem の先行可視化に使用
 var _adjacent_areas: Dictionary = {}  # String -> Array[String]
 
+## 安全エリアタイル集合（敵は進入不可）
+## DungeonBuilder が is_safe_room=true の部屋の内部 FLOOR タイルをマークする
+var _safe_tiles: Dictionary = {}  # Vector2i -> true
+
 
 func _init() -> void:
 	_generate_room()
@@ -205,3 +209,28 @@ func is_walkable_for(pos: Vector2i, flying: bool) -> bool:
 		TileType.STAIRS_DOWN, TileType.STAIRS_UP: return true
 		TileType.OBSTACLE: return flying
 		_: return false
+
+
+## 安全エリアとしてマークする（DungeonBuilder が使用）
+func mark_safe_tile(pos: Vector2i) -> void:
+	_safe_tiles[pos] = true
+
+
+## 指定座標が安全エリア（敵進入不可）かどうか
+func is_safe_tile(pos: Vector2i) -> bool:
+	return _safe_tiles.has(pos)
+
+
+## 全ての安全タイル座標を返す（味方の撤退先選択に使用）
+func get_safe_tiles() -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for pos: Variant in _safe_tiles.keys():
+		result.append(pos as Vector2i)
+	return result
+
+
+## 敵（非友好キャラ）用の移動可否。安全エリアも通過不可とする
+func is_walkable_for_enemy(pos: Vector2i, flying: bool) -> bool:
+	if not is_walkable_for(pos, flying):
+		return false
+	return not is_safe_tile(pos)

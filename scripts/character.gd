@@ -118,6 +118,14 @@ var party_color: Color = Color.TRANSPARENT:
 		party_color = value
 		queue_redraw()
 
+## パーティーリング表示フラグ。
+## 未接触NPCパーティー（話しかけたことのないNPC）は false でリング非表示。
+## プレイヤーパーティー・敵パーティー・接触済みNPCは true
+var party_ring_visible: bool = true:
+	set(value):
+		party_ring_visible = value
+		queue_redraw()
+
 ## パーティーリーダーフラグ（true のとき二重リングで表示）
 var is_leader: bool = false:
 	set(value):
@@ -453,8 +461,8 @@ func _draw() -> void:
 		# 向きインジケーター（ローカル上方向 = 前方、回転で向きが変わる）
 		draw_rect(Rect2(-4, -(half - margin - 2), 8, 10), Color.WHITE)
 
-	# パーティーカラーリング（TRANSPARENT でなければ常に描画）
-	if party_color != Color.TRANSPARENT:
+	# パーティーカラーリング（TRANSPARENT でなければ描画。未接触NPCは party_ring_visible=false で非表示）
+	if party_color != Color.TRANSPARENT and party_ring_visible:
 		_draw_party_ring(float(gs))
 
 
@@ -566,6 +574,17 @@ func sync_position() -> void:
 ## グリッド移動（向きを更新して rotation を変更する）
 ## duration: 視覚的な移動にかける時間（秒）。呼び出し側の移動間隔に合わせること
 ## grid_pos は半マス到達時点（進捗50%）で更新される
+## 壁や他キャラに塞がれて移動できない状態で、歩行アニメーション（walk1→top→walk2→top）
+## だけを再生する。位置・グリッド座標・向きは変更しない
+func walk_in_place(duration: float = 0.4) -> void:
+	_pending_grid_pos   = grid_pos
+	_grid_pos_committed = true
+	_visual_from        = position
+	_visual_to          = position
+	_visual_elapsed     = 0.0
+	_visual_duration    = maxf(duration, 0.01)
+
+
 func move_to(new_grid_pos: Vector2i, duration: float = 0.4) -> void:
 	# ガード中は向きを変更しない（guard_facing を維持）
 	if not is_guarding:

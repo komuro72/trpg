@@ -14,9 +14,12 @@ const ITEM_COLORS: Dictionary = {
 const DEFAULT_COLOR := Color(1.0, 0.85, 0.15)  # 黄：その他消耗品
 
 const ICON_SIZE_RATIO: float = 0.50   # GRID_SIZE に対するアイコンサイズの比率
-const COUNT_TEXT_W:    int   = 28     # "×n" テキスト確保幅（px）
 const ITEM_GAP:        int   = 6      # アイテム間余白（px）
 const H_PAD:           int   = 8      # バー左右内側余白（px）
+const COUNT_FONT_SIZE: int   = 10     # 数量表示フォントサイズ（アイコン右下）
+const DIM_MODULATE := Color(0.45, 0.45, 0.45, 0.75)  # 使用/装備不可時のグレーアウト色
+const DETAIL_BOX_W: float = 280.0     # 詳細表示エリアの幅（px）
+const DETAIL_BOX_H_EXPANDED: float = 220.0  # ACTION/TRANSFER モード時の拡張高さ
 
 var _character: Character = null
 var _control: Control
@@ -36,10 +39,16 @@ var item_index: int   = 0
 ## ACTION_SELECT モード用（アクション文字列配列）
 var action_list:  Array = []
 var action_index: int   = 0
+## 各アクションの詳細情報（右側パネル表示用）。要素: {"label": String, "lines": Array[String]}
+var action_info: Array = []
 
 ## TRANSFER_SELECT モード用（キャラ名文字列配列）
 var transfer_list:  Array = []
 var transfer_index: int   = 0
+## 各メンバーの詳細情報。要素: {"name": String, "can_equip": bool, "lines": Array[String]}
+var transfer_info: Array = []
+## パネル見出し（例：「渡す：渡す先」「渡して装備させる：渡す先」）
+var transfer_label: String = ""
 
 ## 後方互換フィールド（旧コードとの整合用。display_mode に統一予定）
 var is_selecting: bool = false
@@ -82,13 +91,12 @@ func _load_texture(image_path: String) -> Texture2D:
 
 
 func _on_draw() -> void:
-	# モード別描画
+	# モード別描画（ACTION_SELECT / TRANSFER_SELECT は ITEM_SELECT と共通のアイコン列 +
+	# 右側パネルに動的内容を描画する統合 UI）
 	match display_mode:
-		GlobalConstants.ConsumableDisplayMode.ACTION_SELECT:
-			_draw_list_menu(action_list, action_index, Color(0.9, 0.8, 0.3))
-			return
+		GlobalConstants.ConsumableDisplayMode.ACTION_SELECT, \
 		GlobalConstants.ConsumableDisplayMode.TRANSFER_SELECT:
-			_draw_list_menu(transfer_list, transfer_index, Color(0.4, 0.9, 0.6))
+			_draw_item_list()
 			return
 
 	# V スロットクールダウン表示（消耗品がなくても表示する）
@@ -133,7 +141,9 @@ func _on_draw() -> void:
 			groups[itype] = {
 				"count":     0,
 				"item_name": item.get("item_name", itype) as String,
-				"image":     item.get("image", "") as String
+				"image":     item.get("image", "") as String,
+				"category":  item.get("category", "") as String,
+				"usable":    _is_consumable_usable(item),
 			}
 		(groups[itype] as Dictionary)["count"] = \
 			int((groups[itype] as Dictionary)["count"]) + 1
@@ -152,12 +162,12 @@ func _on_draw() -> void:
 		var sel := cd.get_selected_consumable()
 		sel_type = sel.get("item_type", "") as String if not sel.is_empty() else ""
 
-	# レイアウト計算
+	# レイアウト計算（数量はアイコン右下オーバーレイ表示）
 	var gs      := GlobalConstants.GRID_SIZE
 	var pw      := GlobalConstants.PANEL_TILES * gs
 	var icon_sz := int(float(gs) * ICON_SIZE_RATIO)
-	var item_w  := icon_sz + COUNT_TEXT_W
-	var none_w  := icon_sz + ITEM_GAP  # なし枠は「×n」なしで幅を詰める
+	var item_w  := icon_sz
+	var none_w  := icon_sz
 	var n       := group_keys.size()
 	var total_w := float(n * item_w + (n - 1) * ITEM_GAP + H_PAD * 2)
 	if show_none_slot:
@@ -207,31 +217,233 @@ func _on_draw() -> void:
 		var count  := int(info["count"])
 		var is_sel := (itype == sel_type) and (not is_selecting or select_index >= 0)
 
-		# アイコン（画像優先・なければカラーブロック）
 		var iy        := by + (box_h - float(icon_sz)) * 0.5
 		var icon_rect := Rect2(x, iy, float(icon_sz), float(icon_sz))
 		var img_path  := info["image"] as String
 		if img_path.is_empty():
 			img_path = "assets/images/items/" + itype + ".png"
 		var tex       := _load_texture(img_path)
-		if tex != null:
-			_control.draw_texture_rect(tex, icon_rect, false)
-		else:
-			var col := ITEM_COLORS.get(itype, DEFAULT_COLOR) as Color
-			_control.draw_rect(icon_rect, col)
-		# 選択中：白い枠でハイライト
-		if is_sel:
-			_control.draw_rect(icon_rect, Color(1.0, 1.0, 1.0, 0.95), false, 2)
-
-		# ×n ラベル
-		if _font != null:
-			_control.draw_string(_font,
-				Vector2(x + float(icon_sz) + 2.0, by + box_h * 0.68),
-				"\u00d7%d" % count,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
-				Color(1.0, 0.92, 0.65, 1.0))
+		var dim: bool = not bool(info.get("usable", true))
+		_draw_item_icon(icon_rect, tex, itype, info.get("category", "") as String,
+				true, count, is_sel, dim)
 
 		x += float(item_w + ITEM_GAP)
+
+
+## 選択中のアイテム詳細を右側パネルに描画する（ITEM_SELECT / ACTION_SELECT / TRANSFER_SELECT 共通）
+func _draw_detail_pane(bx_end: float, by: float, box_h: float) -> void:
+	if _font == null or item_list.is_empty():
+		return
+	if item_index < 0 or item_index >= item_list.size():
+		return
+	var entry := item_list[item_index] as Dictionary
+	var dx := bx_end + float(ITEM_GAP)
+	var dw := DETAIL_BOX_W
+	# ACTION_SELECT / TRANSFER_SELECT はパネル高さを拡張
+	var dh: float = box_h
+	if display_mode == GlobalConstants.ConsumableDisplayMode.ACTION_SELECT \
+			or display_mode == GlobalConstants.ConsumableDisplayMode.TRANSFER_SELECT:
+		dh = DETAIL_BOX_H_EXPANDED
+	_control.draw_rect(Rect2(dx, by, dw, dh), Color(0.04, 0.04, 0.08, 0.88))
+	_control.draw_rect(Rect2(dx, by, dw, dh), Color(0.65, 0.55, 0.30, 0.80), false, 1)
+
+	var name_s: String = entry.get("item_name", "") as String
+	var usable: bool   = bool(entry.get("usable", true))
+	var name_col: Color = Color(1.0, 1.0, 1.0, 0.95) if usable else Color(0.6, 0.6, 0.6, 0.8)
+
+	# 1行目：アイテム名
+	var tx := dx + 8.0
+	var ty := by + 14.0
+	_control.draw_string(_font, Vector2(tx, ty), name_s,
+		HORIZONTAL_ALIGNMENT_LEFT, dw - 16.0, 13, name_col)
+	ty += 16.0
+
+	match display_mode:
+		GlobalConstants.ConsumableDisplayMode.ACTION_SELECT:
+			_draw_action_list_detail(dx, ty, dw, by + dh)
+		GlobalConstants.ConsumableDisplayMode.TRANSFER_SELECT:
+			_draw_transfer_list_detail(dx, ty, dw, by + dh)
+		_:
+			# ITEM_SELECT：stats / effect
+			var info_lines: Array[String] = _build_detail_lines(entry)
+			var info_col: Color = Color(0.85, 0.85, 0.9, 0.9) if usable \
+				else Color(0.55, 0.55, 0.6, 0.75)
+			for line: String in info_lines:
+				if ty > by + dh - 4.0:
+					break
+				_control.draw_string(_font, Vector2(tx, ty), line,
+					HORIZONTAL_ALIGNMENT_LEFT, dw - 16.0, 11, info_col)
+				ty += 13.0
+
+
+## ACTION_SELECT モードの詳細：アクション一覧 + 選択中の詳細行
+func _draw_action_list_detail(dx: float, y_start: float, dw: float, y_end: float) -> void:
+	var tx := dx + 8.0
+	var ty := y_start
+	var sel_color := Color(0.9, 0.8, 0.3)
+	# アクション一覧（縦並び）
+	for i: int in range(action_list.size()):
+		if ty > y_end - 16.0:
+			break
+		var label: String = action_list[i] as String
+		var is_sel := (i == action_index)
+		var row_h := 16.0
+		var row_rect := Rect2(dx + 4.0, ty - 11.0, dw - 8.0, row_h)
+		if is_sel:
+			_control.draw_rect(row_rect,
+				Color(sel_color.r, sel_color.g, sel_color.b, 0.20))
+		var col: Color = sel_color if is_sel else Color(0.85, 0.85, 0.85, 0.9)
+		_control.draw_string(_font, Vector2(tx, ty), label,
+			HORIZONTAL_ALIGNMENT_LEFT, dw - 16.0, 12, col)
+		ty += row_h
+	# 選択中アクションの詳細行
+	ty += 4.0
+	if action_index >= 0 and action_index < action_info.size():
+		var info: Dictionary = action_info[action_index] as Dictionary
+		var lines: Array = info.get("lines", []) as Array
+		for line_v: Variant in lines:
+			if ty > y_end - 4.0:
+				break
+			_control.draw_string(_font, Vector2(tx, ty), line_v as String,
+				HORIZONTAL_ALIGNMENT_LEFT, dw - 16.0, 11,
+				Color(0.85, 0.95, 0.85, 0.9))
+			ty += 13.0
+
+
+## TRANSFER_SELECT モードの詳細：渡す先メンバー一覧 + 選択中メンバーの装備可否/補正
+func _draw_transfer_list_detail(dx: float, y_start: float, dw: float, y_end: float) -> void:
+	var tx := dx + 8.0
+	var ty := y_start
+	# 見出し
+	if not transfer_label.is_empty():
+		_control.draw_string(_font, Vector2(tx, ty), transfer_label,
+			HORIZONTAL_ALIGNMENT_LEFT, dw - 16.0, 11, Color(0.75, 0.85, 0.95, 0.9))
+		ty += 14.0
+	var sel_color := Color(0.4, 0.9, 0.6)
+	# メンバー一覧
+	for i: int in range(transfer_list.size()):
+		if ty > y_end - 32.0:
+			break
+		var nm: String = transfer_list[i] as String
+		var can_equip := true
+		if i < transfer_info.size():
+			can_equip = bool((transfer_info[i] as Dictionary).get("can_equip", true))
+		var is_sel := (i == transfer_index)
+		var row_h := 16.0
+		var row_rect := Rect2(dx + 4.0, ty - 11.0, dw - 8.0, row_h)
+		if is_sel:
+			_control.draw_rect(row_rect,
+				Color(sel_color.r, sel_color.g, sel_color.b, 0.20))
+		var base_col: Color = sel_color if is_sel else Color(0.85, 0.85, 0.85, 0.9)
+		var suffix := "" if can_equip else "（装備不可）"
+		var col: Color = base_col if can_equip else Color(0.6, 0.6, 0.6, 0.85)
+		_control.draw_string(_font, Vector2(tx, ty), nm + suffix,
+			HORIZONTAL_ALIGNMENT_LEFT, dw - 16.0, 12, col)
+		ty += row_h
+	# 選択中メンバーの詳細行
+	ty += 4.0
+	if transfer_index >= 0 and transfer_index < transfer_info.size():
+		var info: Dictionary = transfer_info[transfer_index] as Dictionary
+		var lines: Array = info.get("lines", []) as Array
+		for line_v: Variant in lines:
+			if ty > y_end - 4.0:
+				break
+			_control.draw_string(_font, Vector2(tx, ty), line_v as String,
+				HORIZONTAL_ALIGNMENT_LEFT, dw - 16.0, 11,
+				Color(0.85, 0.95, 0.85, 0.9))
+			ty += 13.0
+
+
+## entry（item_list の要素）から詳細行を構築する
+func _build_detail_lines(entry: Dictionary) -> Array[String]:
+	var lines: Array[String] = []
+	var cat: String = entry.get("category", "") as String
+	# 装備品：stats（補正値）
+	var stats: Dictionary = entry.get("stats", {}) as Dictionary
+	const STAT_LABELS: Dictionary = {
+		"power":              "威力",
+		"block_right_front":  "右手防御",
+		"block_left_front":   "左手防御",
+		"block_front":        "両手防御",
+		"physical_resistance":"物理耐性",
+		"magic_resistance":   "魔法耐性",
+		"range_bonus":        "射程",
+	}
+	for key_v: Variant in stats.keys():
+		var key := key_v as String
+		var val := int(stats[key])
+		if val == 0:
+			continue
+		var label: String = STAT_LABELS.get(key, key) as String
+		var sign_s: String = "+" if val > 0 else ""
+		lines.append("%s %s%d" % [label, sign_s, val])
+	# 消耗品：effect
+	var effect: Dictionary = entry.get("effect", {}) as Dictionary
+	const EFFECT_LABELS: Dictionary = {
+		"restore_hp": "HP回復",
+		"restore_mp": "MP回復",
+		"restore_sp": "SP回復",
+	}
+	for key_v: Variant in effect.keys():
+		var key := key_v as String
+		var val := int(effect[key])
+		if val == 0:
+			continue
+		var label: String = EFFECT_LABELS.get(key, key) as String
+		lines.append("%s %d" % [label, val])
+	if lines.is_empty():
+		# 装備不可/使用不可の理由
+		if not bool(entry.get("usable", true)):
+			lines.append(_unusable_reason(cat))
+	return lines
+
+
+## 使用/装備不可の理由メッセージを返す
+func _unusable_reason(category: String) -> String:
+	match category:
+		"weapon", "armor", "shield":
+			return "このクラスでは装備できない"
+		"consumable":
+			return "このキャラには効果がない"
+		_:
+			return "使用不可"
+
+
+## アイコン本体 + 右下の個数オーバーレイを描画する（全モード共通）
+## dim=true でアイテム使用不可のグレーアウト、show_count=true で個数表示
+func _draw_item_icon(icon_rect: Rect2, tex: Texture2D, itype: String, category: String,
+		show_count: bool, count: int, highlight: bool, dim: bool = false) -> void:
+	if tex != null:
+		var col := Color.WHITE if not dim else DIM_MODULATE
+		_control.draw_texture_rect(tex, icon_rect, false, col)
+	else:
+		var base_col := ITEM_COLORS.get(itype, DEFAULT_COLOR) as Color
+		if category == "weapon":
+			base_col = Color(0.7, 0.7, 0.9)
+		elif category == "armor" or category == "shield":
+			base_col = Color(0.5, 0.7, 0.5)
+		if dim:
+			base_col = base_col.darkened(0.5)
+			base_col.a = 0.75
+		_control.draw_rect(icon_rect, base_col)
+	# 選択中：白い枠でハイライト
+	if highlight:
+		_control.draw_rect(icon_rect, Color(1.0, 1.0, 1.0, 0.95), false, 2)
+	# 個数を右下にオーバーレイ表示（小さめフォント＋影付き）
+	if show_count and count > 1 and _font != null:
+		var txt: String = str(count)
+		var fs: int = COUNT_FONT_SIZE
+		var ts: Vector2 = _font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+		var px: float = icon_rect.position.x + icon_rect.size.x - ts.x - 2.0
+		var py: float = icon_rect.position.y + icon_rect.size.y - 2.0
+		# 影（黒）
+		_control.draw_string(_font, Vector2(px + 1.0, py + 1.0), txt,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0, 0, 0, 0.9))
+		# 本体（黄系）
+		var num_col: Color = Color(1.0, 0.95, 0.4, 1.0) if not dim \
+			else Color(0.75, 0.7, 0.4, 0.9)
+		_control.draw_string(_font, Vector2(px, py), txt,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, num_col)
 
 
 ## ITEM_SELECT モード：item_list（装備品＋消耗品の混合表示リスト）を描画する
@@ -241,14 +453,15 @@ func _draw_item_list() -> void:
 	var gs      := GlobalConstants.GRID_SIZE
 	var pw      := GlobalConstants.PANEL_TILES * gs
 	var icon_sz := int(float(gs) * ICON_SIZE_RATIO)
-	var item_w  := icon_sz + COUNT_TEXT_W
+	var item_w  := icon_sz
 	var n       := item_list.size()
 	var total_w := float(n * item_w + (n - 1) * ITEM_GAP + H_PAD * 2)
 	var box_h   := float(gs) * 0.65
 	var by      := float(gs) * 0.35
 	var vw      := _control.size.x
 	var field_w := float(vw - 2 * pw)
-	var bx      := float(pw) + field_w * 0.25 - total_w * 0.5
+	# 詳細パネル分を見越して少し左寄せ（詳細パネルは右隣に描画）
+	var bx      := float(pw) + field_w * 0.25 - (total_w + DETAIL_BOX_W) * 0.5
 
 	_control.draw_rect(Rect2(bx, by, total_w, box_h), Color(0.04, 0.04, 0.08, 0.88))
 	_control.draw_rect(Rect2(bx, by, total_w, box_h), Color(0.65, 0.55, 0.30, 0.80), false, 1)
@@ -266,27 +479,25 @@ func _draw_item_list() -> void:
 		var icon_r  := Rect2(x, iy, float(icon_sz), float(icon_sz))
 
 		var tex := _load_texture(img_path)
-		if tex != null:
-			_control.draw_texture_rect(tex, icon_r, false)
-		else:
-			var col := ITEM_COLORS.get(itype, DEFAULT_COLOR) as Color
-			if cat == "weapon":
-				col = Color(0.7, 0.7, 0.9)
-			elif cat == "armor" or cat == "shield":
-				col = Color(0.5, 0.7, 0.5)
-			_control.draw_rect(icon_r, col)
-
-		# 選択中ハイライト
-		if i == item_index:
-			_control.draw_rect(icon_r, Color(1.0, 1.0, 1.0, 0.95), false, 2)
-
-		if _font != null and count > 1:
-			_control.draw_string(_font,
-				Vector2(x + float(icon_sz) + 2.0, by + box_h * 0.68),
-				"\u00d7%d" % count,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.92, 0.65, 1.0))
+		var dim: bool = not bool(entry.get("usable", true))
+		_draw_item_icon(icon_r, tex, itype, cat, true, count, i == item_index, dim)
 
 		x += float(item_w + ITEM_GAP)
+
+	# 右側に詳細パネルを描画
+	_draw_detail_pane(bx + total_w, by, box_h)
+
+
+## 消耗品が現在のキャラクターで使用できるかを簡易判定する（max_mp / max_sp チェック）
+func _is_consumable_usable(item: Dictionary) -> bool:
+	if _character == null or not is_instance_valid(_character):
+		return true
+	var effect: Dictionary = item.get("effect", {}) as Dictionary
+	if int(effect.get("restore_mp", 0)) > 0 and _character.max_mp == 0:
+		return false
+	if int(effect.get("restore_sp", 0)) > 0 and _character.max_sp == 0:
+		return false
+	return true
 
 
 ## ACTION_SELECT / TRANSFER_SELECT モード：テキストリストを横並びで描画する

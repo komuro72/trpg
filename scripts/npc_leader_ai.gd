@@ -495,9 +495,19 @@ func notify_healed() -> void:
 ##   NPC側スコア = (100 - 従順度平均×100) + パーティーランク和 × RANK_SCORE_PER_RANK
 ##   プレイヤー側スコア ≥ NPC側スコア なら承諾
 func will_accept(offer_type: String, player_party: Party) -> bool:
+	return will_accept_with_reason(offer_type, player_party).get("accepted", false) as bool
+
+
+## 合流承諾判定を実行し、承諾/拒否と主要因（reason）を返す
+## 戻り値: { "accepted": bool, "reason": String }
+## reason:
+##   承諾: "dire"（NPC側が窮地）/ "teamwork"（共闘・回復実績）/ "power"（戦力）
+##   拒否: "power_gap"（戦力差）/ "no_teamwork"（共闘不足）/ "independent"（自力で十分）
+##   足切り: "unready"（適正フロア未到達）
+func will_accept_with_reason(offer_type: String, player_party: Party) -> Dictionary:
 	if offer_type != "join_us":
 		# プレイヤーが NPC 傘下に入る場合：戦力強化になるので常に承諾
-		return true
+		return {"accepted": true, "reason": "power"}
 
 	# ---- 足切り：適正フロアに到達していなければ断る ----
 	# まだ下層に進む必要がないため、仲間を増やすメリットが薄い
@@ -509,7 +519,7 @@ func will_accept(offer_type: String, player_party: Party) -> bool:
 	if current_floor < _get_target_floor():
 		MessageLog.add_ai(
 			"[合流判定] %s: 適正フロア未到達のため断る（現在F%d）" % [_get_leader_name(), current_floor])
-		return false
+		return {"accepted": false, "reason": "unready"}
 
 	# ---- プレイヤー側スコア ----
 	var leader_leadership := 0
@@ -534,12 +544,16 @@ func will_accept(offer_type: String, player_party: Party) -> bool:
 	var npc_obedience_sum := 0.0
 	var npc_rank_sum := 0
 	var npc_count := 0
+	var npc_hp_sum := 0
+	var npc_max_hp_sum := 0
 	for m: Character in _party_members:
 		if not is_instance_valid(m):
 			continue
 		if m.character_data != null:
 			npc_obedience_sum += m.character_data.obedience
 			npc_rank_sum += RANK_VALUES.get(m.character_data.rank, 3) as int
+		npc_hp_sum     += m.hp
+		npc_max_hp_sum += m.max_hp
 		npc_count += 1
 
 	var obedience_avg := npc_obedience_sum / float(npc_count) if npc_count > 0 else 0.5
@@ -547,13 +561,46 @@ func will_accept(offer_type: String, player_party: Party) -> bool:
 		+ float(npc_rank_sum) * RANK_SCORE_PER_RANK
 
 	var result := player_score >= npc_score
+
+	# ---- 判定理由の決定 ----
+	var npc_hp_ratio: float = 1.0
+	if npc_max_hp_sum > 0:
+		npc_hp_ratio = float(npc_hp_sum) / float(npc_max_hp_sum)
+
+	var reason: String
+	if result:
+		# 承諾：窮地を最優先（NPC側のHP低下）、次に共闘実績、なければ戦力
+		if npc_hp_ratio < 0.7:
+			reason = "dire"
+		elif has_fought_together or has_been_healed:
+			reason = "teamwork"
+		else:
+			reason = "power"
+	else:
+		# 拒否：3要因のウェイトを比較して最大を採用
+		var w_power_gap: float = maxf(0.0,
+			float(npc_rank_sum - player_rank_sum) * RANK_SCORE_PER_RANK)
+		var w_no_teamwork: float = 0.0
+		if not has_fought_together:
+			w_no_teamwork += FOUGHT_TOGETHER_BONUS
+		if not has_been_healed:
+			w_no_teamwork += HEALED_BONUS
+		var w_independent: float = 100.0 - obedience_avg * 100.0
+
+		if w_power_gap >= w_no_teamwork and w_power_gap >= w_independent:
+			reason = "power_gap"
+		elif w_no_teamwork >= w_independent:
+			reason = "no_teamwork"
+		else:
+			reason = "independent"
+
 	# デバッグ：スコア内訳を MessageLog に出力（F1 ON 時のみ表示）
 	var fought_str := "+%.0f(共闘)" % FOUGHT_TOGETHER_BONUS if has_fought_together else ""
 	var healed_str := "+%.0f(回復)" % HEALED_BONUS        if has_been_healed       else ""
 	MessageLog.add_ai(
-		"[合流判定] P: 統率%d + ランク和%d×10%s%s = %.0f　NPC: (100-従順%.2f×100) + ランク和%d×10 = %.0f　→ %s" % [
+		"[合流判定] P: 統率%d + ランク和%d×10%s%s = %.0f　NPC: (100-従順%.2f×100) + ランク和%d×10 = %.0f　→ %s(%s)" % [
 			leader_leadership, player_rank_sum, fought_str, healed_str, player_score,
 			obedience_avg, npc_rank_sum, npc_score,
-			"承諾" if result else "拒否"
+			"承諾" if result else "拒否", reason
 		])
-	return result
+	return {"accepted": result, "reason": reason}

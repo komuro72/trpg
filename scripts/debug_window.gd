@@ -283,18 +283,17 @@ func _draw_party_state(font: Font, x: float, y_start: float,
 
 
 ## 描画順のリーダーキャラ一覧を構築する（上下キー選択の対象リスト）
+## 描画順（プレイヤー → NPC → 敵）と一致させ、上下キー操作と表示の対応を取る
 ## 全フロアのリーダーを含む（フロアをまたいだナビゲーションに対応）
 func _build_leader_list() -> Array:
 	var list: Array = []
-	var ems: Array = _get_enemy_managers.call() if _get_enemy_managers.is_valid() else []
-	var nms: Array = _get_npc_managers.call()   if _get_npc_managers.is_valid()   else []
-	for em_v: Variant in ems:
-		var em := em_v as PartyManager
-		if em == null or not is_instance_valid(em):
-			continue
-		var leader := _get_any_leader(em.get_members())
+	# 1) プレイヤーパーティー
+	if _party != null:
+		var leader := _get_any_leader(_party.sorted_members())
 		if leader != null:
 			list.append(leader)
+	# 2) NPC パーティー
+	var nms: Array = _get_npc_managers.call() if _get_npc_managers.is_valid() else []
 	for nm_v: Variant in nms:
 		var nm := nm_v as PartyManager
 		if nm == null or not is_instance_valid(nm):
@@ -302,15 +301,27 @@ func _build_leader_list() -> Array:
 		var leader := _get_any_leader(nm.get_members())
 		if leader != null:
 			list.append(leader)
-	if _party != null:
-		var leader := _get_any_leader(_party.sorted_members())
+	# 3) 敵パーティー
+	var ems: Array = _get_enemy_managers.call() if _get_enemy_managers.is_valid() else []
+	for em_v: Variant in ems:
+		var em := em_v as PartyManager
+		if em == null or not is_instance_valid(em):
+			continue
+		var leader := _get_any_leader(em.get_members())
 		if leader != null:
 			list.append(leader)
 	return list
 
 
-## メンバーリストから生存中の先頭キャラを返す（フロア不問）
+## メンバーリストから「リーダー」を返す（is_leader 優先、なければ生存中の先頭）
+## 描画側の leader 判定と同じロジックにして選択と表示を一致させる
 func _get_any_leader(members: Array) -> Character:
+	# is_leader が立っているメンバーを優先
+	for m_v: Variant in members:
+		var m := m_v as Character
+		if is_instance_valid(m) and m.hp > 0 and m.is_leader:
+			return m
+	# 見つからない場合は生存中の先頭
 	for m_v: Variant in members:
 		var m := m_v as Character
 		if is_instance_valid(m) and m.hp > 0:
@@ -414,18 +425,15 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 		_control.draw_string(font, Vector2(x - INDENT, y + FS), "▶",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, FS, Color(1.0, 1.0, 0.3))
 	_control.draw_string(font, Vector2(x, y + FS), header,
-		HORIZONTAL_ALIGNMENT_LEFT, w - INDENT, FS, header_color)
+		HORIZONTAL_ALIGNMENT_LEFT, -1, FS, header_color)
+
+	# ヘッダーの右側にメンバー全員を横並びで描画（同じ y 座標）
+	var header_w: float = font.get_string_size(header, HORIZONTAL_ALIGNMENT_LEFT, -1, FS).x
+	var member_x: float = x + header_w + FS
+	var member_w: float = (x + w) - member_x
+	if member_w > 0:
+		_draw_members_row(font, floor_members, member_x, y, member_w, floor_idx, pm)
 	y += LINE_H
-
-	# メンバー全員を1行に横並び表示
-	if y < bottom:
-		_draw_members_row(font, floor_members, x + INDENT, y, w - INDENT * 2, floor_idx)
-		y += LINE_H
-
-	# 目的（goal）行：各メンバーの現在の行動目的を表示
-	if y < bottom:
-		_draw_members_goals_row(font, pm, floor_members, x + INDENT, y, w - INDENT * 2, floor_idx)
-		y += LINE_H
 
 	return y
 
@@ -501,19 +509,15 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 		_control.draw_string(font, Vector2(x - INDENT, y + FS), "▶",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, FS, Color(1.0, 1.0, 0.3))
 	_control.draw_string(font, Vector2(x, y + FS), header,
-		HORIZONTAL_ALIGNMENT_LEFT, w - INDENT, FS, Color(0.45, 0.75, 1.0))
+		HORIZONTAL_ALIGNMENT_LEFT, -1, FS, Color(0.45, 0.75, 1.0))
+
+	# ヘッダーの右側にメンバー全員を横並びで描画（同じ y 座標）
+	var header_w: float = font.get_string_size(header, HORIZONTAL_ALIGNMENT_LEFT, -1, FS).x
+	var member_x: float = x + header_w + FS
+	var member_w: float = (x + w) - member_x
+	if member_w > 0:
+		_draw_members_row(font, floor_members, member_x, y, member_w, floor_idx, _hero_manager)
 	y += LINE_H
-
-	# メンバー全員を1行に横並び表示（別フロアメンバーには [Fx] を付加）
-	if y < bottom:
-		_draw_members_row(font, floor_members, x + INDENT, y, w - INDENT * 2, floor_idx)
-		y += LINE_H
-
-	# プレイヤーパーティーは PartyManager（_hero_manager）経由で goal を取得
-	if y < bottom and _hero_manager != null and is_instance_valid(_hero_manager):
-		_draw_members_goals_row(font, _hero_manager, floor_members,
-				x + INDENT, y, w - INDENT * 2, floor_idx)
-		y += LINE_H
 
 	return y
 
@@ -555,10 +559,11 @@ func _draw_members_goals_row(font: Font, pm: PartyManager, members: Array,
 
 
 ## メンバー全員を1行に横並びで描画する
-## 各メンバー：★名前[ランク] HP:x/y [ス][ガ]  （幅を超えたら打ち切り）
+## 各メンバー：★名前[ランク] HP:x/y [ス][ガ] 目的  （幅を超えたら打ち切り）
 ## display_floor: 表示中のフロア。これと異なるフロアにいるメンバーには "[Fx]" を付加する
+## pm: PartyManager（null 可。非 null なら各メンバーの行動目的を末尾に付記）
 func _draw_members_row(font: Font, members: Array, x: float, y: float, w: float,
-		display_floor: int = -1) -> void:
+		display_floor: int = -1, pm: PartyManager = null) -> void:
 	var cx: float = x
 	const SEP: String = "  "
 	var sep_w: float = font.get_string_size(SEP, HORIZONTAL_ALIGNMENT_LEFT, -1, FS).x
@@ -588,7 +593,16 @@ func _draw_members_row(font: Font, members: Array, x: float, y: float, w: float,
 		var floor_s: String = ""
 		if display_floor >= 0 and m.current_floor != display_floor:
 			floor_s = "[F%d]" % m.current_floor
-		var part := "%s%s%s[%s] HP:%d/%d%s" % [floor_s, star_s, name_s, rank_s, m.hp, m.max_hp, status]
+
+		# 行動目的（PartyManager 経由）。非 null なら末尾に付記
+		var goal_s: String = ""
+		if pm != null and is_instance_valid(pm):
+			var raw_goal: String = pm.get_member_goal_str(m)
+			if not raw_goal.is_empty():
+				goal_s = " " + raw_goal
+
+		var part := "%s%s%s[%s] HP:%d/%d%s%s" % [
+			floor_s, star_s, name_s, rank_s, m.hp, m.max_hp, status, goal_s]
 		var part_w: float = font.get_string_size(part, HORIZONTAL_ALIGNMENT_LEFT, -1, FS).x
 
 		if cx + part_w > x + w:
@@ -597,8 +611,17 @@ func _draw_members_row(font: Font, members: Array, x: float, y: float, w: float,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, FS, Color(0.5, 0.5, 0.5))
 			break
 
-		_control.draw_string(font, Vector2(cx, y + FS), part,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, FS, col)
+		# メンバー本体は HP 色、目的部分は薄いシアン系で区別
+		if goal_s.is_empty():
+			_control.draw_string(font, Vector2(cx, y + FS), part,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, FS, col)
+		else:
+			var body_str := part.substr(0, part.length() - goal_s.length())
+			var body_w: float = font.get_string_size(body_str, HORIZONTAL_ALIGNMENT_LEFT, -1, FS).x
+			_control.draw_string(font, Vector2(cx, y + FS), body_str,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, FS, col)
+			_control.draw_string(font, Vector2(cx + body_w, y + FS), goal_s,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, FS, Color(0.55, 0.85, 1.0, 0.85))
 		cx += part_w
 
 		if i < members.size() - 1:

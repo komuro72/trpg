@@ -166,6 +166,7 @@ func _finish_setup() -> void:
 	_link_all_character_lists()
 	_setup_controller()
 	_setup_camera()
+	_setup_time_stop_overlay()
 	_setup_vision_system()
 	_setup_panels()
 	_setup_dialogue_system()
@@ -288,7 +289,29 @@ func _setup_hero() -> void:
 			{"item_type": "armor_robe", "category": "armor", "item_name": "古いローブ", "stats": {"physical_resistance": 0, "magic_resistance": 0}, "equipped": true},
 		],
 	}
-	hero_items = _dbg_items.get(class_id, []) as Array
+	hero_items = (_dbg_items.get(class_id, []) as Array).duplicate()
+
+	# 初期ポーション（全人間キャラ共通）：HPポーション×5 + SP/MPポーション×5
+	# ConsumableBar は inventory 内のエントリ数で ×n を表示し、use_consumable は
+	# 辞書を erase するため、N個持たせるには N個の個別エントリが必要
+	for _i in range(5):
+		hero_items.append({
+			"item_type": "potion_hp", "category": "consumable",
+			"item_name": "HPポーション", "effect": {"restore_hp": 30}, "quantity": 1,
+		})
+	var magic_classes: Array[String] = ["magician-fire", "magician-water", "healer"]
+	if class_id in magic_classes:
+		for _i in range(5):
+			hero_items.append({
+				"item_type": "potion_mp", "category": "consumable",
+				"item_name": "MPポーション", "effect": {"restore_mp": 20}, "quantity": 1,
+			})
+	else:
+		for _i in range(5):
+			hero_items.append({
+				"item_type": "potion_sp", "category": "consumable",
+				"item_name": "活力薬", "effect": {"restore_sp": 20}, "quantity": 1,
+			})
 
 	hero = Character.new()
 	hero.grid_pos = spawn_pos
@@ -559,6 +582,12 @@ func _setup_controller() -> void:
 		player_controller.blocking_characters.append_array(nm.get_members())
 	player_controller.name = "PlayerController"
 	add_child(player_controller)
+
+
+func _setup_time_stop_overlay() -> void:
+	var overlay := TimeStopOverlay.new()
+	overlay.name = "TimeStopOverlay"
+	add_child(overlay)
 
 
 func _setup_camera() -> void:
@@ -926,15 +955,14 @@ func _on_dialogue_requested(nm: PartyManager, npc_initiates: bool) -> void:
 	_dialogue_npc_manager   = nm
 	_dialogue_npc_initiates = npc_initiates
 	player_controller.is_blocked = true
+	# 話しかけた時点で「接触済み」としてパーティーリングを表示する
+	nm.mark_contacted()
 	# 会話中は対象 NPC の AI を一時停止（メンバーが動き回らないようにする）
 	nm.set_process_mode(Node.PROCESS_MODE_DISABLED)
 
 	# MessageLog に会話開始を記録
-	var npc_name := _get_npc_party_leader_name(nm)
-	if npc_initiates:
-		MessageLog.add_system("%s のパーティーが話しかけてきた" % npc_name)
-	else:
-		MessageLog.add_system("%s のパーティーに話しかけた" % npc_name)
+	# プレイヤー起点のみ想定（NPCからの自発的な話しかけは現在無効）。
+	# 選択確定時（勧誘 or キャンセル）にメッセージを表示するため、ここでは何もしない
 
 	# パーティー満員チェック（最大人数を超えて仲間にはできない）
 	if party.members.size() >= GlobalConstants.MAX_PARTY_MEMBERS:
@@ -952,22 +980,29 @@ func _on_dialogue_choice(choice_id: String) -> void:
 		_close_dialogue()
 		return
 
-	# NPC の承諾/拒否判定（プレイヤー起点のみスコア比較。NPC 自発は常に承諾）
+	# NPC の承諾/拒否判定（プレイヤー起点のみ想定。スコア比較）
 	var accepted := true
-	if not _dialogue_npc_initiates:
-		var leader_ai := _dialogue_npc_manager.enemy_ai
-		if leader_ai != null and is_instance_valid(leader_ai) and leader_ai is NpcLeaderAI:
-			accepted = (leader_ai as NpcLeaderAI).will_accept(choice_id, party)
+	var reason: String = "power"
+	var leader_ai := _dialogue_npc_manager.enemy_ai
+	if leader_ai != null and is_instance_valid(leader_ai) and leader_ai is NpcLeaderAI:
+		var decision: Dictionary = (leader_ai as NpcLeaderAI).will_accept_with_reason(choice_id, party)
+		accepted = decision.get("accepted", false) as bool
+		reason   = decision.get("reason", "power") as String
 
 	var npc_name := _get_npc_party_leader_name(_dialogue_npc_manager)
+	# 勧誘：選択確定時に「話しかけ、仲間にならないかと誘った」を表示
+	if choice_id == NpcDialogueWindow.CHOICE_JOIN_US:
+		MessageLog.add_system("%s のパーティーに話しかけ、仲間にならないかと誘った" % npc_name)
+
 	if not accepted:
-		MessageLog.add_system("断られた")
+		MessageLog.add_system("「%s」" % _get_decision_reason_text(reason, false))
 		_close_dialogue()
 		return
 
 	# 合流処理
 	if choice_id == NpcDialogueWindow.CHOICE_JOIN_US:
 		# プレイヤーがリーダー維持で NPC が加入
+		MessageLog.add_system("「%s」" % _get_decision_reason_text(reason, true))
 		MessageLog.add_system("%s のパーティーが仲間に加わった！" % npc_name)
 		_merge_npc_into_player_party(_dialogue_npc_manager)
 	elif choice_id == NpcDialogueWindow.CHOICE_JOIN_THEM:
@@ -977,14 +1012,30 @@ func _on_dialogue_choice(choice_id: String) -> void:
 	_close_dialogue()
 
 
+## 合流判定の主要因（reason）に対応する人間向けメッセージを返す
+## accepted=true: 承諾時メッセージ / false: 拒否時メッセージ
+func _get_decision_reason_text(reason: String, accepted: bool) -> String:
+	if accepted:
+		match reason:
+			"dire":     return "正直、助けがほしかった"
+			"teamwork": return "一緒に戦った仲間なら信頼できる"
+			"power":    return "あなたのパーティーなら心強い"
+			_:          return "あなたのパーティーなら心強い"
+	else:
+		match reason:
+			"power_gap":   return "あなたのパーティーでは心もとない"
+			"no_teamwork": return "あなたのことをよく知らない"
+			"independent": return "自分たちだけでやっていける"
+			"unready":     return "まだ下層に進む必要がない"
+			_:             return "今は遠慮しておく"
+
+
 func _on_dialogue_dismissed() -> void:
-	MessageLog.add_system("誘いを断った")
-	# NPC 側からの申し出を断った場合は再申し出しないようマーク
-	if _dialogue_npc_initiates and _dialogue_npc_manager != null \
-			and is_instance_valid(_dialogue_npc_manager):
-		var leader_ai := _dialogue_npc_manager.enemy_ai
-		if leader_ai != null and is_instance_valid(leader_ai) and leader_ai is NpcLeaderAI:
-			(leader_ai as NpcLeaderAI).mark_refused()
+	# プレイヤー起点のキャンセル：勧誘せず話しかけただけ
+	# （NPC からの自発的な話しかけは現在無効のため、このパスはプレイヤー起点のみ想定）
+	if _dialogue_npc_manager != null and is_instance_valid(_dialogue_npc_manager):
+		var npc_name := _get_npc_party_leader_name(_dialogue_npc_manager)
+		MessageLog.add_system("%s のパーティーに話しかけた" % npc_name)
 	_close_dialogue()
 
 
@@ -1015,6 +1066,7 @@ func _merge_npc_into_player_party(nm: PartyManager) -> void:
 			member.visible = true
 			# プレイヤーパーティーの白リングに統一。is_leader は false（hero が維持）
 			member.party_color = Color.WHITE
+			member.party_ring_visible = true
 			member.is_leader = false
 			# フロア遷移時の map_data 更新用マッピングを記録
 			_member_to_npc_manager[member] = nm
@@ -1050,6 +1102,7 @@ func _merge_player_into_npc_party(nm: PartyManager) -> void:
 		var ch := member as Character
 		if is_instance_valid(ch):
 			ch.party_color = new_color
+			ch.party_ring_visible = true
 			ch.is_leader = false
 	# NPC メンバーを追加（カラーは既に nm.party_color 設定済み）
 	for member: Character in npc_members:
@@ -1812,6 +1865,10 @@ func _find_free_adjacent_to(center: Vector2i, map_ref: MapData,
 ## 階段を踏んでいるかチェックし、踏んでいれば遷移する
 func _check_stairs_step() -> void:
 	if _stair_cooldown > 0.0:
+		return
+	# 遷移直後、階段タイルから一度出るまでは再遷移を抑止する
+	# （階段上に静止していても反対側の階段へ戻らないように）
+	if player_controller != null and player_controller.stair_just_transitioned:
 		return
 	# 現在の操作キャラ（リーダー以外の場合もある）を使用
 	var active_char := player_controller.character if player_controller != null else hero

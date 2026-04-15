@@ -709,6 +709,13 @@ func _generate_queue(strategy: int, target: Character) -> Array:
 
 	# FLEE: 逃走
 	if strategy == 1:
+		# 味方は撤退先（安全部屋 or 最寄りの上り階段）へ向かう
+		if _member.is_friendly:
+			var retreat := _find_friendly_retreat_goal()
+			if retreat != Vector2i(-1, -1) and retreat != _member.grid_pos:
+				return [{"action": "move_to_explore", "goal": retreat}]
+			return [{"action": "wait"}]
+		# 敵は従来通り脅威から逃走（縄張り帰還は _apply_range_check で処理）
 		if target == null or not is_instance_valid(target):
 			return [{"action": "wait"}]
 		var q: Array = []
@@ -1203,7 +1210,7 @@ func _v_sliding(cost: int) -> void:
 	var landing_pos := _member.grid_pos
 	for step: int in range(1, 4):
 		var check_pos := _member.grid_pos + Vector2i(dir) * step
-		if _map_data == null or not _map_data.is_walkable_for(check_pos, _member.is_flying):
+		if not _is_walkable_for_self(check_pos):
 			break
 		var occupant := _find_enemy_at(check_pos)
 		if occupant != null:
@@ -1378,7 +1385,7 @@ func _find_non_stair_adjacent(pos: Vector2i) -> Vector2i:
 				continue
 			visited[nb] = true
 			# 壁・障害物は無条件にスキップ。友好キャラが占有していても通過可能扱い
-			if _map_data.is_walkable_for(nb, _member.is_flying):
+			if _is_walkable_for_self(nb):
 				queue.append(nb)
 	return pos
 
@@ -1394,9 +1401,39 @@ func _is_stair_tile(pos: Vector2i) -> bool:
 func _find_flank_goal(target: Character) -> Vector2i:
 	var facing_vec := Character.dir_to_vec(target.facing)
 	var behind     := target.grid_pos - facing_vec
-	if _map_data != null and _map_data.is_walkable_for(behind, _member.is_flying):
+	if _is_walkable_for_self(behind):
 		return behind
 	return _find_adjacent_goal(target)
+
+
+## 味方の撤退先を返す（フロア0=安全部屋・フロア1以降=最寄りの上り階段）
+## 撤退先が見つからない場合は Vector2i(-1, -1) を返す
+func _find_friendly_retreat_goal() -> Vector2i:
+	if _map_data == null or _member == null or not is_instance_valid(_member):
+		return Vector2i(-1, -1)
+	# 1) 安全タイル（フロア0の安全部屋など）が存在すれば最寄りを返す
+	var safes: Array[Vector2i] = _map_data.get_safe_tiles()
+	if not safes.is_empty():
+		var best_s := safes[0]
+		var best_ds := _manhattan(_member.grid_pos, best_s)
+		for s: Vector2i in safes:
+			var d := _manhattan(_member.grid_pos, s)
+			if d < best_ds:
+				best_ds = d
+				best_s = s
+		return best_s
+	# 2) 安全タイルがないフロアでは最寄りの上り階段を目指す
+	var ups: Array[Vector2i] = _map_data.find_stairs(MapData.TileType.STAIRS_UP)
+	if ups.is_empty():
+		return Vector2i(-1, -1)
+	var best_u := ups[0]
+	var best_du := _manhattan(_member.grid_pos, best_u)
+	for u: Vector2i in ups:
+		var d := _manhattan(_member.grid_pos, u)
+		if d < best_du:
+			best_du = d
+			best_u = u
+	return best_u
 
 
 func _find_flee_goal(threat: Character) -> Vector2i:
@@ -1411,7 +1448,7 @@ func _find_flee_goal(threat: Character) -> Vector2i:
 	var goal := _member.grid_pos
 	for i: int in range(1, 6):
 		var candidate := _member.grid_pos + flee_dir * i
-		if _map_data != null and _map_data.is_walkable_for(candidate, _member.is_flying):
+		if _is_walkable_for_self(candidate):
 			goal = candidate
 		else:
 			break
@@ -1422,7 +1459,7 @@ func _find_flee_goal(threat: Character) -> Vector2i:
 		]
 		for alt: Vector2i in alts:
 			var candidate := _member.grid_pos + alt
-			if _map_data != null and _map_data.is_walkable_for(candidate, _member.is_flying):
+			if _is_walkable_for_self(candidate):
 				return candidate
 	return goal
 
@@ -1457,7 +1494,7 @@ func _astar(start: Vector2i, goal: Vector2i) -> Array[Vector2i]:
 		for offset: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 			var neighbor := current + offset
 			# タイル（壁・障害物）チェック
-			if _map_data != null and not _map_data.is_walkable_for(neighbor, _member.is_flying):
+			if not _is_walkable_for_self(neighbor):
 				continue
 			# 階段タイルはゴール以外では中間経由地点として使わない
 			if _is_stair_tile(neighbor) and neighbor != goal \
@@ -1475,6 +1512,18 @@ func _astar(start: Vector2i, goal: Vector2i) -> Array[Vector2i]:
 
 func _manhattan(a: Vector2i, b: Vector2i) -> int:
 	return abs(a.x - b.x) + abs(a.y - b.y)
+
+
+## _member にとって歩行可能か判定する（非友好キャラは安全エリアを通過不可）
+func _is_walkable_for_self(pos: Vector2i) -> bool:
+	if _map_data == null:
+		return false
+	if not _map_data.is_walkable_for(pos, _member.is_flying):
+		return false
+	# 敵（非友好キャラ）は安全エリア（NPC安全部屋など）に入れない
+	if not _member.is_friendly and _map_data.is_safe_tile(pos):
+		return false
+	return true
 
 
 # --------------------------------------------------------------------------
@@ -1498,7 +1547,7 @@ func _formation_satisfied() -> bool:
 			if _member.grid_pos == front_sat:
 				return false
 			# 後方が通行可：後方から1タイル以内なら満足（後方・左後方・右後方をカバー）
-			if _map_data != null and _map_data.is_walkable_for(behind_sat, _member.is_flying):
+			if _is_walkable_for_self(behind_sat):
 				return _manhattan(_member.grid_pos, behind_sat) <= 1
 			# 後方が壁・障害物：リーダーの隣接にいれば満足
 			return _manhattan(_member.grid_pos, _leader_ref.grid_pos) <= 1
@@ -1609,7 +1658,7 @@ func _formation_move_goal() -> Vector2i:
 				_leader_ref.grid_pos - perp_g,      # 右
 			]
 			for cand_g: Vector2i in candidates_g:
-				if _map_data != null and _map_data.is_walkable_for(cand_g, _member.is_flying) \
+				if _is_walkable_for_self(cand_g) \
 						and _is_passable(cand_g):
 					return cand_g
 			return _find_adjacent_goal(_leader_ref)
@@ -1731,7 +1780,7 @@ func _try_push_friendly_at(pos: Vector2i, push_dir: Vector2i) -> bool:
 
 
 func _is_passable(pos: Vector2i) -> bool:
-	if _map_data != null and not _map_data.is_walkable_for(pos, _member.is_flying):
+	if not _is_walkable_for_self(pos):
 		return false
 	# 飛行キャラは地上キャラの占有タイルを通過できる（同レイヤーのみブロック）
 	for other: Character in _all_members:

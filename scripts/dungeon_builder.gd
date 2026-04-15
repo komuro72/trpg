@@ -88,12 +88,15 @@ static func _carve_room(data: MapData, room: Dictionary, offset: Vector2i) -> vo
 	var rw: int = int(room.get("width",  10))
 	var rh: int = int(room.get("height", 10))
 	var area_id := room.get("id", "") as String
+	var is_safe: bool = room.get("is_safe_room", false) as bool
 	# 部屋の内側（外周1タイルを壁として残す）
 	for y in range(ry + 1, ry + rh - 1):
 		for x in range(rx + 1, rx + rw - 1):
 			var pos := Vector2i(x, y)
 			data.set_tile(pos, MapData.TileType.FLOOR)
 			data.set_tile_area(pos, area_id)
+			if is_safe:
+				data.mark_safe_tile(pos)
 	# 部屋名をエリア名テーブルに登録
 	var room_name := room.get("name", "") as String
 	if not room_name.is_empty():
@@ -203,10 +206,11 @@ static func _build_spawn_data(data: MapData, floor_data: Dictionary, rooms: Arra
 	var party_id := 1
 	for room: Variant in rooms:
 		var r := room as Dictionary
-		if r.get("is_entrance", false):
-			continue
+		var is_entr: bool = r.get("is_entrance", false) as bool
+		# 入口部屋には敵を配置しない（プレイヤー開始地点の保護）
+		# ただし NPC は入口部屋（安全部屋）にも配置できる
 		var ep: Variant = r.get("enemy_party")
-		if ep != null and ep is Dictionary:
+		if not is_entr and ep != null and ep is Dictionary:
 			var members: Array = (ep as Dictionary).get("members", [])
 			if not members.is_empty():
 				data.enemy_parties.append({
@@ -224,6 +228,18 @@ static func _build_spawn_data(data: MapData, floor_data: Dictionary, rooms: Arra
 					"members":  _offset_members(members, offset)
 				})
 				party_id += 1
+		# 1部屋に複数のNPCパーティーを配置する場合は npc_parties_multi 配列を使う
+		var nps_multi: Variant = r.get("npc_parties_multi")
+		if nps_multi != null and nps_multi is Array:
+			for one_party: Variant in (nps_multi as Array):
+				var opd := one_party as Dictionary
+				var opm: Array = opd.get("members", [])
+				if not opm.is_empty():
+					data.npc_parties.append({
+						"party_id": party_id,
+						"members":  _offset_members(opm, offset)
+					})
+					party_id += 1
 
 
 ## メンバーリストの x/y 座標に offset を加算した新しいリストを返す
