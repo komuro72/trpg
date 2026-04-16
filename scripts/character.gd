@@ -78,6 +78,8 @@ func get_condition() -> String:
 		return "healthy"
 	elif ratio >= GlobalConstants.CONDITION_WOUNDED_THRESHOLD:
 		return "wounded"
+	elif ratio >= GlobalConstants.CONDITION_INJURED_THRESHOLD:
+		return "injured"
 	return "critical"
 
 ## バフ状態（一時的な防御力アップ。0=なし、>0=残り秒数）
@@ -90,6 +92,9 @@ const DEFENSE_BUFF_DURATION: float = 10.0
 var _buff_effect: Node2D = null
 ## フレンドリーフラグ（NPC など味方側キャラクターに設定。緑のリングで表示）
 var is_friendly: bool = false
+## プレイヤーパーティー合流フラグ（PartyManager から伝播される）
+## true = 主人公または加入済み NPC / false = 未加入 NPC または敵
+var joined_to_player: bool = false
 
 ## 個別指示（OrderWindow で設定）
 ## move:             explore=探索 / same_room=同室追従 / cluster=密集 / guard_room=部屋を守る / standby=待機
@@ -245,17 +250,17 @@ func _update_modulate() -> void:
 		_sprite.modulate = Color.WHITE.lerp(Color(0.3, 0.9, 1.0), 0.5 + pulse * 0.5)
 		return
 
-	# HP状態による色
+	# HP状態による色（状態ラベル閾値と統一：healthy=白 / wounded=橙 / injured=赤 / critical=赤点滅）
 	var ratio := float(hp) / float(max_hp) if max_hp > 0 else 1.0
-	if ratio > 0.6:
+	if ratio >= GlobalConstants.CONDITION_HEALTHY_THRESHOLD:
 		_sprite.modulate = Color.WHITE
-	elif ratio > 0.3:
-		_sprite.modulate = Color(1.0, 1.0, 0.65)      # 軽傷：やや黄色
-	elif ratio > 0.1:
-		_sprite.modulate = Color(1.0, 0.65, 0.25)     # 重傷：オレンジ
+	elif ratio >= GlobalConstants.CONDITION_WOUNDED_THRESHOLD:
+		_sprite.modulate = Color(1.0, 0.65, 0.25)     # wounded：オレンジ
+	elif ratio >= GlobalConstants.CONDITION_INJURED_THRESHOLD:
+		_sprite.modulate = Color(1.0, 0.35, 0.35)     # injured：赤
 	else:
 		var pulse := (sin(t * TAU * 3.0) + 1.0) * 0.5
-		_sprite.modulate = Color.WHITE.lerp(Color(1.0, 0.15, 0.15), pulse)  # 瀕死：赤く点滅
+		_sprite.modulate = Color.WHITE.lerp(Color(1.0, 0.15, 0.15), pulse)  # critical：赤く点滅
 
 	# FieldOverlay によるハイライト乗数を適用（White = 変化なし）
 	if highlight_override != Color.WHITE:
@@ -732,17 +737,17 @@ func use_consumable(item: Dictionary) -> void:
 	if restore_hp_val > 0:
 		heal(restore_hp_val)  # heal() 内で効果音を再生
 		MessageLog.add_battle(character_data, null,
-			"%sがHP回復ポーションを使い、自身のHPを回復した" % char_name, self)
+			"%sがHPポーションを使い、自身のHPを回復した" % char_name, self)
 	if restore_mp > 0:
 		mp = mini(mp + restore_mp, max_mp)
 		SoundManager.play_from(SoundManager.HEAL, self)
 		MessageLog.add_battle(character_data, null,
-			"%sがMP回復ポーションを使い、自身のMPを回復した" % char_name, self)
+			"%sがMPポーションを使い、自身のMPを回復した" % char_name, self)
 	if restore_sp > 0:
 		sp = mini(sp + restore_sp, max_sp)
 		SoundManager.play_from(SoundManager.HEAL, self)
 		MessageLog.add_battle(character_data, null,
-			"%sがSP回復ポーションを使い、自身のSPを回復した" % char_name, self)
+			"%sがSPポーションを使い、自身のSPを回復した" % char_name, self)
 	# インベントリからアイテムを削除
 	if character_data != null:
 		character_data.inventory.erase(item)
@@ -1047,45 +1052,127 @@ func _emit_damage_battle_msg(attacker: Character, raw: int, actual: int,
 
 	var atk_name := _battle_name(attacker)
 	var def_name := _battle_name(self)
+	var atk_color := _party_name_color(attacker)
+	var def_color := _party_name_color(self)
+	var dmg_label := _damage_label(actual)
+	var dmg_color := _damage_label_color(actual)
+	var dmg_bold  := _damage_is_huge(actual)
 
 	var msg: String
+	var segments: Array = []
 
 	# ── アンデッド特効（ヒーラーがアンデッドを攻撃）
 	if atk_data != null and atk_data.attack_type == "heal" \
 			and def_data != null and def_data.is_undead:
-		msg = "%sが%sに聖なる光を放ち、%sを与えた" % [atk_name, def_name, _damage_label(actual)]
+		msg = "%sが%sに聖なる光を放ち、%sを与えた" % [atk_name, def_name, dmg_label]
+		segments = _make_segs([
+			[atk_name, atk_color], ["が", Color.WHITE],
+			[def_name, def_color], ["に聖なる光を放ち、", Color.WHITE],
+			[dmg_label, dmg_color, dmg_bold], ["を与えた", Color.WHITE],
+		])
 
 	# ── ヘッドショット（即死）
 	elif raw >= 9999:
 		msg = "%sが%sを射抜き、即座に倒した" % [atk_name, def_name]
+		segments = _make_segs([
+			[atk_name, atk_color], ["が", Color.WHITE],
+			[def_name, def_color], ["を射抜き、即座に倒した", Color.WHITE],
+		])
 
 	# ── 完全ブロック
 	elif is_fully_blocked:
 		var verb := _weapon_action(attacker, "negative")
 		msg = "%sが%sに%s、%sは盾で防いだ" % [atk_name, def_name, verb, def_name]
+		segments = _make_segs([
+			[atk_name, atk_color], ["が", Color.WHITE],
+			[def_name, def_color], ["に" + verb + "、", Color.WHITE],
+			[def_name, def_color], ["は盾で防いだ", Color.WHITE],
+		])
 
 	# ── クリティカルヒット
 	elif is_critical:
 		var verb := _weapon_action(attacker, "critical")
-		msg = "%sが%sに%s、%sを与えた" % [atk_name, def_name, verb, _damage_label(actual)]
+		msg = "%sが%sに%s、%sを与えた" % [atk_name, def_name, verb, dmg_label]
+		segments = _make_segs([
+			[atk_name, atk_color], ["が", Color.WHITE],
+			[def_name, def_color], ["に" + verb + "、", Color.WHITE],
+			[dmg_label, dmg_color, dmg_bold], ["を与えた", Color.WHITE],
+		])
 
 	# ── 部分ブロック
 	elif blocked > 0:
 		var verb := _weapon_action(attacker, "negative")
 		msg = "%sが%sに%s、%sは盾で防ぎ、%sに抑えた" % \
-				[atk_name, def_name, verb, def_name, _damage_label(actual)]
+				[atk_name, def_name, verb, def_name, dmg_label]
+		segments = _make_segs([
+			[atk_name, atk_color], ["が", Color.WHITE],
+			[def_name, def_color], ["に" + verb + "、", Color.WHITE],
+			[def_name, def_color], ["は盾で防ぎ、", Color.WHITE],
+			[dmg_label, dmg_color, dmg_bold], ["に抑えた", Color.WHITE],
+		])
 
 	# ── 0ダメージ（耐性等で吸収）
 	elif actual <= 1:
 		var verb := _weapon_action(attacker, "negative")
 		msg = "%sが%sに%s、ダメージを与えられなかった" % [atk_name, def_name, verb]
+		segments = _make_segs([
+			[atk_name, atk_color], ["が", Color.WHITE],
+			[def_name, def_color], ["に" + verb + "、ダメージを与えられなかった", Color.WHITE],
+		])
 
 	# ── 通常攻撃
 	else:
 		var verb := _weapon_action(attacker, "normal")
-		msg = "%sが%sに%s、%sを与えた" % [atk_name, def_name, verb, _damage_label(actual)]
+		msg = "%sが%sに%s、%sを与えた" % [atk_name, def_name, verb, dmg_label]
+		segments = _make_segs([
+			[atk_name, atk_color], ["が", Color.WHITE],
+			[def_name, def_color], ["に" + verb + "、", Color.WHITE],
+			[dmg_label, dmg_color, dmg_bold], ["を与えた", Color.WHITE],
+		])
 
-	MessageLog.add_battle(atk_data, def_data, msg, attacker, self)
+	MessageLog.add_battle(atk_data, def_data, msg, attacker, self, segments)
+
+
+## segments 配列を {text,color,bold} の辞書配列に変換するヘルパー
+## 入力: [[text, color], [text, color, bold], ...]
+static func _make_segs(raw: Array) -> Array:
+	var result: Array = []
+	for s: Array in raw:
+		var d := {"text": s[0] as String, "color": s[1] as Color}
+		if s.size() >= 3:
+			d["bold"] = s[2] as bool
+		result.append(d)
+	return result
+
+
+## パーティー所属に応じた名前色を返す
+## 自パーティー（joined_to_player=true）=青系 / 未加入NPC（is_friendly=true）=水色系 / 敵=暗めの緑
+static func _party_name_color(ch: Character) -> Color:
+	if ch == null or not is_instance_valid(ch):
+		return Color.WHITE
+	if ch.joined_to_player:
+		return Color(0.50, 0.75, 1.00)   # 自パーティー：青
+	if ch.is_friendly:
+		return Color(0.55, 0.90, 1.00)   # 未加入NPC：水色
+	return Color(0.30, 0.65, 0.35)       # 敵：暗めの緑（状態ラベルの明るい緑と区別）
+
+
+## ダメージ量に応じたラベル色を返す
+## 小=白 / 中=黄 / 大=オレンジ / 特大=赤
+static func _damage_label_color(dmg: int) -> Color:
+	if dmg <= GlobalConstants.DAMAGE_LEVEL_SMALL:
+		return Color.WHITE
+	elif dmg <= GlobalConstants.DAMAGE_LEVEL_MEDIUM:
+		return Color(1.00, 0.95, 0.30)   # 黄
+	elif dmg <= GlobalConstants.DAMAGE_LEVEL_LARGE:
+		return Color(1.00, 0.65, 0.20)   # オレンジ
+	else:
+		return Color(1.00, 0.30, 0.30)   # 赤
+
+
+## ダメージ量が特大かどうか（太字描画フラグ用）
+static func _damage_is_huge(dmg: int) -> bool:
+	return dmg > GlobalConstants.DAMAGE_LEVEL_LARGE
 
 
 ## 戦闘計算ログを出力する

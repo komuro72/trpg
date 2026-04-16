@@ -213,10 +213,10 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 
 ### メッセージ表記方針
 - メッセージウィンドウに表示するバトルメッセージは**自然言語**で記述する（記号的表現を避ける）
-  - 良い例：「○○がHP回復ポーションを使い、自身のHPを回復した」
+  - 良い例：「○○がHPポーションを使い、自身のHPを回復した」
   - 悪い例：「○○がHPポーションを使った（HP+30）」
 - 数値は原則として表示しない（ダメージ段階「小/中/大/特大」等の表現を使う）
-- アイテム名は統一表記を使う：HP回復ポーション / MP回復ポーション / SP回復ポーション
+- アイテム名は統一表記を使う：HPポーション / MPポーション / SPポーション
 
 ### 指示／ステータスウィンドウ（OrderWindow）
 - 専用ボタンでいつでも開閉可能（ポーズなし・時間進行継続）
@@ -567,6 +567,16 @@ rank値: C=0, B=1, A=2, S=3
 - [x] パーティーシステムリファクタリング: 敵リーダーAI継承構造リファクタリング（EnemyLeaderAI）・PartyLeader基底クラス抽出・NpcManager/EnemyManager廃止しPartyManagerに統合・パーティー戦力評価メソッド追加
 - [x] ダンジョン再構成: 5フロア×20部屋構成に拡張。各フロア下り階段3部屋・上り階段3部屋（上り階段部屋は敵初期配置なし）。主人公1人スタート・NPC 8パーティー（1人×5+2人×2+3人×1=計12人）を全てフロア0に配置
 - [x] 安全部屋の追加: フロア0中央に「安全の広間」（15×11、`is_safe_room`）を配置。上下左右4部屋と通路で接続。敵は通路までは来れるが部屋内に進入できない（MapData.is_safe_tile で敵AIのA*経路探索から除外）。主人公とNPC全8パーティーがここからスタート
+- [x] UI・演出ブラッシュアップ（2026-04-16）:
+  - ヒットエフェクトを3層プロシージャル（リング波紋＋光条＋パーティクル散布・加算合成）に刷新
+  - OrderWindow レイアウト再構成（タイトル削除・ステータスヘッダー復活・ランク色付き・装備/所持アイテム2列化・全身画像拡大1:1維持・ログ行廃止）
+  - OrderWindow チップ選択の左右キーは全列循環・上下移動時は列種類（pos）で対応づけ
+  - メッセージウィンドウ刷新（右スティック上下でピクセル単位スムーズスクロール・R3/Homeで拡大トグル・背景半透明化・文字色分け segments 対応）
+  - 状態ラベル4段階化（healthy/wounded/injured/critical）。スプライト色・テキスト色・HPゲージ色・DebugWindow を状態ラベル閾値に統一
+  - 攻撃フロー改善（他ボタンで攻撃キャンセル＋機能切替・射程内対象なし時の自動キャンセル・ヒーラー360度射程オーバーレイ対応）
+  - 安全部屋専用タイル画像（safe_floor.png）
+  - `Character.joined_to_player` フラグ追加（パーティー所属判定用）
+  - アイテム名称統一（HPポーション/MPポーション/SPポーション）
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム
@@ -683,7 +693,7 @@ rank値: C=0, B=1, A=2, S=3
 - 複数パーティーによる協力撃破の分配は将来実装
 
 ### 消耗品
-- HP回復ポーション・MP回復ポーション・SP回復ポーション（上級ポーションは設けない）
+- HPポーション・MPポーション・SPポーション（上級ポーションは設けない）
 - C/X短押しでフィールドからアイテム選択UIを開いて使用（ウィンドウ不要）
 - 固定スロット管理なし。inventory内のアイテムを一覧表示（消耗品はグループ化）
 - LB/RB（通常時）：パーティーメンバーを表示順で循環切り替え
@@ -772,8 +782,9 @@ rank値: C=0, B=1, A=2, S=3
 #### HP系
 | 用途 | 定数名 | 値 |
 |------|-------|-----|
-| 状態ラベル "healthy" の境界（HP%≥この値） | `CONDITION_HEALTHY_THRESHOLD` | 0.75 |
-| 状態ラベル "wounded" の境界（HP%≥この値、未満は "critical"） | `CONDITION_WOUNDED_THRESHOLD` | 0.35 |
+| 状態ラベル "healthy" の境界（HP%≥この値） | `CONDITION_HEALTHY_THRESHOLD` | 0.5 |
+| 状態ラベル "wounded" の境界（HP%≥この値） | `CONDITION_WOUNDED_THRESHOLD` | 0.35 |
+| 状態ラベル "injured" の境界（HP%≥この値、未満は "critical"） | `CONDITION_INJURED_THRESHOLD` | 0.25 |
 | 瀕死判定（HPポーション自動使用・on_low_hp 発動・heal "aggressive" モード対象） | `NEAR_DEATH_THRESHOLD` | 0.25 |
 | ヒーラー回復モード "lowest_hp_first" / "leader_first"（リーダー判定） | `HEALER_HEAL_THRESHOLD` | 0.5 |
 | 種族固有自己逃走（ゴブリン系 `_should_self_flee`） | `SELF_FLEE_HP_THRESHOLD` | 0.3 |
@@ -823,7 +834,7 @@ rank値: C=0, B=1, A=2, S=3
 | 即死耐性 | `instant_death_immune` | bool。デフォルト false。ボス級は true（ヘッドショット無効・無力化水魔法短縮） |
 | アンデッド | `is_undead` | bool。デフォルト false。skeleton / skeleton-archer / lich が true。ヒーラーの回復魔法が特効（回復量をダメージとして適用）。物理耐性極高・魔法はある程度有効 |
 | 巻き添え | `friendly_fire` | bool。デフォルト false（将来実装。範囲攻撃が味方・他パーティーにも当たる仕様） |
-| 状態ラベル | `get_condition()` | HP割合に基づく3段階ラベル（healthy/wounded/critical）。AI の戦力評価で敵のHP推定に使用。閾値は GlobalConstants で管理 |
+| 状態ラベル | `get_condition()` | HP割合に基づく4段階ラベル（healthy/wounded/injured/critical）。AI の戦力評価で敵のHP推定に使用。閾値は GlobalConstants で管理 |
 
 - 魔法命中精度は `skill` と共通（`power` 系は攻撃・回復とも同じ命中扱い）
 - 回復魔法は必ず命中するため、ヒーラー（attack_type="heal"）には OrderWindow の魔法技量行を表示しない
@@ -840,7 +851,7 @@ rank値: C=0, B=1, A=2, S=3
 - 特殊攻撃（V）：魔法クラスはMP消費大・非魔法クラスはSP消費大
 - ヒーラーのZ（回復）はMP消費大（例外扱い）
 - 自動回復：MP・SP ともに時間経過でゆっくり回復
-- 回復アイテム：MP回復ポーション（魔法クラス用）・SP回復ポーション（非魔法クラス用）に分離
+- 回復アイテム：MPポーション（魔法クラス用）・SPポーション（非魔法クラス用）に分離
 - 敵キャラクターは当面 SP/MP システムを持たない（AI の行動クールタイムで代替）
 
 ### 命中・被ダメージ計算
@@ -1024,7 +1035,7 @@ rank値: C=0, B=1, A=2, S=3
 - 敵キャラクターの正確なステータス（hp, max_hp, power, skill 等）をAIの判断ロジックで直接参照してはならない
   - 参照してよい情報：ランク、クラス（種族）、condition（状態ラベル）、位置、向き、is_alive、is_flying、is_undead など外見で判断できる情報
   - 理由：ゲーム仕様上、敵のステータスは不可視。将来的に情報制限を導入する前提で設計する
-  - HP の推定は状態ラベル（condition: healthy/wounded/critical）経由で行う
+  - HP の推定は状態ラベル（condition: healthy/wounded/injured/critical）経由で行う
   - 戦力評価は `_evaluate_party_strength_for()` を使う
   - 種族固有リーダーAI（GoblinLeaderAI 等）でも同じルールを守ること
   - 自パーティーのメンバーのステータスは直接参照してよい

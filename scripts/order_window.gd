@@ -96,7 +96,7 @@ const ATTACK_TYPE_LABELS: Dictionary = {
 
 # ── 内部状態 ──────────────────────────────────────────────────────────────────
 
-enum _FocusArea { GLOBAL_POLICY, MEMBER_TABLE, CLOSE, LOG }
+enum _FocusArea { GLOBAL_POLICY, MEMBER_TABLE }
 
 ## 名前列Z押下時のサブメニュー項目
 const SUBMENU_ITEMS: Array[String] = ["操作切替", "アイテム"]
@@ -134,9 +134,6 @@ var _texture_cache: Dictionary = {}
 ## MessageWindow 参照（ログ表示に使用）
 var _message_window: MessageWindow = null
 
-## ログ表示モード・スクロール
-var _log_mode:   bool = false
-var _log_scroll: int  = 0
 
 ## アイテム画像テクスチャキャッシュ（img_path -> Texture2D or null）
 var _item_tex_cache: Dictionary = {}
@@ -180,7 +177,6 @@ func open_window() -> void:
 func close_window() -> void:
 	visible = false
 	_submenu_open = false
-	_log_mode     = false
 	_item_mode    = _ItemMode.OFF
 	closed.emit()
 
@@ -227,8 +223,6 @@ func _handle_input() -> void:
 					_focus_area    = _FocusArea.MEMBER_TABLE
 					_member_cursor = 0
 					_col_cursor    = 0
-				else:
-					_focus_area = _FocusArea.CLOSE
 			elif Input.is_action_just_pressed("ui_left"):
 				if _is_editable():
 					_cycle_global_row(-1)
@@ -266,21 +260,18 @@ func _handle_input() -> void:
 					if _member_cursor <= 0:
 						_focus_area = _FocusArea.GLOBAL_POLICY
 					else:
+						var old_pos := _get_col_pos_at_cursor()
 						_member_cursor -= 1
+						_adjust_col_cursor_by_pos(old_pos)
 				elif Input.is_action_just_pressed("ui_down"):
-					if _member_cursor >= members_count - 1:
-						_focus_area = _FocusArea.CLOSE
-					else:
+					if _member_cursor < members_count - 1:
+						var old_pos := _get_col_pos_at_cursor()
 						_member_cursor += 1
+						_adjust_col_cursor_by_pos(old_pos)
 				elif Input.is_action_just_pressed("ui_left"):
-					if _col_cursor == 0:
-						# 名前列左キー：ウィンドウを閉じる
-						close_window()
-					else:
-						var tc := _get_active_total_cols()
-						_col_cursor = (_col_cursor - 1 + tc) % tc
+					var tc := _get_active_total_cols()
+					_col_cursor = (_col_cursor - 1 + tc) % tc
 				elif Input.is_action_just_pressed("ui_right"):
-					# 右キーは常に列移動（サブメニューを開くのは Z のみ）
 					var tc := _get_active_total_cols()
 					_col_cursor = (_col_cursor + 1) % tc
 				elif Input.is_action_just_pressed("attack") \
@@ -295,39 +286,6 @@ func _handle_input() -> void:
 							_cycle_member_col(_member_cursor, _col_cursor - 1, +1)
 				elif Input.is_action_just_pressed("ui_cancel") \
 						or Input.is_action_just_pressed("menu_back"):
-					close_window()
-
-		_FocusArea.CLOSE:
-			if _log_mode:
-				# ログ表示モード：スクロール操作
-				if Input.is_action_just_pressed("ui_up"):
-					_log_scroll = maxi(0, _log_scroll - 1)
-				elif Input.is_action_just_pressed("ui_down"):
-					var log_visible := MessageLog.get_visible_entries() if MessageLog != null else []
-					_log_scroll = mini(_log_scroll + 1, maxi(0, log_visible.size() - 1))
-				elif Input.is_action_just_pressed("attack") \
-						or Input.is_action_just_pressed("ui_accept") \
-						or Input.is_action_just_pressed("ui_cancel") \
-						or Input.is_action_just_pressed("menu_back"):
-					_log_mode = false
-			else:
-				if Input.is_action_just_pressed("ui_up"):
-					if members_count > 0:
-						_focus_area    = _FocusArea.MEMBER_TABLE
-						_member_cursor = members_count - 1
-					else:
-						_focus_area = _FocusArea.GLOBAL_POLICY
-				elif Input.is_action_just_pressed("attack") \
-						or Input.is_action_just_pressed("ui_accept") \
-						or Input.is_action_just_pressed("ui_right"):
-					# ログ行でZ/右キーを押すとログモードを開始
-					_log_mode   = true
-					_log_scroll = 0
-					if MessageLog != null:
-						_log_scroll = maxi(0, MessageLog.get_visible_entries().size() - 1)
-				elif Input.is_action_just_pressed("ui_cancel") \
-						or Input.is_action_just_pressed("menu_back") \
-						or Input.is_action_just_pressed("ui_left"):
 					close_window()
 
 
@@ -858,8 +816,6 @@ func _on_draw() -> void:
 	panel_h += 25.0                                        # sep
 	panel_h += row_h                                       # ヘッダー行
 	panel_h += float(member_count) * row_h + 8.0
-	panel_h += 25.0                                        # sep
-	panel_h += row_h                                       # 閉じるボタン
 	panel_h += status_section_h
 	panel_h += float(fs_hint) + pad                        # ヒント＋下余白
 
@@ -872,19 +828,6 @@ func _on_draw() -> void:
 		Color(0.50, 0.50, 0.72, 0.90), false, 2)
 
 	var y := py + pad
-
-	# ── タイトル ─────────────────────────────────────────────────────────────
-	var title_str := "パーティー指示"
-	if not _is_editable():
-		title_str += "  （閲覧のみ）"
-	_control.draw_string(_font,
-		Vector2(px + pad, y + float(fs_title)),
-		title_str,
-		HORIZONTAL_ALIGNMENT_LEFT, panel_w - pad * 2.0,
-		fs_title, Color(0.88, 0.88, 1.00))
-	y += float(fs_title) + 10.0
-	_draw_sep(px, y, panel_w, pad)
-	y += 13.0
 
 	# ── 全体方針（6行） ───────────────────────────────────────────────────────
 	var global_row_h2: float = maxf(22.0, gs_f * 0.24)
@@ -989,11 +932,15 @@ func _on_draw() -> void:
 		var nm_focused := is_mem and (_col_cursor == 0)
 		# 名前に操作状態を付記（操作中=★、名前列フォーカス時=▶）
 		var nm_prefix := "★" if is_controlled else ("▶" if nm_focused else "  ")
+		# 名前列フォーカス時はハイライト背景（チップ列と同じ挙動）
+		var name_w := col_xs[1] - col_xs[0] - 4.0
+		if nm_focused:
+			_control.draw_rect(Rect2(col_xs[0] - 2.0, y + 2.0, name_w, row_h - 4.0),
+				Color(0.25, 0.35, 0.65, 0.70))
 		var nm_color: Color
 		if is_controlled:  nm_color = Color(0.45, 1.0, 0.55)
-		elif nm_focused:   nm_color = Color(1.0, 1.0, 0.3)
+		elif is_mem:       nm_color = Color(1.0, 1.0, 0.3)
 		else:              nm_color = Color(0.90, 0.90, 0.90)
-		var name_w := col_xs[1] - col_xs[0] - 4.0
 		_control.draw_string(_font, Vector2(col_xs[0], y + row_h * 0.67),
 			nm_prefix + nm_str, HORIZONTAL_ALIGNMENT_LEFT, name_w, fs_body, nm_color)
 
@@ -1053,27 +1000,8 @@ func _on_draw() -> void:
 	_draw_sep(px, y, panel_w, pad)
 	y += 13.0
 
-	# ── ログ行 ────────────────────────────────────────────────────────────────
-	var is_log_row := (_focus_area == _FocusArea.CLOSE)
-	if is_log_row:
-		_control.draw_rect(Rect2(px + 4.0, y, panel_w - 8.0, row_h),
-			Color(0.18, 0.24, 0.48, 0.70))
-	var log_col: Color
-	if _log_mode:     log_col = Color(0.40, 1.00, 0.80)
-	elif is_log_row:  log_col = Color(1.0, 1.0, 0.3)
-	else:             log_col = Color(0.68, 0.68, 0.82)
-	var log_prefix := "▶  " if is_log_row else "    "
-	var log_label  := log_prefix + ("ログ [表示中]" if _log_mode else "ログ")
-	var log_tw     := _font.get_string_size(log_label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_body).x
-	_control.draw_string(_font,
-		Vector2(px + panel_w * 0.5 - log_tw * 0.5, y + row_h * 0.67),
-		log_label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_body, log_col)
-	y += row_h
-
 	# ── ステータスパネル（下部） ───────────────────────────────────────────────
-	if _log_mode and MessageLog != null:
-		_draw_log_section(px, y, panel_w, pad, fs_stat, stat_h)
-	elif sel_ch != null:
+	if sel_ch != null:
 		_draw_status_section(px, y, panel_w, pad, sel_ch, stat_rows, stat_h, fs_stat)
 
 	# ── 操作ヒント ────────────────────────────────────────────────────────────
@@ -1115,8 +1043,6 @@ func _on_draw() -> void:
 		hint_str = "↑↓:選択  Z/Enter:実行  Esc:戻る"
 	elif _item_mode == _ItemMode.TRANSFER_SELECT:
 		hint_str = "↑↓:選択  Z/Enter:渡す  Esc:戻る"
-	elif _log_mode:
-		hint_str = "↑↓:スクロール  Z/Enter/Esc:ログを閉じる  Tab:ウィンドウを閉じる"
 	elif _submenu_open:
 		hint_str = "↑↓:選択  Z/Enter:決定  Esc:キャンセル"
 	elif _focus_area == _FocusArea.GLOBAL_POLICY:
@@ -1133,35 +1059,6 @@ func _on_draw() -> void:
 		hint_str,
 		HORIZONTAL_ALIGNMENT_LEFT, panel_w - pad * 2.0, fs_hint,
 		Color(0.46, 0.46, 0.56))
-
-
-## ログ表示セクション（MessageLog の共有バッファを一覧表示・色分け対応）
-func _draw_log_section(px: float, y_start: float, panel_w: float, pad: float,
-		fs_stat: int, stat_h: float) -> void:
-	var y     := y_start + 13.0
-	var avail := panel_w - pad * 2.0
-	var lbl_x := px + pad
-
-	_draw_sep(px, y_start, panel_w, pad)
-	var log_visible: Array[Dictionary] = MessageLog.get_visible_entries() if MessageLog != null else []
-	var visible_rows: int = 12
-	var start_idx:    int = maxi(0, _log_scroll - visible_rows + 1)
-	var end_idx:      int = mini(log_visible.size(), start_idx + visible_rows)
-
-	_control.draw_string(_font, Vector2(lbl_x, y + float(fs_stat)),
-		"ログ（%d件）  ↑↓:スクロール  Z/Esc:閉じる" % log_visible.size(),
-		HORIZONTAL_ALIGNMENT_LEFT, avail, fs_stat, Color(0.80, 0.80, 1.00))
-	y += float(fs_stat) + stat_h
-
-	for i: int in range(start_idx, end_idx):
-		var entry := log_visible[i]
-		var is_cur := (i == _log_scroll)
-		var base_col: Color = entry.get("color", Color.WHITE) as Color
-		var e_col: Color = base_col if is_cur else base_col * Color(0.65, 0.65, 0.75, 1.0)
-		var text: String = entry.get("text", "") as String
-		_control.draw_string(_font, Vector2(lbl_x, y + stat_h * 0.75),
-			"%d: %s" % [i + 1, text], HORIZONTAL_ALIGNMENT_LEFT, avail, fs_stat, e_col)
-		y += stat_h
 
 
 ## 1行分のステータスデータを指定 X 座標に描画するヘルパー
@@ -1201,16 +1098,17 @@ func _draw_one_stat_row(row: Dictionary,
 				val, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_val)
 
 
-## ステータス詳細・装備・アイテムセクションを描画する（左：front画像 / 右：2列ステータス）
+## ステータス詳細・装備・アイテムセクションを描画する
+## 左: front画像（全コンテンツの高さに合わせて拡大）
+## 右: ステータス2列 → 装備2列 → 所持アイテム2列
 func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 		ch: Character, stat_rows: Dictionary, stat_h: float, fs_stat: int) -> void:
 	var y     := y_start
 	var avail := panel_w - pad * 2.0
 
 	# ── レイアウト計算 ────────────────────────────────────────────────────────
-	# 左端: front画像（最大 180px 正方形）
-	# 右側: ステータス2列
-	var img_col_w: float = minf(avail * 0.22, 180.0)
+	# 左端: front画像（幅の28%、最大240px）
+	var img_col_w: float = minf(avail * 0.28, 240.0)
 	var col_gap   := pad
 	var stats_x0  := px + pad + img_col_w + col_gap
 	var stats_avail := px + panel_w - pad - stats_x0
@@ -1236,36 +1134,44 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 	var c_val   := Color(0.90, 0.90, 0.95)
 	var c_bonus := Color(0.50, 0.55, 0.70)
 	var c_dim   := Color(0.42, 0.42, 0.58)
-	# 装備・アイテムセクションで使うベースX（左ステータス列の先頭と同じ位置）
+	# 装備・アイテムセクションで使うベースX（ステータス左列の先頭と同じ位置）
 	var lbl_x   := lbl_l
 
 	# ── ステータス区切り ──────────────────────────────────────────────────────
 	_draw_sep(px, y, panel_w, pad)
 	y += 13.0
+	# 画像の描画開始Y を記録（後で画像サイズを確定して描画）
+	var img_top_y := y
 
 	var cd    := ch.character_data
 	var cname := (cd.character_name \
 		if (cd != null and not cd.character_name.is_empty()) \
 		else String(ch.name))
 
-	# ── 左側: front / face 画像 ───────────────────────────────────────────────
-	var tex := _get_char_front_texture(ch)
-	if tex != null:
-		_control.draw_texture_rect(tex,
-			Rect2(px + pad, y, img_col_w, img_col_w), false)
-	else:
-		var ph_col := ch.placeholder_color \
-			if (is_instance_valid(ch) and ch.placeholder_color != Color.BLACK) \
-			else Color(0.30, 0.30, 0.45)
-		_control.draw_rect(Rect2(px + pad, y, img_col_w, img_col_w),
-			Color(ph_col.r * 0.5, ph_col.g * 0.5, ph_col.b * 0.5, 0.85))
-
 	# ── ヘッダー（名前 クラス ランク） ────────────────────────────────────────
 	var class_jp: String = GlobalConstants.CLASS_NAME_JP.get(cd.class_id, cd.class_id) as String
-	var header_str := cname + "  " + class_jp + "  " + cd.rank
+	var name_rank_str := cname + "  " + class_jp + "  "
 	_control.draw_string(_font, Vector2(lbl_l, y + float(fs_stat)),
-		header_str, HORIZONTAL_ALIGNMENT_LEFT, stats_avail, fs_stat, c_head)
-	y += float(fs_stat) + stat_h
+		name_rank_str, HORIZONTAL_ALIGNMENT_LEFT, stats_avail, fs_stat, c_head)
+	# ランクを色付きで描画
+	var name_w := _font.get_string_size(name_rank_str, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat).x
+	_control.draw_string(_font, Vector2(lbl_l + name_w, y + float(fs_stat)),
+		cd.rank, HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, _rank_color(cd.rank))
+	y += float(fs_stat) + 4.0
+
+	# ── ステータス列ヘッダー（素値/補正/→最終値） ─────────────────────────────
+	var hdr_fs := fs_stat - 1
+	var hdr_y := y + float(hdr_fs)
+	for hx: float in [base_l, base_r]:
+		_control.draw_string(_font, Vector2(hx, hdr_y),
+			"素値", HORIZONTAL_ALIGNMENT_LEFT, -1, hdr_fs, c_dim)
+	for hx2: float in [bonus_l, bonus_r]:
+		_control.draw_string(_font, Vector2(hx2, hdr_y),
+			"補正", HORIZONTAL_ALIGNMENT_LEFT, -1, hdr_fs, c_dim)
+	for hx3: float in [final_l, final_r]:
+		_control.draw_string(_font, Vector2(hx3, hdr_y),
+			"最終", HORIZONTAL_ALIGNMENT_LEFT, -1, hdr_fs, c_dim)
+	y += float(hdr_fs) + 4.0
 
 	# ── 2列ステータス行 ───────────────────────────────────────────────────────
 	var left_rows:  Array = stat_rows.get("left",  []) as Array
@@ -1283,32 +1189,32 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 				c_lbl, c_val, c_bonus)
 	y += float(n_rows) * stat_h
 
-	# 画像の下端まで y を進める（画像がステータス行より長い場合）
-	var img_bottom := y_start + 13.0 + img_col_w
-	if y < img_bottom:
-		y = img_bottom
-
-	# ── 装備 ─────────────────────────────────────────────────────────────────
-	_draw_sep(px, y, panel_w, pad)
-	y += 13.0
+	# ── 装備（2列レイアウト） ─────────────────────────────────────────────────
+	_draw_sep_range(stats_x0, y, stats_avail, 0.0)
+	y += 8.0
 	_control.draw_string(_font, Vector2(lbl_x, y + float(fs_stat)),
 		"装備", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_head)
-	y += float(fs_stat) + 6.0
+	y += float(fs_stat) + 4.0
 	var slot_defs: Array = [
 		["武器", cd.equipped_weapon],
 		["防具", cd.equipped_armor],
 		["盾",   cd.equipped_shield],
 	]
-	for sd: Variant in slot_defs:
-		var sd_arr   := sd as Array
+	# 2列に配置（左列: index 0,2  右列: index 1）
+	var eq_icon_sz := stat_h - 2.0
+	var eq_col_w := (stats_avail - half_gap) * 0.5
+	var eq_row := 0
+	for si: int in range(slot_defs.size()):
+		var col_idx := si % 2
+		var ex := lbl_x + float(col_idx) * (eq_col_w + half_gap)
+		var ey := y + float(eq_row) * stat_h
+		var sd_arr   := slot_defs[si] as Array
 		var equip    : Dictionary = sd_arr[1] as Dictionary
-		var eq_icon_sz := stat_h - 2.0
 		if equip.is_empty():
-			_control.draw_string(_font, Vector2(lbl_x, y + stat_h * 0.75),
-				"（なし）", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_dim)
+			_control.draw_string(_font, Vector2(ex, ey + stat_h * 0.75),
+				"（なし）", HORIZONTAL_ALIGNMENT_LEFT, eq_col_w, fs_stat, c_dim)
 		else:
-			# アイコンをlbl_xから描画（「武器」「防具」「盾」ラベルは非表示）
-			var eq_icon_rect := Rect2(lbl_x, y + 1.0, eq_icon_sz, eq_icon_sz)
+			var eq_icon_rect := Rect2(ex, ey + 1.0, eq_icon_sz, eq_icon_sz)
 			var etex := _load_item_tex(equip)
 			if etex != null:
 				_control.draw_texture_rect(etex, eq_icon_rect, false)
@@ -1325,17 +1231,22 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 						var jp: String = GlobalConstants.STAT_NAME_JP.get(k, k) as String
 						eparts.append("%s+%d" % [jp, v])
 			var estat_str := "" if eparts.is_empty() else " [%s]" % ", ".join(eparts)
-			_control.draw_string(_font, Vector2(lbl_x + eq_icon_sz + 3.0, y + stat_h * 0.75),
+			_control.draw_string(_font, Vector2(ex + eq_icon_sz + 3.0, ey + stat_h * 0.75),
 				ename + estat_str,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_val)
-		y += stat_h
+				HORIZONTAL_ALIGNMENT_LEFT, eq_col_w - eq_icon_sz - 3.0, fs_stat, c_val)
+		if col_idx == 1:
+			eq_row += 1
+	# 最後の行が左列で終わった場合も行を進める
+	if slot_defs.size() % 2 == 1:
+		eq_row += 1
+	y += float(eq_row) * stat_h
 
-	# ── 所持アイテム ──────────────────────────────────────────────────────────
-	_draw_sep(px, y, panel_w, pad)
-	y += 13.0
+	# ── 所持アイテム（2列レイアウト） ─────────────────────────────────────────
+	_draw_sep_range(stats_x0, y, stats_avail, 0.0)
+	y += 8.0
 	_control.draw_string(_font, Vector2(lbl_x, y + float(fs_stat)),
 		"所持アイテム", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_head)
-	y += float(fs_stat) + 6.0
+	y += float(fs_stat) + 4.0
 	# 未装備品のみ表示（同名アイテムは「×n」でまとめ表示）
 	var inv: Array = _get_unequipped_items(ch)
 	# 同名グループ化
@@ -1355,14 +1266,20 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 	if inv_groups.is_empty():
 		_control.draw_string(_font, Vector2(lbl_x, y + stat_h * 0.75),
 			"（なし）", HORIZONTAL_ALIGNMENT_LEFT, -1, fs_stat, c_dim)
+		y += stat_h
 	else:
 		var inv_icon_sz := stat_h - 2.0
-		for g_v2: Variant in inv_groups:
-			var g2    := g_v2 as Dictionary
+		var inv_col_w := (stats_avail - half_gap) * 0.5
+		var inv_row := 0
+		for ii: int in range(inv_groups.size()):
+			var col_idx2 := ii % 2
+			var ix := lbl_x + float(col_idx2) * (inv_col_w + half_gap)
+			var iy := y + float(inv_row) * stat_h
+			var g2    := inv_groups[ii] as Dictionary
 			var item_d := g2["item"] as Dictionary
 			var count2 := int(g2["count"])
 			# アイコン描画
-			var inv_icon_rect := Rect2(lbl_x, y + 1.0, inv_icon_sz, inv_icon_sz)
+			var inv_icon_rect := Rect2(ix, iy + 1.0, inv_icon_sz, inv_icon_sz)
 			var inv_tex := _load_item_tex(item_d)
 			if inv_tex != null:
 				_control.draw_texture_rect(inv_tex, inv_icon_rect, false)
@@ -1377,19 +1294,57 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 				if stats_d.has(k) and int(stats_d[k]) != 0:
 					var jp: String = GlobalConstants.STAT_NAME_JP.get(k, k) as String
 					stat_strs.append("%s+%d" % [jp, int(stats_d[k])])
-			# 消耗品は effect を表示
+			# 消耗品は effect を日本語表記で表示
 			var effect_d: Dictionary = item_d.get("effect", {}) as Dictionary
 			for ek: String in effect_d:
-				stat_strs.append("%s:%d" % [ek, int(effect_d[ek])])
+				var ev: int = int(effect_d[ek])
+				if ev != 0:
+					var elbl: String = _effect_label(ek)
+					stat_strs.append("%s %d" % [elbl, ev])
 			var qty_str := " ×%d" % count2 if count2 > 1 else ""
 			var stat_str := " [%s]" % ", ".join(stat_strs) if not stat_strs.is_empty() else ""
-			_control.draw_string(_font, Vector2(lbl_x + inv_icon_sz + 3.0, y + stat_h * 0.75),
+			_control.draw_string(_font, Vector2(ix + inv_icon_sz + 3.0, iy + stat_h * 0.75),
 				iname + qty_str + stat_str, HORIZONTAL_ALIGNMENT_LEFT,
-				avail - inv_icon_sz - 3.0, fs_stat, c_val)
-			y += stat_h
+				inv_col_w - inv_icon_sz - 3.0, fs_stat, c_val)
+			if col_idx2 == 1:
+				inv_row += 1
+		if inv_groups.size() % 2 == 1:
+			inv_row += 1
+		y += float(inv_row) * stat_h
+
+	# ── 全身画像を描画（1:1 アスペクト比を維持） ─────────────────────────────
+	var tex := _get_char_front_texture(ch)
+	if tex != null:
+		_control.draw_texture_rect(tex,
+			Rect2(px + pad, img_top_y, img_col_w, img_col_w), false)
+	else:
+		var ph_col := ch.placeholder_color \
+			if (is_instance_valid(ch) and ch.placeholder_color != Color.BLACK) \
+			else Color(0.30, 0.30, 0.45)
+		_control.draw_rect(Rect2(px + pad, img_top_y, img_col_w, img_col_w),
+			Color(ph_col.r * 0.5, ph_col.g * 0.5, ph_col.b * 0.5, 0.85))
 
 
 # ── ユーティリティ ────────────────────────────────────────────────────────────
+
+## 消耗品 effect キーを日本語ラベルに変換する
+const _EFFECT_LABELS: Dictionary = {
+	"restore_hp": "HP回復",
+	"restore_mp": "MP回復",
+	"restore_sp": "SP回復",
+}
+
+static func _effect_label(key: String) -> String:
+	return _EFFECT_LABELS.get(key, key) as String
+
+
+## ランク文字の色（right_panel と共通ルール）
+static func _rank_color(rank: String) -> Color:
+	match rank:
+		"S", "A": return Color(1.0, 0.30, 0.30)
+		"B", "C": return Color(1.0, 0.65, 0.20)
+		_:        return Color(1.0, 1.0, 0.30)
+
 
 ## アイテム辞書からアイコン画像を読み込む（image フィールド優先・なければ item_type から導出）
 func _load_item_tex(item: Dictionary) -> Texture2D:
@@ -1495,6 +1450,48 @@ func _get_active_total_cols() -> int:
 	return TOTAL_COLS
 
 
+## 現在の _col_cursor が指すチップ列の pos 値を返す（名前列=−1）
+func _get_col_pos_at_cursor() -> int:
+	if _col_cursor <= 0:
+		return -1
+	if _member_cursor >= _sorted_members.size():
+		return -1
+	var ch := _sorted_members[_member_cursor] as Character
+	if not is_instance_valid(ch):
+		return -1
+	var cols := _get_cols_for(ch)
+	var ci := _col_cursor - 1  # チップ配列のインデックス
+	if ci < cols.size():
+		return int(cols[ci].get("pos", ci))
+	return -1
+
+
+## 上下移動後に _col_cursor を列種類（pos）で対応づけて調整する
+func _adjust_col_cursor_by_pos(old_pos: int) -> void:
+	if old_pos < 0:
+		return  # 名前列は調整不要
+	if _member_cursor >= _sorted_members.size():
+		return
+	var ch := _sorted_members[_member_cursor] as Character
+	if not is_instance_valid(ch):
+		return
+	var cols := _get_cols_for(ch)
+	# 同じ pos の列を探す
+	for i: int in cols.size():
+		if int(cols[i].get("pos", i)) == old_pos:
+			_col_cursor = i + 1
+			return
+	# 該当列がなければ最も近い pos の列に移動
+	var best_i := 0
+	var best_dist := 999
+	for i: int in cols.size():
+		var dist := absi(int(cols[i].get("pos", i)) - old_pos)
+		if dist < best_dist:
+			best_dist = dist
+			best_i = i
+	_col_cursor = best_i + 1
+
+
 func _get_col_xs(px: float, panel_w: float, pad: float) -> Array[float]:
 	## [0]=名前, [1..5]=指示位置0..4（HEADER_COLS の pos に対応）
 	var avail  := panel_w - pad * 2.0
@@ -1512,6 +1509,14 @@ func _draw_sep(px: float, y: float, panel_w: float, pad: float) -> void:
 	_control.draw_line(
 		Vector2(px + pad, y),
 		Vector2(px + panel_w - pad, y),
+		Color(0.35, 0.35, 0.55, 0.65), 1)
+
+
+## 指定範囲に区切り線を引く（装備・アイテムセクション用）
+func _draw_sep_range(x: float, y: float, w: float, _pad: float) -> void:
+	_control.draw_line(
+		Vector2(x, y),
+		Vector2(x + w, y),
 		Color(0.35, 0.35, 0.55, 0.65), 1)
 
 
@@ -1585,7 +1590,10 @@ func _draw_item_list_overlay(ox: float, main_py: float, ow: float,
 						parts.append("%s+%d" % [jp, v])
 			var effect_d: Dictionary = item.get("effect", {}) as Dictionary
 			for ek: String in effect_d:
-				parts.append("%s:%d" % [ek, int(effect_d[ek])])
+				var ev: int = int(effect_d[ek])
+				if ev != 0:
+					var elbl: String = _effect_label(ek)
+					parts.append("%s %d" % [elbl, ev])
 			var stat_str := "" if parts.is_empty() else " [%s]" % ", ".join(parts)
 			var can_equip := _can_equip(_item_char, item)
 			var equip_mark := "◆" if can_equip else "  "

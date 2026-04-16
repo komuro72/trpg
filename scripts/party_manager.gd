@@ -422,6 +422,10 @@ func is_active() -> bool:
 ## プレイヤーパーティー合流フラグを設定し、LeaderAI・UnitAI に伝播する
 func set_joined_to_player(value: bool) -> void:
 	joined_to_player = value
+	# メンバー個別にも伝播（メッセージ色分け等で参照される）
+	for m: Character in _members:
+		if is_instance_valid(m):
+			m.joined_to_player = value
 	if _leader_ai != null:
 		# set_follow_hero_floors() が joined_to_player の更新と UnitAI への伝播を行う
 		_leader_ai.set_follow_hero_floors(value)

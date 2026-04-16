@@ -3,6 +3,50 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-16（UI・演出ブラッシュアップ）
+
+### ヒットエフェクト3層刷新
+- 変更内容: `scripts/hit_effect.gd` を全面書き換え。旧・単純な白い円のフォールバック（0.14秒）を廃止し、リング波紋＋光条フラッシュ＋パーティクル散布の3層プロシージャル描画（0.40秒）に。加算合成（`CanvasItemMaterial.BLEND_MODE_ADD`）で輝度を確保。ダメージ量に応じてリング最大半径とパーティクル数（6〜20）が増減する。
+- 理由: 旧エフェクトは輝度が低く攻撃の手応えが薄かった。
+
+### OrderWindow バグ修正と UI 改善
+- 修正: 個別指示テーブルで左右キーは名前列を含めて全列で循環する方式に変更（当初の案を経て最終仕様に確定）。上下移動時は列インデックスではなく列の種類（`pos` 値）で対応づけるヘルパー `_get_col_pos_at_cursor()` / `_adjust_col_cursor_by_pos()` を追加し、非ヒーラー4列／ヒーラー5列で行を跨いでも同じ種類の列にカーソルが着地する。
+- 修正: 所持アイテム表記を `[restore_hp:30]` から `[HP回復 30]` 形式に変更（ConsumableBar と同じ `EFFECT_LABELS` 方式）。
+- 変更: 「パーティー指示」タイトル行を削除して上部スペースを詰めた。
+- 変更: ステータス列ヘッダー（素値/補正/最終）を名前行直下に復活。
+- 変更: ランクを色付きで描画（right_panel と同じ `_rank_color`。S/A=赤・B/C=橙・他=黄）。left_panel / OrderWindow 両方に展開。
+- 変更: レイアウト再構成。全身画像を avail * 0.28（最大240px）に拡大。装備・所持アイテムをそれぞれ 2 列レイアウトに変更。画像は 1:1 のアスペクト比を維持（テキストが長くなっても画像は伸びない）。
+- 変更: メンバー行選択時、名前列にもハイライト背景を描画（他の列と挙動統一）。非フォーカス時の名前は白、フォーカス行の名前は黄色（操作中は緑が優先）。
+- 変更: ログ行を廃止。`_FocusArea.CLOSE` / `LOG`、`_log_mode` / `_log_scroll`、`_draw_log_section()` を削除。メンバー最終行で下キーは留まる。メッセージログは MessageWindow 側で見る運用に統一。
+
+### メッセージウィンドウ大幅刷新
+- 変更: 右スティック上下 / PageUp / PageDown でピクセル単位スムーズスクロール。`Input.get_action_strength()` でアナログ強度を取得し、2乗カーブ × `MANUAL_SCROLL_SPEED = 900.0 px/s`。新メッセージ到着で自動的に最新位置に戻る。時間停止は制御しない。
+- 変更: R3 押し込み / Home でメッセージウィンドウの表示行数をトグル（`VISIBLE_LINES = 3` ↔ `EXPANDED_LINES = 7`）。拡大時は画面上端まで中央テキスト部だけが伸び、左右バスト画像は通常サイズ・下端寄せを維持。
+- 変更: 背景不透明度を 0.80 → 0.55 に下げて半透明化。左右バスト部の背景・枠線・セパレータ線を削除し、キャラクター画像のみ表示。データが無い場合の黒矩形フォールバックも削除（ゲーム開始時の右エリアに黒背景が残っていた問題を解消）。
+- 変更: アイコンサイズを文字2行分の仕様（`ICON_SCALE_RATIO = 2.0/3.0`、`LINE_HEIGHT_RATIO = 1.5`）に戻した。実試験縮小版（1/3・1.25）を廃止。
+- 追加: 文字色分け。MessageLog のエントリに `segments: Array[{text, color, bold?}]` を追加し、セグメント単位で色分け描画できる `_draw_segments()` を実装。自パーティー名=青 / 未加入NPC名=水色 / 敵名=暗い緑 / 小ダメ=白 / 中ダメ=黄 / 大ダメ=オレンジ / 特大ダメ=赤＋太字。通常攻撃メッセージ（`character.gd._emit_damage_battle_msg`）と V スロット特殊攻撃メッセージ（`player_controller.gd._emit_v_skill_battle_msg` / `unit_ai.gd._emit_v_skill_battle_msg`・空振り・ヘッドショット・炎陣・スライディング）を segments 化。
+
+### 状態ラベルを 4 段階に拡張＋色表示統一
+- 変更: 状態ラベルを 4 段階（healthy / wounded / injured / critical）に拡張。閾値を `CONDITION_HEALTHY_THRESHOLD = 0.5` / `CONDITION_WOUNDED_THRESHOLD = 0.35` / `CONDITION_INJURED_THRESHOLD = 0.25` に再設定。
+- 変更: キャラクタースプライト modulate・左右パネルのテキスト色・HP バー色を全て状態ラベル閾値に統一。スプライト: 白 / オレンジ / 赤 / 赤点滅。テキスト・ゲージ: 緑 / 黄 / オレンジ / 赤。中間色のハードコード閾値（0.60 / 0.30 / 0.10 / 0.5 / 0.25）を廃止。
+- 変更: DebugWindow の HP 色分け 2 箇所も状態ラベル閾値に統一。`party_leader._estimate_hp_ratio_from_condition()` に injured ケースを追加。
+- 備考: AI の `NEAR_DEATH_THRESHOLD = 0.25`（HPポーション自動使用・heal "aggressive" モード等）は変更せず据え置き。
+
+### 攻撃フロー改善
+- 追加: PRE_DELAY / TARGETING 中の他ボタン入力で攻撃をキャンセルし、そのボタンの機能を即時実行する `_handle_attack_switch_input()` を追加。アイテムボタン（C/X）でアイテム UI、V/Y で特殊攻撃開始（通常→特殊）、Z/A で通常攻撃開始（特殊→通常）に切替。
+- 追加: TARGETING 突入時に `_valid_targets` が空なら射程オーバーレイを `AUTO_CANCEL_FLASH = 0.25 秒`だけ見せてから自動キャンセル。待機中は他の入力をブロック。
+- 修正: ヒーラーの射程オーバーレイが前方±45°しか表示されなかった。`game_map._draw_tiles` の射程描画で `action == "heal" or action == "buff_defense"` 時は距離判定のみ（360度）に変更。実際の判定ロジックと整合。
+
+### アイテム名称統一
+- 変更: `HP回復ポーション` / `MP回復ポーション` / `SP回復ポーション` → `HPポーション` / `MPポーション` / `SPポーション`。`character.gd` の自然言語バトルメッセージ 3 箇所と CLAUDE.md / docs/spec.md のドキュメントを更新。
+- 修正: SP ポーションが `活力薬` 表記になっていた箇所（`game_map.gd` の初期付与・`dungeon_handcrafted.json` の 53 箇所）を全て `SPポーション` に一括置換。
+
+### 安全部屋専用タイル画像
+- 追加: フロア 0 の「安全の広間」用の床タイル画像 `assets/images/tiles/stone_00001/safe_floor.png` を配置。`game_map._load_tile_textures()` でロードし、`_draw()` 内で `map_data.is_safe_tile(pos)` の FLOOR タイルのみ `_safe_floor_tex` で描画するように拡張。
+
+### Character.joined_to_player 伝播
+- 追加: `Character.joined_to_player: bool` フラグを追加。主人公は初期化時に `true`、NPC パーティーは `PartyManager.set_joined_to_player()` 呼び出し時にメンバー全員に伝播。メッセージ色分けの「自パーティー」判定に使用。
+
 ## Phase 2
 
 ### 設計変更: AI行動生成をLLMからルールベースに変更

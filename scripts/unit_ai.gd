@@ -1101,8 +1101,13 @@ func _v_rush_slash(cost: int) -> void:
 	_state = _State.WAITING
 	_timer = 0.3
 	if hit_count == 0:
+		var n := _v_name()
+		var segs := Character._make_segs([
+			[n, Character._party_name_color(_member)],
+			["が突進斬りを放ったが敵に当たらなかった", Color.WHITE],
+		])
 		MessageLog.add_battle(_member.character_data, null,
-			"%sが突進斬りを放ったが敵に当たらなかった" % _v_name(), _member)
+			"%sが突進斬りを放ったが敵に当たらなかった" % n, _member, null, segs)
 
 
 ## 斧戦士: 振り回し（周囲8マスの敵全員にダメージ）
@@ -1139,15 +1144,33 @@ func _v_headshot(cost: int) -> void:
 	var is_immune := false
 	if _target.character_data != null:
 		is_immune = bool(_target.character_data.instant_death_immune)
+	var atk_n := _v_name()
+	var tgt_n := _v_tgt_name()
+	var atk_col := Character._party_name_color(_member)
+	var tgt_col := Character._party_name_color(_target)
 	if is_immune:
 		var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
 		var raw_damage := int(float(_member.power) * 3.0 * type_mult)
+		# 大ダメージ扱いで描画（オレンジ）
+		var dmg_col := Character._damage_label_color(GlobalConstants.DAMAGE_LEVEL_LARGE)
+		var segs := Character._make_segs([
+			[atk_n, atk_col], ["がヘッドショットで", Color.WHITE],
+			[tgt_n, tgt_col], ["に", Color.WHITE],
+			["大ダメージ", dmg_col], ["を与えた", Color.WHITE],
+		])
 		MessageLog.add_battle(_member.character_data, _target.character_data,
-			"%sがヘッドショットで%sに大ダメージを与えた" % [_v_name(), _v_tgt_name()], _member, _target)
+			"%sがヘッドショットで%sに大ダメージを与えた" % [atk_n, tgt_n], _member, _target, segs)
 		_target.take_damage(raw_damage, 1.0, _member, false, true)
 	else:
+		# 即死扱いは特大色＋太字で強調
+		var kill_col := Character._damage_label_color(GlobalConstants.DAMAGE_LEVEL_LARGE + 9999)
+		var segs2 := Character._make_segs([
+			[atk_n, atk_col], ["がヘッドショットで", Color.WHITE],
+			[tgt_n, tgt_col], ["を", Color.WHITE],
+			["仕留めた", kill_col, true],
+		])
 		MessageLog.add_battle(_member.character_data, _target.character_data,
-			"%sがヘッドショットで%sを仕留めた" % [_v_name(), _v_tgt_name()], _member, _target)
+			"%sがヘッドショットで%sを仕留めた" % [atk_n, tgt_n], _member, _target, segs2)
 		# 即死: 防御・耐性を無視して即座に倒す
 		_target.last_attacker = _member
 		_target.hp = 0
@@ -1171,8 +1194,13 @@ func _v_flame_circle(cost: int) -> void:
 	flame.setup(_member.position, _member.grid_pos, 3, damage,
 			2.5, 0.5, _member, _all_members)
 	SoundManager.play(SoundManager.FLAME_SHOOT)
+	var fn := _v_name()
+	var fsegs := Character._make_segs([
+		[fn, Character._party_name_color(_member)],
+		["が炎陣を設置した", Color.WHITE],
+	])
 	MessageLog.add_battle(_member.character_data, null,
-		"%sが炎陣を設置した" % _v_name(), _member)
+		"%sが炎陣を設置した" % fn, _member, null, fsegs)
 	_state = _State.WAITING
 	_timer = 0.5
 
@@ -1224,8 +1252,13 @@ func _v_sliding(cost: int) -> void:
 		_member.grid_pos = landing_pos
 		_member.sync_position()
 	SoundManager.play(SoundManager.MELEE_DAGGER)
+	var sn := _v_name()
+	var ssegs := Character._make_segs([
+		[sn, Character._party_name_color(_member)],
+		["がスライディングで突進した", Color.WHITE],
+	])
 	MessageLog.add_battle(_member.character_data, null,
-		"%sがスライディングで突進した" % _v_name(), _member)
+		"%sがスライディングで突進した" % sn, _member, null, ssegs)
 	_state = _State.WAITING
 	_timer = 0.3
 
@@ -1273,11 +1306,20 @@ func _v_tgt_name() -> String:
 func _emit_v_skill_battle_msg(skill_name: String, def: Character, dmg: int) -> void:
 	if MessageLog == null or _member == null or def == null:
 		return
+	var atk_name := _v_name()
 	var def_name: String = def.character_data.character_name \
 			if def.character_data != null else String(def.name)
-	var dmg_label := Character._damage_label(maxi(1, dmg))
-	var msg := "%sが%sで%sを攻撃し、%sを与えた" % [_v_name(), skill_name, def_name, dmg_label]
-	MessageLog.add_battle(_member.character_data, def.character_data, msg, _member, def)
+	var dmg_val := maxi(1, dmg)
+	var dmg_label := Character._damage_label(dmg_val)
+	var dmg_color := Character._damage_label_color(dmg_val)
+	var dmg_bold  := Character._damage_is_huge(dmg_val)
+	var msg := "%sが%sで%sを攻撃し、%sを与えた" % [atk_name, skill_name, def_name, dmg_label]
+	var segments := Character._make_segs([
+		[atk_name, Character._party_name_color(_member)], ["が" + skill_name + "で", Color.WHITE],
+		[def_name, Character._party_name_color(def)], ["を攻撃し、", Color.WHITE],
+		[dmg_label, dmg_color, dmg_bold], ["を与えた", Color.WHITE],
+	])
+	MessageLog.add_battle(_member.character_data, def.character_data, msg, _member, def, segments)
 
 
 # --------------------------------------------------------------------------

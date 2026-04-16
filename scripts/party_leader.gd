@@ -659,7 +659,8 @@ func _estimate_hp_ratio_from_condition(condition: String) -> float:
 	match condition:
 		"healthy":  return 1.0
 		"wounded":  return GlobalConstants.CONDITION_HEALTHY_THRESHOLD
-		"critical": return GlobalConstants.CONDITION_WOUNDED_THRESHOLD
+		"injured":  return GlobalConstants.CONDITION_WOUNDED_THRESHOLD
+		"critical": return GlobalConstants.CONDITION_INJURED_THRESHOLD
 		_:          return 1.0  # 不明な値 → 安全側（敵を強く見積もる）
 
 

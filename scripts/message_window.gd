@@ -8,16 +8,14 @@ extends CanvasLayer
 ## ・バトルメッセージ：行左端に [攻撃側face] → [被攻撃側face] アイコン
 ## ・システムメッセージ：アイコンなし
 
-const VISIBLE_LINES: int = 7
+const VISIBLE_LINES: int = 3
 const MSG_FONT_SIZE:  int = 20
 
 ## 中央テキスト部の顔アイコン表示サイズ係数（GRID_SIZE に対する比率）
-## 旧値: 2.0/3.0（≈64px）。試験的に半分（≈32px）に縮小して1メッセージあたりの縦幅を抑える
-## 元に戻す場合は 2.0/3.0 に戻す
-const ICON_SCALE_RATIO: float = 1.0 / 3.0
+const ICON_SCALE_RATIO: float = 2.0 / 3.0
 const ICON_MIN_SIZE: int = 20
-## 行間倍率（旧値: 1.5）。アイコン縮小に合わせて行間も詰めることで表示行数を増やす
-const LINE_HEIGHT_RATIO: float = 1.25
+## 行間倍率
+const LINE_HEIGHT_RATIO: float = 1.5
 
 ## スクロールアニメーションの所要時間（秒）
 const SCROLL_DURATION: float = 0.15
@@ -71,6 +69,15 @@ var _scroll_offset: float = 0.0
 var _scroll_speed:  float = 0.0
 ## 次の _on_scroll_draw でスクロール初期化を行うフラグ
 var _should_init_scroll: bool = false
+
+## 拡大表示トグル（R3 / Home で切り替え）
+var _expanded: bool = false
+const EXPANDED_LINES: int = 7  ## 拡大時の表示行数
+
+## 手動スクロール：最新位置からのピクセルオフセット（0=最新。正の値で過去に遡る）
+var _manual_scroll_px: float = 0.0
+## 手動スクロールの最大速度（ピクセル/秒・フル入力時）
+const MANUAL_SCROLL_SPEED: float = 900.0
 
 # --------------------------------------------------------------------------
 # エントリ描画用 SubViewport（確実なピクセルクリッピング）
@@ -183,6 +190,7 @@ func is_dialogue_active() -> bool:
 
 func _on_entry_changed() -> void:
 	_should_init_scroll = true
+	_manual_scroll_px = 0.0  # 新メッセージで最新位置に戻る
 	if _control != null:
 		_control.queue_redraw()
 	if _scroll_content != null:
@@ -206,6 +214,73 @@ func _on_battle_message(atk_data: CharacterData, def_data: CharacterData,
 		set_combat_target(atk_data)
 
 
+## 手動スクロール入力処理（右スティック上下アナログ / PageUp/PageDown デジタル）
+## ピクセル単位のスムーズスクロール
+func _handle_manual_scroll(delta: float) -> void:
+	var up_str   := Input.get_action_strength("msg_scroll_up")
+	var down_str := Input.get_action_strength("msg_scroll_down")
+	var net := up_str - down_str  # 正=上（過去へ）、負=下（最新へ）
+	if absf(net) < 0.01:
+		return
+
+	# デッドゾーン後の強度を 0.0〜1.0 に正規化（深く倒すほど速く）
+	# アナログ値を 2 乗してカーブをつけ、浅倒しはゆっくり、深倒しで高速にする
+	var sign_n := signf(net)
+	var strength := clampf(absf(net), 0.0, 1.0)
+	strength = strength * strength  # 2乗カーブ
+
+	var dy := sign_n * strength * MANUAL_SCROLL_SPEED * delta
+	_manual_scroll_px += dy
+
+	# 上限（avail_h を超える分までスクロール可能）
+	var max_scroll := _calc_max_scroll()
+	_manual_scroll_px = clampf(_manual_scroll_px, 0.0, max_scroll)
+
+	if _scroll_content != null:
+		_scroll_content.queue_redraw()
+	if _control != null:
+		_control.queue_redraw()
+
+
+## 手動スクロールの最大量を計算する（全エントリの合計高さ - 表示可能高さ）
+func _calc_max_scroll() -> float:
+	if MessageLog == null or _font == null:
+		return 0.0
+	var visible: Array[Dictionary] = MessageLog.get_visible_entries()
+	if visible.is_empty():
+		return 0.0
+
+	var gs       := GlobalConstants.GRID_SIZE
+	var pw       := GlobalConstants.PANEL_TILES * gs
+	var vw       := _control.size.x if _control != null else 0.0
+	if vw <= 0.0:
+		return 0.0
+	var fs       := MSG_FONT_SIZE
+	var icon_sz  := float(maxi(ICON_MIN_SIZE, int(float(gs) * ICON_SCALE_RATIO)))
+	var line_h   := float(fs) * LINE_HEIGHT_RATIO
+	var row_h    := maxf(line_h, icon_sz + 4.0)
+	var margin_x := maxf(vw * 0.28, float(pw) + 4.0)
+	var box_w    := vw - 2.0 * margin_x
+	var normal_box_h := row_h * float(VISIBLE_LINES) + 16.0
+	var box_h: float
+	if _expanded:
+		box_h = (_control.size.y if _control != null else normal_box_h) - 6.0
+	else:
+		box_h = normal_box_h
+	var avail_h  := box_h - 12.0
+
+	var arrow_w   := _font.get_string_size("→ ", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var icon_col_w := icon_sz + arrow_w + icon_sz + 6.0
+	var battle_tw := box_w - 16.0 - icon_col_w
+	var sys_tw    := box_w - 16.0
+
+	var groups := _build_display_groups(visible)
+	var total_h := 0.0
+	for g: Dictionary in groups:
+		total_h += _group_height(g, battle_tw, sys_tw, fs, line_h, icon_sz)
+	return maxf(0.0, total_h - avail_h)
+
+
 # --------------------------------------------------------------------------
 # _process（リジェクトタイマー）
 # --------------------------------------------------------------------------
@@ -218,6 +293,17 @@ func _process(delta: float) -> void:
 			_control.queue_redraw()
 		if _scroll_content != null:
 			_scroll_content.queue_redraw()
+
+	# 拡大トグル（R3 / Home）
+	if Input.is_action_just_pressed("msg_toggle_expand"):
+		_expanded = not _expanded
+		if _control != null:
+			_control.queue_redraw()
+		if _scroll_content != null:
+			_scroll_content.queue_redraw()
+
+	# 手動スクロール（右スティック上下 / PageUp/PageDown）
+	_handle_manual_scroll(delta)
 
 	# リジェクトタイマー
 	if _reject_active:
@@ -252,39 +338,35 @@ func _on_draw() -> void:
 	# 旧計算（line_h のみ）だとアイコン縮小時にバトル行が VISIBLE_LINES 分入らずに
 	# 最上段が見切れる問題が発生していたため
 	var row_h    := maxf(line_h, icon_sz + 4.0)
-	var box_h    := row_h * float(VISIBLE_LINES) + 16.0
+	# 通常時の box 高さ（バスト画像サイズの基準。拡大時も変わらない）
+	var normal_box_h := row_h * float(VISIBLE_LINES) + 16.0
+	# 拡大時は中央テキスト部を画面上端まで広げる
+	var box_h    : float
+	if _expanded:
+		box_h = vh - 6.0
+	else:
+		box_h = normal_box_h
 	var bx       := margin_x
 	var by       := vh - box_h - 6.0
 
-	# ── 上半身画像エリア（正方形・ウィンドウ高さと同じ）
-	var img_size := box_h
+	# ── 上半身画像エリア（正方形・通常サイズ固定・画面下端寄せ）
+	var img_size := normal_box_h
+	var bust_y   := vh - img_size - 6.0
 	var left_x   := bx - img_size
 	var right_x  := bx + box_w
 
-	# ── 全体背景（左バスト + 中央 + 右バスト）
+	# ── 中央テキスト部の背景（拡大時は上に伸びる）
 	_control.draw_rect(
-		Rect2(left_x, by, img_size + box_w + img_size, box_h),
-		Color(0.03, 0.03, 0.07, 0.80))
-	# 外枠
+		Rect2(bx, by, box_w, box_h),
+		Color(0.03, 0.03, 0.07, 0.55))
 	_control.draw_rect(
-		Rect2(left_x, by, img_size + box_w + img_size, box_h),
+		Rect2(bx, by, box_w, box_h),
 		Color(0.30, 0.30, 0.45, 0.50), false, 1)
 
-	# ── 左バスト画像（操作キャラ）
-	_draw_bust(_player_char_data, left_x, by, img_size)
-	# 左セパレータ
-	_control.draw_line(
-		Vector2(bx, by + 4.0),
-		Vector2(bx, by + box_h - 4.0),
-		Color(0.30, 0.30, 0.45, 0.40), 1)
-
-	# ── 右バスト画像（交戦相手）
-	_draw_bust(_combat_target_data, right_x, by, img_size)
-	# 右セパレータ
-	_control.draw_line(
-		Vector2(right_x, by + 4.0),
-		Vector2(right_x, by + box_h - 4.0),
-		Color(0.30, 0.30, 0.45, 0.40), 1)
+	# ── 左バスト画像（操作キャラ・背景なし）
+	_draw_bust(_player_char_data, left_x, bust_y, img_size)
+	# ── 右バスト画像（交戦相手・背景なし）
+	_draw_bust(_combat_target_data, right_x, bust_y, img_size)
 
 	# ── SubViewportContainer をテキストエリアに配置してエントリ描画をリクエスト
 	var avail_h := box_h - 12.0
@@ -312,7 +394,13 @@ func _on_scroll_draw() -> void:
 	# 旧計算（line_h のみ）だとアイコン縮小時にバトル行が VISIBLE_LINES 分入らずに
 	# 最上段が見切れる問題が発生していたため
 	var row_h    := maxf(line_h, icon_sz + 4.0)
-	var box_h    := row_h * float(VISIBLE_LINES) + 16.0
+	# _on_draw と同じ計算：拡大時は画面上端まで
+	var normal_box_h := row_h * float(VISIBLE_LINES) + 16.0
+	var box_h    : float
+	if _expanded:
+		box_h = _control.size.y - 6.0
+	else:
+		box_h = normal_box_h
 	var avail_h  := box_h - 12.0
 
 	# ローカル X オフセット（_svc.position.x = bx のため x=0 が bx に対応）
@@ -329,45 +417,34 @@ func _on_scroll_draw() -> void:
 		return
 	var groups := _build_display_groups(visible)
 
-	# ── 下から積み上げて収まるグループ範囲を決定
-	var total_h := 0.0
-	var start_g := groups.size()
-	for i: int in range(groups.size() - 1, -1, -1):
-		var gh := _group_height(groups[i], battle_text_w, sys_text_w, fs, line_h, icon_sz)
-		if total_h + gh > avail_h:
-			break
-		total_h += gh
-		start_g = i
+	# ── 全グループの合計高さを計算
+	var all_total_h := 0.0
+	for g: Dictionary in groups:
+		all_total_h += _group_height(g, battle_text_w, sys_text_w, fs, line_h, icon_sz)
 
-	# ── スクロールアニメーション初期化（新エントリ追加時のみ）
+	# ── スクロールアニメーション初期化（新エントリ追加時のみ・手動スクロールしていないとき）
 	if _should_init_scroll:
 		_should_init_scroll = false
-		if not groups.is_empty():
+		if _manual_scroll_px <= 0.0 and not groups.is_empty():
 			var newest_group := groups.back() as Dictionary
 			var new_h := _group_height(newest_group, battle_text_w, sys_text_w, fs, line_h, icon_sz)
 			_scroll_offset = new_h
 			_scroll_speed  = new_h / SCROLL_DURATION
 
-	# ── 上端から退場するグループ（start_g - 1）を描画：y<0 の部分は自動クリップされる
-	if start_g > 0 and _scroll_offset > 0.0:
-		var exit_group := groups[start_g - 1] as Dictionary
-		var exit_gh    := _group_height(exit_group, battle_text_w, sys_text_w, fs, line_h, icon_sz)
-		var exit_y     := -exit_gh + _scroll_offset
-		if exit_y + exit_gh > 0.0:  # まだ一部が clip 領域内にある
-			_draw_group(exit_group, exit_y, arrow_str, arrow_w, icon_sz,
-					battle_text_x, battle_text_w, sys_text_w, fs)
+	# ── 描画起点（最新を下端に揃え、手動スクロールで上にずらす）
+	# 全体が avail_h に収まらない場合は最古を上端に揃える基準へ
+	var anim_offset := _scroll_offset if _manual_scroll_px <= 0.0 else 0.0
+	var base_y := avail_h - all_total_h + _manual_scroll_px + anim_offset
 
-	# ── 通常エントリを描画（ローカル y=0 = クリップ上端 = by+8.0 のビューポート位置）
-	var entry_y := (avail_h - total_h) + _scroll_offset
-	for i: int in range(start_g, groups.size()):
+	# ── 全グループを描画（SubViewport で自動クリップ）
+	var entry_y := base_y
+	for i: int in range(groups.size()):
 		var group := groups[i] as Dictionary
 		var gh    := _group_height(group, battle_text_w, sys_text_w, fs, line_h, icon_sz)
-		# クリップ下端より下はスキップ（パフォーマンス最適化・自動クリップと二重防衛）
-		if entry_y >= avail_h:
-			entry_y += gh
-			continue
-		_draw_group(group, entry_y, arrow_str, arrow_w, icon_sz,
-				battle_text_x, battle_text_w, sys_text_w, fs)
+		# 表示領域外はスキップ（パフォーマンス最適化・SubViewportのクリップと二重防衛）
+		if entry_y + gh > 0.0 and entry_y < avail_h:
+			_draw_group(group, entry_y, arrow_str, arrow_w, icon_sz,
+					battle_text_x, battle_text_w, sys_text_w, fs)
 		entry_y += gh
 
 
@@ -378,6 +455,7 @@ func _draw_group(group: Dictionary, y: float, arrow_str: String, arrow_w: float,
 	var is_battle : bool   = group.get("is_battle", false) as bool
 	var col       : Color  = group.get("color", Color.WHITE) as Color
 	var text      : String = group.get("text", "") as String
+	var segments  : Array  = group.get("segments", []) as Array
 
 	if is_battle:
 		var atk_data: CharacterData = group.get("atk_data") as CharacterData
@@ -396,15 +474,50 @@ func _draw_group(group: Dictionary, y: float, arrow_str: String, arrow_w: float,
 					Color(0.70, 0.70, 0.70))
 			_draw_face_icon(def_data, 8.0 + icon_sz + arrow_w, y, icon_sz)
 
-		# テキスト（\n 区切りで複数行）
-		_scroll_content.draw_multiline_string(_font,
-				Vector2(battle_text_x, y + float(fs)),
-				text, HORIZONTAL_ALIGNMENT_LEFT, battle_text_w, fs, -1, col)
+		# テキスト：segments があればセグメント単位で色分け描画、なければ従来通り
+		if not segments.is_empty():
+			_draw_segments(battle_text_x, y, battle_text_w, fs, segments)
+		else:
+			_scroll_content.draw_multiline_string(_font,
+					Vector2(battle_text_x, y + float(fs)),
+					text, HORIZONTAL_ALIGNMENT_LEFT, battle_text_w, fs, -1, col)
 	else:
 		# システム・デバッグ行：アイコンなし・フル幅
 		_scroll_content.draw_multiline_string(_font,
 				Vector2(8.0, y + float(fs)),
 				text, HORIZONTAL_ALIGNMENT_LEFT, sys_text_w, fs, -1, col)
+
+
+## セグメント配列を左端から順に描画する
+## 各要素: {"text": String, "color": Color, "bold": bool（省略可）}
+## text == "\n" で改行、幅オーバー時は自動折り返し（単語単位ではなく長いセグメントのみ）
+func _draw_segments(x: float, y: float, max_w: float, fs: int, segments: Array) -> void:
+	var line_h: float = float(fs) * LINE_HEIGHT_RATIO
+	var cur_x: float = 0.0
+	var cur_y: float = float(fs)  # 最初のベースライン
+	for s_v: Variant in segments:
+		var s := s_v as Dictionary
+		var t: String = s.get("text", "") as String
+		if t == "\n":
+			cur_x = 0.0
+			cur_y += line_h
+			continue
+		var col: Color = s.get("color", Color.WHITE) as Color
+		var bold: bool = bool(s.get("bold", false))
+		var sw: float = _font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		# 行あふれ時は改行
+		if cur_x > 0.0 and cur_x + sw > max_w:
+			cur_x = 0.0
+			cur_y += line_h
+		# 太字は1pxずらして2回描く
+		if bold:
+			_scroll_content.draw_string(_font,
+					Vector2(x + cur_x + 1.0, y + cur_y),
+					t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+		_scroll_content.draw_string(_font,
+				Vector2(x + cur_x, y + cur_y),
+				t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+		cur_x += sw
 
 
 # --------------------------------------------------------------------------
@@ -413,6 +526,7 @@ func _draw_group(group: Dictionary, y: float, arrow_str: String, arrow_w: float,
 
 ## 連続する同アイコンペアのバトルエントリをまとめて表示グループを作る
 ## 異なるペア・システムメッセージは個別グループになる
+## segments（文字色分け用）がある場合は各エントリのものを "\n" セグメントで区切って連結する
 func _build_display_groups(entries: Array[Dictionary]) -> Array[Dictionary]:
 	var groups: Array[Dictionary] = []
 	var i := 0
@@ -432,6 +546,7 @@ func _build_display_groups(entries: Array[Dictionary]) -> Array[Dictionary]:
 		var def_data : CharacterData = e.get("defender_data") as CharacterData
 		var color    : Color         = e.get("color", Color.WHITE) as Color
 		var lines    : PackedStringArray = PackedStringArray([e.get("text", "") as String])
+		var segments : Array = (e.get("segments", []) as Array).duplicate()
 		i += 1
 		while i < entries.size():
 			var nxt := entries[i] as Dictionary
@@ -442,14 +557,21 @@ func _build_display_groups(entries: Array[Dictionary]) -> Array[Dictionary]:
 			if (nxt.get("defender_data") as CharacterData) != def_data:
 				break
 			lines.append(nxt.get("text", "") as String)
+			var nxt_segs: Array = nxt.get("segments", []) as Array
+			if not segments.is_empty() and not nxt_segs.is_empty():
+				segments.append({"text": "\n"})
+				segments += nxt_segs
 			i += 1
-		groups.append({
+		var grp: Dictionary = {
 			"is_battle": true,
 			"atk_data": atk_data,
 			"def_data": def_data,
 			"text":  "\n".join(lines),
 			"color": color,
-		})
+		}
+		if not segments.is_empty():
+			grp["segments"] = segments
+		groups.append(grp)
 	return groups
 
 
@@ -507,7 +629,7 @@ func _draw_bust(data: CharacterData, x: float, y: float, size: float) -> void:
 	var rect := Rect2(x, y, size, size)
 	var tex  := _load_bust_tex(data)
 	if tex == null:
-		_control.draw_rect(rect, Color(0.0, 0.0, 0.0, 0.65))
+		# キャラなし（交戦前など）→ 何も描画しない（背景を透過）
 		return
 	var tex_size := tex.get_size()
 	var src_rect: Rect2

@@ -185,15 +185,17 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 	var header := name_str
 	if not class_jp.is_empty():
 		header += " " + class_jp
-	if not rank_str.is_empty():
-		header += " " + rank_str
 	var header_y := fy + float(pad) + 13.0
 	_control.draw_string(_font, Vector2(tx, header_y),
 		header, HORIZONTAL_ALIGNMENT_LEFT, tw, 13, Color.WHITE)
+	# ランクを色付きで描画
+	if not rank_str.is_empty():
+		var hdr_w := _font.get_string_size(header + " ", HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+		_control.draw_string(_font, Vector2(tx + hdr_w, header_y),
+			rank_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, _rank_color(rank_str))
 	# 状態テキストをヘッダーの右に配置
 	var cond     := c.get_condition()
-	var cond_col := Color(0.4, 0.9, 0.4) if cond == "healthy" \
-		else (Color(1.0, 0.8, 0.2) if cond == "wounded" else Color(1.0, 0.35, 0.35))
+	var cond_col := _condition_text_color(cond)
 	var header_w := _font.get_string_size(header, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 4.0
 	_control.draw_string(_font, Vector2(tx + header_w, header_y),
 		cond, HORIZONTAL_ALIGNMENT_LEFT, tw - header_w, 10, cond_col)
@@ -317,39 +319,50 @@ func _draw_bar(x: float, y: float, w: float, h: float, fill_ratio: float,
 		if fill_color.a > 0.0:
 			fill = fill_color
 		else:
-			# HP 色: max に対する割合で色分け
+			# HP ゲージ色: 状態ラベル閾値と統一（緑／黄／オレンジ／赤）
 			var ratio_of_max := fill_ratio / max_ratio if max_ratio > 0.0 else 0.0
-			if ratio_of_max > 0.6:
-				fill = Color(0.25, 0.80, 0.30)
-			elif ratio_of_max > 0.3:
-				fill = Color(0.90, 0.70, 0.10)
+			if ratio_of_max >= GlobalConstants.CONDITION_HEALTHY_THRESHOLD:
+				fill = Color(0.25, 0.80, 0.30)   # healthy：緑
+			elif ratio_of_max >= GlobalConstants.CONDITION_WOUNDED_THRESHOLD:
+				fill = Color(0.95, 0.80, 0.15)   # wounded：黄
+			elif ratio_of_max >= GlobalConstants.CONDITION_INJURED_THRESHOLD:
+				fill = Color(0.95, 0.55, 0.15)   # injured：オレンジ
 			else:
-				fill = Color(0.90, 0.20, 0.20)
+				fill = Color(0.90, 0.20, 0.20)   # critical：赤
 		_control.draw_rect(Rect2(x, y, w * clampf(fill_ratio, 0.0, 1.0), h), fill)
 
 
 ## フィールド上のキャラクタースプライトと同じ HP状態→色 マッピング
+## 状態ラベル閾値と統一：healthy=白 / wounded=オレンジ / injured=赤 / critical=赤点滅
 func _hp_modulate(c: Character) -> Color:
 	if not is_instance_valid(c) or c.max_hp <= 0:
 		return Color.WHITE
 	var t := Time.get_ticks_msec() / 1000.0
 	var ratio := float(c.hp) / float(c.max_hp)
-	if ratio > 0.6:
+	if ratio >= GlobalConstants.CONDITION_HEALTHY_THRESHOLD:
 		return Color.WHITE
-	elif ratio > 0.3:
-		return Color(1.0, 1.0, 0.65)
-	elif ratio > 0.1:
-		return Color(1.0, 0.65, 0.25)
+	elif ratio >= GlobalConstants.CONDITION_WOUNDED_THRESHOLD:
+		return Color(1.0, 0.65, 0.25)   # wounded：オレンジ
+	elif ratio >= GlobalConstants.CONDITION_INJURED_THRESHOLD:
+		return Color(1.0, 0.35, 0.35)   # injured：赤
 	else:
 		var pulse := (sin(t * TAU * 3.0) + 1.0) * 0.5
 		return Color.WHITE.lerp(Color(1.0, 0.15, 0.15), pulse)
 
 
-func _condition_color(c: Character) -> Color:
-	var ratio := float(c.hp) / float(c.max_hp) if c.max_hp > 0 else 0.0
-	if ratio > 0.5:
-		return Color.WHITE
-	elif ratio > 0.25:
-		return Color(1.0, 0.85, 0.20)   # 黄（負傷）
-	else:
-		return Color(1.0, 0.35, 0.35)   # 赤（瀕死）
+## ランク文字の色（right_panel と共通ルール）
+func _rank_color(rank: String) -> Color:
+	match rank:
+		"S", "A": return Color(1.0, 0.30, 0.30)
+		"B", "C": return Color(1.0, 0.65, 0.20)
+		_:        return Color(1.0, 1.0, 0.30)
+
+
+## 状態ラベル（healthy/wounded/injured/critical）に対応するテキスト／ゲージ色
+## （全パネル共通ルール）
+static func _condition_text_color(cond: String) -> Color:
+	match cond:
+		"healthy": return Color(0.40, 0.90, 0.40)   # 緑
+		"wounded": return Color(1.00, 0.85, 0.20)   # 黄
+		"injured": return Color(1.00, 0.60, 0.20)   # オレンジ
+		_:         return Color(1.00, 0.35, 0.35)   # 赤（critical）

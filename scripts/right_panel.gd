@@ -189,13 +189,14 @@ func _draw_char_row(c: Character, px: int, pw: int, row_y: float, row_h: int,
 			Vector2(float(px + pw) - 20.0, ty1),
 			rank, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, _rank_color(rank))
 
-	# 状態テキスト
+	# 状態テキスト（left_panel._condition_text_color と同ルール）
 	var cond := c.get_condition()
 	var cond_col: Color
 	match cond:
-		"wounded":  cond_col = Color(1.0, 0.80, 0.20)
-		"critical": cond_col = Color(1.0, 0.35, 0.35)
-		_:          cond_col = Color(0.5, 0.9, 0.5)
+		"healthy": cond_col = Color(0.40, 0.90, 0.40)   # 緑
+		"wounded": cond_col = Color(1.00, 0.85, 0.20)   # 黄
+		"injured": cond_col = Color(1.00, 0.60, 0.20)   # オレンジ
+		_:         cond_col = Color(1.00, 0.35, 0.35)   # 赤（critical）
 
 	var cond_str := cond
 	# NPC はクラス名も表示
@@ -238,17 +239,18 @@ func _get_face_texture(c: Character) -> Texture2D:
 
 
 ## フィールド上のキャラクタースプライトと同じ HP状態→色 マッピング
+## 状態ラベル閾値と統一：healthy=白 / wounded=オレンジ / injured=赤 / critical=赤点滅
 func _hp_modulate(c: Character) -> Color:
 	if not is_instance_valid(c) or c.max_hp <= 0:
 		return Color.WHITE
 	var t := Time.get_ticks_msec() / 1000.0
 	var ratio := float(c.hp) / float(c.max_hp)
-	if ratio > 0.6:
+	if ratio >= GlobalConstants.CONDITION_HEALTHY_THRESHOLD:
 		return Color.WHITE
-	elif ratio > 0.3:
-		return Color(1.0, 1.0, 0.65)
-	elif ratio > 0.1:
-		return Color(1.0, 0.65, 0.25)
+	elif ratio >= GlobalConstants.CONDITION_WOUNDED_THRESHOLD:
+		return Color(1.0, 0.65, 0.25)   # wounded：オレンジ
+	elif ratio >= GlobalConstants.CONDITION_INJURED_THRESHOLD:
+		return Color(1.0, 0.35, 0.35)   # injured：赤
 	else:
 		var pulse := (sin(t * TAU * 3.0) + 1.0) * 0.5
 		return Color.WHITE.lerp(Color(1.0, 0.15, 0.15), pulse)

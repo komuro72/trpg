@@ -574,12 +574,17 @@ func _draw_members_row(font: Font, members: Array, x: float, y: float, w: float,
 		if not is_instance_valid(m):
 			continue
 
-		# HP比率で色分け
+		# HP比率で色分け（状態ラベル閾値と統一）
 		var hp_pct: float = float(m.hp) / float(m.max_hp) if m.max_hp > 0 else 0.0
 		var col: Color
-		if hp_pct > 0.5:    col = Color(0.85, 0.85, 0.85)
-		elif hp_pct > 0.25: col = Color(1.0, 1.0, 0.3)
-		else:               col = Color(1.0, 0.35, 0.35)
+		if hp_pct >= GlobalConstants.CONDITION_HEALTHY_THRESHOLD:
+			col = Color(0.85, 0.85, 0.85)
+		elif hp_pct >= GlobalConstants.CONDITION_WOUNDED_THRESHOLD:
+			col = Color(1.0, 1.0, 0.3)
+		elif hp_pct >= GlobalConstants.CONDITION_INJURED_THRESHOLD:
+			col = Color(1.0, 0.65, 0.25)
+		else:
+			col = Color(1.0, 0.35, 0.35)
 
 		var cd := m.character_data
 		var name_s: String = (cd.character_name if cd != null else "?") as String
@@ -643,12 +648,14 @@ func _draw_member_line(font: Font, ch: Character, x: float, y: float,
 	var rank_str: String  = cd.rank if cd != null else "?"
 	var hp_pct: float     = float(ch.hp) / float(ch.max_hp) if ch.max_hp > 0 else 0.0
 
-	# HP比率で色分け
+	# HP比率で色分け（状態ラベル閾値と統一）
 	var char_color: Color
-	if hp_pct > 0.5:
+	if hp_pct >= GlobalConstants.CONDITION_HEALTHY_THRESHOLD:
 		char_color = Color(0.92, 0.92, 0.92)
-	elif hp_pct > 0.25:
+	elif hp_pct >= GlobalConstants.CONDITION_WOUNDED_THRESHOLD:
 		char_color = Color(1.0, 1.0, 0.3)
+	elif hp_pct >= GlobalConstants.CONDITION_INJURED_THRESHOLD:
+		char_color = Color(1.0, 0.65, 0.25)
 	else:
 		char_color = Color(1.0, 0.35, 0.35)
 

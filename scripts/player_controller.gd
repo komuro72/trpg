@@ -125,6 +125,10 @@ var _pre_delay_remaining: float = 0.0
 ## 攻撃後硬直カウントダウン（POST_DELAY モード）
 var _post_delay_remaining: float = 0.0
 
+## TARGETING 突入時にターゲットなしで自動解除するタイマー（射程オーバーレイを一瞬見せる）
+var _auto_cancel_remaining: float = 0.0
+const AUTO_CANCEL_FLASH: float = 0.25  # 秒
+
 ## _input() で検出したターゲット循環方向（+1=次・-1=前・0=なし）
 ## is_action_just_pressed をポーリングするより確実にボタン1回を捕捉できる
 var _cycle_direction: int = 0
@@ -487,6 +491,9 @@ func _process_guard_and_move(_delta: float) -> void:
 
 
 func _process_pre_delay(delta: float) -> void:
+	# 他ボタンによる攻撃キャンセル＋機能切替
+	if _handle_attack_switch_input():
+		return
 	# pre_delay を消化しながらターゲット候補を表示
 	_pre_delay_remaining -= delta
 	_refresh_targets()
@@ -495,9 +502,23 @@ func _process_pre_delay(delta: float) -> void:
 		_start_targeting()
 
 
-func _process_targeting(_delta: float) -> void:
+func _process_targeting(delta: float) -> void:
 	# 死亡等による対象消失を検出してリフレッシュ
 	_refresh_targets()
+
+	# ターゲットなしで自動キャンセル（射程オーバーレイを一瞬見せてから解除）
+	if _auto_cancel_remaining > 0.0:
+		_auto_cancel_remaining -= delta
+		if _auto_cancel_remaining <= 0.0:
+			_auto_cancel_remaining = 0.0
+			_exit_targeting()
+			return
+		# 自動キャンセル待機中は他の入力を一切受け付けない
+		return
+
+	# 他ボタンによる攻撃キャンセル＋機能切替
+	if _handle_attack_switch_input():
+		return
 
 	# X/B でキャンセル（ノーコスト）
 	if Input.is_action_just_pressed("menu_back"):
@@ -589,6 +610,11 @@ func _start_targeting() -> void:
 		if is_instance_valid(t):
 			t.set_outline(Color(0.65, 0.65, 0.65), 1.0)
 	_update_cursor()
+	# 対象なしなら射程オーバーレイを一瞬見せてから自動キャンセル
+	if _valid_targets.is_empty():
+		_auto_cancel_remaining = AUTO_CANCEL_FLASH
+	else:
+		_auto_cancel_remaining = 0.0
 
 
 func _exit_targeting() -> void:
@@ -606,11 +632,53 @@ func _exit_targeting() -> void:
 	_valid_targets.clear()
 	_target_index        = 0
 	_pre_delay_remaining = 0.0
+	_auto_cancel_remaining = 0.0
 	_cycle_direction     = 0
 	character.is_targeting_mode = false
 	if _cursor != null:
 		_cursor.queue_free()
 		_cursor = null
+
+
+## PRE_DELAY / TARGETING 中の他ボタン入力を処理し、攻撃をキャンセルして
+## そのボタンの機能を即時実行する。
+## - use_item: 攻撃キャンセル → アイテム選択 UI
+## - special_skill: 通常攻撃中のみ。V スロットが使えれば → V スロット発動
+## - attack: 特殊攻撃中のみ。→ 通常攻撃開始
+## 処理した場合は true を返す。
+func _handle_attack_switch_input() -> bool:
+	# アイテムボタン：どちらの攻撃中でもキャンセル＋アイテム UI 起動
+	if Input.is_action_just_pressed("use_item"):
+		_exit_targeting()
+		_enter_item_select()
+		return true
+
+	# 通常攻撃中 → 特殊攻撃（V/Y）へ切替
+	if not _using_v_slot and Input.is_action_just_pressed("special_skill"):
+		if not _slot_v.is_empty() and _v_slot_cooldown <= 0.0 and _has_v_slot_resources():
+			var v_action: String = _slot_v.get("action", "") as String
+			var instant_actions: Array = ["sliding", "whirlwind", "rush", "flame_circle"]
+			_exit_targeting()
+			if instant_actions.has(v_action):
+				_execute_v_instant(v_action)
+			else:
+				_using_v_slot = true
+				_move_buffer  = Vector2i.ZERO
+				_enter_pre_delay()
+			return true
+
+	# 特殊攻撃中 → 通常攻撃（Z/A）へ切替
+	if _using_v_slot and Input.is_action_just_pressed("attack"):
+		_exit_targeting()
+		_using_v_slot = false
+		_pending_move_dir = Vector2i.ZERO
+		if character.is_guarding:
+			character.is_guarding = false
+		_move_buffer = Vector2i.ZERO
+		_enter_pre_delay()
+		return true
+
+	return false
 
 
 ## TARGETING モードでターゲット確定 → 射程チェック → 攻撃実行 → POST_DELAY へ
@@ -1046,10 +1114,19 @@ func _emit_v_skill_battle_msg(skill_name: String, atk: Character, def: Character
 		return
 	var atk_data: CharacterData = atk.character_data
 	var def_data: CharacterData = def.character_data
-	var dmg_label := Character._damage_label(maxi(1, dmg))
-	var msg := "%sが%sで%sを攻撃し、%sを与えた" % \
-			[_char_name(atk), skill_name, _char_name(def), dmg_label]
-	MessageLog.add_battle(atk_data, def_data, msg, atk, def)
+	var atk_name := _char_name(atk)
+	var def_name := _char_name(def)
+	var dmg_val := maxi(1, dmg)
+	var dmg_label := Character._damage_label(dmg_val)
+	var dmg_color := Character._damage_label_color(dmg_val)
+	var dmg_bold  := Character._damage_is_huge(dmg_val)
+	var msg := "%sが%sで%sを攻撃し、%sを与えた" % [atk_name, skill_name, def_name, dmg_label]
+	var segments := Character._make_segs([
+		[atk_name, Character._party_name_color(atk)], ["が" + skill_name + "で", Color.WHITE],
+		[def_name, Character._party_name_color(def)], ["を攻撃し、", Color.WHITE],
+		[dmg_label, dmg_color, dmg_bold], ["を与えた", Color.WHITE],
+	])
+	MessageLog.add_battle(atk_data, def_data, msg, atk, def, segments)
 
 
 # --------------------------------------------------------------------------
@@ -1117,8 +1194,13 @@ func _execute_sliding() -> void:
 	is_blocked = false
 	SoundManager.play(SoundManager.MELEE_DAGGER)
 	if is_instance_valid(character):
+		var c_name := _char_name(character)
+		var segs := Character._make_segs([
+			[c_name, Character._party_name_color(character)],
+			["がスライディングで突進した", Color.WHITE],
+		])
 		MessageLog.add_battle(character.character_data, null,
-			"%sがスライディングで突進した" % _char_name(character), character)
+			"%sがスライディングで突進した" % c_name, character, null, segs)
 
 
 ## 斧戦士：振り回し（周囲8マスの敵全員にダメージ）
@@ -1150,8 +1232,13 @@ func _execute_whirlwind() -> void:
 	if is_instance_valid(character):
 		character.is_attacking = false
 	if hit_count == 0:
+		var c_name := _char_name(character)
+		var segs := Character._make_segs([
+			[c_name, Character._party_name_color(character)],
+			["が振り回したが空振りに終わった", Color.WHITE],
+		])
 		MessageLog.add_battle(character.character_data, null,
-			"%sが振り回したが空振りに終わった" % _char_name(character), character)
+			"%sが振り回したが空振りに終わった" % c_name, character, null, segs)
 
 
 ## 剣士：突進斬り（向いている方向に最大2マス前進、経路上の敵全員にダメージ、次の空きマスに着地）
@@ -1195,8 +1282,13 @@ func _execute_rush() -> void:
 		character.is_attacking = false
 	is_blocked = false
 	if hit_count == 0:
+		var c_name := _char_name(character)
+		var segs := Character._make_segs([
+			[c_name, Character._party_name_color(character)],
+			["が突進斬りを放ったが敵に当たらなかった", Color.WHITE],
+		])
 		MessageLog.add_battle(character.character_data, null,
-			"%sが突進斬りを放ったが敵に当たらなかった" % _char_name(character), character)
+			"%sが突進斬りを放ったが敵に当たらなかった" % c_name, character, null, segs)
 
 
 ## 弓使い：ヘッドショット（即死耐性なし→即死、あり→×3ダメージ）

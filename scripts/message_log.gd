@@ -61,8 +61,11 @@ func add_ai(text: String, grid_pos: Vector2i = Vector2i(-1, -1)) -> void:
 ## バトルメッセージ（オレンジ）— エリアフィルタなし・battle_message_added シグナルも発火
 ## attacker_data / defender_data はエントリ dict に格納し MessageWindow のアイコン表示に使用（null 可）
 ## attacker / defender は Character 実体（null 可）。MessageWindow の死亡チェックに使用
+## segments: Array of {"text": String, "color": Color, "bold": bool（省略可）}
+##   省略可。指定時は文字単位で色分け描画する（message は後方互換用にプレーンテキストも保持）
 func add_battle(attacker_data: CharacterData, defender_data: CharacterData,
-		message: String, attacker: Character = null, defender: Character = null) -> void:
+		message: String, attacker: Character = null, defender: Character = null,
+		segments: Array = []) -> void:
 	var entry: Dictionary = {
 		"text": message,
 		"type": int(MsgType.BATTLE),
@@ -70,6 +73,8 @@ func add_battle(attacker_data: CharacterData, defender_data: CharacterData,
 		"attacker_data": attacker_data,
 		"defender_data": defender_data,
 	}
+	if not segments.is_empty():
+		entry["segments"] = segments
 	entries.append(entry)
 	if entries.size() > LOG_MAX:
 		entries = entries.slice(entries.size() - LOG_MAX)

@@ -74,6 +74,7 @@ var order_window: OrderWindow
 
 var _tile_set_id: String = DEFAULT_TILE_SET  ## 現在のフロアのタイルセットID
 var _tile_textures: Dictionary = {}  # TileType(int) -> Texture2D
+var _safe_floor_tex: Texture2D = null  ## 安全部屋用の床テクスチャ（safe_floor.png）
 var _was_targeting: bool = false  ## 射程オーバーレイの再描画トリガー用
 ## 床に散らばったアイテム（Vector2i → Dictionary）。1マスに1個
 var _floor_items: Dictionary = {}
@@ -310,7 +311,7 @@ func _setup_hero() -> void:
 		for _i in range(5):
 			hero_items.append({
 				"item_type": "potion_sp", "category": "consumable",
-				"item_name": "活力薬", "effect": {"restore_sp": 20}, "quantity": 1,
+				"item_name": "SPポーション", "effect": {"restore_sp": 20}, "quantity": 1,
 			})
 
 	hero = Character.new()
@@ -330,6 +331,7 @@ func _setup_hero() -> void:
 	hero.sync_position()
 
 	hero.is_friendly = true  # _assign_orders() で current_order.move を適用するために必要
+	hero.joined_to_player = true  # 主人公は常にプレイヤーパーティー
 
 	# セーブデータの主人公名を適用する（性別に応じた名前を使用）
 	var active_save := SaveManager.get_active_save()
@@ -2253,6 +2255,16 @@ func _load_tile_textures() -> void:
 	if not _tile_textures.has(MapData.TileType.CORRIDOR) \
 			and _tile_textures.has(MapData.TileType.FLOOR):
 		_tile_textures[MapData.TileType.CORRIDOR] = _tile_textures[MapData.TileType.FLOOR]
+	# 安全部屋用の床テクスチャ（safe_floor.png）
+	var safe_path := base + "safe_floor.png"
+	if ResourceLoader.exists(safe_path):
+		var stex := load(safe_path) as Texture2D
+		if stex != null:
+			_safe_floor_tex = _crop_single_tile(stex)
+		else:
+			_safe_floor_tex = null
+	else:
+		_safe_floor_tex = null
 
 
 ## タイル画像の左上1/4を切り出して使用する
@@ -2287,7 +2299,11 @@ func _draw() -> void:
 			var tile := draw_map.get_tile(pos)
 			var rect := Rect2(x * gs, y * gs, gs, gs)
 
-			if draw_textures.has(int(tile)):
+			# 安全部屋の床は専用テクスチャで描画
+			if tile == MapData.TileType.FLOOR and _safe_floor_tex != null \
+					and draw_map.is_safe_tile(pos):
+				draw_texture_rect(_safe_floor_tex, rect, false)
+			elif draw_textures.has(int(tile)):
 				draw_texture_rect(draw_textures[int(tile)] as Texture2D, rect, false)
 			else:
 				var fill_color: Color
@@ -2358,8 +2374,11 @@ func _draw() -> void:
 					continue
 				var diff := Vector2(tx - origin.x, ty - origin.y)
 				var dot := fwd.dot(diff.normalized()) if diff != Vector2.ZERO else 0.0
-				# 方向フィルタ: melee=前方±90°(dot>=0)、ranged/heal系=前方±45°(dot>=0.707)
-				if action == "melee":
+				# 方向フィルタ: heal/buff_defense=全方向、melee=前方±90°、その他=前方±45°
+				if action == "heal" or action == "buff_defense":
+					if diff.length() > float(range_val):
+						continue
+				elif action == "melee":
 					if dot < 0.0:
 						continue
 					if abs(tx - origin.x) + abs(ty - origin.y) > range_val:

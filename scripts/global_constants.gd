@@ -109,12 +109,13 @@ const STAT_NAME_JP: Dictionary = {
 ## Autoload の GlobalConstants に定義して回避する
 enum ConsumableDisplayMode { NORMAL, ITEM_SELECT, ACTION_SELECT, TRANSFER_SELECT }
 
-## 状態ラベル（condition）の HP% 閾値
+## 状態ラベル（condition）の HP% 閾値（4段階）
 ## Character.get_condition() が返す文字列の判定基準
 ## 戦力評価で敵のHP推定に使用する（_estimate_hp_ratio_from_condition）
-const CONDITION_HEALTHY_THRESHOLD:  float = 0.75  ## HP75%以上 → "healthy"
-const CONDITION_WOUNDED_THRESHOLD:  float = 0.35  ## HP35%以上75%未満 → "wounded"
-## HP35%未満 → "critical"
+const CONDITION_HEALTHY_THRESHOLD:  float = 0.5   ## HP50%以上 → "healthy"
+const CONDITION_WOUNDED_THRESHOLD:  float = 0.35  ## HP35%以上50%未満 → "wounded"
+const CONDITION_INJURED_THRESHOLD:  float = 0.25  ## HP25%以上35%未満 → "injured"
+## HP25%未満 → "critical"
 
 ## 戦況判断（_evaluate_combat_situation）の比率閾値
 ## 自軍戦力 / 敵戦力 の比率で戦況を分類する

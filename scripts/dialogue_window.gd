@@ -206,9 +206,10 @@ func _draw_panel(field_x: float, field_w: float, vp_h: float, gs_f: float) -> vo
 			var cond_s := member.get_condition()
 			var cond_col: Color
 			match cond_s:
-				"healthy": cond_col = Color(0.40, 0.90, 0.40)
-				"wounded": cond_col = Color(1.00, 0.80, 0.20)
-				_:         cond_col = Color(1.00, 0.35, 0.35)
+				"healthy": cond_col = Color(0.40, 0.90, 0.40)   # 緑
+				"wounded": cond_col = Color(1.00, 0.85, 0.20)   # 黄
+				"injured": cond_col = Color(1.00, 0.60, 0.20)   # オレンジ
+				_:         cond_col = Color(1.00, 0.35, 0.35)   # 赤（critical）
 			var rank_col := Color(1.0, 0.4, 0.4) if rnk_str in ["S", "A"] \
 				else Color(1.0, 0.65, 0.2)
 			var ty := y + float(fs_body)
