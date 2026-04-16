@@ -736,7 +736,7 @@ rank値: C=0, B=1, A=2, S=3
 | OVERWHELMING | ≥ 2.0 | 通常攻撃（余裕あり） | しない |
 | ADVANTAGE | ≥ 1.2 | 通常攻撃 | しない |
 | EVEN | ≥ 0.8 | 通常攻撃 | しない |
-| DISADVANTAGE | ≥ 0.5 | 特殊攻撃を積極使用（将来実装） | しない |
+| DISADVANTAGE | ≥ 0.5 | 通常攻撃（特殊攻撃は指示「強敵なら使う」で発動） | しない |
 | CRITICAL | < 0.5 | 撤退（部屋から離脱） | しない |
 
 - アイテム取得ナビゲーションは `_is_combat_safe()` で判定（戦況 SAFE のときのみ item_pickup 指示に従う）
