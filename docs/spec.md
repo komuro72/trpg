@@ -4779,3 +4779,53 @@ CONDITION_COLOR_TEXT_CRITICAL = Color(1.00, 0.35, 0.35)
 - 新カテゴリを追加したい場合：`config_editor.gd` の `TABS: Array[String]` の末尾に追記する
 - `constants_default.json` の `category` フィールドを新タブ名に揃える
 - 未登録カテゴリの定数は Unknown タブに自動振り分け（`push_warning` で警告も出す）
+
+---
+
+## Config Editor「味方クラス」タブ（Phase B）
+
+### データフロー
+1. ConfigEditor 初期化時に `_load_class_files()` が `assets/master/classes/*.json` を 7 ファイル読み込み、`_class_data[class_id]` に格納（`Dictionary` はキーの挿入順を保持）
+2. `_flatten_class(data)` で `slots.Z.*` → `Z_*`, `slots.V.*` → `V_*` に平坦化して行表示に使う
+3. ユーザーがセル編集 → `_on_class_cell_changed` が発火し、`_class_cell_styles[widget_key]` の `StyleBoxFlat.bg_color` を薄黄色に変更、`_class_dirty[class_id]` を更新
+4. 「保存」ボタン押下 → `_save_class_files()` が dirty=true のクラスだけ書き戻し
+
+### グループ定義
+`config_editor.gd` の `CLASS_PARAM_GROUPS: Array` でパラメータ → グループ名を定義：
+- 基本: id / name / weapon_type / attack_type / attack_range / behavior_description
+- リソース: base_defense / mp / max_sp / heal_mp_cost / buff_mp_cost
+- 特性: is_flying
+- Zスロット（通常攻撃）: Z_name / Z_action / Z_type / Z_range / Z_damage_mult / Z_heal_mult / Z_pre_delay / Z_post_delay / Z_sp_cost / Z_mp_cost
+- Vスロット（特殊攻撃）: V_name / V_action / V_type / V_range / V_damage_mult / V_sp_cost / V_mp_cost / V_pre_delay / V_post_delay / V_stun_duration / V_buff_duration / V_duration / V_tick_interval
+
+未分類パラメータは「その他」グループに自動集約され、`push_warning` で警告される。
+
+### 型変換ルール（`_coerce_class_value`）
+元 JSON の値の型を見て以下に変換：
+- **bool**: `"true"` / `"false"` を変換。それ以外は失敗
+- **int**: `is_valid_int()` 優先、`is_valid_float()` なら int 切り捨て、それ以外は失敗
+- **float**: `is_valid_float()` なら変換、それ以外は失敗
+- **String**: そのまま
+
+型変換が 1 つでも失敗したらそのクラス JSON の保存を中止し、`push_warning` でログ。
+
+### キー順保持
+`JSON.stringify(data, "  ", false)` で `sort_keys=false` を指定（Godot 4 のデフォルトは `true` でアルファベット順ソートされるため）。これにより元 JSON のキー挿入順と `slots.X` / `slots.C` などの未編集構造がそのまま保持される。
+
+### UI 構造
+- トップタブ「味方クラス」の中身：`ScrollContainer` → `VBoxContainer`
+- ヘッダー行：「パラメータ」＋ 7 クラス ID の横並び
+- グループ区切り：`PanelContainer + StyleBoxFlat`（濃い青背景）でタイトル表示
+- 各行：`HBoxContainer{ パラメータ名 Label(220px) + 7×LineEdit(150px) }`。該当クラスに無いパラメータは `—` 表示（編集不可）
+- セル幅定数：`CLASS_PARAM_COL_W = 220`（パラメータ名列）/ `CLASS_VALUE_COL_W = 150`（値セル）
+- 左端の「パラメータ名」列の sticky（横スクロール固定）は未実装（Godot 標準コントロールでは一手間かかるため省略）
+
+### 下部ボタンの挙動
+`_on_top_tab_changed()` が上段タブ切替時に呼ばれ、ボタンの `disabled` を更新：
+- **定数タブ**: 保存 / リセット / デフォルト化 すべて有効
+- **味方クラスタブ**: 保存のみ有効。リセット・デフォルト化は無効化（デフォルト値を保持しない方針）
+- **敵 / ステータス / アイテム**: すべて無効化（プレースホルダー段階）
+
+`_on_save_pressed()` は現在の上段タブを見て分岐（`_current_top_tab_name()`）：
+- TOP_TAB_CONSTANTS → `GlobalConstants.save_constants()`
+- TOP_TAB_ALLY_CLASS → `_save_class_files()`

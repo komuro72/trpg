@@ -505,12 +505,27 @@ rank値: C=0, B=1, A=2, S=3
 - `assets/master/config/constants.json` … ユーザー編集中の値（シンプル key:value）
 - `assets/master/config/constants_default.json` … デフォルト値＋メタ情報（value / type / category / min / max / step / description）
 
-### カテゴリ（タブ）
+### トップレベルタブ
+- **定数** — `constants.json` / `constants_default.json` を編集
+- **味方クラス** — `assets/master/classes/*.json` 7ファイルを横断表で編集
+- **敵** — プレースホルダー（6サブタブ：ゴブリン系・ウルフ系・アンデッド系・デーモン系・ボス・その他）
+- **ステータス** — プレースホルダー（2サブタブ：クラスステータス・属性補正）
+- **アイテム** — プレースホルダー
+
+### 「定数」タブのカテゴリ
 コード上のクラス名で分類：
 
 - Character / UnitAI / PartyLeader / NpcLeaderAI / Healer / PlayerController / EnemyLeaderAI / Unknown（未分類検出用）
 
 タブ順は `config_editor.gd` の `TABS` 配列で定義。追加したい場合は配列末尾に追記する。
+
+### 「味方クラス」タブ
+- 7クラス（fighter-sword / fighter-axe / archer / magician-fire / magician-water / healer / scout）を横に並べた横断表形式
+- ネストされた `slots.Z.*` / `slots.V.*` は `Z_*` / `V_*` に平坦化して行に表示（保存時に元の階層へ戻す）。`slots.X` / `slots.C` は表示せず、保存時にそのまま維持
+- パラメータのグループ分け（`CLASS_PARAM_GROUPS` 配列）：基本 / リソース / 特性 / Zスロット / Vスロット / その他
+- 各セルは LineEdit（文字列入力）。保存時に元 JSON の値の型（int / float / bool / string）に合わせて変換。変換失敗時は保存を中止しエラー表示
+- 変更されたセルは薄黄色ハイライト、変更があったファイルのみ書き戻す
+- 「すべてデフォルトに戻す」「現在値をすべてデフォルト化」は**無効化**（デフォルト値を保持しない方針。復帰は git 履歴で管理）
 
 ### 操作
 - 各定数を SpinBox（数値）または ColorPicker（色）で編集
@@ -522,13 +537,18 @@ rank値: C=0, B=1, A=2, S=3
 ### 反映
 - 「保存」→ `constants.json` に書き込み → **ゲーム再起動で反映**（即時反映はしない方針）
 
-### 定数追加時の運用ルール
+### 定数追加時の運用ルール（「定数」タブ）
 1. `GlobalConstants.gd` に `const`/`var` を追加するときは、`constants_default.json` にも同時に追加する
 2. `category` フィールドは既存7タブ（Character / UnitAI / PartyLeader / NpcLeaderAI / Healer / PlayerController / EnemyLeaderAI）のいずれかを指定
 3. 上記7タブに属さない場合は `config_editor.gd` の `TABS` 配列にタブを追加することを検討
 4. カテゴリ未定義・不明な値の定数は Unknown タブに自動振り分け（起動時に push_warning で警告）
 5. 定期的に Claude Code に「外出しされていない定数」の棚卸し指示を出す
    - チェック観点：GlobalConstants 内に直書きされ `constants_default.json` に未登録の定数がないか
+
+### 「味方クラス」編集時の運用ルール
+1. クラス JSON に新パラメータを追加するときは、`config_editor.gd` の `CLASS_PARAM_GROUPS` の適切なグループにも追加する
+2. 追加し忘れた場合は「その他」グループに自動集約されるため、起動時の push_warning で気付ける
+3. Config Editor で編集した結果は `assets/master/classes/*.json` に直接書き戻されるので、そのまま git commit すれば差分管理できる
 
 ### ConfigEditor 対象の `var` 化
 - 対象の定数は `const` ではなく `var` で宣言する必要がある（Autoload 起動時に `_load_constants()` が外部 JSON から値を代入するため）
@@ -624,6 +644,7 @@ rank値: C=0, B=1, A=2, S=3
 - [x] 攻撃クールダウン（pre_delay / post_delay）の全面見直し：クラスJSONのスロット単位（Z/V）に一元化、プレイヤー/AIで同じ slots 参照、PRE_DELAY 中から射程オーバーレイ表示、game_speed 適用
 - [x] HP状態ラベルの色と点滅を全UI要素で統一。色定数を `GlobalConstants` に集約（SPRITE/GAUGE/TEXT の3パレット）。wounded 以降はスプライト・顔アイコンで3Hz点滅。ゲージ・文字は静的
 - [x] Config Editor（開発用定数エディタ）を実装。F4 でタイトル画面・ゲーム中ともトグル起動。5定数（Phase A）を外部 JSON（`assets/master/config/constants.json` / `constants_default.json`）化し、7 + Unknown タブでカテゴリ分け表示・保存・デフォルト復帰・デフォルト化に対応
+- [x] Config Editor にトップレベルタブ構造（定数/味方クラス/敵/ステータス/アイテム）を導入し、「味方クラス」タブで 7 クラス JSON を横断表で編集できるよう実装（`slots.Z/V` 平坦化・LineEdit セル・元値型に合わせた書き戻し・キー順保持）
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム

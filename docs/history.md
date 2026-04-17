@@ -941,3 +941,15 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
 ### バグ修正
 - **デフォルト列に `%.4g` が literal 表示される**：GDScript の `%` フォーマットは `%g` 未対応。`%.4f` で丸めて末尾ゼロを削る `_format_number()` を新設し、整数扱いなら `"3"` 形式、小数なら `"0.35"` 形式で返すように修正
 - **ゲーム中 F4 が即座に自己 close される**：`game_map._input` の KEY_F4 処理後に `set_input_as_handled()` を呼ばなかったため、同じ F4 イベントが `config_editor._unhandled_input` に伝搬して `visible=true` 直後に `close()` が呼ばれていた。`get_viewport().set_input_as_handled()` を追加して伝搬を遮断
+
+### Phase B：味方クラス横断編集（本コミット）
+- トップレベル TabContainer を「定数 / 味方クラス / 敵 / ステータス / アイテム」の 5 タブ構造に拡張
+- 「味方クラス」タブで 7 クラス JSON（`assets/master/classes/*.json`）を横断表で編集できる実装を追加
+  - `_load_class_files()`：ConfigEditor 初期化時に 7 ファイルをパースして `_class_data[class_id]` に保持
+  - `_flatten_class()`：`slots.Z.*` / `slots.V.*` を `Z_*` / `V_*` に平坦化して表示用 Dict を生成
+  - `_save_class_files()`：変更されたクラスのみ `JSON.stringify(data, "  ", false)` で書き戻し
+  - `_coerce_class_value()`：元 JSON の値の型（bool / int / float / string）に合わせて変換。変換失敗時は保存中止・警告
+- `CLASS_PARAM_GROUPS` 配列でパラメータのグループ分け（基本/リソース/特性/Zスロット/Vスロット）。未分類は「その他」グループに自動集約＋警告
+- 下部ボタンを上段タブに応じて有効/無効切替：定数タブは全ボタン有効・味方クラスタブは保存のみ・その他はすべて無効
+- **重要**：Godot 4 の `JSON.stringify` デフォルトは `sort_keys=true`（キーをアルファベット順にソート）。クラス JSON のキー順を保持するため `sort_keys=false` を明示指定。同じ理由で `GlobalConstants.save_constants()` / `commit_as_defaults()` にも `false` を追加
+- 「すべてデフォルトに戻す」「現在値をすべてデフォルト化」は味方クラスタブでは無効化（デフォルト値を保持しない方針・復帰は git 履歴で管理）

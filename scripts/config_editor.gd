@@ -57,10 +57,79 @@ const STATS_SUB_TABS: Array[String] = [
 	"属性補正",
 ]
 
+# ============================================================================
+# 味方クラスタブ（Phase B）
+# ============================================================================
+## 7クラスの順序（画面に左から順に並ぶ）
+const CLASS_IDS: Array[String] = [
+	"fighter-sword",
+	"fighter-axe",
+	"archer",
+	"magician-fire",
+	"magician-water",
+	"healer",
+	"scout",
+]
+const CLASS_DIR: String = "res://assets/master/classes/"
+
+## クラスパラメータのグループ分け（表示順）
+## slots.Z / slots.V は "Z_xxx" / "V_xxx" に平坦化して保存時に元の階層へ戻す
+## ここに登場しないパラメータは「その他」グループに自動で集約される（警告あり）
+const CLASS_PARAM_GROUPS: Array = [
+	{
+		"title": "基本",
+		"params": ["id", "name", "weapon_type", "attack_type", "attack_range", "behavior_description"],
+	},
+	{
+		"title": "リソース",
+		"params": ["base_defense", "mp", "max_sp", "heal_mp_cost", "buff_mp_cost"],
+	},
+	{
+		"title": "特性",
+		"params": ["is_flying"],
+	},
+	{
+		"title": "Zスロット（通常攻撃）",
+		"params": [
+			"Z_name", "Z_action", "Z_type", "Z_range",
+			"Z_damage_mult", "Z_heal_mult",
+			"Z_pre_delay", "Z_post_delay",
+			"Z_sp_cost", "Z_mp_cost",
+		],
+	},
+	{
+		"title": "Vスロット（特殊攻撃）",
+		"params": [
+			"V_name", "V_action", "V_type", "V_range",
+			"V_damage_mult",
+			"V_sp_cost", "V_mp_cost",
+			"V_pre_delay", "V_post_delay",
+			"V_stun_duration", "V_buff_duration",
+			"V_duration", "V_tick_interval",
+		],
+	},
+]
+## 味方クラスタブのセル幅
+const CLASS_PARAM_COL_W:  int = 220
+const CLASS_VALUE_COL_W:  int = 150
+
 var _root_panel:        PanelContainer = null
 var _top_tab_container: TabContainer   = null  ## トップレベル：定数/味方クラス/敵/ステータス/アイテム
 var _tab_container:     TabContainer   = null  ## 「定数」タブ内の既存カテゴリタブ
 var _status_lbl:        Label          = null
+
+## 下部ボタン参照（現在の上段タブに応じて有効/無効を切替）
+var _btn_save:   Button = null
+var _btn_reset:  Button = null
+var _btn_commit: Button = null
+var _btn_close:  Button = null
+
+## 味方クラス（Phase B）: 起動時にクラスJSONをロードし、編集はメモリ上で保持
+## 保存時にファイルへ書き戻す（変更があったファイルのみ）
+var _class_data:         Dictionary = {}  ## class_id → 元の JSON Dictionary（キー順保持）
+var _class_cell_widgets: Dictionary = {}  ## "class_id|param_key" → LineEdit
+var _class_dirty:        Dictionary = {}  ## class_id → bool（書き戻し対象フラグ）
+var _class_cell_styles:  Dictionary = {}  ## "class_id|param_key" → StyleBoxFlat（ハイライト制御）
 ## 各タブ名 → そのタブ内の VBox（ここに行を add）
 var _tab_rows: Dictionary = {}
 ## 各タブ名 → プレースホルダーラベル（空タブ用。定数があれば hide）
@@ -202,38 +271,44 @@ func _build_ui() -> void:
 	# 初期状態のタブ名（● インジケータ）を一度更新
 	_update_tab_indicators()
 
+	# タブ切替時にボタンの有効/無効を更新（上段タブに応じて作用対象が変わる）
+	_top_tab_container.tab_changed.connect(_on_top_tab_changed)
+
 	# 下部ボタン
 	var btn_box := HBoxContainer.new()
 	btn_box.add_theme_constant_override("separation", 12)
 	outer.add_child(btn_box)
 
-	var btn_save := Button.new()
-	btn_save.text = "保存"
-	btn_save.custom_minimum_size = Vector2(120, 36)
-	btn_save.pressed.connect(_on_save_pressed)
-	btn_box.add_child(btn_save)
+	_btn_save = Button.new()
+	_btn_save.text = "保存"
+	_btn_save.custom_minimum_size = Vector2(120, 36)
+	_btn_save.pressed.connect(_on_save_pressed)
+	btn_box.add_child(_btn_save)
 
-	var btn_reset := Button.new()
-	btn_reset.text = "すべてデフォルトに戻す"
-	btn_reset.custom_minimum_size = Vector2(200, 36)
-	btn_reset.pressed.connect(_on_reset_pressed)
-	btn_box.add_child(btn_reset)
+	_btn_reset = Button.new()
+	_btn_reset.text = "すべてデフォルトに戻す"
+	_btn_reset.custom_minimum_size = Vector2(200, 36)
+	_btn_reset.pressed.connect(_on_reset_pressed)
+	btn_box.add_child(_btn_reset)
 
-	var btn_commit := Button.new()
-	btn_commit.text = "現在値をすべてデフォルト化"
-	btn_commit.custom_minimum_size = Vector2(220, 36)
-	btn_commit.pressed.connect(_on_commit_pressed)
-	btn_box.add_child(btn_commit)
+	_btn_commit = Button.new()
+	_btn_commit.text = "現在値をすべてデフォルト化"
+	_btn_commit.custom_minimum_size = Vector2(220, 36)
+	_btn_commit.pressed.connect(_on_commit_pressed)
+	btn_box.add_child(_btn_commit)
 
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_box.add_child(spacer)
 
-	var btn_close := Button.new()
-	btn_close.text = "閉じる (F4)"
-	btn_close.custom_minimum_size = Vector2(120, 36)
-	btn_close.pressed.connect(close)
-	btn_box.add_child(btn_close)
+	_btn_close = Button.new()
+	_btn_close.text = "閉じる (F4)"
+	_btn_close.custom_minimum_size = Vector2(120, 36)
+	_btn_close.pressed.connect(close)
+	btn_box.add_child(_btn_close)
+
+	# 初期表示のボタン有効状態を設定
+	_on_top_tab_changed(_top_tab_container.current_tab)
 
 
 func _add_hdr_label(parent: HBoxContainer, text: String, width: int) -> void:
@@ -275,10 +350,370 @@ func _build_top_tab_constants(parent: TabContainer) -> void:
 		_build_row(key)
 
 
-## 「味方クラス」トップタブ：プレースホルダー
+## 「味方クラス」トップタブ：7クラスJSONの横断表
 func _build_top_tab_ally_class(parent: TabContainer) -> void:
-	_add_placeholder_tab(parent, TOP_TAB_ALLY_CLASS,
-		"ここに7クラスの横断表が入る予定です（max_hp, power, skill, Z_pre_delay, V_pre_delay 等）")
+	var container := VBoxContainer.new()
+	container.name = TOP_TAB_ALLY_CLASS
+	container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(container)
+	parent.set_tab_title(parent.get_tab_count() - 1, TOP_TAB_ALLY_CLASS)
+
+	_load_class_files()
+
+	# 表の外側スクロール（縦横の両方）
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	container.add_child(scroll)
+
+	var grid := VBoxContainer.new()
+	grid.add_theme_constant_override("separation", 2)
+	scroll.add_child(grid)
+
+	_build_class_grid(grid)
+
+
+## クラスJSONをすべて読み込む
+func _load_class_files() -> void:
+	_class_data.clear()
+	_class_dirty.clear()
+	for cid: String in CLASS_IDS:
+		var path := CLASS_DIR + cid + ".json"
+		if not FileAccess.file_exists(path):
+			push_warning("[ConfigEditor] クラスJSONがありません: " + path)
+			continue
+		var f := FileAccess.open(path, FileAccess.READ)
+		if f == null:
+			push_warning("[ConfigEditor] クラスJSONを開けません: " + path)
+			continue
+		var txt := f.get_as_text()
+		f.close()
+		var parsed: Variant = JSON.parse_string(txt)
+		if parsed == null or not parsed is Dictionary:
+			push_warning("[ConfigEditor] クラスJSONのパースに失敗: " + path)
+			continue
+		_class_data[cid] = parsed
+		_class_dirty[cid] = false
+
+
+## class Dictionary を編集用の平坦な Dictionary に変換する
+## 通常の top-level キーはそのまま、slots.Z.* は Z_* へ、slots.V.* は V_* へ
+## slots.X / slots.C は表示しない（保存時は書き戻さないのでそのまま残る）
+func _flatten_class(data: Dictionary) -> Dictionary:
+	var flat: Dictionary = {}
+	for raw_key: Variant in data.keys():
+		var k := raw_key as String
+		if k == "slots":
+			var slots := data[k] as Dictionary
+			for slot_key: String in ["Z", "V"]:
+				var s: Variant = slots.get(slot_key)
+				if s == null or not s is Dictionary:
+					continue
+				var slot_dict := s as Dictionary
+				for raw_p: Variant in slot_dict.keys():
+					var p := raw_p as String
+					flat["%s_%s" % [slot_key, p]] = slot_dict[p]
+		else:
+			flat[k] = data[k]
+	return flat
+
+
+## 全クラスの平坦パラメータの和集合を、初出順で返す
+func _collect_all_flat_params() -> Array[String]:
+	var seen: Dictionary = {}
+	var out: Array[String] = []
+	for cid: String in CLASS_IDS:
+		if not _class_data.has(cid):
+			continue
+		var flat := _flatten_class(_class_data[cid] as Dictionary)
+		for raw_k: Variant in flat.keys():
+			var k := raw_k as String
+			if not seen.has(k):
+				seen[k] = true
+				out.append(k)
+	return out
+
+
+## グリッド本体を構築する（ヘッダー行 → グループごとに区切り + 行群）
+func _build_class_grid(parent: VBoxContainer) -> void:
+	# パラメータ → グループ名 のマップを作成
+	var param_to_group: Dictionary = {}
+	for g_v: Variant in CLASS_PARAM_GROUPS:
+		var g := g_v as Dictionary
+		for p_v: Variant in g["params"]:
+			param_to_group[p_v as String] = g["title"]
+
+	var all_params := _collect_all_flat_params()
+	var unclassified: Array[String] = []
+	for p: String in all_params:
+		if not param_to_group.has(p):
+			unclassified.append(p)
+	if not unclassified.is_empty():
+		push_warning("[ConfigEditor] 未分類のクラスパラメータ（「その他」へ集約）: " + ", ".join(unclassified))
+
+	# グループ順 = CLASS_PARAM_GROUPS + その他
+	var groups_ordered: Array = CLASS_PARAM_GROUPS.duplicate()
+	if not unclassified.is_empty():
+		groups_ordered.append({"title": "その他", "params": unclassified})
+
+	# ヘッダー行（パラメータ名 + 7クラスID）
+	_build_class_header_row(parent)
+
+	# グループごとに区切り → 行群
+	for g_v: Variant in groups_ordered:
+		var g := g_v as Dictionary
+		var title: String = g["title"]
+		# そのグループに該当パラメータが 1 つもない場合はセパレータも出さない
+		var visible_params: Array[String] = []
+		for p_v: Variant in g["params"]:
+			var p := p_v as String
+			if all_params.has(p):
+				visible_params.append(p)
+		if visible_params.is_empty():
+			continue
+		_add_class_group_separator(parent, title)
+		for p: String in visible_params:
+			_build_class_row(parent, p)
+
+
+func _build_class_header_row(parent: VBoxContainer) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	parent.add_child(row)
+
+	var name_lbl := Label.new()
+	name_lbl.text = "パラメータ"
+	name_lbl.custom_minimum_size = Vector2(CLASS_PARAM_COL_W, 0)
+	name_lbl.add_theme_font_size_override("font_size", 12)
+	name_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
+	row.add_child(name_lbl)
+
+	for cid: String in CLASS_IDS:
+		var lbl := Label.new()
+		lbl.text = cid
+		lbl.custom_minimum_size = Vector2(CLASS_VALUE_COL_W, 0)
+		lbl.add_theme_font_size_override("font_size", 11)
+		lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		row.add_child(lbl)
+
+
+func _add_class_group_separator(parent: VBoxContainer, title: String) -> void:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.18, 0.22, 0.30, 1.0)
+	sb.content_margin_left   = 6
+	sb.content_margin_right  = 6
+	sb.content_margin_top    = 3
+	sb.content_margin_bottom = 3
+	panel.add_theme_stylebox_override("panel", sb)
+	parent.add_child(panel)
+	var lbl := Label.new()
+	lbl.text = "─── %s ───" % title
+	lbl.add_theme_font_size_override("font_size", 12)
+	lbl.add_theme_color_override("font_color", Color(0.85, 0.9, 1.0))
+	panel.add_child(lbl)
+
+
+func _build_class_row(parent: VBoxContainer, param_key: String) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	parent.add_child(row)
+
+	# 左列：パラメータ名
+	var name_lbl := Label.new()
+	name_lbl.text = param_key
+	name_lbl.custom_minimum_size = Vector2(CLASS_PARAM_COL_W, 0)
+	name_lbl.add_theme_font_size_override("font_size", 11)
+	name_lbl.clip_text = true
+	row.add_child(name_lbl)
+
+	# 7クラス分のセル
+	for cid: String in CLASS_IDS:
+		var flat: Dictionary = _flatten_class(_class_data.get(cid, {}) as Dictionary) \
+			if _class_data.has(cid) else {}
+		if flat.has(param_key):
+			var cell := LineEdit.new()
+			cell.text = _stringify_class_value(flat[param_key])
+			cell.custom_minimum_size = Vector2(CLASS_VALUE_COL_W, 0)
+			cell.add_theme_font_size_override("font_size", 11)
+			# ハイライト用スタイル（初期は透明）
+			var sb := StyleBoxFlat.new()
+			sb.bg_color = Color(0.12, 0.12, 0.16)
+			sb.content_margin_left   = 4
+			sb.content_margin_right  = 4
+			sb.content_margin_top    = 2
+			sb.content_margin_bottom = 2
+			cell.add_theme_stylebox_override("normal", sb)
+			cell.add_theme_stylebox_override("focus", sb)
+			row.add_child(cell)
+			var widget_key := "%s|%s" % [cid, param_key]
+			_class_cell_widgets[widget_key] = cell
+			_class_cell_styles[widget_key] = sb
+			cell.text_changed.connect(_on_class_cell_changed.bind(cid, param_key))
+		else:
+			# そのクラスにこのパラメータが存在しない（表示のみの空欄）
+			var empty_lbl := Label.new()
+			empty_lbl.text = "—"
+			empty_lbl.custom_minimum_size = Vector2(CLASS_VALUE_COL_W, 0)
+			empty_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			empty_lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.45))
+			row.add_child(empty_lbl)
+
+
+## Variant → 表示用 String
+func _stringify_class_value(v: Variant) -> String:
+	if v == null:
+		return ""
+	if v is bool:
+		return "true" if v else "false"
+	if v is int:
+		return str(int(v))
+	if v is float:
+		return _format_number(float(v))
+	return str(v)
+
+
+## セル編集時：現在値と元値を比較し、差分があればハイライト・dirty 立て
+func _on_class_cell_changed(new_text: String, class_id: String, param_key: String) -> void:
+	var widget_key := "%s|%s" % [class_id, param_key]
+	var cell := _class_cell_widgets.get(widget_key) as LineEdit
+	var sb := _class_cell_styles.get(widget_key) as StyleBoxFlat
+	if cell == null or sb == null:
+		return
+	# 元値
+	var flat := _flatten_class(_class_data.get(class_id, {}) as Dictionary)
+	var orig_text := _stringify_class_value(flat.get(param_key))
+	var changed := new_text != orig_text
+	sb.bg_color = HIGHLIGHT_BG_COLOR if changed else Color(0.12, 0.12, 0.16)
+	# dirty フラグは「このクラスのいずれかのセルが元と違う」で判定
+	_class_dirty[class_id] = _class_has_any_diff(class_id)
+
+
+## 指定クラスに、元値と差分があるセルが1つでもあれば true
+func _class_has_any_diff(class_id: String) -> bool:
+	var flat := _flatten_class(_class_data.get(class_id, {}) as Dictionary)
+	for raw_key: Variant in _class_cell_widgets.keys():
+		var wk := raw_key as String
+		if not wk.begins_with(class_id + "|"):
+			continue
+		var pk := wk.substr(class_id.length() + 1)
+		var cell := _class_cell_widgets[wk] as LineEdit
+		if cell == null:
+			continue
+		var orig_text := _stringify_class_value(flat.get(pk))
+		if cell.text != orig_text:
+			return true
+	return false
+
+
+## 変更されたクラスJSONをすべて書き戻す
+## 戻り値：{"saved": Array[String], "errors": Array[String]}
+func _save_class_files() -> Dictionary:
+	var result := {"saved": [], "errors": []}
+	for cid: String in CLASS_IDS:
+		if not _class_dirty.get(cid, false):
+			continue
+		# 元 JSON を複製してから編集値を適用
+		var orig := _class_data[cid] as Dictionary
+		var new_data := _apply_class_edits(cid, orig)
+		if new_data == null:
+			(result["errors"] as Array).append("%s: 型変換失敗（保存中止）" % cid)
+			continue
+		var path := CLASS_DIR + cid + ".json"
+		var f := FileAccess.open(path, FileAccess.WRITE)
+		if f == null:
+			(result["errors"] as Array).append(
+				"%s: 書き込み失敗 err=%d" % [cid, FileAccess.get_open_error()])
+			continue
+		# sort_keys=false：元 JSON のキー順を保持（Godot 4 のデフォルトは true でアルファベット順）
+		f.store_string(JSON.stringify(new_data, "  ", false))
+		f.close()
+		# メモリ上の data を保存後の状態に更新
+		_class_data[cid] = new_data
+		_class_dirty[cid] = false
+		(result["saved"] as Array).append(cid)
+		# このクラスのハイライトを全解除
+		_clear_class_highlights(cid)
+	return result
+
+
+## 指定クラスの全セルのハイライトを解除
+func _clear_class_highlights(class_id: String) -> void:
+	for raw_key: Variant in _class_cell_styles.keys():
+		var wk := raw_key as String
+		if not wk.begins_with(class_id + "|"):
+			continue
+		var sb := _class_cell_styles[wk] as StyleBoxFlat
+		if sb != null:
+			sb.bg_color = Color(0.12, 0.12, 0.16)
+
+
+## 元 JSON を複製して編集値を適用。型変換失敗時は null を返す
+func _apply_class_edits(class_id: String, orig: Dictionary) -> Variant:
+	var out := (orig as Dictionary).duplicate(true) as Dictionary
+	for raw_key: Variant in _class_cell_widgets.keys():
+		var wk := raw_key as String
+		if not wk.begins_with(class_id + "|"):
+			continue
+		var pk := wk.substr(class_id.length() + 1)
+		var cell := _class_cell_widgets[wk] as LineEdit
+		if cell == null:
+			continue
+		var text_val := cell.text
+		# 保存先を決定：Z_/V_ は slots 配下、それ以外は top-level
+		var is_z := pk.begins_with("Z_")
+		var is_v := pk.begins_with("V_")
+		if is_z or is_v:
+			var slot_key := "Z" if is_z else "V"
+			var p := pk.substr(slot_key.length() + 1)
+			var slots: Variant = out.get("slots")
+			if not slots is Dictionary:
+				continue
+			var slots_d := slots as Dictionary
+			var slot: Variant = slots_d.get(slot_key)
+			if not slot is Dictionary:
+				continue
+			var slot_d := slot as Dictionary
+			if not slot_d.has(p):
+				continue
+			var coerced := _coerce_class_value(text_val, slot_d[p])
+			if not bool(coerced.get("ok", false)):
+				push_warning("[ConfigEditor] %s.%s 型変換失敗: '%s'" % [class_id, pk, text_val])
+				return null
+			slot_d[p] = coerced["value"]
+		else:
+			if not out.has(pk):
+				continue
+			var coerced := _coerce_class_value(text_val, out[pk])
+			if not bool(coerced.get("ok", false)):
+				push_warning("[ConfigEditor] %s.%s 型変換失敗: '%s'" % [class_id, pk, text_val])
+				return null
+			out[pk] = coerced["value"]
+	return out
+
+
+## 文字列 → 元値の型に合わせて変換。{"ok": true, "value": ...} / {"ok": false}
+func _coerce_class_value(text: String, orig_value: Variant) -> Dictionary:
+	if orig_value is bool:
+		var low := text.to_lower().strip_edges()
+		if low == "true":  return {"ok": true, "value": true}
+		if low == "false": return {"ok": true, "value": false}
+		return {"ok": false}
+	if orig_value is int:
+		if text.is_valid_int():
+			return {"ok": true, "value": text.to_int()}
+		if text.is_valid_float():
+			return {"ok": true, "value": int(text.to_float())}
+		return {"ok": false}
+	if orig_value is float:
+		if text.is_valid_float():
+			return {"ok": true, "value": text.to_float()}
+		return {"ok": false}
+	# 文字列または null はそのまま
+	return {"ok": true, "value": text}
 
 
 ## 「敵」トップタブ：敵種グループのサブタブ（各中身はプレースホルダー）
@@ -538,12 +973,50 @@ func _on_color_changed(color: Color, key: String) -> void:
 # ボタン
 # ============================================================================
 
+## 現在の上段タブ名を返す（TOP_TAB_CONSTANTS / TOP_TAB_ALLY_CLASS / ...）
+func _current_top_tab_name() -> String:
+	if _top_tab_container == null:
+		return ""
+	return _top_tab_container.get_tab_title(_top_tab_container.current_tab)
+
+
+## 上段タブが切り替わったときに下部ボタンの有効/無効を更新する
+## - 定数タブ：保存 / リセット / デフォルト化がすべて有効
+## - 味方クラスタブ：保存のみ有効（リセット・デフォルト化はデフォルト値を保持しない方針のため無効）
+## - それ以外（敵/ステータス/アイテム）：プレースホルダー段階なのですべて無効
+func _on_top_tab_changed(_idx: int) -> void:
+	if _btn_save == null:
+		return
+	var top := _current_top_tab_name()
+	var is_constants := top == TOP_TAB_CONSTANTS
+	var is_ally := top == TOP_TAB_ALLY_CLASS
+	_btn_save.disabled = not (is_constants or is_ally)
+	_btn_reset.disabled = not is_constants
+	_btn_commit.disabled = not is_constants
+
+
 func _on_save_pressed() -> void:
-	var ok := GlobalConstants.save_constants()
-	if ok:
-		_set_status("保存しました: %s" % GlobalConstants.CONFIG_USER_PATH, Color(0.55, 1.0, 0.55))
-	else:
-		_set_status(GlobalConstants.last_config_error, Color(1.0, 0.5, 0.5))
+	var top := _current_top_tab_name()
+	match top:
+		TOP_TAB_CONSTANTS:
+			var ok := GlobalConstants.save_constants()
+			if ok:
+				_set_status("保存しました: %s" % GlobalConstants.CONFIG_USER_PATH, Color(0.55, 1.0, 0.55))
+			else:
+				_set_status(GlobalConstants.last_config_error, Color(1.0, 0.5, 0.5))
+		TOP_TAB_ALLY_CLASS:
+			var result := _save_class_files()
+			var saved: Array = result.get("saved", [])
+			var errors: Array = result.get("errors", [])
+			if errors.is_empty():
+				if saved.is_empty():
+					_set_status("変更なし（保存対象の差分がありません）", Color(0.8, 0.8, 0.6))
+				else:
+					_set_status("保存しました: %s" % ", ".join(saved), Color(0.55, 1.0, 0.55))
+			else:
+				_set_status("エラー: %s" % " / ".join(errors), Color(1.0, 0.5, 0.5))
+		_:
+			_set_status("このタブでは保存操作はありません", Color(0.8, 0.8, 0.6))
 
 
 func _on_reset_pressed() -> void:

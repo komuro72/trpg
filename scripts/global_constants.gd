@@ -378,7 +378,8 @@ func save_constants() -> bool:
 		last_config_error = "書き込み失敗: %s (err=%d)" % [CONFIG_USER_PATH, FileAccess.get_open_error()]
 		push_warning("[GlobalConstants] " + last_config_error)
 		return false
-	f.store_string(JSON.stringify(out, "  "))
+	# sort_keys=false で CONFIG_KEYS の宣言順を保持
+	f.store_string(JSON.stringify(out, "  ", false))
 	f.close()
 	return true
 
@@ -402,7 +403,8 @@ func commit_as_defaults() -> bool:
 		last_config_error = "書き込み失敗: %s (err=%d)" % [CONFIG_DEFAULT_PATH, FileAccess.get_open_error()]
 		push_warning("[GlobalConstants] " + last_config_error)
 		return false
-	f.store_string(JSON.stringify(dd, "  "))
+	# sort_keys=false で元 JSON のキー順・メタ情報の構造を保持
+	f.store_string(JSON.stringify(dd, "  ", false))
 	f.close()
 	return true
 
