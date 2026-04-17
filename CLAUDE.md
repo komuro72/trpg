@@ -1184,6 +1184,23 @@ rank値: C=0, B=1, A=2, S=3
   - [x] NpcLeaderAI の撤退ロジック追加（CombatSituation.CRITICAL 時に FLEE に切り替え。SAFE 復帰で EXPLORE に戻る）
   - [x] special_skill 指示のAI接続（strong_enemy / disadvantage 等の条件判定。PowerBalance / HpStatus で判定。_generate_special_attack_queue で発動）
 - NpcLeaderAI のアイテム収集方針の動的切り替え：目標フロアに到達している場合（余裕がある状態）、item_pickup を "passive"（近くなら拾う）から "aggressive"（積極的に拾う）に切り替える。装備強化のために能動的にアイテムを回収する行動
+- **アイテムのランダム生成機構**：フロア深度に応じた補正値のランダム生成が未実装。`assets/master/items/*.json` のマスターデータ（`base_stats` の `_min`/`_max` ペア、`depth_scale`）は用意済みだがランタイムから参照されていない。実装時には下記「effect キー名の不整合」も合わせて対応
+- **Config Editor のアイテムタブ**：アイテムランダム生成機構の実装とセットで実装予定（単独実装ではゲーム反映が確認できないため保留）
+
+## 要調査・要整理項目
+バグ可能性・構造整理・命名整理など、実装ではなく調査系のタスク：
+
+- **legacy フィールドの棚卸し**：
+  - `base_defense`（敵クラス JSON に残っているが使われていない疑い）
+  - 個別敵 JSON の `hp` / `power` / `skill` / `physical_resistance` / `magic_resistance` / `defense` / `rank` / `mp`（`apply_enemy_stats` で上書きされる legacy）
+  - 他にも潜んでいる可能性あり。定期的に Claude Code に全体棚卸しを依頼する運用
+- **demon の `is_flying`**：Step 1 の構造整理後、敵一覧タブで demon の `is_flying` が false に表示されていた。CLAUDE.md の仕様では demon は飛行のはず（`is_flying=true`）。要確認・修正
+- **アイテム effect キー名の不整合**：マスター側（`assets/master/items/potion_hp.json`）は `heal_hp`、インスタンス側（`dungeon_handcrafted.json`）は `restore_hp`。現状は両方未使用なので問題顕在化していないが、将来のランダム生成実装時に統一が必要
+- **Config Editor の「デフォルトに戻す」不具合**：ボタンを押しても値が戻らない症状がある。要修正
+- **「敵クラス」vs「種族」の概念整理**：Excel 仕様書では「敵クラス」、コード／AI 実装では「種族」（GoblinLeaderAI 等）と呼んでいる。現状は動作に問題ないが用語の使い分けがあいまいで将来混乱の元になる可能性。整理したい
+- **ファイル名のハイフン／アンダースコア統一**：個別敵 JSON は `dark_lord.json` 等アンダースコア、クラス JSON は `dark-lord.json` 等ハイフン。統一するなら個別敵 JSON をハイフンに寄せる。ファイル名変更はコード側の参照も書き換えが必要
+- **`enemy_list.json` と `enemies_list.json` の紛らわしい命名**：役割が全く違う（前者はステータスタイプ参照マップ、後者は敵ファイルパス一覧）のにファイル名が酷似。片方リネーム候補
+- **Config Editor やツール類での設定変更の git 反映方針**：JSON ファイル・画像素材などバイナリファイルの、自動 commit/push の是非を含めた運用ルール検討が必要
 
 ## 参照ファイル
 - docs/spec.md：詳細仕様書（実装前に参照すること）
