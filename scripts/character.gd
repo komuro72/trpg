@@ -236,7 +236,6 @@ func _process(delta: float) -> void:
 func _update_modulate() -> void:
 	if _sprite == null:
 		return
-	var t := Time.get_ticks_msec() / 1000.0
 
 	# ターゲットとして選択中：白く輝かせる
 	if is_targeted:
@@ -250,17 +249,8 @@ func _update_modulate() -> void:
 		_sprite.modulate = Color.WHITE.lerp(Color(0.3, 0.9, 1.0), 0.5 + pulse * 0.5)
 		return
 
-	# HP状態による色（状態ラベル閾値と統一：healthy=白 / wounded=橙 / injured=赤 / critical=赤点滅）
-	var ratio := float(hp) / float(max_hp) if max_hp > 0 else 1.0
-	if ratio >= GlobalConstants.CONDITION_HEALTHY_THRESHOLD:
-		_sprite.modulate = Color.WHITE
-	elif ratio >= GlobalConstants.CONDITION_WOUNDED_THRESHOLD:
-		_sprite.modulate = Color(1.0, 0.65, 0.25)     # wounded：オレンジ
-	elif ratio >= GlobalConstants.CONDITION_INJURED_THRESHOLD:
-		_sprite.modulate = Color(1.0, 0.35, 0.35)     # injured：赤
-	else:
-		var pulse := (sin(t * TAU * 3.0) + 1.0) * 0.5
-		_sprite.modulate = Color.WHITE.lerp(Color(1.0, 0.15, 0.15), pulse)  # critical：赤く点滅
+	# HP状態ラベルによる色（healthy=白 / wounded=黄 / injured=橙 / critical=赤、wounded以降は点滅）
+	_sprite.modulate = GlobalConstants.condition_sprite_modulate(get_condition())
 
 	# FieldOverlay によるハイライト乗数を適用（White = 変化なし）
 	if highlight_override != Color.WHITE:

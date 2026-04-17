@@ -204,12 +204,7 @@ func _draw_panel(field_x: float, field_w: float, vp_h: float, gs_f: float) -> vo
 			var cls_str: String = cd.class_id       if cd != null else ""
 			var rnk_str: String = cd.rank           if cd != null else "C"
 			var cond_s := member.get_condition()
-			var cond_col: Color
-			match cond_s:
-				"healthy": cond_col = Color(0.40, 0.90, 0.40)   # 緑
-				"wounded": cond_col = Color(1.00, 0.85, 0.20)   # 黄
-				"injured": cond_col = Color(1.00, 0.60, 0.20)   # オレンジ
-				_:         cond_col = Color(1.00, 0.35, 0.35)   # 赤（critical）
+			var cond_col := GlobalConstants.condition_text_color(cond_s)
 			var rank_col := Color(1.0, 0.4, 0.4) if rnk_str in ["S", "A"] \
 				else Color(1.0, 0.65, 0.2)
 			var ty := y + float(fs_body)

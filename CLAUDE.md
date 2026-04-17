@@ -579,6 +579,7 @@ rank値: C=0, B=1, A=2, S=3
   - アイテム名称統一（HPポーション/MPポーション/SPポーション）
 - [x] 近接3クラス（剣士/斧戦士/斥候）の特殊攻撃AI発動条件（隣接敵数・突進斬りの経路判定）を実装
 - [x] 攻撃クールダウン（pre_delay / post_delay）の全面見直し：クラスJSONのスロット単位（Z/V）に一元化、プレイヤー/AIで同じ slots 参照、PRE_DELAY 中から射程オーバーレイ表示、game_speed 適用
+- [x] HP状態ラベルの色と点滅を全UI要素で統一。色定数を `GlobalConstants` に集約（SPRITE/GAUGE/TEXT の3パレット）。wounded 以降はスプライト・顔アイコンで3Hz点滅。ゲージ・文字は静的
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム
@@ -837,6 +838,22 @@ rank値: C=0, B=1, A=2, S=3
 | アンデッド | `is_undead` | bool。デフォルト false。skeleton / skeleton-archer / lich が true。ヒーラーの回復魔法が特効（回復量をダメージとして適用）。物理耐性極高・魔法はある程度有効 |
 | 巻き添え | `friendly_fire` | bool。デフォルト false（将来実装。範囲攻撃が味方・他パーティーにも当たる仕様） |
 | 状態ラベル | `get_condition()` | HP割合に基づく4段階ラベル（healthy/wounded/injured/critical）。AI の戦力評価で敵のHP推定に使用。閾値は GlobalConstants で管理 |
+
+### 状態ラベルの色と点滅
+- 閾値は `GlobalConstants.CONDITION_HEALTHY_THRESHOLD` (0.5) / `CONDITION_WOUNDED_THRESHOLD` (0.35) / `CONDITION_INJURED_THRESHOLD` (0.25)
+- 色は `GlobalConstants` に 3 系統のパレットで集約（SPRITE / GAUGE / TEXT）。各 UI は用途に応じてパレットを使い分ける
+- 点滅は **スプライト・顔アイコン（左右パネル）のみ** に適用。wounded / injured / critical の 3 段階で 3Hz 点滅（`CONDITION_PULSE_HZ`）。ゲージ・文字・DebugWindow は静的色
+
+| ラベル | HP閾値 | スプライト・アイコン | HPゲージ | テキスト | DebugWindow HP | 点滅 |
+|---|---|---|---|---|---|---|
+| healthy  | ≥50% | 白 | 緑 | 緑 | 白 | なし |
+| wounded  | ≥35% | 黄 | 黄 | 黄 | 黄 | **あり** |
+| injured  | ≥25% | 橙 | 橙 | 橙 | 橙 | **あり** |
+| critical | <25% | 赤 | 赤 | 赤 | 赤 | **あり** |
+
+- 色定数：`CONDITION_COLOR_{SPRITE|GAUGE|TEXT}_{HEALTHY|WOUNDED|INJURED|CRITICAL}`（全12定数）
+- ヘルパー：`condition_sprite_modulate(cond)`（点滅あり）/ `condition_sprite_color(cond)`（静的）/ `condition_gauge_color(cond)` / `condition_text_color(cond)` / `ratio_to_condition(ratio)`
+- 点滅実装：`_pulse_color(base)` が `sin(t*TAU*3)` で「色 ↔ 暗い同色（各成分×0.7）」を lerp
 
 - 魔法命中精度は `skill` と共通（`power` 系は攻撃・回復とも同じ命中扱い）
 - 回復魔法は必ず命中するため、ヒーラー（attack_type="heal"）には OrderWindow の魔法技量行を表示しない

@@ -117,6 +117,89 @@ const CONDITION_WOUNDED_THRESHOLD:  float = 0.35  ## HP35%以上50%未満 → "w
 const CONDITION_INJURED_THRESHOLD:  float = 0.25  ## HP25%以上35%未満 → "injured"
 ## HP25%未満 → "critical"
 
+## 状態ラベル色（全要素統一・2026-04-17〜）
+## スプライト・顔アイコンは wounded 以降で 3Hz 点滅（condition_sprite_modulate）
+## ゲージ・テキストは静的（condition_gauge_color / condition_text_color）
+const CONDITION_PULSE_HZ: float = 3.0
+
+## スプライト・顔アイコンの modulate 色（白 / 黄 / 橙 / 赤）
+const CONDITION_COLOR_SPRITE_HEALTHY:  Color = Color.WHITE
+const CONDITION_COLOR_SPRITE_WOUNDED:  Color = Color(1.00, 0.85, 0.20)
+const CONDITION_COLOR_SPRITE_INJURED:  Color = Color(1.00, 0.65, 0.25)
+const CONDITION_COLOR_SPRITE_CRITICAL: Color = Color(1.00, 0.35, 0.35)
+
+## HP ゲージ色（緑 / 黄 / 橙 / 赤）
+const CONDITION_COLOR_GAUGE_HEALTHY:  Color = Color(0.25, 0.80, 0.30)
+const CONDITION_COLOR_GAUGE_WOUNDED:  Color = Color(0.95, 0.80, 0.15)
+const CONDITION_COLOR_GAUGE_INJURED:  Color = Color(0.95, 0.55, 0.15)
+const CONDITION_COLOR_GAUGE_CRITICAL: Color = Color(0.90, 0.20, 0.20)
+
+## 状態ラベルテキスト色（緑 / 黄 / 橙 / 赤）
+const CONDITION_COLOR_TEXT_HEALTHY:  Color = Color(0.40, 0.90, 0.40)
+const CONDITION_COLOR_TEXT_WOUNDED:  Color = Color(1.00, 0.85, 0.20)
+const CONDITION_COLOR_TEXT_INJURED:  Color = Color(1.00, 0.60, 0.20)
+const CONDITION_COLOR_TEXT_CRITICAL: Color = Color(1.00, 0.35, 0.35)
+
+
+## HP 比率 → 状態ラベル文字列（"healthy"/"wounded"/"injured"/"critical"）
+func ratio_to_condition(ratio: float) -> String:
+	if ratio >= CONDITION_HEALTHY_THRESHOLD:
+		return "healthy"
+	elif ratio >= CONDITION_WOUNDED_THRESHOLD:
+		return "wounded"
+	elif ratio >= CONDITION_INJURED_THRESHOLD:
+		return "injured"
+	return "critical"
+
+
+## スプライト・顔アイコン用 modulate 色を返す（wounded 以降は 3Hz 点滅）
+## healthy → WHITE 固定  /  wounded・injured・critical → 色 ↔ 暗い同色 を sin で lerp
+func condition_sprite_modulate(cond: String) -> Color:
+	match cond:
+		"healthy":
+			return CONDITION_COLOR_SPRITE_HEALTHY
+		"wounded":
+			return _pulse_color(CONDITION_COLOR_SPRITE_WOUNDED)
+		"injured":
+			return _pulse_color(CONDITION_COLOR_SPRITE_INJURED)
+		_:
+			return _pulse_color(CONDITION_COLOR_SPRITE_CRITICAL)
+
+
+## スプライト系パレットの静的色（点滅なし・DebugWindow 用）
+func condition_sprite_color(cond: String) -> Color:
+	match cond:
+		"healthy": return CONDITION_COLOR_SPRITE_HEALTHY
+		"wounded": return CONDITION_COLOR_SPRITE_WOUNDED
+		"injured": return CONDITION_COLOR_SPRITE_INJURED
+	return CONDITION_COLOR_SPRITE_CRITICAL
+
+
+## HP ゲージ色（静的・点滅なし）
+func condition_gauge_color(cond: String) -> Color:
+	match cond:
+		"healthy": return CONDITION_COLOR_GAUGE_HEALTHY
+		"wounded": return CONDITION_COLOR_GAUGE_WOUNDED
+		"injured": return CONDITION_COLOR_GAUGE_INJURED
+	return CONDITION_COLOR_GAUGE_CRITICAL
+
+
+## 状態ラベルテキスト色（静的・点滅なし）
+func condition_text_color(cond: String) -> Color:
+	match cond:
+		"healthy": return CONDITION_COLOR_TEXT_HEALTHY
+		"wounded": return CONDITION_COLOR_TEXT_WOUNDED
+		"injured": return CONDITION_COLOR_TEXT_INJURED
+	return CONDITION_COLOR_TEXT_CRITICAL
+
+
+## 点滅ヘルパー：ベース色と暗い同色（各成分 ×0.7）を 3Hz で lerp
+func _pulse_color(base: Color) -> Color:
+	var t := Time.get_ticks_msec() / 1000.0
+	var dark := Color(base.r * 0.7, base.g * 0.7, base.b * 0.7, base.a)
+	var pulse := (sin(t * TAU * CONDITION_PULSE_HZ) + 1.0) * 0.5
+	return base.lerp(dark, pulse)
+
 ## 戦況判断（_evaluate_combat_situation）の比率閾値
 ## 自軍戦力 / 敵戦力 の比率で戦況を分類する
 const COMBAT_RATIO_OVERWHELMING: float = 2.0  ## 圧倒的優勢

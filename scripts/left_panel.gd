@@ -319,35 +319,19 @@ func _draw_bar(x: float, y: float, w: float, h: float, fill_ratio: float,
 		if fill_color.a > 0.0:
 			fill = fill_color
 		else:
-			# HP ゲージ色: 状態ラベル閾値と統一（緑／黄／オレンジ／赤）
+			# HP ゲージ色: GlobalConstants の状態ラベル → ゲージ色マッピング（静的）
 			var ratio_of_max := fill_ratio / max_ratio if max_ratio > 0.0 else 0.0
-			if ratio_of_max >= GlobalConstants.CONDITION_HEALTHY_THRESHOLD:
-				fill = Color(0.25, 0.80, 0.30)   # healthy：緑
-			elif ratio_of_max >= GlobalConstants.CONDITION_WOUNDED_THRESHOLD:
-				fill = Color(0.95, 0.80, 0.15)   # wounded：黄
-			elif ratio_of_max >= GlobalConstants.CONDITION_INJURED_THRESHOLD:
-				fill = Color(0.95, 0.55, 0.15)   # injured：オレンジ
-			else:
-				fill = Color(0.90, 0.20, 0.20)   # critical：赤
+			fill = GlobalConstants.condition_gauge_color(
+				GlobalConstants.ratio_to_condition(ratio_of_max))
 		_control.draw_rect(Rect2(x, y, w * clampf(fill_ratio, 0.0, 1.0), h), fill)
 
 
 ## フィールド上のキャラクタースプライトと同じ HP状態→色 マッピング
-## 状態ラベル閾値と統一：healthy=白 / wounded=オレンジ / injured=赤 / critical=赤点滅
+## wounded 以降は 3Hz 点滅（GlobalConstants.condition_sprite_modulate）
 func _hp_modulate(c: Character) -> Color:
 	if not is_instance_valid(c) or c.max_hp <= 0:
 		return Color.WHITE
-	var t := Time.get_ticks_msec() / 1000.0
-	var ratio := float(c.hp) / float(c.max_hp)
-	if ratio >= GlobalConstants.CONDITION_HEALTHY_THRESHOLD:
-		return Color.WHITE
-	elif ratio >= GlobalConstants.CONDITION_WOUNDED_THRESHOLD:
-		return Color(1.0, 0.65, 0.25)   # wounded：オレンジ
-	elif ratio >= GlobalConstants.CONDITION_INJURED_THRESHOLD:
-		return Color(1.0, 0.35, 0.35)   # injured：赤
-	else:
-		var pulse := (sin(t * TAU * 3.0) + 1.0) * 0.5
-		return Color.WHITE.lerp(Color(1.0, 0.15, 0.15), pulse)
+	return GlobalConstants.condition_sprite_modulate(c.get_condition())
 
 
 ## ランク文字の色（right_panel と共通ルール）
@@ -358,11 +342,7 @@ func _rank_color(rank: String) -> Color:
 		_:        return Color(1.0, 1.0, 0.30)
 
 
-## 状態ラベル（healthy/wounded/injured/critical）に対応するテキスト／ゲージ色
-## （全パネル共通ルール）
+## 状態ラベル（healthy/wounded/injured/critical）に対応するテキスト色
+## ラッパー：GlobalConstants.condition_text_color に委譲（既存外部参照の互換保持用）
 static func _condition_text_color(cond: String) -> Color:
-	match cond:
-		"healthy": return Color(0.40, 0.90, 0.40)   # 緑
-		"wounded": return Color(1.00, 0.85, 0.20)   # 黄
-		"injured": return Color(1.00, 0.60, 0.20)   # オレンジ
-		_:         return Color(1.00, 0.35, 0.35)   # 赤（critical）
+	return GlobalConstants.condition_text_color(cond)

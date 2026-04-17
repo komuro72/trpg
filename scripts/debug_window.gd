@@ -574,17 +574,8 @@ func _draw_members_row(font: Font, members: Array, x: float, y: float, w: float,
 		if not is_instance_valid(m):
 			continue
 
-		# HP比率で色分け（状態ラベル閾値と統一）
-		var hp_pct: float = float(m.hp) / float(m.max_hp) if m.max_hp > 0 else 0.0
-		var col: Color
-		if hp_pct >= GlobalConstants.CONDITION_HEALTHY_THRESHOLD:
-			col = Color(0.85, 0.85, 0.85)
-		elif hp_pct >= GlobalConstants.CONDITION_WOUNDED_THRESHOLD:
-			col = Color(1.0, 1.0, 0.3)
-		elif hp_pct >= GlobalConstants.CONDITION_INJURED_THRESHOLD:
-			col = Color(1.0, 0.65, 0.25)
-		else:
-			col = Color(1.0, 0.35, 0.35)
+		# HP比率で色分け（スプライト系パレット：白 / 黄 / 橙 / 赤。点滅なし）
+		var col: Color = _hp_color_for(m)
 
 		var cd := m.character_data
 		var name_s: String = (cd.character_name if cd != null else "?") as String
@@ -646,18 +637,9 @@ func _draw_member_line(font: Font, ch: Character, x: float, y: float,
 	var name_str: String  = cd.character_name if cd != null else "?"
 	var class_jp: String  = GlobalConstants.CLASS_NAME_JP.get(cd.class_id if cd != null else "", "?")
 	var rank_str: String  = cd.rank if cd != null else "?"
-	var hp_pct: float     = float(ch.hp) / float(ch.max_hp) if ch.max_hp > 0 else 0.0
 
-	# HP比率で色分け（状態ラベル閾値と統一）
-	var char_color: Color
-	if hp_pct >= GlobalConstants.CONDITION_HEALTHY_THRESHOLD:
-		char_color = Color(0.92, 0.92, 0.92)
-	elif hp_pct >= GlobalConstants.CONDITION_WOUNDED_THRESHOLD:
-		char_color = Color(1.0, 1.0, 0.3)
-	elif hp_pct >= GlobalConstants.CONDITION_INJURED_THRESHOLD:
-		char_color = Color(1.0, 0.65, 0.25)
-	else:
-		char_color = Color(1.0, 0.35, 0.35)
+	# HP比率で色分け（スプライト系パレット：白 / 黄 / 橙 / 赤。点滅なし）
+	var char_color: Color = _hp_color_for(ch)
 
 	var star:  String = "★" if ch.is_player_controlled else "  "
 	var stun:  String = " [スタン]" if ch.is_stunned  else ""
@@ -743,6 +725,14 @@ func _power_balance_label(pb: int) -> String:
 		int(GlobalConstants.PowerBalance.INFERIOR):      return "劣位"
 		int(GlobalConstants.PowerBalance.DESPERATE):     return "絶望"
 	return "?"
+
+
+## HP比率からデバッグ表示用の色を返す
+## スプライト系パレット（白 / 黄 / 橙 / 赤）を流用・点滅なし
+func _hp_color_for(ch: Character) -> Color:
+	if not is_instance_valid(ch) or ch.max_hp <= 0:
+		return GlobalConstants.CONDITION_COLOR_SPRITE_HEALTHY
+	return GlobalConstants.condition_sprite_color(ch.get_condition())
 
 
 func _hp_status_label(hs: int) -> String:

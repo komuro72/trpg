@@ -878,3 +878,34 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
 - `game_map._draw` の射程オーバーレイ判定を `is_targeting()` → `is_in_attack_windup()`（新設）に変更。PRE_DELAY 中から射程が見える
 - `PlayerController._process_pre_delay` / `_process_post_delay` および `UnitAI` の `_timer -= delta` を `delta * game_speed` に変更（MOVING / WAITING / ATTACKING_PRE / ATTACKING_POST すべて）
 - pre-scaled だった `_timer = WAIT_DURATION / game_speed` と MOVING 継続時の `_timer = _get_move_interval()` を raw 値（`WAIT_DURATION` / `MOVE_INTERVAL`）に変更。カウントダウン側で game_speed を掛ける統一仕様に
+
+## HP状態ラベルの色・点滅統一（2026-04-17）
+
+### 背景
+調査の結果、以下の問題が判明：
+- スプライト・アイコン系と HP ゲージ・状態ラベル文字系で色体系がズレていた（前者は3色モデル：白／橙／赤+点滅。後者は4色モデル：緑／黄／橙／赤。wounded/injured の境界が1段ずれていた）
+- 点滅は critical のスプライト・アイコンにしか適用されておらず、操作キャラの HP 減少に気付きにくかった
+- 色定数が `GlobalConstants` に集約されておらず、複数ファイル（`character.gd` / `left_panel.gd` / `right_panel.gd` / `dialogue_window.gd` / `debug_window.gd`）に同種の色マッチ文が手書きコピペされていた
+
+### 変更方針
+- 全要素で同じ 4 段階状態ラベル（healthy / wounded / injured / critical）に統一
+- 色定数を `GlobalConstants` に集約（SPRITE / GAUGE / TEXT の3パレット・計12定数 + 点滅Hz）
+- ヘルパー関数 `condition_sprite_modulate` / `condition_sprite_color` / `condition_gauge_color` / `condition_text_color` / `ratio_to_condition` を追加し、各 UI ファイルはこれらを呼ぶだけに統一
+- 点滅は wounded / injured / critical の 3 段階に拡張（旧：critical のみ）。3Hz 一律
+- 点滅対象はスプライト・顔アイコンのみ。HP ゲージ・状態ラベル文字・DebugWindow は静的色
+
+### 色の微調整
+- スプライト wounded/injured の色境界を1段ずらした：旧「wounded=橙 / injured=赤」→ 新「wounded=黄 / injured=橙 / critical=赤」
+- ゲージ critical の赤を `(0.90, 0.20, 0.20)` に統一（旧 spritepath の `(1.0, 0.15, 0.15)` 暗赤は点滅用 ×0.7 計算に置き換え）
+- DebugWindow の healthy を `(0.85, 0.85, 0.85)` 灰白 → `Color.WHITE` に
+- DebugWindow の wounded を `(1.0, 1.0, 0.3)` 明黄 → `(1.00, 0.85, 0.20)` に統一（SPRITE パレット流用）
+
+### 実装変更
+- `scripts/global_constants.gd` に色定数12個 + `CONDITION_PULSE_HZ = 3.0` + ヘルパー6関数を追加
+- `character.gd._update_modulate` の HP 状態色分岐（7行）を削除し `GlobalConstants.condition_sprite_modulate(get_condition())` の1行に
+- `left_panel.gd._draw_bar` の HPゲージ色分岐を `condition_gauge_color(ratio_to_condition(ratio))` で置換
+- `left_panel.gd._hp_modulate` を簡略化（`condition_sprite_modulate` を返すだけ）
+- `left_panel.gd._condition_text_color` を `condition_text_color` のラッパーに短縮（既存呼び出し元の互換保持）
+- `right_panel.gd._hp_modulate` も同様にリファクタ
+- `right_panel.gd` と `dialogue_window.gd` のインラインコピペ（状態テキスト色 match）を `GlobalConstants.condition_text_color(cond)` 1行で置換
+- `debug_window.gd` の HP 色分岐2箇所を共通関数 `_hp_color_for(ch)` に統合（内部で `condition_sprite_color` を呼ぶ）
