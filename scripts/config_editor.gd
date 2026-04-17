@@ -1208,7 +1208,7 @@ func _save_enemy_list_tab() -> Dictionary:
 	var result := {"saved": [], "errors": []}
 	# 1. enemy_list.json（dirty の場合のみ）
 	if _enemy_list_dirty:
-		var new_list := _apply_enemy_list_edits()
+		var new_list: Variant = _apply_enemy_list_edits()
 		if new_list == null:
 			(result["errors"] as Array).append("enemy_list.json: 型変換失敗")
 		else:
@@ -1226,7 +1226,7 @@ func _save_enemy_list_tab() -> Dictionary:
 	for eid: String in ENEMY_IDS:
 		if not _enemy_indiv_dirty.get(eid, false):
 			continue
-		var new_indiv := _apply_enemy_indiv_edits(eid)
+		var new_indiv: Variant = _apply_enemy_indiv_edits(eid)
 		if new_indiv == null:
 			(result["errors"] as Array).append("%s: 型変換失敗" % _enemy_id_to_filename(eid))
 			continue
