@@ -249,7 +249,8 @@ func _add_hdr_label(parent: HBoxContainer, text: String, width: int) -> void:
 # トップタブの構築
 # ============================================================================
 
-## 「定数」トップタブ：ヘッダー行 + 既存のカテゴリ TabContainer（8 タブ）
+## 「定数」トップタブ：既存のカテゴリ TabContainer（8 タブ）
+## ヘッダー行は各カテゴリタブの内側（タブバーの直下）に配置する
 func _build_top_tab_constants(parent: TabContainer) -> void:
 	var container := VBoxContainer.new()
 	container.name = TOP_TAB_CONSTANTS
@@ -258,15 +259,6 @@ func _build_top_tab_constants(parent: TabContainer) -> void:
 	container.add_theme_constant_override("separation", 6)
 	parent.add_child(container)
 	parent.set_tab_title(parent.get_tab_count() - 1, TOP_TAB_CONSTANTS)
-
-	# ヘッダー行
-	var hdr := HBoxContainer.new()
-	hdr.add_theme_constant_override("separation", 10)
-	container.add_child(hdr)
-	_add_hdr_label(hdr, "定数名", 260)
-	_add_hdr_label(hdr, "説明", 380)
-	_add_hdr_label(hdr, "編集", 200)
-	_add_hdr_label(hdr, "デフォルト", 120)
 
 	# 内側のカテゴリタブ（既存の TABS 配列＋Unknown）
 	_tab_container = TabContainer.new()
@@ -358,26 +350,43 @@ func _add_placeholder_tab(parent: TabContainer, tab_name: String, message: Strin
 ## タブ名に対応する VBox を生成して TabContainer に追加する
 ## 空タブの時のプレースホルダーも同時に配置（後で定数が入れば自動で hide）
 func _build_tab(tab_name: String) -> void:
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.name = tab_name
-	_tab_container.add_child(scroll)
+	# カテゴリタブの中身 = 外側 VBox（ヘッダー行 + スクロール領域）
+	var outer_vbox := VBoxContainer.new()
+	outer_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	outer_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	outer_vbox.add_theme_constant_override("separation", 4)
+	outer_vbox.name = tab_name
+	_tab_container.add_child(outer_vbox)
 	var tab_idx := _tab_container.get_tab_count() - 1
 	_tab_container.set_tab_title(tab_idx, tab_name)
 	_tab_indices[tab_name] = tab_idx
 
-	var vbox := VBoxContainer.new()
-	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 4)
-	scroll.add_child(vbox)
-	_tab_rows[tab_name] = vbox
+	# ヘッダー行（タブバー直下に配置・各カテゴリタブで共通表示）
+	var hdr := HBoxContainer.new()
+	hdr.add_theme_constant_override("separation", 10)
+	outer_vbox.add_child(hdr)
+	_add_hdr_label(hdr, "定数名", 260)
+	_add_hdr_label(hdr, "説明", 380)
+	_add_hdr_label(hdr, "編集", 200)
+	_add_hdr_label(hdr, "デフォルト", 120)
+
+	# 行はスクロール領域内の VBox に追加する
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	outer_vbox.add_child(scroll)
+
+	var rows_vbox := VBoxContainer.new()
+	rows_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rows_vbox.add_theme_constant_override("separation", 4)
+	scroll.add_child(rows_vbox)
+	_tab_rows[tab_name] = rows_vbox
 
 	var placeholder := Label.new()
 	placeholder.text = "このカテゴリには定数がまだ登録されていません。"
 	placeholder.add_theme_font_size_override("font_size", 12)
 	placeholder.add_theme_color_override("font_color", Color(0.6, 0.6, 0.65))
-	vbox.add_child(placeholder)
+	rows_vbox.add_child(placeholder)
 	_tab_placeholders[tab_name] = placeholder
 
 
