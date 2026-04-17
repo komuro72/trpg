@@ -84,6 +84,7 @@ var _dialogue_npc_initiates: bool = false
 var npc_dialogue_window: NpcDialogueWindow  ## NPC会話専用ウィンドウ
 var pause_menu: PauseMenu  ## ポーズメニュー
 var debug_window: DebugWindow  ## F1 デバッグウィンドウ
+var config_editor: CanvasLayer = null  ## F4 ConfigEditor（開発用定数エディタ）
 var _debug_follow_target: Character = null  ## デバッグ用カメラ追跡対象（null=通常追跡）
 ## デバッグ表示フロア（-1=通常。>=0 のときそのフロアを描画。ゲームロジックは _current_floor_index を使用）
 var _debug_view_floor: int = -1
@@ -125,6 +126,8 @@ func _input(event: InputEvent) -> void:
 						queue_redraw()
 			KEY_F2:
 				_print_debug_floor_info()
+			KEY_F4:
+				_toggle_config_editor()
 			KEY_F5:
 				get_tree().reload_current_scene()
 
@@ -2130,6 +2133,19 @@ func _update_character_visibility() -> void:
 			var ch := member_var as Character
 			if ch != null and ch != hero:
 				ch.visible = (ch.current_floor == view_floor)
+
+
+## F4 ConfigEditor を表示・非表示トグル（初回のみ生成）
+func _toggle_config_editor() -> void:
+	if config_editor == null:
+		var packed: PackedScene = load("res://scenes/config_editor.tscn") as PackedScene
+		if packed == null:
+			push_warning("[GameMap] ConfigEditor シーンの読み込みに失敗")
+			return
+		config_editor = packed.instantiate() as CanvasLayer
+		add_child(config_editor)
+	if config_editor.has_method("toggle"):
+		config_editor.call("toggle")
 
 
 ## F2 デバッグ情報をファイルに書き出す（フルスクリーン実行対応）

@@ -10,6 +10,7 @@ var _tex_bg:        Texture2D = null
 var _blink_timer:   float     = 0.0
 var _show_prompt:   bool      = true
 var _transitioning: bool      = false
+var _config_editor: CanvasLayer = null  ## F4 ConfigEditor
 
 
 func _ready() -> void:
@@ -44,15 +45,37 @@ func _process(delta: float) -> void:
 func _input(event: InputEvent) -> void:
 	if _transitioning:
 		return
-	var pressed := false
+	# F4: ConfigEditor トグル（他の「any key → main menu」遷移より優先・捕捉）
 	if event is InputEventKey:
 		var ke := event as InputEventKey
-		pressed = ke.pressed and not ke.echo
+		if ke.pressed and not ke.echo and ke.keycode == KEY_F4:
+			_toggle_config_editor()
+			get_viewport().set_input_as_handled()
+			return
+		# ConfigEditor 表示中は any-key 遷移を抑止
+		if _config_editor != null and _config_editor.visible:
+			return
+	var pressed := false
+	if event is InputEventKey:
+		var ke2 := event as InputEventKey
+		pressed = ke2.pressed and not ke2.echo
 	elif event is InputEventJoypadButton:
 		pressed = (event as InputEventJoypadButton).pressed
 	if pressed:
 		_transitioning = true
 		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+
+
+## F4 ConfigEditor トグル（初回のみ生成）
+func _toggle_config_editor() -> void:
+	if _config_editor == null:
+		var packed: PackedScene = load("res://scenes/config_editor.tscn") as PackedScene
+		if packed == null:
+			return
+		_config_editor = packed.instantiate() as CanvasLayer
+		add_child(_config_editor)
+	if _config_editor.has_method("toggle"):
+		_config_editor.call("toggle")
 
 
 func _on_draw() -> void:

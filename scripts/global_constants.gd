@@ -75,10 +75,12 @@ const POTION_SP_MP_AUTOUSE_THRESHOLD: float = 0.5
 ## 種族固有自己逃走HP閾値（goblin系の _should_self_flee がこの値未満で true を返す）
 const SELF_FLEE_HP_THRESHOLD: float = 0.3
 ## パーティー逃走の生存率閾値（goblin/wolf リーダー：生存メンバー率がこれ未満で FLEE 戦略に切り替え）
-const PARTY_FLEE_ALIVE_RATIO: float = 0.5
+## [ConfigEditor 対象] 外部 JSON (assets/master/config/constants.json) から読み込み
+var PARTY_FLEE_ALIVE_RATIO: float = 0.5
 ## 特殊攻撃の状況判定で使う「隣接敵数の最小値」
 ## 近接3クラス（剣士・斧戦士・斥候）と magician-fire の発動条件: 隣接8マスの敵がこの数以上
-const SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES: int = 2
+## [ConfigEditor 対象]
+var SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES: int = 2
 ## 劣勢判定閾値（特殊攻撃「劣勢なら使う」用の参考値。現在は HpStatus enum で代替されており未使用）
 const DISADVANTAGE_THRESHOLD: float = 0.6
 
@@ -113,18 +115,21 @@ enum ConsumableDisplayMode { NORMAL, ITEM_SELECT, ACTION_SELECT, TRANSFER_SELECT
 ## Character.get_condition() が返す文字列の判定基準
 ## 戦力評価で敵のHP推定に使用する（_estimate_hp_ratio_from_condition）
 const CONDITION_HEALTHY_THRESHOLD:  float = 0.5   ## HP50%以上 → "healthy"
-const CONDITION_WOUNDED_THRESHOLD:  float = 0.35  ## HP35%以上50%未満 → "wounded"
+## [ConfigEditor 対象]
+var CONDITION_WOUNDED_THRESHOLD:  float = 0.35  ## HP35%以上50%未満 → "wounded"
 const CONDITION_INJURED_THRESHOLD:  float = 0.25  ## HP25%以上35%未満 → "injured"
 ## HP25%未満 → "critical"
 
 ## 状態ラベル色（全要素統一・2026-04-17〜）
-## スプライト・顔アイコンは wounded 以降で 3Hz 点滅（condition_sprite_modulate）
+## スプライト・顔アイコンは wounded 以降で点滅（condition_sprite_modulate）
 ## ゲージ・テキストは静的（condition_gauge_color / condition_text_color）
-const CONDITION_PULSE_HZ: float = 3.0
+## [ConfigEditor 対象]
+var CONDITION_PULSE_HZ: float = 3.0
 
 ## スプライト・顔アイコンの modulate 色（白 / 黄 / 橙 / 赤）
 const CONDITION_COLOR_SPRITE_HEALTHY:  Color = Color.WHITE
-const CONDITION_COLOR_SPRITE_WOUNDED:  Color = Color(1.00, 0.85, 0.20)
+## [ConfigEditor 対象]
+var CONDITION_COLOR_SPRITE_WOUNDED:  Color = Color(1.00, 0.85, 0.20)
 const CONDITION_COLOR_SPRITE_INJURED:  Color = Color(1.00, 0.65, 0.25)
 const CONDITION_COLOR_SPRITE_CRITICAL: Color = Color(1.00, 0.35, 0.35)
 
@@ -255,3 +260,176 @@ const MEMBER_HEAL_TARGET:  Array[String] = ["lowest_hp", "nearest", "same_as_lea
 ## 縦方向タイル数を固定してGRID_SIZEを決定（最小32px）
 func initialize(viewport_size: Vector2) -> void:
 	GRID_SIZE = maxi(32, int(viewport_size.y / float(TILES_VERTICAL)))
+
+
+# ============================================================================
+# ConfigEditor 対応：外部 JSON からの定数ロード／セーブ
+# ============================================================================
+
+const CONFIG_USER_PATH:    String = "res://assets/master/config/constants.json"
+const CONFIG_DEFAULT_PATH: String = "res://assets/master/config/constants_default.json"
+
+## ConfigEditor 管理対象の定数名一覧（var 宣言されているもの）
+## 新規に外出しする定数はこのリストに追加する
+const CONFIG_KEYS: Array[String] = [
+	"CONDITION_WOUNDED_THRESHOLD",
+	"CONDITION_PULSE_HZ",
+	"SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES",
+	"CONDITION_COLOR_SPRITE_WOUNDED",
+	"PARTY_FLEE_ALIVE_RATIO",
+]
+
+## 最後のセーブ／書き込み結果（ConfigEditor がエラー表示に使う）
+## 成功時は空文字、失敗時はエラーメッセージ
+var last_config_error: String = ""
+
+
+func _ready() -> void:
+	_load_constants()
+
+
+## constants.json から値を読み込む。不足キーは constants_default.json で補完
+## 読み込み失敗時はハードコード値を維持してエラーを last_config_error に記録
+func _load_constants() -> void:
+	last_config_error = ""
+	var user_data: Variant = _read_json(CONFIG_USER_PATH)
+	var default_data: Variant = _read_json(CONFIG_DEFAULT_PATH)
+	if user_data == null and default_data == null:
+		last_config_error = "定数 JSON が読み込めません（ハードコード値で継続）"
+		push_warning("[GlobalConstants] " + last_config_error)
+		return
+
+	for key: String in CONFIG_KEYS:
+		var value: Variant = null
+		# ユーザー値を優先
+		if user_data != null and (user_data as Dictionary).has(key):
+			value = (user_data as Dictionary)[key]
+		# なければデフォルトの value フィールドを使う
+		elif default_data != null and (default_data as Dictionary).has(key):
+			value = ((default_data as Dictionary)[key] as Dictionary).get("value")
+		if value == null:
+			continue
+		_apply_value(key, value)
+
+
+## JSON から 1 ファイル読み込む。失敗時は null
+func _read_json(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		return null
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return null
+	var txt := f.get_as_text()
+	f.close()
+	var parsed: Variant = JSON.parse_string(txt)
+	if parsed == null:
+		push_warning("[GlobalConstants] JSON parse failed: " + path)
+		return null
+	return parsed
+
+
+## JSON 由来の値を該当メンバーに適用する（型に応じて変換）
+func _apply_value(key: String, raw: Variant) -> void:
+	var meta := _get_meta_for(key)
+	var type_name: String = (meta.get("type", "float") as String) if meta != null else "float"
+	match type_name:
+		"float":
+			set(key, float(raw))
+		"int":
+			set(key, int(raw))
+		"color":
+			if raw is Array:
+				var arr := raw as Array
+				var r: float = float(arr[0]) if arr.size() >= 1 else 0.0
+				var g: float = float(arr[1]) if arr.size() >= 2 else 0.0
+				var b: float = float(arr[2]) if arr.size() >= 3 else 0.0
+				var a: float = float(arr[3]) if arr.size() >= 4 else 1.0
+				set(key, Color(r, g, b, a))
+		_:
+			push_warning("[GlobalConstants] 未対応の型: " + type_name + " key=" + key)
+
+
+## constants_default.json のメタ情報辞書を返す（type, category, min, max, step, description）
+func _get_meta_for(key: String) -> Dictionary:
+	var default_data: Variant = _read_json(CONFIG_DEFAULT_PATH)
+	if default_data == null or not (default_data as Dictionary).has(key):
+		return {}
+	return (default_data as Dictionary)[key] as Dictionary
+
+
+## 現在の値を ConfigEditor UI 用の形式で返す（Color は [r,g,b,a] 配列）
+func get_config_value(key: String) -> Variant:
+	var v: Variant = get(key)
+	if v is Color:
+		var c := v as Color
+		return [c.r, c.g, c.b, c.a]
+	return v
+
+
+## 現在の定数値を constants.json に書き出す（編集 UI の「保存」ボタン）
+## 成功時 true / 失敗時 false + last_config_error にメッセージ
+func save_constants() -> bool:
+	last_config_error = ""
+	var out: Dictionary = {}
+	for key: String in CONFIG_KEYS:
+		out[key] = get_config_value(key)
+	var f := FileAccess.open(CONFIG_USER_PATH, FileAccess.WRITE)
+	if f == null:
+		last_config_error = "書き込み失敗: %s (err=%d)" % [CONFIG_USER_PATH, FileAccess.get_open_error()]
+		push_warning("[GlobalConstants] " + last_config_error)
+		return false
+	f.store_string(JSON.stringify(out, "  "))
+	f.close()
+	return true
+
+
+## constants_default.json の value を現在値に書き換える（「現在値をデフォルト化」ボタン）
+func commit_as_defaults() -> bool:
+	last_config_error = ""
+	var default_data: Variant = _read_json(CONFIG_DEFAULT_PATH)
+	if default_data == null or not default_data is Dictionary:
+		last_config_error = "constants_default.json が読み込めません"
+		return false
+	var dd := default_data as Dictionary
+	for key: String in CONFIG_KEYS:
+		if not dd.has(key):
+			continue
+		var entry := dd[key] as Dictionary
+		entry["value"] = get_config_value(key)
+		dd[key] = entry
+	var f := FileAccess.open(CONFIG_DEFAULT_PATH, FileAccess.WRITE)
+	if f == null:
+		last_config_error = "書き込み失敗: %s (err=%d)" % [CONFIG_DEFAULT_PATH, FileAccess.get_open_error()]
+		push_warning("[GlobalConstants] " + last_config_error)
+		return false
+	f.store_string(JSON.stringify(dd, "  "))
+	f.close()
+	return true
+
+
+## constants_default.json の値で現在値を上書き（「すべてデフォルトに戻す」ボタン）
+## 現在メモリ上の値のみ変更・constants.json への書き込みは別途 save_constants() で
+func reset_to_defaults() -> void:
+	last_config_error = ""
+	var default_data: Variant = _read_json(CONFIG_DEFAULT_PATH)
+	if default_data == null or not default_data is Dictionary:
+		last_config_error = "constants_default.json が読み込めません"
+		return
+	var dd := default_data as Dictionary
+	for key: String in CONFIG_KEYS:
+		if not dd.has(key):
+			continue
+		var entry := dd[key] as Dictionary
+		if entry.has("value"):
+			_apply_value(key, entry["value"])
+
+
+## デフォルト値を返す（ConfigEditor の「デフォルト値」列と「薄黄ハイライト」比較用）
+func get_default_value(key: String) -> Variant:
+	var default_data: Variant = _read_json(CONFIG_DEFAULT_PATH)
+	if default_data == null or not default_data is Dictionary:
+		return null
+	var dd := default_data as Dictionary
+	if not dd.has(key):
+		return null
+	return (dd[key] as Dictionary).get("value")

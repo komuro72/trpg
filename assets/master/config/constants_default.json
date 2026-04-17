@@ -1,0 +1,44 @@
+{
+  "CONDITION_WOUNDED_THRESHOLD": {
+    "value": 0.35,
+    "type": "float",
+    "category": "HP状態",
+    "min": 0.0,
+    "max": 1.0,
+    "step": 0.05,
+    "description": "HP割合がこの値未満で wounded 状態（黄色・点滅開始）"
+  },
+  "CONDITION_PULSE_HZ": {
+    "value": 3.0,
+    "type": "float",
+    "category": "HP状態",
+    "min": 0.5,
+    "max": 10.0,
+    "step": 0.5,
+    "description": "状態ラベル点滅の速度（Hz）。wounded 以降のスプライト・顔アイコンに適用"
+  },
+  "SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES": {
+    "value": 2,
+    "type": "int",
+    "category": "戦闘",
+    "min": 0,
+    "max": 8,
+    "step": 1,
+    "description": "隣接8マスに敵がこの数以上いると AI が特殊攻撃発動を検討（近接3クラス・炎陣）"
+  },
+  "CONDITION_COLOR_SPRITE_WOUNDED": {
+    "value": [1.00, 0.85, 0.20, 1.0],
+    "type": "color",
+    "category": "HP状態",
+    "description": "wounded 状態のスプライト・顔アイコン色（RGBA）"
+  },
+  "PARTY_FLEE_ALIVE_RATIO": {
+    "value": 0.5,
+    "type": "float",
+    "category": "AI",
+    "min": 0.0,
+    "max": 1.0,
+    "step": 0.05,
+    "description": "パーティーの生存メンバー率がこの値未満で FLEE 戦略へ切替（ゴブリン・ウルフ系）"
+  }
+}
