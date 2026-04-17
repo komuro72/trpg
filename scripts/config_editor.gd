@@ -34,23 +34,15 @@ const TABS: Array[String] = [
 ## TABS に含まれないカテゴリの定数を集める予備タブ
 const UNKNOWN_TAB: String = "Unknown"
 
-## トップレベルタブ（5種類）
+## トップレベルタブ（6種類）
 ## 将来ここに別ドメインのエディタを追加する際はこの配列と _build_top_tab_X を追加
-const TOP_TAB_CONSTANTS:   String = "定数"
-const TOP_TAB_ALLY_CLASS:  String = "味方クラス"
-const TOP_TAB_ENEMY:       String = "敵"
-const TOP_TAB_STATS:       String = "ステータス"
-const TOP_TAB_ITEM:        String = "アイテム"
+const TOP_TAB_CONSTANTS:    String = "定数"
+const TOP_TAB_ALLY_CLASS:   String = "味方クラス"
+const TOP_TAB_ENEMY_CLASS:  String = "敵クラス"
+const TOP_TAB_ENEMY_LIST:   String = "敵一覧"
+const TOP_TAB_STATS:        String = "ステータス"
+const TOP_TAB_ITEM:         String = "アイテム"
 
-## 敵タブ内のサブタブ名
-const ENEMY_SUB_TABS: Array[String] = [
-	"ゴブリン系",
-	"ウルフ系",
-	"アンデッド系",
-	"デーモン系",
-	"ボス",
-	"その他",
-]
 ## ステータスタブ内のサブタブ名
 const STATS_SUB_TABS: Array[String] = [
 	"クラスステータス",
@@ -58,9 +50,9 @@ const STATS_SUB_TABS: Array[String] = [
 ]
 
 # ============================================================================
-# 味方クラスタブ（Phase B）
+# クラス系タブ（味方クラス / 敵クラス）— Phase B
 # ============================================================================
-## 7クラスの順序（画面に左から順に並ぶ）
+## 味方クラス（人間系 7 種）の順序
 const CLASS_IDS: Array[String] = [
 	"fighter-sword",
 	"fighter-axe",
@@ -69,6 +61,14 @@ const CLASS_IDS: Array[String] = [
 	"magician-water",
 	"healer",
 	"scout",
+]
+## 敵固有クラス 5 種の順序
+const ENEMY_CLASS_IDS: Array[String] = [
+	"zombie",
+	"wolf",
+	"salamander",
+	"harpy",
+	"dark-lord",
 ]
 const CLASS_DIR: String = "res://assets/master/classes/"
 
@@ -300,7 +300,8 @@ func _build_ui() -> void:
 
 	_build_top_tab_constants(_top_tab_container)
 	_build_top_tab_ally_class(_top_tab_container)
-	_build_top_tab_enemy(_top_tab_container)
+	_build_top_tab_enemy_class(_top_tab_container)
+	_build_top_tab_enemy_list(_top_tab_container)
 	_build_top_tab_stats(_top_tab_container)
 	_build_top_tab_item(_top_tab_container)
 
@@ -386,14 +387,25 @@ func _build_top_tab_constants(parent: TabContainer) -> void:
 		_build_row(key)
 
 
-## 「味方クラス」トップタブ：7クラスJSONの横断表
+## 「味方クラス」トップタブ：人間系 7 クラス JSON の横断表
 func _build_top_tab_ally_class(parent: TabContainer) -> void:
+	_build_class_tab_common(parent, TOP_TAB_ALLY_CLASS, CLASS_IDS)
+
+
+## 「敵クラス」トップタブ：敵固有 5 クラス JSON の横断表（味方タブと同構造）
+func _build_top_tab_enemy_class(parent: TabContainer) -> void:
+	_build_class_tab_common(parent, TOP_TAB_ENEMY_CLASS, ENEMY_CLASS_IDS)
+
+
+## 味方クラス / 敵クラス 共通：対象クラス ID 配列を受け取り同構造の横断表を組み立てる
+func _build_class_tab_common(parent: TabContainer, tab_name: String,
+		class_list: Array[String]) -> void:
 	var container := VBoxContainer.new()
-	container.name = TOP_TAB_ALLY_CLASS
+	container.name = tab_name
 	container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	parent.add_child(container)
-	parent.set_tab_title(parent.get_tab_count() - 1, TOP_TAB_ALLY_CLASS)
+	parent.set_tab_title(parent.get_tab_count() - 1, tab_name)
 
 	_load_class_files()
 
@@ -407,14 +419,18 @@ func _build_top_tab_ally_class(parent: TabContainer) -> void:
 	grid.add_theme_constant_override("separation", 2)
 	scroll.add_child(grid)
 
-	_build_class_grid(grid)
+	_build_class_grid(grid, class_list)
 
 
-## クラスJSONをすべて読み込む
+## クラスJSONを読み込む（味方 7 + 敵固有 5 = 12 クラス）
+## 複数タブから呼ばれるため、既にロード済みの場合はスキップ
 func _load_class_files() -> void:
-	_class_data.clear()
-	_class_dirty.clear()
-	for cid: String in CLASS_IDS:
+	var all_class_ids: Array[String] = []
+	all_class_ids.append_array(CLASS_IDS)
+	all_class_ids.append_array(ENEMY_CLASS_IDS)
+	for cid: String in all_class_ids:
+		if _class_data.has(cid):
+			continue  # 既にロード済み（他タブ初期化で読まれた）
 		var path := CLASS_DIR + cid + ".json"
 		if not FileAccess.file_exists(path):
 			push_warning("[ConfigEditor] クラスJSONがありません: " + path)
@@ -455,11 +471,11 @@ func _flatten_class(data: Dictionary) -> Dictionary:
 	return flat
 
 
-## 全クラスの平坦パラメータの和集合を、初出順で返す
-func _collect_all_flat_params() -> Array[String]:
+## 指定クラス群の平坦パラメータの和集合を、初出順で返す
+func _collect_all_flat_params(class_list: Array[String]) -> Array[String]:
 	var seen: Dictionary = {}
 	var out: Array[String] = []
-	for cid: String in CLASS_IDS:
+	for cid: String in class_list:
 		if not _class_data.has(cid):
 			continue
 		var flat := _flatten_class(_class_data[cid] as Dictionary)
@@ -472,7 +488,8 @@ func _collect_all_flat_params() -> Array[String]:
 
 
 ## グリッド本体を構築する（ヘッダー行 → グループごとに区切り + 行群）
-func _build_class_grid(parent: VBoxContainer) -> void:
+## class_list は描画対象のクラス ID 配列（味方 CLASS_IDS / 敵 ENEMY_CLASS_IDS）
+func _build_class_grid(parent: VBoxContainer, class_list: Array[String]) -> void:
 	# パラメータ → グループ名 のマップを作成
 	var param_to_group: Dictionary = {}
 	for g_v: Variant in CLASS_PARAM_GROUPS:
@@ -480,7 +497,7 @@ func _build_class_grid(parent: VBoxContainer) -> void:
 		for p_v: Variant in g["params"]:
 			param_to_group[p_v as String] = g["title"]
 
-	var all_params := _collect_all_flat_params()
+	var all_params := _collect_all_flat_params(class_list)
 	var unclassified: Array[String] = []
 	for p: String in all_params:
 		if not param_to_group.has(p):
@@ -493,8 +510,8 @@ func _build_class_grid(parent: VBoxContainer) -> void:
 	if not unclassified.is_empty():
 		groups_ordered.append({"title": "その他", "params": unclassified})
 
-	# ヘッダー行（パラメータ名 + 7クラスID）
-	_build_class_header_row(parent)
+	# ヘッダー行（パラメータ名 + クラスID）
+	_build_class_header_row(parent, class_list)
 
 	# グループごとに区切り → 行群
 	for g_v: Variant in groups_ordered:
@@ -510,10 +527,10 @@ func _build_class_grid(parent: VBoxContainer) -> void:
 			continue
 		_add_class_group_separator(parent, title)
 		for p: String in visible_params:
-			_build_class_row(parent, p)
+			_build_class_row(parent, p, class_list)
 
 
-func _build_class_header_row(parent: VBoxContainer) -> void:
+func _build_class_header_row(parent: VBoxContainer, class_list: Array[String]) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
 	parent.add_child(row)
@@ -525,7 +542,7 @@ func _build_class_header_row(parent: VBoxContainer) -> void:
 	name_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
 	row.add_child(name_lbl)
 
-	for cid: String in CLASS_IDS:
+	for cid: String in class_list:
 		var lbl := Label.new()
 		lbl.text = cid
 		lbl.custom_minimum_size = Vector2(CLASS_VALUE_COL_W, 0)
@@ -553,7 +570,8 @@ func _add_class_group_separator(parent: VBoxContainer, title: String) -> void:
 	panel.add_child(lbl)
 
 
-func _build_class_row(parent: VBoxContainer, param_key: String) -> void:
+func _build_class_row(parent: VBoxContainer, param_key: String,
+		class_list: Array[String]) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
 	parent.add_child(row)
@@ -566,8 +584,8 @@ func _build_class_row(parent: VBoxContainer, param_key: String) -> void:
 	name_lbl.clip_text = true
 	row.add_child(name_lbl)
 
-	# 7クラス分のセル
-	for cid: String in CLASS_IDS:
+	# 対象クラス分のセル
+	for cid: String in class_list:
 		var flat: Dictionary = _flatten_class(_class_data.get(cid, {}) as Dictionary) \
 			if _class_data.has(cid) else {}
 		if flat.has(param_key):
@@ -645,11 +663,15 @@ func _class_has_any_diff(class_id: String) -> bool:
 	return false
 
 
-## 変更されたクラスJSONをすべて書き戻す
+## 変更されたクラスJSONをすべて書き戻す（味方・敵クラス両対応）
 ## 戻り値：{"saved": Array[String], "errors": Array[String]}
 func _save_class_files() -> Dictionary:
 	var result := {"saved": [], "errors": []}
-	for cid: String in CLASS_IDS:
+	# 味方 + 敵固有クラスを合わせて 12 クラスすべてを対象にする
+	var all_ids: Array[String] = []
+	all_ids.append_array(CLASS_IDS)
+	all_ids.append_array(ENEMY_CLASS_IDS)
+	for cid: String in all_ids:
 		if not _class_dirty.get(cid, false):
 			continue
 		# 元 JSON を複製してから編集値を適用
@@ -752,23 +774,10 @@ func _coerce_class_value(text: String, orig_value: Variant) -> Dictionary:
 	return {"ok": true, "value": text}
 
 
-## 「敵」トップタブ：敵種グループのサブタブ（各中身はプレースホルダー）
-func _build_top_tab_enemy(parent: TabContainer) -> void:
-	var container := VBoxContainer.new()
-	container.name = TOP_TAB_ENEMY
-	container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	parent.add_child(container)
-	parent.set_tab_title(parent.get_tab_count() - 1, TOP_TAB_ENEMY)
-
-	var sub_tc := TabContainer.new()
-	sub_tc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sub_tc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	container.add_child(sub_tc)
-
-	for sub_name: String in ENEMY_SUB_TABS:
-		_add_placeholder_tab(sub_tc, sub_name,
-			"ここに%sの横断表が入る予定です" % sub_name)
+## 「敵一覧」トップタブ：プレースホルダー（Step 3 で enemy_list.json 本実装予定）
+func _build_top_tab_enemy_list(parent: TabContainer) -> void:
+	_add_placeholder_tab(parent, TOP_TAB_ENEMY_LIST,
+		"ここに敵 16 種の一覧（enemy_list.json の stat_type / rank / stat_bonus 編集）が入る予定です")
 
 
 ## 「ステータス」トップタブ：クラスステータス・属性補正のサブタブ
@@ -1611,16 +1620,17 @@ func _current_top_tab_name() -> String:
 
 ## 上段タブが切り替わったときに下部ボタンの有効/無効を更新する
 ## - 定数タブ：保存 / リセット / デフォルト化がすべて有効
-## - 味方クラスタブ・ステータスタブ：保存のみ有効（デフォルト値を保持しない方針のためリセット・デフォルト化は無効）
-## - それ以外（敵/アイテム）：プレースホルダー段階なのですべて無効
+## - 味方クラス・敵クラス・ステータス：保存のみ有効（デフォルト値を保持しない方針）
+## - それ以外（敵一覧/アイテム）：プレースホルダー段階なのですべて無効
 func _on_top_tab_changed(_idx: int) -> void:
 	if _btn_save == null:
 		return
 	var top := _current_top_tab_name()
 	var is_constants := top == TOP_TAB_CONSTANTS
 	var is_ally := top == TOP_TAB_ALLY_CLASS
+	var is_enemy_class := top == TOP_TAB_ENEMY_CLASS
 	var is_stats := top == TOP_TAB_STATS
-	_btn_save.disabled = not (is_constants or is_ally or is_stats)
+	_btn_save.disabled = not (is_constants or is_ally or is_enemy_class or is_stats)
 	_btn_reset.disabled = not is_constants
 	_btn_commit.disabled = not is_constants
 
@@ -1634,7 +1644,8 @@ func _on_save_pressed() -> void:
 				_set_status("保存しました: %s" % GlobalConstants.CONFIG_USER_PATH, Color(0.55, 1.0, 0.55))
 			else:
 				_set_status(GlobalConstants.last_config_error, Color(1.0, 0.5, 0.5))
-		TOP_TAB_ALLY_CLASS:
+		TOP_TAB_ALLY_CLASS, TOP_TAB_ENEMY_CLASS:
+			# 味方・敵どちらも _save_class_files が 12 クラス全て対象にまとめて書き戻す
 			var result := _save_class_files()
 			var saved: Array = result.get("saved", [])
 			var errors: Array = result.get("errors", [])

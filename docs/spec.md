@@ -4944,3 +4944,40 @@ PartyManager → CharacterData.load_from_json(enemy_path)  // 個体固有項目
                   _load_class_json(stat_type) でクラス JSON ロード
                   → attack_type / attack_range / slots.Z/V 由来値を CharacterData に上書き
 ```
+
+---
+
+## Config Editor「敵クラス」タブ（Phase B）
+
+### 概要
+味方クラスタブの描画ロジックを流用し、対象クラス ID 配列を差し替えるだけで実装。敵固有 5 クラス（zombie / wolf / salamander / harpy / dark-lord）の JSON を横断表で編集可能にする。
+
+### トップタブ構成の変更
+旧：`[定数] [味方クラス] [敵] [ステータス] [アイテム]`（敵タブは 6 サブタブ：ゴブリン系 / ウルフ系 / ... のプレースホルダー）
+新：`[定数] [味方クラス] [敵クラス] [敵一覧] [ステータス] [アイテム]`
+
+敵タブとその `ENEMY_SUB_TABS` 定数（6 敵種グループ）を削除。敵一覧タブは引き続きプレースホルダー。
+
+### 共通描画関数のリファクタ
+味方クラスタブの実装を `_build_class_tab_common(parent, tab_name, class_list)` にパラメータ化し、以下の関数に `class_list: Array[String]` 引数を追加：
+- `_build_class_grid(parent, class_list)`
+- `_build_class_header_row(parent, class_list)`
+- `_build_class_row(parent, param_key, class_list)`
+- `_collect_all_flat_params(class_list)`
+
+`CLASS_PARAM_GROUPS`（グループ分け定義）は味方・敵共通で同じものを使う。敵固有クラスに存在しないパラメータ（例：敵クラスには weapon_type なし等）は行全体が描画されない（`all_params.has(p)` チェック）。
+
+### 定数追加
+- `TOP_TAB_ENEMY_CLASS: String = "敵クラス"`
+- `TOP_TAB_ENEMY_LIST:  String = "敵一覧"`
+- `ENEMY_CLASS_IDS: Array[String] = ["zombie", "wolf", "salamander", "harpy", "dark-lord"]`
+
+### データ管理
+- `_class_data` は 12 クラス全て（味方 7 + 敵固有 5）を保持する 1 つの Dictionary
+- `_load_class_files()` は味方・敵の全 12 クラスを一括ロード。再ロード防止のため既存キーはスキップ
+- `_save_class_files()` は dirty フラグが立ったクラスのみを `all_ids = CLASS_IDS + ENEMY_CLASS_IDS` から抽出して書き戻す
+
+### ボタンの有効化
+- 保存ボタン：TOP_TAB_ALLY_CLASS / TOP_TAB_ENEMY_CLASS / TOP_TAB_CONSTANTS / TOP_TAB_STATS で有効
+- リセット / デフォルト化ボタン：TOP_TAB_CONSTANTS のみ有効（敵クラスタブもデフォルト値を保持しない方針）
+- 味方クラスと敵クラスは同じ `_save_class_files()` を共有し、どちらのタブから保存しても 12 クラス全ての dirty ファイルを書き戻す
