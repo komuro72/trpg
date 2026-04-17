@@ -2353,8 +2353,10 @@ func _draw() -> void:
 			draw_rect(irect, Color(1.0, 0.85, 0.15, 0.90))
 			draw_rect(irect, Color(1.0, 1.0, 0.5, 0.70), false, 1)
 
-	# ターゲット選択中：攻撃射程を赤オーバーレイで表示
-	if player_controller != null and player_controller.is_targeting():
+	# 攻撃構え中（PRE_DELAY）またはターゲット選択中：攻撃射程を赤オーバーレイで表示
+	# PRE_DELAY からオーバーレイを出すことで、ボタン押下直後から射程が見えるようにする
+	# （PRE_DELAY 中は「見せるだけ」、ターゲット選択はできない）
+	if player_controller != null and player_controller.is_in_attack_windup():
 		var info := player_controller.get_current_slot_range_info()
 		var action: String = str(info.get("action", "melee"))
 		var range_val: int = int(info.get("range", 1))

@@ -5,8 +5,6 @@
   "base_defense": 3,
   "attack_type": "ranged",
   "attack_range": 5,
-  "pre_delay": 0.4,
-  "post_delay": 0.5,
   "max_sp": 60,
   "is_flying": false,
   "behavior_description": "弓で遠距離攻撃する。距離を保ちながら狙い撃つ。",
@@ -17,8 +15,8 @@
       "type": "physical",
       "range": 5,
       "damage_mult": 0.9,
-      "pre_delay": 0.3,
-      "post_delay": 0.4,
+      "pre_delay": 0.10,
+      "post_delay": 0.25,
       "sp_cost": 2
     },
     "X": {
@@ -38,8 +36,8 @@
       "range": 6,
       "damage_mult": 3.0,
       "sp_cost": 25,
-      "pre_delay": 0.5,
-      "post_delay": 0.5
+      "pre_delay": 0.40,
+      "post_delay": 0.50
     }
   }
 }

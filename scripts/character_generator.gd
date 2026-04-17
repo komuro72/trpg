@@ -120,20 +120,26 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	data.move_speed              = _convert_move_speed(stats.move_speed)
 	data.leadership              = stats.leadership
 	data.obedience               = clampf(float(stats.obedience) / 100.0, 0.0, 1.0)
-	data.pre_delay          = float(class_json.get("pre_delay",  0.3))
-	data.post_delay         = float(class_json.get("post_delay", 0.5))
 	data.is_flying          = bool(class_json.get("is_flying",  false))
 	data.behavior_description = str(class_json.get("behavior_description", ""))
 	data.attack_type        = str(class_json.get("attack_type",  "melee"))
 	data.attack_range       = int(class_json.get("attack_range", 1))
 	data.heal_mp_cost       = int(class_json.get("heal_mp_cost",  0))
 	data.buff_mp_cost       = int(class_json.get("buff_mp_cost",  0))
-	# Vスロット特殊攻撃のコストを読み取る
+	# スロット Z / V の pre_delay / post_delay と V スロット特殊攻撃のコストを読み取る
+	# 味方クラスは slots から読む。敵は別経路（CharacterData.load_from_json）のため影響なし
 	var slots: Dictionary = class_json.get("slots", {}) as Dictionary
+	var z_data: Variant = slots.get("Z")
+	if z_data != null and z_data is Dictionary:
+		data.z_pre_delay  = float((z_data as Dictionary).get("pre_delay",  0.0))
+		data.z_post_delay = float((z_data as Dictionary).get("post_delay", 0.0))
 	var v_data: Variant = slots.get("V")
 	if v_data != null and v_data is Dictionary:
-		data.v_slot_mp_cost = int((v_data as Dictionary).get("mp_cost", 0))
-		data.v_slot_sp_cost = int((v_data as Dictionary).get("sp_cost", 0))
+		var v_dict := v_data as Dictionary
+		data.v_slot_mp_cost = int(v_dict.get("mp_cost", 0))
+		data.v_slot_sp_cost = int(v_dict.get("sp_cost", 0))
+		data.v_pre_delay    = float(v_dict.get("pre_delay",  0.0))
+		data.v_post_delay   = float(v_dict.get("post_delay", 0.0))
 
 	var folder: String = GRAPHIC_SET_DIR + str(chosen_set.get("folder", ""))
 	data.image_set         = folder

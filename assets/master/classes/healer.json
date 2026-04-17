@@ -8,8 +8,6 @@
   "buff_mp_cost": 8,
   "attack_type": "heal",
   "attack_range": 4,
-  "pre_delay": 0.4,
-  "post_delay": 0.5,
   "is_flying": false,
   "behavior_description": "仲間を回復・強化する支援専門家。自ら攻撃はしない。",
   "slots": {
@@ -20,8 +18,8 @@
       "range": 4,
       "heal_mult": 0.3,
       "mp_cost": 5,
-      "pre_delay": 0.4,
-      "post_delay": 0.4
+      "pre_delay": 0.10,
+      "post_delay": 0.30
     },
     "X": {
       "name": "回復(大)",
@@ -41,8 +39,8 @@
       "range": 4,
       "buff_duration": 10.0,
       "mp_cost": 8,
-      "pre_delay": 0.5,
-      "post_delay": 0.5
+      "pre_delay": 0.40,
+      "post_delay": 0.50
     }
   }
 }

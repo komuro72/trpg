@@ -179,6 +179,12 @@ func is_targeting() -> bool:
 	return _mode == Mode.TARGETING
 
 
+## PRE_DELAY または TARGETING 中か（射程オーバーレイ表示用）
+## 押下直後から射程を見せるため、pre_delay 消化中も true を返す
+func is_in_attack_windup() -> bool:
+	return _mode == Mode.PRE_DELAY or _mode == Mode.TARGETING
+
+
 ## ターゲット選択中の有効ターゲットリストを返す（FieldOverlay が参照）
 func get_valid_targets() -> Array[Character]:
 	return _valid_targets
@@ -495,7 +501,8 @@ func _process_pre_delay(delta: float) -> void:
 	if _handle_attack_switch_input():
 		return
 	# pre_delay を消化しながらターゲット候補を表示
-	_pre_delay_remaining -= delta
+	# タイマーは「ゲーム内秒」で持つ（game_speed 倍速時は実時間が短縮される）
+	_pre_delay_remaining -= delta * GlobalConstants.game_speed
 	_refresh_targets()
 	_update_cursor()
 	if _pre_delay_remaining <= 0.0:
@@ -556,7 +563,8 @@ func _process_post_delay(delta: float) -> void:
 		_attack_buffer = true
 	elif Input.is_action_just_released("attack"):
 		_attack_buffer = false
-	_post_delay_remaining -= delta
+	# タイマーは「ゲーム内秒」で持つ（game_speed 倍速時は実時間が短縮される）
+	_post_delay_remaining -= delta * GlobalConstants.game_speed
 	if _post_delay_remaining <= 0.0:
 		_post_delay_remaining = 0.0
 		_mode = Mode.NORMAL
@@ -732,10 +740,8 @@ func _confirm_target() -> void:
 	if was_v:
 		_start_v_cooldown()
 
-	# post_delay 開始
-	var post_dur := 0.0
-	if character != null and character.character_data != null:
-		post_dur = character.character_data.post_delay
+	# post_delay 開始（使用したスロットの post_delay を参照）
+	var post_dur: float = float(sd.get("post_delay", 0.0))
 	_enter_post_delay(post_dur)
 
 

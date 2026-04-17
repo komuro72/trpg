@@ -5,8 +5,6 @@
   "base_defense": 4,
   "attack_type": "melee",
   "attack_range": 1,
-  "pre_delay": 0.4,
-  "post_delay": 0.6,
   "max_sp": 60,
   "is_flying": false,
   "behavior_description": "斧で豪快に振り回す。重い一撃が持ち味。",
@@ -17,8 +15,8 @@
       "type": "physical",
       "range": 1,
       "damage_mult": 1.1,
-      "pre_delay": 0.4,
-      "post_delay": 0.6,
+      "pre_delay": 0.20,
+      "post_delay": 0.45,
       "sp_cost": 2
     },
     "X": {
@@ -37,8 +35,8 @@
       "type": "physical",
       "damage_mult": 1.0,
       "sp_cost": 15,
-      "pre_delay": 0.0,
-      "post_delay": 0.0
+      "pre_delay": 0.40,
+      "post_delay": 0.70
     }
   }
 }

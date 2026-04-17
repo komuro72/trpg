@@ -7,8 +7,6 @@
   "max_sp": 0,
   "attack_type": "magic",
   "attack_range": 5,
-  "pre_delay": 0.5,
-  "post_delay": 0.6,
   "is_flying": false,
   "behavior_description": "水の魔法で敵を攻撃・無力化する。後方から水弾を放ち、強力な水魔法で敵をスタンさせる。",
   "slots": {
@@ -19,8 +17,8 @@
       "range": 5,
       "damage_mult": 0.8,
       "mp_cost": 3,
-      "pre_delay": 0.4,
-      "post_delay": 0.5
+      "pre_delay": 0.10,
+      "post_delay": 0.30
     },
     "X": {
       "name": "水流",
@@ -41,8 +39,8 @@
       "damage_mult": 0.5,
       "stun_duration": 4.0,
       "mp_cost": 15,
-      "pre_delay": 0.8,
-      "post_delay": 0.7
+      "pre_delay": 0.60,
+      "post_delay": 0.60
     }
   }
 }

@@ -849,3 +849,32 @@
 ### ヒーラー支援行動
 - 回復・バフの対象に **自分自身** を含める
 - 友軍対象時は方向制限撤廃（360°）。アンデッド特効は通常攻撃扱いで前方コーン制限を維持
+
+## 攻撃クールダウン全面見直し（2026-04-17）
+
+### 背景
+pre_delay / post_delay 周りの調査で以下の問題が判明：
+- 通常攻撃の pre_delay が長く、攻撃ボタンを押してから射程表示までワンテンポ遅れる
+- pre_delay 中に敵が動いて照準が定まりにくい体感
+- プレイヤーはスロット単位（`slots.Z` / `slots.V`）、AI はクラス JSON のトップレベル `pre_delay` / `post_delay` を見ており、一部クラス（archer / magician-fire / magician-water / healer / scout）で値がズレていた
+- V スロット特殊攻撃の AI 側はハードコード固定値（`_timer = 0.3` / `0.5` 等）で、JSON のスロット V 値を無視していた
+- pre_delay / post_delay だけ `game_speed` の影響を受けず、2倍速にしても攻撃テンポが変わらなかった
+
+### 変更方針
+仕様を「味方はスロット単位・敵はトップレベル」に一元化し、プレイヤーと AI が同じ値を参照する設計に統一。射程オーバーレイは PRE_DELAY 中から表示し、押下直後のレスポンス感を確保。game_speed を pre/post_delay にも適用して移動系と整合。
+
+### 数値変更
+全7クラスの通常攻撃（スロット Z）と特殊攻撃（スロット V）の pre_delay / post_delay を短縮方向に再設定。通常攻撃は 0.05〜0.20 / 0.20〜0.45、特殊攻撃は 0.15〜0.60 / 0.40〜0.70 のレンジで「通常はテンポ良く、特殊は少し『ため』」を実現。詳細値は docs/spec.md 参照。
+
+### 実装変更
+- 全7クラス JSON のトップレベル `pre_delay` / `post_delay` を削除。slots.Z / slots.V に値を設定
+- `CharacterData` に `z_pre_delay` / `z_post_delay` / `v_pre_delay` / `v_post_delay` フィールドと対応する getter を追加
+- `CharacterGenerator._build_data()` が slots.Z / slots.V から pre_delay / post_delay を読み込んで CharacterData に設定
+- `UnitAI._start_action` の `"attack"` で `_member.character_data.pre_delay` 参照を `get_z_pre_delay()` に変更
+- `UnitAI._start_action` の `"v_attack"` を即時実行から ATTACKING_PRE 経由に変更（`_timer = get_v_pre_delay()` → `_execute_v_attack()` → ATTACKING_POST）
+- `ATTACKING_PRE` ハンドラ内で `_current_action.action` をチェックして通常攻撃／特殊攻撃を分岐。POST 遷移時に対応する post_delay を適用
+- 各 `_v_*` メソッド（`_v_rush_slash` / `_v_whirlwind` / `_v_headshot` / `_v_flame_circle` / `_v_water_stun` / `_v_sliding`）末尾のハードコード `_state = WAITING / _timer = 0.3〜0.5` 行を削除
+- ヒーラー `heal` / `buff` のタイマーを `get_z_post_delay()` / `get_v_post_delay()` 参照に変更（buff は V スロット相当）
+- `game_map._draw` の射程オーバーレイ判定を `is_targeting()` → `is_in_attack_windup()`（新設）に変更。PRE_DELAY 中から射程が見える
+- `PlayerController._process_pre_delay` / `_process_post_delay` および `UnitAI` の `_timer -= delta` を `delta * game_speed` に変更（MOVING / WAITING / ATTACKING_PRE / ATTACKING_POST すべて）
+- pre-scaled だった `_timer = WAIT_DURATION / game_speed` と MOVING 継続時の `_timer = _get_move_interval()` を raw 値（`WAIT_DURATION` / `MOVE_INTERVAL`）に変更。カウントダウン側で game_speed を掛ける統一仕様に

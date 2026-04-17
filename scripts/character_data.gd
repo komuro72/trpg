@@ -105,8 +105,21 @@ var rank: String = "C"
 var move_speed: float = 0.4
 
 ## 攻撃クールタイム（秒）
-var pre_delay: float = 0.3   # 攻撃前の溜め時間
-var post_delay: float = 0.5  # 攻撃後の硬直時間
+## 味方（クラス持ち）はクラス JSON の slots.Z / slots.V から z_/v_ フィールドに設定される。
+## 敵はスロット構造を持たないため、トップレベルの pre_delay / post_delay を引き続き使用する。
+## 参照は get_z_pre_delay() / get_z_post_delay() / get_v_pre_delay() / get_v_post_delay() を通す。
+var pre_delay: float = 0.3   # 敵用：攻撃前の溜め時間（味方では未使用）
+var post_delay: float = 0.5  # 敵用：攻撃後の硬直時間（味方では未使用）
+
+## スロット Z（通常攻撃）の攻撃クールタイム（味方のみ。CharacterGenerator が slots.Z から設定）
+## 0.0 = 未設定（敵など）→ フォールバックで pre_delay / post_delay を使用
+var z_pre_delay:  float = 0.0
+var z_post_delay: float = 0.0
+
+## スロット V（特殊攻撃）の攻撃クールタイム（味方のみ。CharacterGenerator が slots.V から設定）
+## 0.0 = 未設定 → フォールバックで pre_delay / post_delay を使用
+var v_pre_delay:  float = 0.0
+var v_post_delay: float = 0.0
 
 ## 統率力（リーダー側）：高いほど無理な指示でも従わせやすい。クラス・ランクから算出して確定後不変。当面は値のみ保持
 var leadership: int = 5
@@ -320,6 +333,28 @@ func get_total_physical_resistance() -> float:
 ## 装備補正込みの魔法耐性の軽減率を返す（0.0〜1.0）
 func get_total_magic_resistance() -> float:
 	return resistance_to_ratio(get_total_magic_resistance_score())
+
+
+## 通常攻撃（スロット Z）の pre_delay を返す
+## 味方 → z_pre_delay（CharacterGenerator が slots.Z から設定）
+## 敵   → pre_delay（トップレベル）にフォールバック
+func get_z_pre_delay() -> float:
+	return z_pre_delay if z_pre_delay > 0.0 else pre_delay
+
+
+## 通常攻撃（スロット Z）の post_delay を返す
+func get_z_post_delay() -> float:
+	return z_post_delay if z_post_delay > 0.0 else post_delay
+
+
+## 特殊攻撃（スロット V）の pre_delay を返す
+func get_v_pre_delay() -> float:
+	return v_pre_delay if v_pre_delay > 0.0 else pre_delay
+
+
+## 特殊攻撃（スロット V）の post_delay を返す
+func get_v_post_delay() -> float:
+	return v_post_delay if v_post_delay > 0.0 else post_delay
 
 
 ## ヒーロー用データをJSONから生成する

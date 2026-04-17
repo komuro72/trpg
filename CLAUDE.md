@@ -578,6 +578,7 @@ rank値: C=0, B=1, A=2, S=3
   - `Character.joined_to_player` フラグ追加（パーティー所属判定用）
   - アイテム名称統一（HPポーション/MPポーション/SPポーション）
 - [x] 近接3クラス（剣士/斧戦士/斥候）の特殊攻撃AI発動条件（隣接敵数・突進斬りの経路判定）を実装
+- [x] 攻撃クールダウン（pre_delay / post_delay）の全面見直し：クラスJSONのスロット単位（Z/V）に一元化、プレイヤー/AIで同じ slots 参照、PRE_DELAY 中から射程オーバーレイ表示、game_speed 適用
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム
@@ -941,10 +942,13 @@ rank値: C=0, B=1, A=2, S=3
 - 種類：単体（当面。将来は範囲も追加）
 - 属性タイプ：physical／magic（当面はphysicalのみ）
 - クールタイム：事前（ため・詠唱）・事後（硬直）の両方あり
-- キャラクターデータにpre_delay・post_delayとして持つ
+- 味方（クラス持ち）は `assets/master/classes/*.json` の **スロット単位**（`slots.Z` / `slots.V`）で `pre_delay` / `post_delay` を定義。プレイヤーも AI も `slots` から同じ値を参照する
+- 敵は `assets/master/enemies/*.json` の**トップレベル** `pre_delay` / `post_delay`（スロット構造なし）
+- pre_delay / post_delay は `game_speed` の影響を受ける（移動系と同じ。×2.0 で攻撃テンポも2倍）
 
 ### 攻撃フロー（PRE_DELAY → TARGETING → POST_DELAY）
-- Z/A **短押し** → PRE_DELAY モードへ（pre_delay 消化中は時間進行・ターゲット候補を表示）
+- Z/A **短押し** → PRE_DELAY モードへ（pre_delay 消化中は時間進行・ターゲット候補を表示・**射程オーバーレイも表示**）
+- PRE_DELAY 中は射程が見えるが、ターゲット選択（LB/RB や確定）はできない
 - PRE_DELAY 完了後 TARGETING モードへ自動遷移（時間停止・LB/RB または矢印キーで循環選択）
 - TARGETING 中に Z/A → 射程チェック → 攻撃実行 → POST_DELAY（硬直・時間進行）→ NORMAL
 - TARGETING 中に X/B → ノーコストキャンセル → NORMAL（時間停止に戻る）

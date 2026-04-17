@@ -375,7 +375,7 @@ func _process(delta: float) -> void:
 				notify_situation_changed()
 				_state = _State.IDLE
 				return
-			_timer -= delta
+			_timer -= delta * GlobalConstants.game_speed
 			if _timer <= 0.0:
 				# 1マス移動完了ごとにアイテムチェック（SAFE 時のみ）
 				if _is_combat_safe() and _item_pickup != "avoid":
@@ -389,29 +389,42 @@ func _process(delta: float) -> void:
 							return
 				var still_moving := _step_toward_goal()
 				if still_moving:
-					_timer = _get_move_interval()
+					# タイマーは「ゲーム内秒」で持つ（カウントダウンで game_speed を掛ける）。
+					# move_to の tween 長は実時間秒なので別途 _get_move_interval() を使う。
+					_timer = MOVE_INTERVAL
 				else:
 					_state = _State.IDLE
 					_complete_action()
 
 		_State.WAITING:
-			_timer -= delta
+			_timer -= delta * GlobalConstants.game_speed
 			if _timer <= 0.0:
 				_state = _State.IDLE
 				_complete_action()
 
 		_State.ATTACKING_PRE:
-			_timer -= delta
+			_timer -= delta * GlobalConstants.game_speed
 			if _timer <= 0.0:
-				_execute_attack()
+				var act_type := _current_action.get("action", "attack") as String
+				if act_type == "v_attack":
+					_execute_v_attack()
+				else:
+					_execute_attack()
+				# _execute_v_attack() 内で早期 _complete_action() した場合は状態が変わっている
+				# その場合は POST 遷移をスキップ（IDLE/次アクションを尊重）
+				if _state != _State.ATTACKING_PRE:
+					return
 				_on_after_attack()
 				_member.is_attacking = false
 				_state = _State.ATTACKING_POST
-				var post := _member.character_data.post_delay if _member.character_data else 0.5
+				var post: float = 0.5
+				if _member.character_data != null:
+					post = _member.character_data.get_v_post_delay() if act_type == "v_attack" \
+						else _member.character_data.get_z_post_delay()
 				_timer = post
 
 		_State.ATTACKING_POST:
-			_timer -= delta
+			_timer -= delta * GlobalConstants.game_speed
 			if _timer <= 0.0:
 				_state = _State.IDLE
 				_complete_action()
@@ -483,7 +496,7 @@ func _start_action(action: Dictionary) -> void:
 				return
 			_attack_target = _target
 			_state = _State.ATTACKING_PRE
-			_timer = _member.character_data.pre_delay if _member.character_data else 0.3
+			_timer = _member.character_data.get_z_pre_delay() if _member.character_data else 0.3
 			_member.is_attacking = true
 
 		"move_to_heal", "move_to_buff":
@@ -533,7 +546,7 @@ func _start_action(action: Dictionary) -> void:
 					_member.spawn_heal_effect("cast")
 					tgt.spawn_heal_effect("hit")
 			_state = _State.WAITING
-			_timer = _member.character_data.post_delay if _member.character_data else 0.5
+			_timer = _member.character_data.get_z_post_delay() if _member.character_data else 0.5
 
 		"buff":
 			var tgt_var: Variant = action.get("target", null)
@@ -552,8 +565,9 @@ func _start_action(action: Dictionary) -> void:
 				SoundManager.play_from(SoundManager.HEAL, _member)
 				_member.spawn_heal_effect("cast")
 				tgt.spawn_heal_effect("hit")
+			# バフ発動は V スロット相当（buff_defense）のため V の post_delay を使う
 			_state = _State.WAITING
-			_timer = _member.character_data.post_delay if _member.character_data else 0.5
+			_timer = _member.character_data.get_v_post_delay() if _member.character_data else 0.5
 
 		"use_potion":
 			# インベントリからポーションを使用して短い待機
@@ -568,11 +582,16 @@ func _start_action(action: Dictionary) -> void:
 			_timer = 0.3  # 使用後の短い硬直
 
 		"v_attack":
-			_execute_v_attack()
+			# ATTACKING_PRE に入り、pre_delay 経過後に _execute_v_attack() を呼ぶ（通常攻撃と同じフロー）
+			# post_delay は ATTACKING_PRE → POST 遷移時に slot.V.post_delay を適用
+			_state = _State.ATTACKING_PRE
+			_timer = _member.character_data.get_v_pre_delay() if _member.character_data else 0.0
+			_member.is_attacking = true
 
 		"wait":
 			_state = _State.WAITING
-			_timer = WAIT_DURATION / GlobalConstants.game_speed
+			# タイマーは「ゲーム内秒」で持つ。カウントダウン側で delta * game_speed を掛ける
+			_timer = WAIT_DURATION
 
 		_:
 			_complete_action()
@@ -1097,9 +1116,7 @@ func _v_rush_slash(cost: int) -> void:
 	if landing_pos != _member.grid_pos:
 		_member.grid_pos = landing_pos
 		_member.sync_position()
-	_member.is_attacking = true
-	_state = _State.WAITING
-	_timer = 0.3
+	# 状態・タイマーは ATTACKING_PRE → POST 遷移で slot.V.post_delay を適用
 	if hit_count == 0:
 		var n := _v_name()
 		var segs := Character._make_segs([
@@ -1129,8 +1146,7 @@ func _v_whirlwind(cost: int) -> void:
 				hit_count += 1
 	if hit_count > 0:
 		SoundManager.play_attack_from(_member)
-	_state = _State.WAITING
-	_timer = 0.5
+	# 状態・タイマーは ATTACKING_PRE → POST 遷移で slot.V.post_delay を適用
 
 
 ## 弓使い: ヘッドショット（即死耐性なし→即死、あり→×3ダメージ）
@@ -1175,8 +1191,7 @@ func _v_headshot(cost: int) -> void:
 		_target.last_attacker = _member
 		_target.hp = 0
 		_target.die()
-	_state = _State.WAITING
-	_timer = 0.5
+	# 状態・タイマーは ATTACKING_PRE → POST 遷移で slot.V.post_delay を適用
 
 
 ## 魔法使い(火): 炎陣（自分を中心に半径3マスの炎ゾーン設置）
@@ -1201,8 +1216,7 @@ func _v_flame_circle(cost: int) -> void:
 	])
 	MessageLog.add_battle(_member.character_data, null,
 		"%sが炎陣を設置した" % fn, _member, null, fsegs)
-	_state = _State.WAITING
-	_timer = 0.5
+	# 状態・タイマーは ATTACKING_PRE → POST 遷移で slot.V.post_delay を適用
 
 
 ## 魔法使い(水): 無力化水魔法（ターゲットをスタン）
@@ -1225,8 +1239,7 @@ func _v_water_stun(cost: int) -> void:
 				0.0, true, "")
 	_target.apply_stun(2.5, _member)
 	_target.take_damage(raw_damage, 1.0, _member, true, true)
-	_state = _State.WAITING
-	_timer = 0.5
+	# 状態・タイマーは ATTACKING_PRE → POST 遷移で slot.V.post_delay を適用
 
 
 ## 斥候: スライディング（3マスダッシュ・敵すり抜け）
@@ -1259,8 +1272,7 @@ func _v_sliding(cost: int) -> void:
 	])
 	MessageLog.add_battle(_member.character_data, null,
 		"%sがスライディングで突進した" % sn, _member, null, ssegs)
-	_state = _State.WAITING
-	_timer = 0.3
+	# 状態・タイマーは ATTACKING_PRE → POST 遷移で slot.V.post_delay を適用
 
 
 ## 指定位置にいる敵キャラを返す（なければ null）
