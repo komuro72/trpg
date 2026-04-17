@@ -618,7 +618,7 @@ func _save_class_files() -> Dictionary:
 			continue
 		# 元 JSON を複製してから編集値を適用
 		var orig := _class_data[cid] as Dictionary
-		var new_data := _apply_class_edits(cid, orig)
+		var new_data: Variant = _apply_class_edits(cid, orig)
 		if new_data == null:
 			(result["errors"] as Array).append("%s: 型変換失敗（保存中止）" % cid)
 			continue
