@@ -34,9 +34,33 @@ const TABS: Array[String] = [
 ## TABS に含まれないカテゴリの定数を集める予備タブ
 const UNKNOWN_TAB: String = "Unknown"
 
-var _root_panel:    PanelContainer = null
-var _tab_container: TabContainer   = null
-var _status_lbl:    Label          = null
+## トップレベルタブ（5種類）
+## 将来ここに別ドメインのエディタを追加する際はこの配列と _build_top_tab_X を追加
+const TOP_TAB_CONSTANTS:   String = "定数"
+const TOP_TAB_ALLY_CLASS:  String = "味方クラス"
+const TOP_TAB_ENEMY:       String = "敵"
+const TOP_TAB_STATS:       String = "ステータス"
+const TOP_TAB_ITEM:        String = "アイテム"
+
+## 敵タブ内のサブタブ名
+const ENEMY_SUB_TABS: Array[String] = [
+	"ゴブリン系",
+	"ウルフ系",
+	"アンデッド系",
+	"デーモン系",
+	"ボス",
+	"その他",
+]
+## ステータスタブ内のサブタブ名
+const STATS_SUB_TABS: Array[String] = [
+	"クラスステータス",
+	"属性補正",
+]
+
+var _root_panel:        PanelContainer = null
+var _top_tab_container: TabContainer   = null  ## トップレベル：定数/味方クラス/敵/ステータス/アイテム
+var _tab_container:     TabContainer   = null  ## 「定数」タブ内の既存カテゴリタブ
+var _status_lbl:        Label          = null
 ## 各タブ名 → そのタブ内の VBox（ここに行を add）
 var _tab_rows: Dictionary = {}
 ## 各タブ名 → プレースホルダーラベル（空タブ用。定数があれば hide）
@@ -90,19 +114,20 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var ke := event as InputEventKey
 		if ke.pressed and not ke.echo:
-			# Ctrl+Tab / Ctrl+PageDown → 次タブ、Ctrl+Shift+Tab / Ctrl+PageUp → 前タブ
-			if ke.ctrl_pressed and _tab_container != null and _tab_container.get_tab_count() > 0:
+			# Ctrl+Tab / Ctrl+PageDown → 次タブ（トップレベル）
+			# Ctrl+Shift+Tab / Ctrl+PageUp → 前タブ（トップレベル）
+			if ke.ctrl_pressed and _top_tab_container != null:
 				if ke.keycode == KEY_TAB:
 					var dir := -1 if ke.shift_pressed else 1
-					_cycle_tab(dir)
+					_cycle_top_tab(dir)
 					get_viewport().set_input_as_handled()
 					return
 				if ke.keycode == KEY_PAGEDOWN:
-					_cycle_tab(1)
+					_cycle_top_tab(1)
 					get_viewport().set_input_as_handled()
 					return
 				if ke.keycode == KEY_PAGEUP:
-					_cycle_tab(-1)
+					_cycle_top_tab(-1)
 					get_viewport().set_input_as_handled()
 					return
 			if ke.keycode == KEY_F4 or ke.keycode == KEY_ESCAPE:
@@ -110,13 +135,14 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 
 
-func _cycle_tab(dir: int) -> void:
-	if _tab_container == null:
+## トップレベル TabContainer のタブ循環
+func _cycle_top_tab(dir: int) -> void:
+	if _top_tab_container == null:
 		return
-	var n := _tab_container.get_tab_count()
+	var n := _top_tab_container.get_tab_count()
 	if n <= 0:
 		return
-	_tab_container.current_tab = (_tab_container.current_tab + dir + n) % n
+	_top_tab_container.current_tab = (_top_tab_container.current_tab + dir + n) % n
 
 
 # ============================================================================
@@ -124,10 +150,10 @@ func _cycle_tab(dir: int) -> void:
 # ============================================================================
 
 func _build_ui() -> void:
-	# 画面中央のパネル（幅60% × 高さ70%）
+	# 画面中央のパネル（幅90% × 高さ85%。横断表を見越した広めサイズ）
 	var vp_size: Vector2 = get_viewport().get_visible_rect().size
-	var panel_w: float = vp_size.x * 0.60
-	var panel_h: float = vp_size.y * 0.70
+	var panel_w: float = vp_size.x * 0.90
+	var panel_h: float = vp_size.y * 0.85
 	var panel_x: float = (vp_size.x - panel_w) * 0.5
 	var panel_y: float = (vp_size.y - panel_h) * 0.5
 
@@ -161,30 +187,17 @@ func _build_ui() -> void:
 	_status_lbl.add_theme_font_size_override("font_size", 12)
 	outer.add_child(_status_lbl)
 
-	# ヘッダー行（タブより上に共通表示）
-	var hdr := HBoxContainer.new()
-	hdr.add_theme_constant_override("separation", 10)
-	outer.add_child(hdr)
-	_add_hdr_label(hdr, "定数名", 260)
-	_add_hdr_label(hdr, "説明", 380)
-	_add_hdr_label(hdr, "編集", 200)
-	_add_hdr_label(hdr, "デフォルト", 120)
+	# トップレベルタブ（定数 / 味方クラス / 敵 / ステータス / アイテム）
+	_top_tab_container = TabContainer.new()
+	_top_tab_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_top_tab_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	outer.add_child(_top_tab_container)
 
-	# タブコンテナ
-	_tab_container = TabContainer.new()
-	_tab_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_tab_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	outer.add_child(_tab_container)
-
-	# 宣言順にタブを生成（定数ゼロでも空タブを表示）
-	for tab_name: String in TABS:
-		_build_tab(tab_name)
-	# 未知カテゴリ用の Unknown タブを常に末尾に（未分類定数が出たらここに集まる）
-	_build_tab(UNKNOWN_TAB)
-
-	# 各定数行を所属タブに追加
-	for key: String in GlobalConstants.CONFIG_KEYS:
-		_build_row(key)
+	_build_top_tab_constants(_top_tab_container)
+	_build_top_tab_ally_class(_top_tab_container)
+	_build_top_tab_enemy(_top_tab_container)
+	_build_top_tab_stats(_top_tab_container)
+	_build_top_tab_item(_top_tab_container)
 
 	# 初期状態のタブ名（● インジケータ）を一度更新
 	_update_tab_indicators()
@@ -230,6 +243,116 @@ func _add_hdr_label(parent: HBoxContainer, text: String, width: int) -> void:
 	lbl.add_theme_font_size_override("font_size", 13)
 	lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
 	parent.add_child(lbl)
+
+
+# ============================================================================
+# トップタブの構築
+# ============================================================================
+
+## 「定数」トップタブ：ヘッダー行 + 既存のカテゴリ TabContainer（8 タブ）
+func _build_top_tab_constants(parent: TabContainer) -> void:
+	var container := VBoxContainer.new()
+	container.name = TOP_TAB_CONSTANTS
+	container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	container.add_theme_constant_override("separation", 6)
+	parent.add_child(container)
+	parent.set_tab_title(parent.get_tab_count() - 1, TOP_TAB_CONSTANTS)
+
+	# ヘッダー行
+	var hdr := HBoxContainer.new()
+	hdr.add_theme_constant_override("separation", 10)
+	container.add_child(hdr)
+	_add_hdr_label(hdr, "定数名", 260)
+	_add_hdr_label(hdr, "説明", 380)
+	_add_hdr_label(hdr, "編集", 200)
+	_add_hdr_label(hdr, "デフォルト", 120)
+
+	# 内側のカテゴリタブ（既存の TABS 配列＋Unknown）
+	_tab_container = TabContainer.new()
+	_tab_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_tab_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	container.add_child(_tab_container)
+
+	for tab_name: String in TABS:
+		_build_tab(tab_name)
+	_build_tab(UNKNOWN_TAB)
+
+	# 各定数行を所属タブに追加
+	for key: String in GlobalConstants.CONFIG_KEYS:
+		_build_row(key)
+
+
+## 「味方クラス」トップタブ：プレースホルダー
+func _build_top_tab_ally_class(parent: TabContainer) -> void:
+	_add_placeholder_tab(parent, TOP_TAB_ALLY_CLASS,
+		"ここに7クラスの横断表が入る予定です（max_hp, power, skill, Z_pre_delay, V_pre_delay 等）")
+
+
+## 「敵」トップタブ：敵種グループのサブタブ（各中身はプレースホルダー）
+func _build_top_tab_enemy(parent: TabContainer) -> void:
+	var container := VBoxContainer.new()
+	container.name = TOP_TAB_ENEMY
+	container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(container)
+	parent.set_tab_title(parent.get_tab_count() - 1, TOP_TAB_ENEMY)
+
+	var sub_tc := TabContainer.new()
+	sub_tc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sub_tc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	container.add_child(sub_tc)
+
+	for sub_name: String in ENEMY_SUB_TABS:
+		_add_placeholder_tab(sub_tc, sub_name,
+			"ここに%sの横断表が入る予定です" % sub_name)
+
+
+## 「ステータス」トップタブ：クラスステータス・属性補正のサブタブ
+func _build_top_tab_stats(parent: TabContainer) -> void:
+	var container := VBoxContainer.new()
+	container.name = TOP_TAB_STATS
+	container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(container)
+	parent.set_tab_title(parent.get_tab_count() - 1, TOP_TAB_STATS)
+
+	var sub_tc := TabContainer.new()
+	sub_tc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sub_tc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	container.add_child(sub_tc)
+
+	_add_placeholder_tab(sub_tc, STATS_SUB_TABS[0],
+		"class_stats.json のクラス×ステータス横断表が入る予定です")
+	_add_placeholder_tab(sub_tc, STATS_SUB_TABS[1],
+		"attribute_stats.json の属性×ステータス表が入る予定です")
+
+
+## 「アイテム」トップタブ：プレースホルダー
+func _build_top_tab_item(parent: TabContainer) -> void:
+	_add_placeholder_tab(parent, TOP_TAB_ITEM,
+		"アイテムマスターの縦1列テーブルが入る予定です")
+
+
+## プレースホルダー用のタブを追加する（中身はラベルのみ）
+func _add_placeholder_tab(parent: TabContainer, tab_name: String, message: String) -> void:
+	var wrap := VBoxContainer.new()
+	wrap.name = tab_name
+	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(wrap)
+	parent.set_tab_title(parent.get_tab_count() - 1, tab_name)
+
+	var lbl := Label.new()
+	lbl.text = message
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	wrap.add_child(lbl)
 
 
 ## タブ名に対応する VBox を生成して TabContainer に追加する
