@@ -1174,6 +1174,73 @@ func _find_top_tab_index(tab_name: String) -> int:
 	return -1
 
 
+## OptionButton の現在値を指定テキストの項目に設定（シグナル非発火）
+func _select_option_by_text(btn: OptionButton, text: String) -> void:
+	if btn == null:
+		return
+	for i: int in range(btn.item_count):
+		if btn.get_item_text(i) == text:
+			btn.select(i)
+			return
+
+
+## 「敵一覧」タブの未保存変更を破棄し、JSON から再読込して全ウィジェットを更新
+## 呼び出し元：リセットボタンのハンドラ
+func _reset_enemy_list_tab() -> void:
+	# enemy_list.json と個別敵 JSON 16 ファイルを再読込（_enemy_indiv_dirty 等もクリア）
+	_load_enemy_list_files()
+
+	# 全敵の全ウィジェットを元値に戻す
+	for eid: String in ENEMY_IDS:
+		var list_entry: Dictionary = (_enemy_list_data.get(eid, {}) as Dictionary)
+		var indiv: Dictionary = (_enemy_indiv_data.get(eid, {}) as Dictionary)
+
+		# rank / stat_type OptionButton
+		_select_option_by_text(
+			_enemy_row_widgets.get("%s|rank" % eid) as OptionButton,
+			str(list_entry.get("rank", "C")))
+		_select_option_by_text(
+			_enemy_row_widgets.get("%s|stat_type" % eid) as OptionButton,
+			str(list_entry.get("stat_type", "fighter-axe")))
+
+		# bool 3 フィールド（CheckBox）
+		for f: String in ["is_undead", "is_flying", "instant_death_immune"]:
+			var cb := _enemy_row_widgets.get("%s|%s" % [eid, f]) as CheckBox
+			if cb != null:
+				# set_pressed_no_signal で toggled を発火させずに戻す
+				cb.set_pressed_no_signal(bool(indiv.get(f, false)))
+
+		# 文字列 / 数値 3 フィールド（LineEdit。text 代入では text_changed は発火しない）
+		for f: String in ["behavior_description", "chase_range", "territory_range"]:
+			var le := _enemy_row_widgets.get("%s|%s" % [eid, f]) as LineEdit
+			if le != null:
+				le.text = _enemy_indiv_orig_text(eid, f)
+
+		# stat_bonus 6 スロット
+		var stat_bonus: Dictionary = (list_entry.get("stat_bonus", {}) as Dictionary)
+		var bonus_keys: Array = stat_bonus.keys()
+		for i: int in range(ENEMY_STAT_BONUS_SLOTS):
+			var key: String = "---"
+			var val: int = 0
+			if i < bonus_keys.size():
+				key = bonus_keys[i] as String
+				val = int(stat_bonus[key])
+			var key_btn := _enemy_row_widgets.get("%s|bonus_%d_key" % [eid, i]) as OptionButton
+			var val_le := _enemy_row_widgets.get("%s|bonus_%d_val" % [eid, i]) as LineEdit
+			_select_option_by_text(key_btn, key)
+			if val_le != null:
+				val_le.text = "" if key == "---" else str(val)
+				val_le.editable = (key != "---")
+
+	# _load_enemy_list_files でクリア済みの dirty フラグを念のため再確認
+	_enemy_list_dirty = false
+	_enemy_indiv_dirty.clear()
+	# 全セルのハイライトを解除
+	_clear_enemy_cell_highlights()
+	# タブ末尾の ● インジケータを更新
+	_update_enemy_list_tab_indicator()
+
+
 # ----------------------------------------------------------------------------
 # 敵一覧タブの Dirty 判定
 # ----------------------------------------------------------------------------
@@ -2283,10 +2350,28 @@ func _on_save_pressed() -> void:
 			_set_status("このタブでは保存操作はありません", Color(0.8, 0.8, 0.6))
 
 
+## リセットボタン：現在のタブに応じてダイアログ文言を切り替え、対応するリセット処理を起動
+## - 定数タブ：constants_default.json の値で現在値を上書き
+## - 敵一覧タブ：JSON から再読込して未保存変更を破棄
+## - その他のタブ：リセット未実装のため警告のみ
 func _on_reset_pressed() -> void:
+	var top := _current_top_tab_name()
+	var dialog_text: String = ""
+	match top:
+		TOP_TAB_CONSTANTS:
+			dialog_text = "すべての定数をデフォルト値に戻します。よろしいですか？\n（UI 上の値のみ変更・保存は別途「保存」ボタンで）"
+		TOP_TAB_ENEMY_LIST:
+			dialog_text = "敵一覧の未保存の変更を破棄して JSON から再読込します。よろしいですか？"
+		TOP_TAB_ALLY_CLASS, TOP_TAB_ENEMY_CLASS, TOP_TAB_STATS:
+			_set_status("このタブのリセットは未実装です", Color(0.8, 0.8, 0.6))
+			return
+		_:
+			_set_status("このタブではリセット操作はありません", Color(0.8, 0.8, 0.6))
+			return
+
 	var dlg := ConfirmationDialog.new()
-	dlg.dialog_text = "すべての定数をデフォルト値に戻します。よろしいですか？\n（UI 上の値のみ変更・保存は別途「保存」ボタンで）"
-	dlg.title = "デフォルトに戻す"
+	dlg.dialog_text = dialog_text
+	dlg.title = "リセット"
 	# CanvasLayer 直下だと Window サブウィンドウの表示が安定しないため、
 	# 明示的にメインの Viewport（get_tree().root）に追加する
 	get_tree().root.add_child(dlg)
@@ -2297,16 +2382,31 @@ func _on_reset_pressed() -> void:
 
 
 func _on_reset_confirmed(dlg: ConfirmationDialog) -> void:
-	GlobalConstants.reset_to_defaults()
-	_refresh_all()
-	if GlobalConstants.last_config_error.is_empty():
-		_set_status("デフォルト値に戻しました（未保存）", Color(0.55, 1.0, 0.55))
-	else:
-		_set_status(GlobalConstants.last_config_error, Color(1.0, 0.5, 0.5))
+	var top := _current_top_tab_name()
+	match top:
+		TOP_TAB_CONSTANTS:
+			GlobalConstants.reset_to_defaults()
+			_refresh_all()
+			if GlobalConstants.last_config_error.is_empty():
+				_set_status("デフォルト値に戻しました（未保存）", Color(0.55, 1.0, 0.55))
+			else:
+				_set_status(GlobalConstants.last_config_error, Color(1.0, 0.5, 0.5))
+		TOP_TAB_ENEMY_LIST:
+			_reset_enemy_list_tab()
+			_set_status("敵一覧を JSON から再読込しました", Color(0.55, 1.0, 0.55))
+		_:
+			_set_status("このタブではリセット操作はありません", Color(0.8, 0.8, 0.6))
 	dlg.queue_free()
 
 
+## デフォルト化ボタン：定数タブ専用機能（他タブでは警告表示のみ）
 func _on_commit_pressed() -> void:
+	var top := _current_top_tab_name()
+	if top != TOP_TAB_CONSTANTS:
+		_set_status("「現在値をすべてデフォルト化」は定数タブ専用の機能です",
+			Color(0.8, 0.8, 0.6))
+		return
+
 	var dlg := ConfirmationDialog.new()
 	dlg.dialog_text = "現在値を constants_default.json の value として書き換えます。\nこれは復帰不能な上書きです。よろしいですか？"
 	dlg.title = "現在値をデフォルト化"

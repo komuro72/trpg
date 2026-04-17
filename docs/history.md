@@ -1032,3 +1032,19 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
   - `dlg.close_requested.connect(dlg.queue_free)` を追加（X ボタンでも確実に解放されるように）
 - 動作: 定数タブで値変更 → 「すべてデフォルトに戻す」→ 確認ダイアログ OK → `GlobalConstants.reset_to_defaults()` が constants_default.json を読み直して全定数をリセット → `_refresh_all()` で全 SpinBox / ColorPicker が更新されハイライトも解除される
 
+### バグ修正追補: 「敵一覧」タブでリセットを押してもデフォルト値に戻らない
+- 症状: 敵一覧タブで値を変更してから「すべてデフォルトに戻す」ボタンを押しても、確認ダイアログは出るが値が元に戻らない
+- 原因: 前回修正ではボタンを有効化したものの、リセット処理自体は `GlobalConstants.reset_to_defaults()`（定数タブ専用）を呼ぶだけで、敵一覧タブの値は何も変わらなかった
+- 修正方針: リセットボタンをタブ別動作に変更（「すべて」の意味をタブ内の全フィールドに限定）
+  - 定数タブ: 従来通り `GlobalConstants.reset_to_defaults()` + `_refresh_all()`
+  - 敵一覧タブ: 新設 `_reset_enemy_list_tab()` が `_load_enemy_list_files()` で JSON を再読込し、16 敵×9 種類のウィジェットをすべて元値に戻す
+  - 味方クラス / 敵クラス / ステータスタブ: 未実装の警告ステータスを表示（将来実装予定）
+  - それ以外（アイテムタブ等）: 「このタブではリセット操作はありません」ステータス表示
+- 「現在値をすべてデフォルト化」も定数タブ専用と明確化（他タブでは警告のみ）
+- 実装:
+  - `_reset_enemy_list_tab()`: JSON 再読込 → rank/stat_type（OptionButton）、bool 3 フィールド（CheckBox、`set_pressed_no_signal` で toggled 非発火）、LineEdit 3 フィールド、stat_bonus 6 スロットを全敵について元値に設定 → `_clear_enemy_cell_highlights()` → `_update_enemy_list_tab_indicator()`
+  - `_select_option_by_text()` ヘルパを新設（`OptionButton.select()` は item_selected を発火しないことを利用）
+  - `_on_reset_pressed()` / `_on_reset_confirmed()` を `match top` でタブ別分岐に変更。ダイアログ文言もタブ別に切替
+  - `_on_commit_pressed()` 冒頭に定数タブ以外の早期 return を追加
+- 注意点: CheckBox の `button_pressed` プロパティ代入は `toggled` シグナルを発火するため、代入ではなく `set_pressed_no_signal()` を使う。LineEdit の `.text` 代入・OptionButton の `.select()` は Godot 4 ではシグナル非発火のためそのまま代入でよい
+
