@@ -173,6 +173,7 @@ assets/images/tiles/
 | ポーズメニュー開閉 | Esc | Start | |
 | DebugWindowの表示/非表示 | F1 | — | 画面中央にデバッグウィンドウをトグル表示（ゲーム進行継続） |
 | デバッグ情報コンソール出力 | F2 | — | キャラ・フロア・占有タイル情報を user://debug_floor_info.txt に書き出し |
+| ConfigEditor の表示/非表示 | F4 | — | 定数管理UI。タイトル画面・ゲーム中の両方で起動可。ゲーム中は時間停止 |
 | シーン再スタート | F5 | — | |
 
 ### メニュー内共通操作
@@ -491,6 +492,48 @@ rank値: C=0, B=1, A=2, S=3
 - Claude Code：CLAUDE.mdの更新・仕様書（docs/spec.md）の更新・GDScriptの実装・コミット/プッシュを行う
 - 仕様相談はclaude.aiで行い、確定した仕様をもとに Claude Code が CLAUDE.md を更新してから実装する
 
+## 定数管理（Config Editor）
+
+ゲームバランス調整と定数の棚卸しを目的とした開発用UI。
+
+### 起動
+- F4キーで開閉（タイトル画面・ゲーム中の両方で動作）
+- ゲーム中は他UI（OrderWindow / DebugWindow / PauseMenu / NpcDialogueWindow 等）が開いている時は F4 を無視
+- 開いている間は時間停止（`world_time_running = false`）・閉じると元の状態に復帰
+
+### ファイル構成
+- `assets/master/config/constants.json` … ユーザー編集中の値（シンプル key:value）
+- `assets/master/config/constants_default.json` … デフォルト値＋メタ情報（value / type / category / min / max / step / description）
+
+### カテゴリ（タブ）
+コード上のクラス名で分類：
+
+- Character / UnitAI / PartyLeader / NpcLeaderAI / Healer / PlayerController / EnemyLeaderAI / Unknown（未分類検出用）
+
+タブ順は `config_editor.gd` の `TABS` 配列で定義。追加したい場合は配列末尾に追記する。
+
+### 操作
+- 各定数を SpinBox（数値）または ColorPicker（色）で編集
+- デフォルトと異なる行は背景薄黄色、そのタブ名末尾に `●` 付記
+- 下部3ボタン：保存 / すべてデフォルトに戻す / 現在値をすべてデフォルト化
+- 破壊的操作（リセット・デフォルト化）は確認ダイアログあり
+- タブ切替：マウス、または Ctrl+Tab / Ctrl+Shift+Tab / Ctrl+PageUp / Ctrl+PageDown
+
+### 反映
+- 「保存」→ `constants.json` に書き込み → **ゲーム再起動で反映**（即時反映はしない方針）
+
+### 定数追加時の運用ルール
+1. `GlobalConstants.gd` に `const`/`var` を追加するときは、`constants_default.json` にも同時に追加する
+2. `category` フィールドは既存7タブ（Character / UnitAI / PartyLeader / NpcLeaderAI / Healer / PlayerController / EnemyLeaderAI）のいずれかを指定
+3. 上記7タブに属さない場合は `config_editor.gd` の `TABS` 配列にタブを追加することを検討
+4. カテゴリ未定義・不明な値の定数は Unknown タブに自動振り分け（起動時に push_warning で警告）
+5. 定期的に Claude Code に「外出しされていない定数」の棚卸し指示を出す
+   - チェック観点：GlobalConstants 内に直書きされ `constants_default.json` に未登録の定数がないか
+
+### ConfigEditor 対象の `var` 化
+- 対象の定数は `const` ではなく `var` で宣言する必要がある（Autoload 起動時に `_load_constants()` が外部 JSON から値を代入するため）
+- `const` のまま外部化したい場合は先に `var` へ変換する
+
 ## フェーズ
 - [x] Phase 1: 主人公1人の移動・画像表示・フィールド表示。グリッド移動・4方向スプライト切替・タイルマップ（FLOOR/WALL）・デッドゾーン方式カメラを実装
 - [x] Phase 2: 戦闘基盤。HP等基本ステータス・敵配置（JSON読み込み）・ルールベースAI（A*経路探索・ステートマシン）・近接攻撃・方向ダメージ倍率を実装
@@ -580,6 +623,7 @@ rank値: C=0, B=1, A=2, S=3
 - [x] 近接3クラス（剣士/斧戦士/斥候）の特殊攻撃AI発動条件（隣接敵数・突進斬りの経路判定）を実装
 - [x] 攻撃クールダウン（pre_delay / post_delay）の全面見直し：クラスJSONのスロット単位（Z/V）に一元化、プレイヤー/AIで同じ slots 参照、PRE_DELAY 中から射程オーバーレイ表示、game_speed 適用
 - [x] HP状態ラベルの色と点滅を全UI要素で統一。色定数を `GlobalConstants` に集約（SPRITE/GAUGE/TEXT の3パレット）。wounded 以降はスプライト・顔アイコンで3Hz点滅。ゲージ・文字は静的
+- [x] Config Editor（開発用定数エディタ）を実装。F4 でタイトル画面・ゲーム中ともトグル起動。5定数（Phase A）を外部 JSON（`assets/master/config/constants.json` / `constants_default.json`）化し、7 + Unknown タブでカテゴリ分け表示・保存・デフォルト復帰・デフォルト化に対応
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム

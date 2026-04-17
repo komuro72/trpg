@@ -909,3 +909,35 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
 - `right_panel.gd._hp_modulate` も同様にリファクタ
 - `right_panel.gd` と `dialogue_window.gd` のインラインコピペ（状態テキスト色 match）を `GlobalConstants.condition_text_color(cond)` 1行で置換
 - `debug_window.gd` の HP 色分岐2箇所を共通関数 `_hp_color_for(ch)` に統合（内部で `condition_sprite_color` を呼ぶ）
+
+## Config Editor 実装（2026-04-17）
+
+### 背景
+ゲームバランス調整のためにゲーム内から定数を編集できるツールを導入。
+最終的に 100 個規模になる見込みだが、まずは 5 定数でワークフロー全体が成立するか検証（Phase A）してから本実装に進む方針。
+
+### Phase A：プロトタイプ（5定数・commit b267342）
+- 対象定数（`const` → `var` へ変換）：
+  - `CONDITION_WOUNDED_THRESHOLD` / `CONDITION_PULSE_HZ` / `CONDITION_COLOR_SPRITE_WOUNDED` / `SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES` / `PARTY_FLEE_ALIVE_RATIO`
+- 追加ファイル：
+  - `assets/master/config/constants.json`（ユーザー値）・`constants_default.json`（デフォルト＋メタ情報）
+  - `scenes/config_editor.tscn`・`scripts/config_editor.gd`
+- `GlobalConstants._ready()` で `_load_constants()` を呼び、起動時に外部 JSON から値を代入
+- F4 キーで開閉、タイトル画面・ゲーム中の両方で動作
+- `save_constants()` / `reset_to_defaults()` / `commit_as_defaults()` の3操作を提供
+- 読み込み失敗時は `last_config_error` にメッセージ記録・UI に赤字表示
+
+### タブ機能拡張（commit 62347b0）
+- プロトタイプはフラットな行リストだったが、将来の 100 定数規模を見据えて `TabContainer` 化
+- 7 タブ（Character / UnitAI / PartyLeader / NpcLeaderAI / Healer / PlayerController / EnemyLeaderAI）+ Unknown タブを表示
+- `constants_default.json` の `category` フィールドでタブに振り分け
+- 既存5定数のカテゴリを再設定（HP状態 / 戦闘 / AI → Character / UnitAI / PartyLeader）
+- 未登録カテゴリの定数は Unknown タブに自動振り分け（`push_warning`）
+- 空タブには「このカテゴリには定数がまだ登録されていません。」のプレースホルダー
+- タブ名末尾の ` ●` インジケータでそのタブ内に非デフォルト値があることを表示
+- Ctrl+Tab / Ctrl+Shift+Tab / Ctrl+PageUp / Ctrl+PageDown でタブ循環
+- ゲーム中 F4 の他 UI ガード（OrderWindow / PauseMenu / DebugWindow / NpcDialogueWindow 表示中は無視）
+
+### バグ修正
+- **デフォルト列に `%.4g` が literal 表示される**：GDScript の `%` フォーマットは `%g` 未対応。`%.4f` で丸めて末尾ゼロを削る `_format_number()` を新設し、整数扱いなら `"3"` 形式、小数なら `"0.35"` 形式で返すように修正
+- **ゲーム中 F4 が即座に自己 close される**：`game_map._input` の KEY_F4 処理後に `set_input_as_handled()` を呼ばなかったため、同じ F4 イベントが `config_editor._unhandled_input` に伝搬して `visible=true` 直後に `close()` が呼ばれていた。`get_viewport().set_input_as_handled()` を追加して伝搬を遮断

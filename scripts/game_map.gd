@@ -128,6 +128,9 @@ func _input(event: InputEvent) -> void:
 				_print_debug_floor_info()
 			KEY_F4:
 				_toggle_config_editor()
+				# 同じ F4 イベントが config_editor._unhandled_input に伝搬して
+				# 直後に close されるのを防ぐ
+				get_viewport().set_input_as_handled()
 			KEY_F5:
 				get_tree().reload_current_scene()
 

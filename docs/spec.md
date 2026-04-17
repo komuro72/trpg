@@ -4723,3 +4723,59 @@ CONDITION_COLOR_TEXT_CRITICAL = Color(1.00, 0.35, 0.35)
 - 左右パネルは `_process` で毎フレーム `queue_redraw()` しているため、顔アイコン modulate の点滅が自然に反映される
 - `Character._update_modulate` は `_process` で毎フレーム呼ばれるため、フィールドスプライトの点滅も継続的に更新される
 - HP ゲージ・状態ラベルテキスト・DebugWindow は同じ毎フレーム redraw の対象だが、色が静的なので見た目は変化しない
+
+---
+
+## Config Editor（開発用定数エディタ）
+
+### 実装ファイル
+- `scenes/config_editor.tscn` — CanvasLayer ルート（layer=20・script 取付のみ）
+- `scripts/config_editor.gd` — UI 構築・編集ハンドラ
+- `scripts/global_constants.gd` — ロード/セーブ関数（下記）
+- `assets/master/config/constants.json` — ユーザー値（シンプル key:value）
+- `assets/master/config/constants_default.json` — デフォルト値 + メタ情報
+
+### 起動
+- **タイトル画面**: `scripts/title_screen.gd._input` が `KEY_F4` を捕捉 → `_toggle_config_editor()` で `res://scenes/config_editor.tscn` を instance 化して add_child（初回のみ）。`set_input_as_handled()` で「any key → main menu」遷移より優先
+- **ゲーム中**: `scripts/game_map.gd._input` の `KEY_F4` → `_toggle_config_editor()`。他 UI（OrderWindow / PauseMenu / DebugWindow / NpcDialogueWindow）表示中は無視。F4 押下後に `get_viewport().set_input_as_handled()` を呼んで ConfigEditor 側の `_unhandled_input` への伝搬を遮断（自己 close 防止）
+
+### ConfigEditor の動作
+- `toggle()` / `open()` / `close()` を公開
+- `open()` 時：`_prev_world_time_running` に現在値を退避し、`world_time_running = false` に設定
+- `close()` 時：ゲーム中（`_opened_in_game = true`）だった場合のみ `_prev_world_time_running` を復元
+- `_unhandled_input` で KEY_F4 / KEY_ESCAPE を閉じる、Ctrl+Tab / Ctrl+Shift+Tab / Ctrl+PageUp / Ctrl+PageDown でタブ循環
+
+### GlobalConstants 側の仕組み
+- 対象定数は `const` ではなく `var` で宣言（Autoload 起動時に外部 JSON で代入されるため）
+- `const CONFIG_KEYS: Array[String]` — 管理対象の定数名一覧
+- `_ready()` → `_load_constants()`：`constants.json` を優先して読み、不足キーは `constants_default.json` の `value` で補完
+- `get(key)` / `set(key, val)` は GDScript の Object 動的アクセスで実行
+- `_apply_value(key, raw)` が type に応じて変換（float / int / color[r,g,b,a]）
+- `save_constants()` — 現在値を `constants.json` に `JSON.stringify(out, "  ")` で書き込み
+- `reset_to_defaults()` — `constants_default.json` の `value` で現在値を上書き（保存はしない）
+- `commit_as_defaults()` — 現在値で `constants_default.json` の `value` を書き換え（破壊的）
+- `get_config_value(key)` — Color は `[r,g,b,a]` 配列で返す（JSON 書き出し用）
+- `get_default_value(key)` — `constants_default.json` の `value` を返す（UI 表示用）
+- `_get_meta_for(key)` — type / category / min / max / step / description を返す
+- `last_config_error: String` — 書き込み失敗時のエラーメッセージ（UI で赤字表示）
+
+### UI 構造
+- 画面中央に `PanelContainer`（幅 60% × 高さ 70%・不透明背景）
+- 内部：VBox（Title → Status → Header → TabContainer → 下部ボタン行）
+- TabContainer：`TABS` 配列（Character / UnitAI / PartyLeader / NpcLeaderAI / Healer / PlayerController / EnemyLeaderAI）+ Unknown の 8 タブ
+- 各タブは ScrollContainer → VBox 構造。行は所属カテゴリのタブ VBox に add_child
+- 空タブには「このカテゴリには定数がまだ登録されていません。」のプレースホルダー Label
+- 行ごとのウィジェット：`PanelContainer{ HBox{ 定数名 Label, 説明 Label, SpinBox/ColorPickerButton, デフォルト値 Label/ColorRect } }`
+- 現在値がデフォルトと異なる行は `Color(1.0, 1.0, 0.8)` の薄黄背景（行の `StyleBoxFlat.bg_color`）
+- タブ内に非デフォルト値が 1 つでもあればタブ名末尾に ` ●` を付与（`_update_tab_title` / `_update_tab_indicators`）
+- 下部ボタン：保存 / すべてデフォルトに戻す / 現在値をすべてデフォルト化 / 閉じる (F4)
+- リセット・デフォルト化は `ConfirmationDialog` で確認
+
+### 数値表示のフォーマット（`_format_number`）
+- GDScript の `%` フォーマットは `%g` 未対応のため、`%.4f` で丸めて末尾ゼロを削る自前実装
+- 整数扱い（`is_equal_approx(f, float(int(f)))`）なら `"%d"`、小数なら `0.35` 形式
+
+### タブ追加手順
+- 新カテゴリを追加したい場合：`config_editor.gd` の `TABS: Array[String]` の末尾に追記する
+- `constants_default.json` の `category` フィールドを新タブ名に揃える
+- 未登録カテゴリの定数は Unknown タブに自動振り分け（`push_warning` で警告も出す）
