@@ -4829,3 +4829,44 @@ CONDITION_COLOR_TEXT_CRITICAL = Color(1.00, 0.35, 0.35)
 `_on_save_pressed()` は現在の上段タブを見て分岐（`_current_top_tab_name()`）：
 - TOP_TAB_CONSTANTS → `GlobalConstants.save_constants()`
 - TOP_TAB_ALLY_CLASS → `_save_class_files()`
+- TOP_TAB_STATS → `_save_stats_files()`
+
+---
+
+## Config Editor「ステータス」タブ（Phase B）
+
+### 対象ファイル
+- `assets/master/stats/class_stats.json`（クラス × ステータス × {base, rank}）
+- `assets/master/stats/attribute_stats.json`（sex/age/build × ステータス + random_max）
+
+### データフロー
+1. `_load_stats_files()` が `_class_stats_data` / `_attr_stats_data` に JSON をパースして保持
+2. サブタブごとに UI を構築（`_build_class_stats_sub_tab` / `_build_attr_stats_sub_tab`）
+3. セル編集時：元値と比較して薄黄ハイライト、`_class_stats_dirty` / `_attr_stats_dirty` を更新
+4. 「保存」ボタン押下 → `_save_stats_files()` が dirty のファイルだけ書き戻し（`sort_keys=false`）
+
+### クラスステータス（上段サブタブ）
+- 行 = ステータス（vitality / energy / skill / ...）、列 = クラス
+- 各セルは LineEdit 2 つ（base / rank）を HBox で横並び。セル幅 `STAT_CELL_W = 130`（サブセル `STAT_SUBCELL_W = 60`）
+- 列ヘッダーは 2 段（クラス名 + base/rank の小ヘッダー）
+- 画面上のクラス順は `CLASS_IDS` に合わせる。JSON のクラス順は書き戻し時に保持
+- 編集用 key = `"class_id|stat|base"` or `"class_id|stat|rank"`
+- あるクラスに存在しないステータスはセル位置に「—」を描画（編集不可）
+
+### 属性補正（下段サブタブ）
+- 上段：8 列（male / female / young / adult / elder / slim / medium / muscular）の横断表
+- 下段：1 列（random_max）の縦並び表
+- セル幅 `ATTR_CELL_W = 80`、1 LineEdit / セル
+- 属性順は `ATTR_CATEGORY_ORDER` 定数で定義（sex → age → build → random_max）
+- 編集用 key = `"category|attr|stat"`（上段） / `"random_max|stat"`（下段）
+
+### 保存処理
+- `_apply_class_stats_edits(orig)` / `_apply_attr_stats_edits(orig)` で `duplicate(true)` した Dict に編集値を適用
+- 値の型変換は味方クラスタブと同じ `_coerce_class_value()` を流用（bool / int / float / string）
+- 型変換失敗時は null を返し、そのファイルの保存をスキップ（`push_warning` でログ）
+- 保存成功後はメモリ上の `_class_stats_data` / `_attr_stats_data` を新 Dict で置換し、該当セルのハイライトを全解除
+
+### 制限事項
+- Config Editor からは**新ステータスの追加は不可**（既存ステータスの値編集のみ）
+- 新ステータスを追加する場合は、JSON ファイルと `CharacterData` / `CharacterGenerator` などのコードを直接編集する別タスクとして実施
+- 「すべてデフォルトに戻す」「現在値をすべてデフォルト化」はステータスタブでは無効化（デフォルト値を保持しない方針・復帰は git 履歴で管理）

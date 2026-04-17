@@ -509,7 +509,7 @@ rank値: C=0, B=1, A=2, S=3
 - **定数** — `constants.json` / `constants_default.json` を編集
 - **味方クラス** — `assets/master/classes/*.json` 7ファイルを横断表で編集
 - **敵** — プレースホルダー（6サブタブ：ゴブリン系・ウルフ系・アンデッド系・デーモン系・ボス・その他）
-- **ステータス** — プレースホルダー（2サブタブ：クラスステータス・属性補正）
+- **ステータス** — `assets/master/stats/class_stats.json` / `attribute_stats.json` を編集（2サブタブ：クラスステータス・属性補正）
 - **アイテム** — プレースホルダー
 
 ### 「定数」タブのカテゴリ
@@ -549,6 +549,11 @@ rank値: C=0, B=1, A=2, S=3
 1. クラス JSON に新パラメータを追加するときは、`config_editor.gd` の `CLASS_PARAM_GROUPS` の適切なグループにも追加する
 2. 追加し忘れた場合は「その他」グループに自動集約されるため、起動時の push_warning で気付ける
 3. Config Editor で編集した結果は `assets/master/classes/*.json` に直接書き戻されるので、そのまま git commit すれば差分管理できる
+
+### 「ステータス」編集時の運用ルール
+1. Config Editor は**既存ステータスの値編集のみ**。新ステータス追加はコード変更（CharacterData / 生成ロジック等）を伴うので別タスクで実施
+2. クラスステータスは「base / rank」を 2 つの LineEdit 横並びで編集。属性補正は 1 LineEdit / セル
+3. `class_stats.json` のクラス順・ステータス順、`attribute_stats.json` のカテゴリ順・ステータス順は元 JSON のキー順を保持（`sort_keys=false`）
 
 ### ConfigEditor 対象の `var` 化
 - 対象の定数は `const` ではなく `var` で宣言する必要がある（Autoload 起動時に `_load_constants()` が外部 JSON から値を代入するため）
@@ -645,6 +650,7 @@ rank値: C=0, B=1, A=2, S=3
 - [x] HP状態ラベルの色と点滅を全UI要素で統一。色定数を `GlobalConstants` に集約（SPRITE/GAUGE/TEXT の3パレット）。wounded 以降はスプライト・顔アイコンで3Hz点滅。ゲージ・文字は静的
 - [x] Config Editor（開発用定数エディタ）を実装。F4 でタイトル画面・ゲーム中ともトグル起動。5定数（Phase A）を外部 JSON（`assets/master/config/constants.json` / `constants_default.json`）化し、7 + Unknown タブでカテゴリ分け表示・保存・デフォルト復帰・デフォルト化に対応
 - [x] Config Editor にトップレベルタブ構造（定数/味方クラス/敵/ステータス/アイテム）を導入し、「味方クラス」タブで 7 クラス JSON を横断表で編集できるよう実装（`slots.Z/V` 平坦化・LineEdit セル・元値型に合わせた書き戻し・キー順保持）
+- [x] Config Editor「ステータス」タブを実装。`class_stats.json`（クラス × ステータス × base/rank の 2 LineEdit セル）と `attribute_stats.json`（属性補正表 + random_max 表）を直接編集可能
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム

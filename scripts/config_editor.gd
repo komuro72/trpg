@@ -113,6 +113,27 @@ const CLASS_PARAM_GROUPS: Array = [
 const CLASS_PARAM_COL_W:  int = 220
 const CLASS_VALUE_COL_W:  int = 150
 
+# ============================================================================
+# ステータスタブ（Phase B）
+# ============================================================================
+const STATS_CLASS_PATH: String = "res://assets/master/stats/class_stats.json"
+const STATS_ATTR_PATH:  String = "res://assets/master/stats/attribute_stats.json"
+
+## クラスステータスのセル幅（LineEdit 2つ分）
+const STAT_NAME_COL_W:  int = 200
+const STAT_SUBCELL_W:   int = 60    # base / rank それぞれの LineEdit 幅
+const STAT_CELL_W:      int = 130   # base + rank の HBox 幅
+
+## 属性補正のセル幅
+const ATTR_CELL_W:      int = 80
+
+## 属性タブのカテゴリ順序（上段テーブル左から右）
+const ATTR_CATEGORY_ORDER: Array = [
+	{"category": "sex",   "keys": ["male", "female"]},
+	{"category": "age",   "keys": ["young", "adult", "elder"]},
+	{"category": "build", "keys": ["slim", "medium", "muscular"]},
+]
+
 var _root_panel:        PanelContainer = null
 var _top_tab_container: TabContainer   = null  ## トップレベル：定数/味方クラス/敵/ステータス/アイテム
 var _tab_container:     TabContainer   = null  ## 「定数」タブ内の既存カテゴリタブ
@@ -130,6 +151,21 @@ var _class_data:         Dictionary = {}  ## class_id → 元の JSON Dictionary
 var _class_cell_widgets: Dictionary = {}  ## "class_id|param_key" → LineEdit
 var _class_dirty:        Dictionary = {}  ## class_id → bool（書き戻し対象フラグ）
 var _class_cell_styles:  Dictionary = {}  ## "class_id|param_key" → StyleBoxFlat（ハイライト制御）
+
+## ステータス（Phase B）: 2 つの JSON をロード
+## class_stats.json: クラス × ステータス × {base, rank}
+## attribute_stats.json: sex/age/build × ステータス + random_max
+var _class_stats_data: Dictionary = {}  ## 元 JSON（キー順保持）
+var _attr_stats_data:  Dictionary = {}  ## 元 JSON（キー順保持）
+var _class_stats_dirty: bool = false
+var _attr_stats_dirty:  bool = false
+## ウィジェット参照
+## class_stats: key = "class_id|stat|base" or "class_id|stat|rank"
+var _class_stats_cell_widgets: Dictionary = {}
+var _class_stats_cell_styles:  Dictionary = {}
+## attribute_stats: key = "category|attr|stat" or "random_max|stat"
+var _attr_cell_widgets: Dictionary = {}
+var _attr_cell_styles:  Dictionary = {}
 ## 各タブ名 → そのタブ内の VBox（ここに行を add）
 var _tab_rows: Dictionary = {}
 ## 各タブ名 → プレースホルダーラベル（空タブ用。定数があれば hide）
@@ -744,15 +780,608 @@ func _build_top_tab_stats(parent: TabContainer) -> void:
 	parent.add_child(container)
 	parent.set_tab_title(parent.get_tab_count() - 1, TOP_TAB_STATS)
 
+	_load_stats_files()
+
 	var sub_tc := TabContainer.new()
 	sub_tc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sub_tc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	container.add_child(sub_tc)
 
-	_add_placeholder_tab(sub_tc, STATS_SUB_TABS[0],
-		"class_stats.json のクラス×ステータス横断表が入る予定です")
-	_add_placeholder_tab(sub_tc, STATS_SUB_TABS[1],
-		"attribute_stats.json の属性×ステータス表が入る予定です")
+	_build_class_stats_sub_tab(sub_tc)
+	_build_attr_stats_sub_tab(sub_tc)
+
+
+## ステータス系 JSON をすべて読み込む
+func _load_stats_files() -> void:
+	var cs: Variant = _read_json_file(STATS_CLASS_PATH)
+	_class_stats_data = cs as Dictionary if cs is Dictionary else {}
+	var ats: Variant = _read_json_file(STATS_ATTR_PATH)
+	_attr_stats_data = ats as Dictionary if ats is Dictionary else {}
+	_class_stats_dirty = false
+	_attr_stats_dirty = false
+
+
+## JSON ファイルを読み込むヘルパ
+func _read_json_file(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		push_warning("[ConfigEditor] JSON がありません: " + path)
+		return null
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		push_warning("[ConfigEditor] JSON を開けません: " + path)
+		return null
+	var txt := f.get_as_text()
+	f.close()
+	var parsed: Variant = JSON.parse_string(txt)
+	if parsed == null:
+		push_warning("[ConfigEditor] JSON パース失敗: " + path)
+		return null
+	return parsed
+
+
+# ----------------------------------------------------------------------------
+# サブタブ：クラスステータス（class_stats.json）
+# ----------------------------------------------------------------------------
+
+## class_stats.json 編集用グリッド（列=クラス、行=ステータス、各セルに base/rank の 2 LineEdit）
+func _build_class_stats_sub_tab(parent: TabContainer) -> void:
+	var root := VBoxContainer.new()
+	root.name = STATS_SUB_TABS[0]
+	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(root)
+	parent.set_tab_title(parent.get_tab_count() - 1, STATS_SUB_TABS[0])
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(scroll)
+
+	var grid := VBoxContainer.new()
+	grid.add_theme_constant_override("separation", 2)
+	scroll.add_child(grid)
+
+	if _class_stats_data.is_empty():
+		var err := Label.new()
+		err.text = "class_stats.json が読み込めませんでした。"
+		err.add_theme_color_override("font_color", Color(1.0, 0.5, 0.5))
+		grid.add_child(err)
+		return
+
+	# 画面上のクラス順は CLASS_IDS を使う。JSON に存在するクラスのみ表示
+	var display_classes: Array[String] = []
+	for cid: String in CLASS_IDS:
+		if _class_stats_data.has(cid):
+			display_classes.append(cid)
+
+	# 先頭クラスのステータスキー順を行順として使う
+	var stat_keys: Array[String] = []
+	if not display_classes.is_empty():
+		var first := _class_stats_data[display_classes[0]] as Dictionary
+		for raw_k: Variant in first.keys():
+			stat_keys.append(raw_k as String)
+
+	# ヘッダー2段：クラス名（上）+ base/rank（下）
+	_build_class_stats_header(grid, display_classes)
+
+	# 各ステータス行
+	for stat: String in stat_keys:
+		_build_class_stats_row(grid, stat, display_classes)
+
+
+func _build_class_stats_header(parent: VBoxContainer, classes: Array[String]) -> void:
+	var row1 := HBoxContainer.new()
+	row1.add_theme_constant_override("separation", 4)
+	parent.add_child(row1)
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(STAT_NAME_COL_W, 0)
+	row1.add_child(spacer)
+	for cid: String in classes:
+		var lbl := Label.new()
+		lbl.text = cid
+		lbl.custom_minimum_size = Vector2(STAT_CELL_W, 0)
+		lbl.add_theme_font_size_override("font_size", 11)
+		lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		row1.add_child(lbl)
+
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 4)
+	parent.add_child(row2)
+	var spacer2 := Control.new()
+	spacer2.custom_minimum_size = Vector2(STAT_NAME_COL_W, 0)
+	row2.add_child(spacer2)
+	for _cid: String in classes:
+		var pair := HBoxContainer.new()
+		pair.custom_minimum_size = Vector2(STAT_CELL_W, 0)
+		pair.add_theme_constant_override("separation", 4)
+		row2.add_child(pair)
+		var bl := Label.new()
+		bl.text = "base"
+		bl.custom_minimum_size = Vector2(STAT_SUBCELL_W, 0)
+		bl.add_theme_font_size_override("font_size", 10)
+		bl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
+		bl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		pair.add_child(bl)
+		var rl := Label.new()
+		rl.text = "rank"
+		rl.custom_minimum_size = Vector2(STAT_SUBCELL_W, 0)
+		rl.add_theme_font_size_override("font_size", 10)
+		rl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
+		rl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		pair.add_child(rl)
+
+
+func _build_class_stats_row(parent: VBoxContainer, stat: String, classes: Array[String]) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	parent.add_child(row)
+
+	var name_lbl := Label.new()
+	name_lbl.text = stat
+	name_lbl.custom_minimum_size = Vector2(STAT_NAME_COL_W, 0)
+	name_lbl.add_theme_font_size_override("font_size", 11)
+	row.add_child(name_lbl)
+
+	for cid: String in classes:
+		var class_entry := _class_stats_data[cid] as Dictionary
+		var has_stat := class_entry.has(stat)
+		var pair := HBoxContainer.new()
+		pair.custom_minimum_size = Vector2(STAT_CELL_W, 0)
+		pair.add_theme_constant_override("separation", 4)
+		row.add_child(pair)
+		if not has_stat:
+			var dash1 := Label.new()
+			dash1.text = "—"
+			dash1.custom_minimum_size = Vector2(STAT_SUBCELL_W, 0)
+			dash1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			pair.add_child(dash1)
+			var dash2 := Label.new()
+			dash2.text = "—"
+			dash2.custom_minimum_size = Vector2(STAT_SUBCELL_W, 0)
+			dash2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			pair.add_child(dash2)
+			continue
+		var entry := class_entry[stat] as Dictionary
+		_add_class_stats_cell(pair, cid, stat, "base", entry.get("base", 0))
+		_add_class_stats_cell(pair, cid, stat, "rank", entry.get("rank", 0))
+
+
+func _add_class_stats_cell(parent: HBoxContainer, class_id: String, stat: String,
+		sub_key: String, value: Variant) -> void:
+	var cell := LineEdit.new()
+	cell.text = _stringify_class_value(value)
+	cell.custom_minimum_size = Vector2(STAT_SUBCELL_W, 0)
+	cell.add_theme_font_size_override("font_size", 11)
+	var sb := _make_cell_style()
+	cell.add_theme_stylebox_override("normal", sb)
+	cell.add_theme_stylebox_override("focus", sb)
+	parent.add_child(cell)
+	var key := "%s|%s|%s" % [class_id, stat, sub_key]
+	_class_stats_cell_widgets[key] = cell
+	_class_stats_cell_styles[key] = sb
+	cell.text_changed.connect(_on_class_stats_cell_changed.bind(class_id, stat, sub_key))
+
+
+func _on_class_stats_cell_changed(new_text: String, class_id: String, stat: String, sub_key: String) -> void:
+	var key := "%s|%s|%s" % [class_id, stat, sub_key]
+	var sb := _class_stats_cell_styles.get(key) as StyleBoxFlat
+	if sb == null:
+		return
+	var orig := _class_stats_orig_text(class_id, stat, sub_key)
+	var changed := new_text != orig
+	sb.bg_color = HIGHLIGHT_BG_COLOR if changed else Color(0.12, 0.12, 0.16)
+	_class_stats_dirty = _class_stats_has_any_diff()
+
+
+func _class_stats_orig_text(class_id: String, stat: String, sub_key: String) -> String:
+	if not _class_stats_data.has(class_id):
+		return ""
+	var class_entry := _class_stats_data[class_id] as Dictionary
+	if not class_entry.has(stat):
+		return ""
+	var entry := class_entry[stat] as Dictionary
+	return _stringify_class_value(entry.get(sub_key, 0))
+
+
+func _class_stats_has_any_diff() -> bool:
+	for raw_key: Variant in _class_stats_cell_widgets.keys():
+		var wk := raw_key as String
+		var cell := _class_stats_cell_widgets[wk] as LineEdit
+		if cell == null:
+			continue
+		var parts := wk.split("|")
+		if parts.size() != 3:
+			continue
+		var orig := _class_stats_orig_text(parts[0], parts[1], parts[2])
+		if cell.text != orig:
+			return true
+	return false
+
+
+# ----------------------------------------------------------------------------
+# サブタブ：属性補正（attribute_stats.json）
+# ----------------------------------------------------------------------------
+
+func _build_attr_stats_sub_tab(parent: TabContainer) -> void:
+	var root := VBoxContainer.new()
+	root.name = STATS_SUB_TABS[1]
+	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(root)
+	parent.set_tab_title(parent.get_tab_count() - 1, STATS_SUB_TABS[1])
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(scroll)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	scroll.add_child(vbox)
+
+	if _attr_stats_data.is_empty():
+		var err := Label.new()
+		err.text = "attribute_stats.json が読み込めませんでした。"
+		err.add_theme_color_override("font_color", Color(1.0, 0.5, 0.5))
+		vbox.add_child(err)
+		return
+
+	# 属性補正テーブル
+	_build_attr_group_separator(vbox, "属性補正")
+	_build_attr_table(vbox)
+
+	# random_max テーブル
+	_build_attr_group_separator(vbox, "random_max（乱数上限）")
+	_build_random_max_table(vbox)
+
+
+func _build_attr_group_separator(parent: VBoxContainer, title: String) -> void:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.18, 0.22, 0.30, 1.0)
+	sb.content_margin_left   = 6
+	sb.content_margin_right  = 6
+	sb.content_margin_top    = 3
+	sb.content_margin_bottom = 3
+	panel.add_theme_stylebox_override("panel", sb)
+	parent.add_child(panel)
+	var lbl := Label.new()
+	lbl.text = "─── %s ───" % title
+	lbl.add_theme_font_size_override("font_size", 12)
+	lbl.add_theme_color_override("font_color", Color(0.85, 0.9, 1.0))
+	panel.add_child(lbl)
+
+
+func _build_attr_table(parent: VBoxContainer) -> void:
+	# 収集：全属性キー（male/female/young/...）の列ヘッダー順
+	var all_attrs: Array = []
+	for entry: Variant in ATTR_CATEGORY_ORDER:
+		var ent := entry as Dictionary
+		for k: Variant in ent["keys"]:
+			all_attrs.append({"category": ent["category"], "attr": k as String})
+
+	# ステータス行順：任意の1属性の stats 順を取る
+	var stat_keys: Array[String] = []
+	for cell_entry: Variant in all_attrs:
+		var ent := cell_entry as Dictionary
+		var cat := ent["category"] as String
+		var attr := ent["attr"] as String
+		if _attr_stats_data.has(cat) and (_attr_stats_data[cat] as Dictionary).has(attr):
+			var stats := (_attr_stats_data[cat] as Dictionary)[attr] as Dictionary
+			for sk: Variant in stats.keys():
+				stat_keys.append(sk as String)
+			break
+
+	# ヘッダー行
+	var hdr := HBoxContainer.new()
+	hdr.add_theme_constant_override("separation", 4)
+	parent.add_child(hdr)
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(STAT_NAME_COL_W, 0)
+	hdr.add_child(spacer)
+	for cell_entry: Variant in all_attrs:
+		var ent := cell_entry as Dictionary
+		var lbl := Label.new()
+		lbl.text = ent["attr"] as String
+		lbl.custom_minimum_size = Vector2(ATTR_CELL_W, 0)
+		lbl.add_theme_font_size_override("font_size", 11)
+		lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hdr.add_child(lbl)
+
+	# データ行
+	for stat: String in stat_keys:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 4)
+		parent.add_child(row)
+		var name_lbl := Label.new()
+		name_lbl.text = stat
+		name_lbl.custom_minimum_size = Vector2(STAT_NAME_COL_W, 0)
+		name_lbl.add_theme_font_size_override("font_size", 11)
+		row.add_child(name_lbl)
+		for cell_entry: Variant in all_attrs:
+			var ent := cell_entry as Dictionary
+			var cat := ent["category"] as String
+			var attr := ent["attr"] as String
+			var v: Variant = null
+			if _attr_stats_data.has(cat) and (_attr_stats_data[cat] as Dictionary).has(attr):
+				var stats := (_attr_stats_data[cat] as Dictionary)[attr] as Dictionary
+				v = stats.get(stat)
+			_add_attr_cell(row, cat, attr, stat, v)
+
+
+func _add_attr_cell(parent: HBoxContainer, category: String, attr: String,
+		stat: String, value: Variant) -> void:
+	if value == null:
+		var dash := Label.new()
+		dash.text = "—"
+		dash.custom_minimum_size = Vector2(ATTR_CELL_W, 0)
+		dash.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		dash.add_theme_color_override("font_color", Color(0.4, 0.4, 0.45))
+		parent.add_child(dash)
+		return
+	var cell := LineEdit.new()
+	cell.text = _stringify_class_value(value)
+	cell.custom_minimum_size = Vector2(ATTR_CELL_W, 0)
+	cell.add_theme_font_size_override("font_size", 11)
+	var sb := _make_cell_style()
+	cell.add_theme_stylebox_override("normal", sb)
+	cell.add_theme_stylebox_override("focus", sb)
+	parent.add_child(cell)
+	var key := "%s|%s|%s" % [category, attr, stat]
+	_attr_cell_widgets[key] = cell
+	_attr_cell_styles[key] = sb
+	cell.text_changed.connect(_on_attr_cell_changed.bind(category, attr, stat))
+
+
+func _on_attr_cell_changed(new_text: String, category: String, attr: String, stat: String) -> void:
+	var key := "%s|%s|%s" % [category, attr, stat]
+	var sb := _attr_cell_styles.get(key) as StyleBoxFlat
+	if sb == null:
+		return
+	var orig := _attr_orig_text(category, attr, stat)
+	var changed := new_text != orig
+	sb.bg_color = HIGHLIGHT_BG_COLOR if changed else Color(0.12, 0.12, 0.16)
+	_attr_stats_dirty = _attr_stats_has_any_diff()
+
+
+func _attr_orig_text(category: String, attr: String, stat: String) -> String:
+	if not _attr_stats_data.has(category):
+		return ""
+	var cat_d := _attr_stats_data[category] as Dictionary
+	if not cat_d.has(attr):
+		return ""
+	var stats := cat_d[attr] as Dictionary
+	return _stringify_class_value(stats.get(stat, 0))
+
+
+func _build_random_max_table(parent: VBoxContainer) -> void:
+	if not _attr_stats_data.has("random_max"):
+		var err := Label.new()
+		err.text = "random_max セクションがありません。"
+		err.add_theme_color_override("font_color", Color(1.0, 0.5, 0.5))
+		parent.add_child(err)
+		return
+	var rm := _attr_stats_data["random_max"] as Dictionary
+
+	# ヘッダー
+	var hdr := HBoxContainer.new()
+	hdr.add_theme_constant_override("separation", 4)
+	parent.add_child(hdr)
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(STAT_NAME_COL_W, 0)
+	hdr.add_child(spacer)
+	var h_lbl := Label.new()
+	h_lbl.text = "random_max"
+	h_lbl.custom_minimum_size = Vector2(ATTR_CELL_W, 0)
+	h_lbl.add_theme_font_size_override("font_size", 11)
+	h_lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
+	h_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hdr.add_child(h_lbl)
+
+	# 各ステータス行
+	for raw_k: Variant in rm.keys():
+		var stat := raw_k as String
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 4)
+		parent.add_child(row)
+		var name_lbl := Label.new()
+		name_lbl.text = stat
+		name_lbl.custom_minimum_size = Vector2(STAT_NAME_COL_W, 0)
+		name_lbl.add_theme_font_size_override("font_size", 11)
+		row.add_child(name_lbl)
+		var cell := LineEdit.new()
+		cell.text = _stringify_class_value(rm[stat])
+		cell.custom_minimum_size = Vector2(ATTR_CELL_W, 0)
+		cell.add_theme_font_size_override("font_size", 11)
+		var sb := _make_cell_style()
+		cell.add_theme_stylebox_override("normal", sb)
+		cell.add_theme_stylebox_override("focus", sb)
+		row.add_child(cell)
+		var key := "random_max|%s" % stat
+		_attr_cell_widgets[key] = cell
+		_attr_cell_styles[key] = sb
+		cell.text_changed.connect(_on_random_max_cell_changed.bind(stat))
+
+
+func _on_random_max_cell_changed(new_text: String, stat: String) -> void:
+	var key := "random_max|%s" % stat
+	var sb := _attr_cell_styles.get(key) as StyleBoxFlat
+	if sb == null:
+		return
+	var orig := ""
+	if _attr_stats_data.has("random_max"):
+		var rm := _attr_stats_data["random_max"] as Dictionary
+		orig = _stringify_class_value(rm.get(stat, 0))
+	var changed := new_text != orig
+	sb.bg_color = HIGHLIGHT_BG_COLOR if changed else Color(0.12, 0.12, 0.16)
+	_attr_stats_dirty = _attr_stats_has_any_diff()
+
+
+func _attr_stats_has_any_diff() -> bool:
+	for raw_key: Variant in _attr_cell_widgets.keys():
+		var wk := raw_key as String
+		var cell := _attr_cell_widgets[wk] as LineEdit
+		if cell == null:
+			continue
+		var parts := wk.split("|")
+		var orig := ""
+		if parts.size() == 3:
+			orig = _attr_orig_text(parts[0], parts[1], parts[2])
+		elif parts.size() == 2 and parts[0] == "random_max":
+			if _attr_stats_data.has("random_max"):
+				var rm := _attr_stats_data["random_max"] as Dictionary
+				orig = _stringify_class_value(rm.get(parts[1], 0))
+		if cell.text != orig:
+			return true
+	return false
+
+
+# ----------------------------------------------------------------------------
+# セル共通
+# ----------------------------------------------------------------------------
+
+## LineEdit セル用の初期スタイル（濃い背景）
+func _make_cell_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.12, 0.12, 0.16)
+	sb.content_margin_left   = 4
+	sb.content_margin_right  = 4
+	sb.content_margin_top    = 2
+	sb.content_margin_bottom = 2
+	return sb
+
+
+# ----------------------------------------------------------------------------
+# ステータス系ファイル保存
+# ----------------------------------------------------------------------------
+
+## class_stats.json + attribute_stats.json をまとめて保存
+## 戻り値：{"saved": Array[String], "errors": Array[String]}
+func _save_stats_files() -> Dictionary:
+	var result := {"saved": [], "errors": []}
+	# class_stats
+	if _class_stats_dirty:
+		var new_cs: Variant = _apply_class_stats_edits(_class_stats_data)
+		if new_cs == null:
+			(result["errors"] as Array).append("class_stats.json: 型変換失敗")
+		else:
+			var f := FileAccess.open(STATS_CLASS_PATH, FileAccess.WRITE)
+			if f == null:
+				(result["errors"] as Array).append(
+					"class_stats.json: 書き込み失敗 err=%d" % FileAccess.get_open_error())
+			else:
+				f.store_string(JSON.stringify(new_cs, "  ", false))
+				f.close()
+				_class_stats_data = new_cs as Dictionary
+				_class_stats_dirty = false
+				_clear_cell_styles(_class_stats_cell_styles)
+				(result["saved"] as Array).append("class_stats.json")
+	# attribute_stats
+	if _attr_stats_dirty:
+		var new_at: Variant = _apply_attr_stats_edits(_attr_stats_data)
+		if new_at == null:
+			(result["errors"] as Array).append("attribute_stats.json: 型変換失敗")
+		else:
+			var f := FileAccess.open(STATS_ATTR_PATH, FileAccess.WRITE)
+			if f == null:
+				(result["errors"] as Array).append(
+					"attribute_stats.json: 書き込み失敗 err=%d" % FileAccess.get_open_error())
+			else:
+				f.store_string(JSON.stringify(new_at, "  ", false))
+				f.close()
+				_attr_stats_data = new_at as Dictionary
+				_attr_stats_dirty = false
+				_clear_cell_styles(_attr_cell_styles)
+				(result["saved"] as Array).append("attribute_stats.json")
+	return result
+
+
+## 指定した StyleBoxFlat 群を既定の暗色に戻す（保存後のハイライト解除）
+func _clear_cell_styles(styles: Dictionary) -> void:
+	for raw_key: Variant in styles.keys():
+		var sb := styles[raw_key] as StyleBoxFlat
+		if sb != null:
+			sb.bg_color = Color(0.12, 0.12, 0.16)
+
+
+## class_stats を編集値で書き換えて新 Dictionary を返す（元のキー順・ネスト構造を保持）
+## 型変換失敗時は null を返す
+func _apply_class_stats_edits(orig: Dictionary) -> Variant:
+	var out := orig.duplicate(true) as Dictionary
+	for raw_key: Variant in _class_stats_cell_widgets.keys():
+		var wk := raw_key as String
+		var parts := wk.split("|")
+		if parts.size() != 3:
+			continue
+		var cid: String = parts[0]
+		var stat: String = parts[1]
+		var sub_key: String = parts[2]
+		var cell := _class_stats_cell_widgets[wk] as LineEdit
+		if cell == null:
+			continue
+		if not out.has(cid):
+			continue
+		var class_d := out[cid] as Dictionary
+		if not class_d.has(stat):
+			continue
+		var entry := class_d[stat] as Dictionary
+		if not entry.has(sub_key):
+			continue
+		var coerced := _coerce_class_value(cell.text, entry[sub_key])
+		if not bool(coerced.get("ok", false)):
+			push_warning("[ConfigEditor] class_stats %s.%s.%s 型変換失敗: '%s'" \
+				% [cid, stat, sub_key, cell.text])
+			return null
+		entry[sub_key] = coerced["value"]
+	return out
+
+
+## attribute_stats を編集値で書き換えて新 Dictionary を返す
+func _apply_attr_stats_edits(orig: Dictionary) -> Variant:
+	var out := orig.duplicate(true) as Dictionary
+	for raw_key: Variant in _attr_cell_widgets.keys():
+		var wk := raw_key as String
+		var parts := wk.split("|")
+		var cell := _attr_cell_widgets[wk] as LineEdit
+		if cell == null:
+			continue
+		# 3 パーツ = "category|attr|stat"（上段テーブル）
+		if parts.size() == 3:
+			var cat: String = parts[0]
+			var attr: String = parts[1]
+			var stat: String = parts[2]
+			if not out.has(cat):
+				continue
+			var cat_d := out[cat] as Dictionary
+			if not cat_d.has(attr):
+				continue
+			var attr_d := cat_d[attr] as Dictionary
+			if not attr_d.has(stat):
+				continue
+			var coerced := _coerce_class_value(cell.text, attr_d[stat])
+			if not bool(coerced.get("ok", false)):
+				push_warning("[ConfigEditor] attribute_stats %s.%s.%s 型変換失敗: '%s'" \
+					% [cat, attr, stat, cell.text])
+				return null
+			attr_d[stat] = coerced["value"]
+		# 2 パーツ = "random_max|stat"（下段テーブル）
+		elif parts.size() == 2 and parts[0] == "random_max":
+			var stat: String = parts[1]
+			if not out.has("random_max"):
+				continue
+			var rm := out["random_max"] as Dictionary
+			if not rm.has(stat):
+				continue
+			var coerced := _coerce_class_value(cell.text, rm[stat])
+			if not bool(coerced.get("ok", false)):
+				push_warning("[ConfigEditor] attribute_stats random_max.%s 型変換失敗: '%s'" \
+					% [stat, cell.text])
+				return null
+			rm[stat] = coerced["value"]
+	return out
 
 
 ## 「アイテム」トップタブ：プレースホルダー
@@ -982,15 +1611,16 @@ func _current_top_tab_name() -> String:
 
 ## 上段タブが切り替わったときに下部ボタンの有効/無効を更新する
 ## - 定数タブ：保存 / リセット / デフォルト化がすべて有効
-## - 味方クラスタブ：保存のみ有効（リセット・デフォルト化はデフォルト値を保持しない方針のため無効）
-## - それ以外（敵/ステータス/アイテム）：プレースホルダー段階なのですべて無効
+## - 味方クラスタブ・ステータスタブ：保存のみ有効（デフォルト値を保持しない方針のためリセット・デフォルト化は無効）
+## - それ以外（敵/アイテム）：プレースホルダー段階なのですべて無効
 func _on_top_tab_changed(_idx: int) -> void:
 	if _btn_save == null:
 		return
 	var top := _current_top_tab_name()
 	var is_constants := top == TOP_TAB_CONSTANTS
 	var is_ally := top == TOP_TAB_ALLY_CLASS
-	_btn_save.disabled = not (is_constants or is_ally)
+	var is_stats := top == TOP_TAB_STATS
+	_btn_save.disabled = not (is_constants or is_ally or is_stats)
 	_btn_reset.disabled = not is_constants
 	_btn_commit.disabled = not is_constants
 
@@ -1006,6 +1636,17 @@ func _on_save_pressed() -> void:
 				_set_status(GlobalConstants.last_config_error, Color(1.0, 0.5, 0.5))
 		TOP_TAB_ALLY_CLASS:
 			var result := _save_class_files()
+			var saved: Array = result.get("saved", [])
+			var errors: Array = result.get("errors", [])
+			if errors.is_empty():
+				if saved.is_empty():
+					_set_status("変更なし（保存対象の差分がありません）", Color(0.8, 0.8, 0.6))
+				else:
+					_set_status("保存しました: %s" % ", ".join(saved), Color(0.55, 1.0, 0.55))
+			else:
+				_set_status("エラー: %s" % " / ".join(errors), Color(1.0, 0.5, 0.5))
+		TOP_TAB_STATS:
+			var result := _save_stats_files()
 			var saved: Array = result.get("saved", [])
 			var errors: Array = result.get("errors", [])
 			if errors.is_empty():

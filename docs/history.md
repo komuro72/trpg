@@ -942,7 +942,15 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
 - **デフォルト列に `%.4g` が literal 表示される**：GDScript の `%` フォーマットは `%g` 未対応。`%.4f` で丸めて末尾ゼロを削る `_format_number()` を新設し、整数扱いなら `"3"` 形式、小数なら `"0.35"` 形式で返すように修正
 - **ゲーム中 F4 が即座に自己 close される**：`game_map._input` の KEY_F4 処理後に `set_input_as_handled()` を呼ばなかったため、同じ F4 イベントが `config_editor._unhandled_input` に伝搬して `visible=true` 直後に `close()` が呼ばれていた。`get_viewport().set_input_as_handled()` を追加して伝搬を遮断
 
-### Phase B：味方クラス横断編集（本コミット）
+### Phase B - ステータスタブ（class_stats.json / attribute_stats.json 編集）
+- トップタブ「ステータス」のサブタブ 2 つを本実装
+- クラスステータス：行 = ステータス / 列 = クラス、各セルに base + rank の LineEdit 2 つ横並び。ヘッダー 2 段（クラス名 + base/rank 小ヘッダー）
+- 属性補正：上段に 8 列（sex/age/build）の横断表、下段に 1 列 random_max 表
+- 型変換・書き戻しは味方クラスタブと同じ仕組み（`_coerce_class_value` 流用、`sort_keys=false` でキー順保持）
+- 「新ステータス追加」は Config Editor 外の作業（CharacterData 等コード変更を伴うため別タスク）
+- デフォルト復帰機能は無効化（デフォルト値を保持しない方針）
+
+### Phase B：味方クラス横断編集
 - トップレベル TabContainer を「定数 / 味方クラス / 敵 / ステータス / アイテム」の 5 タブ構造に拡張
 - 「味方クラス」タブで 7 クラス JSON（`assets/master/classes/*.json`）を横断表で編集できる実装を追加
   - `_load_class_files()`：ConfigEditor 初期化時に 7 ファイルをパースして `_class_data[class_id]` に保持
