@@ -4981,3 +4981,69 @@ PartyManager → CharacterData.load_from_json(enemy_path)  // 個体固有項目
 - 保存ボタン：TOP_TAB_ALLY_CLASS / TOP_TAB_ENEMY_CLASS / TOP_TAB_CONSTANTS / TOP_TAB_STATS で有効
 - リセット / デフォルト化ボタン：TOP_TAB_CONSTANTS のみ有効（敵クラスタブもデフォルト値を保持しない方針）
 - 味方クラスと敵クラスは同じ `_save_class_files()` を共有し、どちらのタブから保存しても 12 クラス全ての dirty ファイルを書き戻す
+
+---
+
+## Config Editor「敵一覧」タブ（Phase B - Step 3）
+
+### 概要
+`enemy_list.json`（rank / stat_type / stat_bonus × 16 敵）と個別敵 JSON の非 legacy フィールド（is_undead / is_flying / instant_death_immune / behavior_description / chase_range / territory_range）を 1 つの横断表 UI で一括編集する。
+
+### 定数
+- `ENEMY_LIST_PATH: String = "res://assets/master/stats/enemy_list.json"`
+- `ENEMY_DIR: String = "res://assets/master/enemies/"`
+- `ENEMY_IDS: Array[String]`（16 敵の表示順。`enemy_list.json` と一致）
+- `ENEMY_RANK_CHOICES`（C/B/A/S）
+- `ENEMY_STAT_TYPE_CHOICES`（人間 7 + 敵固有 5 = 12 クラス）
+- `ENEMY_STAT_BONUS_CHOICES`（"---" + 13 ステータス = 14 項目）
+- `ENEMY_STAT_BONUS_SLOTS: int = 6`（1 敵あたりの stat_bonus 枠数）
+
+### 敵 ID → ファイル名変換
+`_enemy_id_to_filename(eid)` がハイフンをアンダースコアに置換：
+- `goblin-archer` → `goblin_archer.json`
+- `dark-lord` → `dark_lord.json`
+
+### データ保持
+- `_enemy_list_data: Dictionary`（元の `enemy_list.json` 全体）
+- `_enemy_indiv_data: Dictionary`（enemy_id → 個別敵 JSON Dict × 16）
+- `_enemy_list_dirty: bool`（enemy_list.json の変更フラグ）
+- `_enemy_indiv_dirty: Dictionary`（enemy_id → bool）
+
+### ウィジェット
+| 列 | 種別 | key 形式 | 保存先 |
+|---|---|---|---|
+| 敵ID | Label（固定） | — | — |
+| rank | OptionButton（C/B/A/S） | `{eid}\|rank` | enemy_list.json |
+| stat_type | OptionButton（12クラス） | `{eid}\|stat_type` | enemy_list.json |
+| is_undead | CheckBox | `{eid}\|is_undead` | 個別敵JSON |
+| is_flying | CheckBox | `{eid}\|is_flying` | 個別敵JSON |
+| instant_death_immune | CheckBox | `{eid}\|instant_death_immune` | 個別敵JSON |
+| behavior_description | LineEdit | `{eid}\|behavior_description` | 個別敵JSON |
+| chase_range | LineEdit | `{eid}\|chase_range` | 個別敵JSON |
+| territory_range | LineEdit | `{eid}\|territory_range` | 個別敵JSON |
+| stat_bonus × 6 | OptionButton + LineEdit | `{eid}\|bonus_{0..5}_key` / `bonus_{0..5}_val` | enemy_list.json |
+
+### stat_bonus の展開・集約
+- **展開（起動時）**：`enemy_list.json[eid].stat_bonus` の各キーを先頭から 6 枠に割り当て。余った枠は `---` + 空欄・編集不可
+- **集約（保存時）**：6 枠のうち `---` 以外の枠を辞書化（同じキーが複数枠にあれば後ろ勝ち）。`int` 変換失敗スロットはスキップ
+- 空ディクショナリ `{}` も保存対象として出力される
+
+### Dirty 判定
+- `_enemy_list_dirty`：`_enemy_list_has_any_diff()` が全敵の rank / stat_type / stat_bonus を元値と比較
+- `_enemy_indiv_dirty[eid]`：`_enemy_indiv_has_any_diff(eid)` がその敵の bool 3 + 文字列・数値 3 を元値と比較
+- ウィジェット変更時に各ハンドラが上記を再評価して bool を更新
+
+### 保存（`_save_enemy_list_tab`）
+1. `_enemy_list_dirty == true` なら `_apply_enemy_list_edits()` で新 Dict を構築 → `JSON.stringify(..., "  ", false)` で `enemy_list.json` に書き戻し（キー順保持）
+2. 各 `eid` で `_enemy_indiv_dirty[eid] == true` なら `_apply_enemy_indiv_edits(eid)` で新 Dict を構築 → 個別敵 JSON ファイルに書き戻し
+3. 書き戻し成功分は dirty フラグを false に戻し、該当セルのハイライトを解除
+
+### 個別敵 JSON の legacy 保護
+`_apply_enemy_indiv_edits` は `duplicate(true)` で元を複製してから編集対象 6 フィールドのみを「元値と異なる場合だけ」上書きする。**元にフィールドが無かった場合はデフォルト値（false / ""）から変化したときのみ追加**。これにより：
+- legacy フィールド（hp / power / skill / sprites 等）は完全に保持される
+- ユーザーが触らなかったフィールドは元 JSON に無ければ追加されない（diff ノイズ防止）
+
+### 既知の制限
+- 左端の「敵ID」列の sticky（横スクロール時固定）は未実装（Godot 標準で一手間かかるため）
+- 新敵追加は不可（新敵は `enemy_list.json` と個別敵 JSON 両方を作る必要があるためコード変更範囲）
+- stat_bonus で同じキーを複数枠に選択した場合、保存時は後ろ勝ちで辞書化される（エラーにしない）

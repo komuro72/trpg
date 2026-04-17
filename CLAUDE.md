@@ -520,7 +520,7 @@ rank値: C=0, B=1, A=2, S=3
 - **定数** — `constants.json` / `constants_default.json` を編集
 - **味方クラス** — `assets/master/classes/` の人間系 7 ファイルを横断表で編集
 - **敵クラス** — `assets/master/classes/` の敵固有 5 ファイル（zombie / wolf / salamander / harpy / dark-lord）を横断表で編集（味方クラスタブと同構造・同描画ロジックを流用）
-- **敵一覧** — プレースホルダー（`enemy_list.json` の stat_type / rank / stat_bonus 編集を今後実装）
+- **敵一覧** — `enemy_list.json`（16 敵の stat_type / rank / stat_bonus）と個別敵 JSON の非 legacy フィールド（is_undead / is_flying / instant_death_immune / behavior_description / chase_range / territory_range）を一括編集
 - **ステータス** — `assets/master/stats/class_stats.json` / `attribute_stats.json` を編集（2サブタブ：クラスステータス・属性補正）
 - **アイテム** — プレースホルダー
 
@@ -534,6 +534,15 @@ rank値: C=0, B=1, A=2, S=3
 ### 「味方クラス」「敵クラス」タブ
 - **味方クラス**：7 クラス（fighter-sword / fighter-axe / archer / magician-fire / magician-water / healer / scout）を横に並べた横断表
 - **敵クラス**：5 敵固有クラス（zombie / wolf / salamander / harpy / dark-lord）を横に並べた横断表。味方クラスタブと同構造・同描画関数（`_build_class_tab_common` / `_build_class_grid`）を流用し、対象クラス ID 配列だけ差し替え
+
+### 「敵一覧」タブ
+- 行 = 16 敵、列 = 敵ID（固定ラベル）/ rank / stat_type / is_undead / is_flying / instant_death_immune / behavior_description / chase_range / territory_range / stat_bonus × 6 枠
+- **rank / stat_type / stat_bonus キー**は `OptionButton`（ドロップダウン）、**bool 3 フィールド**は `CheckBox`、**文字列・数値**は `LineEdit`
+- stat_bonus は 6 枠（`ENEMY_STAT_BONUS_SLOTS`）。各枠はキー OptionButton ＋ 値 LineEdit の横並び。`---` 選択時は値編集欄を無効化
+- 起動時に既存 stat_bonus を 6 枠の先頭から展開。保存時に `---` 以外の枠を辞書化して書き戻し
+- **保存は 2 つのファイル系統に分かれる**：`enemy_list.json`（rank / stat_type / stat_bonus 用）と個別敵 JSON 16 ファイル（その他）。dirty なファイルのみ書き戻し
+- 個別敵 JSON への書き戻しは **元 JSON のフィールド有無を尊重**：元にあったフィールドは更新、元になかったフィールドはデフォルト値から変化した場合のみ追加（legacy フィールドの構造を壊さない）
+- 新ステータス・新敵の追加は Config Editor の守備範囲外（コード変更を伴うため）
 - ネストされた `slots.Z.*` / `slots.V.*` は `Z_*` / `V_*` に平坦化して行に表示（保存時に元の階層へ戻す）。`slots.X` / `slots.C` は表示せず、保存時にそのまま維持
 - パラメータのグループ分け（`CLASS_PARAM_GROUPS` 配列）：基本 / リソース / 特性 / Zスロット / Vスロット / その他
 - 各セルは LineEdit（文字列入力）。保存時に元 JSON の値の型（int / float / bool / string）に合わせて変換。変換失敗時は保存を中止しエラー表示
@@ -666,6 +675,7 @@ rank値: C=0, B=1, A=2, S=3
 - [x] Config Editor「ステータス」タブを実装。`class_stats.json`（クラス × ステータス × base/rank の 2 LineEdit セル）と `attribute_stats.json`（属性補正表 + random_max 表）を直接編集可能
 - [x] 敵データの構造整理：敵固有 5 クラス（zombie / wolf / salamander / harpy / dark-lord）の JSON を `assets/master/classes/` に新規作成。個別敵 JSON 16 ファイルから `attack_type` / `attack_range` / `pre_delay` / `post_delay` / `heal_mp_cost` / `buff_mp_cost` を除去し、クラス経由で注入する仕組みに統一。`healer.json` の top-level `heal_mp_cost` / `buff_mp_cost` も削除し、`slots.Z.mp_cost` / `slots.V.mp_cost` を正規化
 - [x] Config Editor「敵クラス」タブを実装。味方クラスタブの描画関数を流用し、対象クラス ID 配列を差し替えて 5 敵固有クラスを横断表編集可能に。トップタブを「敵」→「敵クラス」「敵一覧」の 2 タブに分割
+- [x] Config Editor「敵一覧」タブを実装。`enemy_list.json`（rank / stat_type / stat_bonus）と個別敵 JSON（is_undead / is_flying / instant_death_immune / behavior_description / chase_range / territory_range）を 1 つの横断表で編集。stat_bonus は 6 枠 UI で管理。保存は 2 系統のファイル（enemy_list.json + dirty な個別敵 JSON のみ）に分かれる
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム

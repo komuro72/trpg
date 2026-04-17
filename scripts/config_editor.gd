@@ -134,6 +134,53 @@ const ATTR_CATEGORY_ORDER: Array = [
 	{"category": "build", "keys": ["slim", "medium", "muscular"]},
 ]
 
+# ============================================================================
+# 敵一覧タブ（Phase B - Step 3）
+# ============================================================================
+const ENEMY_LIST_PATH: String = "res://assets/master/stats/enemy_list.json"
+const ENEMY_DIR:       String = "res://assets/master/enemies/"
+
+## 敵 16 種の表示順（enemy_list.json のキー順と一致させる）
+const ENEMY_IDS: Array[String] = [
+	"goblin", "hobgoblin", "goblin-archer", "goblin-mage",
+	"zombie", "skeleton", "skeleton-archer", "lich",
+	"wolf", "salamander", "harpy", "demon",
+	"dark-knight", "dark-mage", "dark-priest", "dark-lord",
+]
+
+## rank ドロップダウン選択肢
+const ENEMY_RANK_CHOICES: Array[String] = ["C", "B", "A", "S"]
+
+## stat_type ドロップダウン選択肢（人間 7 + 敵固有 5 = 12 クラス）
+const ENEMY_STAT_TYPE_CHOICES: Array[String] = [
+	"fighter-sword", "fighter-axe", "archer",
+	"magician-fire", "magician-water", "healer", "scout",
+	"zombie", "wolf", "salamander", "harpy", "dark-lord",
+]
+
+## stat_bonus ドロップダウン選択肢（先頭 "---" = 未設定・計 14 個）
+const ENEMY_STAT_BONUS_CHOICES: Array[String] = [
+	"---",
+	"vitality", "energy",
+	"power", "skill",
+	"defense_accuracy", "physical_resistance", "magic_resistance",
+	"block_right_front", "block_left_front", "block_front",
+	"move_speed", "leadership", "obedience",
+]
+
+## 1 敵あたりの stat_bonus 枠数（将来変更しやすいよう定数化）
+const ENEMY_STAT_BONUS_SLOTS: int = 6
+
+## 敵一覧タブの列幅
+const ENEMY_ID_COL_W:          int = 130
+const ENEMY_RANK_COL_W:        int = 60
+const ENEMY_STAT_TYPE_COL_W:   int = 135
+const ENEMY_CHECK_COL_W:       int = 40
+const ENEMY_BEHAVIOR_COL_W:    int = 260
+const ENEMY_RANGE_COL_W:       int = 55
+const ENEMY_BONUS_KEY_W:       int = 135
+const ENEMY_BONUS_VAL_W:       int = 40
+
 var _root_panel:        PanelContainer = null
 var _top_tab_container: TabContainer   = null  ## トップレベル：定数/味方クラス/敵/ステータス/アイテム
 var _tab_container:     TabContainer   = null  ## 「定数」タブ内の既存カテゴリタブ
@@ -166,6 +213,25 @@ var _class_stats_cell_styles:  Dictionary = {}
 ## attribute_stats: key = "category|attr|stat" or "random_max|stat"
 var _attr_cell_widgets: Dictionary = {}
 var _attr_cell_styles:  Dictionary = {}
+
+## 敵一覧（Phase B - Step 3）
+## enemy_list.json 全体は 1 つの Dictionary として保持し、個別敵 JSON は 16 個
+## 個別 _enemy_indiv_dirty[eid] = true のファイルだけ保存時に書き戻す
+## enemy_list.json は 1 ファイルなので _enemy_list_dirty: bool 1 つで管理
+var _enemy_list_data:   Dictionary = {}  ## 元の enemy_list.json（キー順保持）
+var _enemy_indiv_data:  Dictionary = {}  ## enemy_id → 元の個別敵 JSON Dict
+var _enemy_list_dirty:  bool = false
+var _enemy_indiv_dirty: Dictionary = {}  ## enemy_id → bool
+## ウィジェット参照
+## key 形式：
+##   "{eid}|rank" → OptionButton
+##   "{eid}|stat_type" → OptionButton
+##   "{eid}|is_undead" / "is_flying" / "instant_death_immune" → CheckBox
+##   "{eid}|behavior_description" / "chase_range" / "territory_range" → LineEdit
+##   "{eid}|bonus_N_key" → OptionButton（N=0..5）
+##   "{eid}|bonus_N_val" → LineEdit（N=0..5）
+var _enemy_row_widgets: Dictionary = {}
+var _enemy_cell_styles: Dictionary = {}  ## LineEdit 用ハイライトスタイル参照
 ## 各タブ名 → そのタブ内の VBox（ここに行を add）
 var _tab_rows: Dictionary = {}
 ## 各タブ名 → プレースホルダーラベル（空タブ用。定数があれば hide）
@@ -774,10 +840,484 @@ func _coerce_class_value(text: String, orig_value: Variant) -> Dictionary:
 	return {"ok": true, "value": text}
 
 
-## 「敵一覧」トップタブ：プレースホルダー（Step 3 で enemy_list.json 本実装予定）
+## 「敵一覧」トップタブ：enemy_list.json + 個別敵 JSON の非 legacy フィールドを編集
 func _build_top_tab_enemy_list(parent: TabContainer) -> void:
-	_add_placeholder_tab(parent, TOP_TAB_ENEMY_LIST,
-		"ここに敵 16 種の一覧（enemy_list.json の stat_type / rank / stat_bonus 編集）が入る予定です")
+	var container := VBoxContainer.new()
+	container.name = TOP_TAB_ENEMY_LIST
+	container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(container)
+	parent.set_tab_title(parent.get_tab_count() - 1, TOP_TAB_ENEMY_LIST)
+
+	_load_enemy_list_files()
+
+	# 横スクロールも効くように、縦横両方スクロール可能な ScrollContainer
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	container.add_child(scroll)
+
+	var grid := VBoxContainer.new()
+	grid.add_theme_constant_override("separation", 2)
+	scroll.add_child(grid)
+
+	if _enemy_list_data.is_empty():
+		var err := Label.new()
+		err.text = "enemy_list.json が読み込めませんでした。"
+		err.add_theme_color_override("font_color", Color(1.0, 0.5, 0.5))
+		grid.add_child(err)
+		return
+
+	_build_enemy_list_header(grid)
+	for eid: String in ENEMY_IDS:
+		_build_enemy_list_row(grid, eid)
+
+
+## enemy_list.json と個別敵 JSON 16 ファイルを読み込む
+func _load_enemy_list_files() -> void:
+	_enemy_list_data.clear()
+	_enemy_indiv_data.clear()
+	_enemy_indiv_dirty.clear()
+	_enemy_list_dirty = false
+
+	var el: Variant = _read_json_file(ENEMY_LIST_PATH)
+	if el is Dictionary:
+		_enemy_list_data = el as Dictionary
+
+	for eid: String in ENEMY_IDS:
+		var path := ENEMY_DIR + _enemy_id_to_filename(eid)
+		var data: Variant = _read_json_file(path)
+		if data is Dictionary:
+			_enemy_indiv_data[eid] = data
+			_enemy_indiv_dirty[eid] = false
+
+
+## 敵 ID を個別敵 JSON ファイル名に変換する（ハイフン → アンダースコア）
+## 例：goblin-archer → goblin_archer.json
+func _enemy_id_to_filename(enemy_id: String) -> String:
+	return enemy_id.replace("-", "_") + ".json"
+
+
+func _build_enemy_list_header(parent: VBoxContainer) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	parent.add_child(row)
+
+	var cols: Array = [
+		["敵ID",          ENEMY_ID_COL_W],
+		["rank",          ENEMY_RANK_COL_W],
+		["stat_type",     ENEMY_STAT_TYPE_COL_W],
+		["undead",        ENEMY_CHECK_COL_W],
+		["flying",        ENEMY_CHECK_COL_W],
+		["死耐性",        ENEMY_CHECK_COL_W],
+		["behavior",      ENEMY_BEHAVIOR_COL_W],
+		["chase",         ENEMY_RANGE_COL_W],
+		["territory",     ENEMY_RANGE_COL_W],
+	]
+	for entry: Variant in cols:
+		var arr := entry as Array
+		_add_enemy_hdr(row, arr[0] as String, int(arr[1]))
+
+	for i: int in range(ENEMY_STAT_BONUS_SLOTS):
+		var lbl := Label.new()
+		lbl.text = "bonus %d" % (i + 1)
+		lbl.custom_minimum_size = Vector2(ENEMY_BONUS_KEY_W + ENEMY_BONUS_VAL_W + 4, 0)
+		lbl.add_theme_font_size_override("font_size", 11)
+		lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		row.add_child(lbl)
+
+
+func _add_enemy_hdr(parent: HBoxContainer, text: String, width: int) -> void:
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.custom_minimum_size = Vector2(width, 0)
+	lbl.add_theme_font_size_override("font_size", 11)
+	lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	parent.add_child(lbl)
+
+
+func _build_enemy_list_row(parent: VBoxContainer, eid: String) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	parent.add_child(row)
+
+	# 敵 ID（固定ラベル）
+	var name_lbl := Label.new()
+	name_lbl.text = eid
+	name_lbl.custom_minimum_size = Vector2(ENEMY_ID_COL_W, 0)
+	name_lbl.add_theme_font_size_override("font_size", 11)
+	name_lbl.clip_text = true
+	row.add_child(name_lbl)
+
+	var list_entry: Dictionary = (_enemy_list_data.get(eid, {}) as Dictionary)
+	var indiv: Dictionary = (_enemy_indiv_data.get(eid, {}) as Dictionary)
+
+	# rank OptionButton
+	var rank_btn := _make_option_button(ENEMY_RANK_CHOICES,
+		str(list_entry.get("rank", "C")), ENEMY_RANK_COL_W)
+	rank_btn.item_selected.connect(_on_enemy_list_field_changed.bind(eid, "rank"))
+	row.add_child(rank_btn)
+	_enemy_row_widgets["%s|rank" % eid] = rank_btn
+
+	# stat_type OptionButton
+	var stat_btn := _make_option_button(ENEMY_STAT_TYPE_CHOICES,
+		str(list_entry.get("stat_type", "fighter-axe")), ENEMY_STAT_TYPE_COL_W)
+	stat_btn.item_selected.connect(_on_enemy_list_field_changed.bind(eid, "stat_type"))
+	row.add_child(stat_btn)
+	_enemy_row_widgets["%s|stat_type" % eid] = stat_btn
+
+	# is_undead CheckBox
+	_add_enemy_checkbox(row, eid, "is_undead", bool(indiv.get("is_undead", false)))
+	# is_flying CheckBox
+	_add_enemy_checkbox(row, eid, "is_flying", bool(indiv.get("is_flying", false)))
+	# instant_death_immune CheckBox
+	_add_enemy_checkbox(row, eid, "instant_death_immune",
+		bool(indiv.get("instant_death_immune", false)))
+
+	# behavior_description LineEdit
+	_add_enemy_lineedit(row, eid, "behavior_description",
+		str(indiv.get("behavior_description", "")), ENEMY_BEHAVIOR_COL_W)
+	# chase_range LineEdit
+	_add_enemy_lineedit(row, eid, "chase_range",
+		_stringify_class_value(indiv.get("chase_range", 10)), ENEMY_RANGE_COL_W)
+	# territory_range LineEdit
+	_add_enemy_lineedit(row, eid, "territory_range",
+		_stringify_class_value(indiv.get("territory_range", 50)), ENEMY_RANGE_COL_W)
+
+	# stat_bonus 6 枠（既存値を先頭から展開）
+	var stat_bonus: Dictionary = (list_entry.get("stat_bonus", {}) as Dictionary)
+	var bonus_keys: Array = stat_bonus.keys()
+	for i: int in range(ENEMY_STAT_BONUS_SLOTS):
+		var key: String = "---"
+		var val: int = 0
+		if i < bonus_keys.size():
+			key = bonus_keys[i] as String
+			val = int(stat_bonus[key])
+		_add_enemy_bonus_slot(row, eid, i, key, val)
+
+
+## OptionButton を生成し、指定されたテキストの項目を選択状態にする
+func _make_option_button(choices: Array[String], current_text: String, width: int) -> OptionButton:
+	var btn := OptionButton.new()
+	btn.custom_minimum_size = Vector2(width, 0)
+	btn.add_theme_font_size_override("font_size", 11)
+	var selected_idx := 0
+	for i: int in range(choices.size()):
+		btn.add_item(choices[i], i)
+		if choices[i] == current_text:
+			selected_idx = i
+	btn.select(selected_idx)
+	return btn
+
+
+func _add_enemy_checkbox(parent: HBoxContainer, eid: String, field: String, value: bool) -> void:
+	var wrapper := Control.new()
+	wrapper.custom_minimum_size = Vector2(ENEMY_CHECK_COL_W, 0)
+	parent.add_child(wrapper)
+	var cb := CheckBox.new()
+	cb.button_pressed = value
+	cb.position = Vector2(ENEMY_CHECK_COL_W * 0.5 - 10, 2)
+	wrapper.add_child(cb)
+	cb.toggled.connect(_on_enemy_indiv_field_changed.bind(eid, field))
+	_enemy_row_widgets["%s|%s" % [eid, field]] = cb
+
+
+func _add_enemy_lineedit(parent: HBoxContainer, eid: String, field: String,
+		text_val: String, width: int) -> void:
+	var le := LineEdit.new()
+	le.text = text_val
+	le.custom_minimum_size = Vector2(width, 0)
+	le.add_theme_font_size_override("font_size", 11)
+	var sb := _make_cell_style()
+	le.add_theme_stylebox_override("normal", sb)
+	le.add_theme_stylebox_override("focus", sb)
+	parent.add_child(le)
+	le.text_changed.connect(_on_enemy_indiv_field_text_changed.bind(eid, field))
+	var wk := "%s|%s" % [eid, field]
+	_enemy_row_widgets[wk] = le
+	_enemy_cell_styles[wk] = sb
+
+
+func _add_enemy_bonus_slot(parent: HBoxContainer, eid: String, slot_idx: int,
+		key: String, value: int) -> void:
+	var pair := HBoxContainer.new()
+	pair.add_theme_constant_override("separation", 2)
+	pair.custom_minimum_size = Vector2(ENEMY_BONUS_KEY_W + ENEMY_BONUS_VAL_W + 4, 0)
+	parent.add_child(pair)
+
+	var key_btn := _make_option_button(ENEMY_STAT_BONUS_CHOICES, key, ENEMY_BONUS_KEY_W)
+	key_btn.item_selected.connect(_on_enemy_bonus_slot_changed.bind(eid, slot_idx))
+	pair.add_child(key_btn)
+	_enemy_row_widgets["%s|bonus_%d_key" % [eid, slot_idx]] = key_btn
+
+	var val_le := LineEdit.new()
+	val_le.custom_minimum_size = Vector2(ENEMY_BONUS_VAL_W, 0)
+	val_le.add_theme_font_size_override("font_size", 11)
+	val_le.text = "" if key == "---" else str(value)
+	val_le.editable = (key != "---")
+	var sb := _make_cell_style()
+	val_le.add_theme_stylebox_override("normal", sb)
+	val_le.add_theme_stylebox_override("focus", sb)
+	pair.add_child(val_le)
+	val_le.text_changed.connect(_on_enemy_bonus_val_changed.bind(eid, slot_idx))
+	var wk := "%s|bonus_%d_val" % [eid, slot_idx]
+	_enemy_row_widgets[wk] = val_le
+	_enemy_cell_styles[wk] = sb
+
+
+# ----------------------------------------------------------------------------
+# 敵一覧タブのハンドラ
+# ----------------------------------------------------------------------------
+
+## enemy_list.json 系の変更（rank / stat_type）。エンジン Dirty 立てて再評価
+func _on_enemy_list_field_changed(_idx: int, eid: String, field: String) -> void:
+	_enemy_list_dirty = _enemy_list_has_any_diff()
+	# 視覚フィードバックは OptionButton には付けない（選択されたものが見えるため）
+
+
+## 個別敵 JSON 系の bool 値変更（3 つのチェックボックス）
+func _on_enemy_indiv_field_changed(_pressed: bool, eid: String, field: String) -> void:
+	_enemy_indiv_dirty[eid] = _enemy_indiv_has_any_diff(eid)
+
+
+## 個別敵 JSON 系の LineEdit 変更（behavior_description / chase_range / territory_range）
+func _on_enemy_indiv_field_text_changed(new_text: String, eid: String, field: String) -> void:
+	var wk := "%s|%s" % [eid, field]
+	var sb := _enemy_cell_styles.get(wk) as StyleBoxFlat
+	if sb != null:
+		var orig := _enemy_indiv_orig_text(eid, field)
+		sb.bg_color = HIGHLIGHT_BG_COLOR if new_text != orig else Color(0.12, 0.12, 0.16)
+	_enemy_indiv_dirty[eid] = _enemy_indiv_has_any_diff(eid)
+
+
+## stat_bonus のキー（OptionButton）変更：LineEdit の編集可否を切替、enemy_list 再評価
+func _on_enemy_bonus_slot_changed(idx: int, eid: String, slot_idx: int) -> void:
+	var key_btn := _enemy_row_widgets.get("%s|bonus_%d_key" % [eid, slot_idx]) as OptionButton
+	var val_le  := _enemy_row_widgets.get("%s|bonus_%d_val" % [eid, slot_idx]) as LineEdit
+	if key_btn == null or val_le == null:
+		return
+	var key := key_btn.get_item_text(idx)
+	if key == "---":
+		val_le.text = ""
+		val_le.editable = false
+	else:
+		val_le.editable = true
+		if val_le.text.is_empty():
+			val_le.text = "0"
+	_enemy_list_dirty = _enemy_list_has_any_diff()
+
+
+## stat_bonus の値（LineEdit）変更
+func _on_enemy_bonus_val_changed(new_text: String, eid: String, slot_idx: int) -> void:
+	var wk := "%s|bonus_%d_val" % [eid, slot_idx]
+	var sb := _enemy_cell_styles.get(wk) as StyleBoxFlat
+	if sb != null:
+		# bonus 値のハイライトは「本来の stat_bonus 辞書と一致するか」で判定するのが理想だが
+		# 実装簡略化のため、新テキストが空でなく変更されているかで判定
+		# （dirty 判定は _enemy_list_has_any_diff で厳密に行う）
+		var changed := new_text != "0" and not new_text.is_empty()
+		sb.bg_color = HIGHLIGHT_BG_COLOR if changed else Color(0.12, 0.12, 0.16)
+	_enemy_list_dirty = _enemy_list_has_any_diff()
+
+
+# ----------------------------------------------------------------------------
+# 敵一覧タブの Dirty 判定
+# ----------------------------------------------------------------------------
+
+## 個別敵 JSON の元テキスト値（LineEdit 用に文字列化）
+func _enemy_indiv_orig_text(eid: String, field: String) -> String:
+	var indiv: Dictionary = (_enemy_indiv_data.get(eid, {}) as Dictionary)
+	if field == "behavior_description":
+		return str(indiv.get(field, ""))
+	if field == "chase_range":
+		return _stringify_class_value(indiv.get(field, 10))
+	if field == "territory_range":
+		return _stringify_class_value(indiv.get(field, 50))
+	return str(indiv.get(field, ""))
+
+
+## 指定敵の個別 JSON に差分があるか判定
+func _enemy_indiv_has_any_diff(eid: String) -> bool:
+	var indiv: Dictionary = (_enemy_indiv_data.get(eid, {}) as Dictionary)
+	# bool 3 つ
+	for f: String in ["is_undead", "is_flying", "instant_death_immune"]:
+		var cb := _enemy_row_widgets.get("%s|%s" % [eid, f]) as CheckBox
+		if cb == null:
+			continue
+		if cb.button_pressed != bool(indiv.get(f, false)):
+			return true
+	# 文字列 / 数値
+	for f: String in ["behavior_description", "chase_range", "territory_range"]:
+		var le := _enemy_row_widgets.get("%s|%s" % [eid, f]) as LineEdit
+		if le == null:
+			continue
+		if le.text != _enemy_indiv_orig_text(eid, f):
+			return true
+	return false
+
+
+## enemy_list.json に差分があるか判定（全敵を対象に rank / stat_type / stat_bonus を比較）
+func _enemy_list_has_any_diff() -> bool:
+	for eid: String in ENEMY_IDS:
+		var orig_entry: Dictionary = (_enemy_list_data.get(eid, {}) as Dictionary)
+		var rank_btn := _enemy_row_widgets.get("%s|rank" % eid) as OptionButton
+		if rank_btn != null:
+			var cur_rank := rank_btn.get_item_text(rank_btn.selected)
+			if cur_rank != str(orig_entry.get("rank", "C")):
+				return true
+		var stat_btn := _enemy_row_widgets.get("%s|stat_type" % eid) as OptionButton
+		if stat_btn != null:
+			var cur_type := stat_btn.get_item_text(stat_btn.selected)
+			if cur_type != str(orig_entry.get("stat_type", "")):
+				return true
+		# stat_bonus：現在の 6 枠から Dictionary を再構築して元と比較
+		var cur_bonus := _build_bonus_dict_from_slots(eid)
+		var orig_bonus: Dictionary = (orig_entry.get("stat_bonus", {}) as Dictionary)
+		if cur_bonus != orig_bonus:
+			return true
+	return false
+
+
+## 6 枠の UI 値から stat_bonus Dictionary を構築
+## "---" スロットは無視。int 変換失敗スロットも無視（スキップ）
+## 同じキーが複数枠にある場合は後ろ勝ち（UI 仕様として受け入れる）
+func _build_bonus_dict_from_slots(eid: String) -> Dictionary:
+	var out: Dictionary = {}
+	for i: int in range(ENEMY_STAT_BONUS_SLOTS):
+		var key_btn := _enemy_row_widgets.get("%s|bonus_%d_key" % [eid, i]) as OptionButton
+		var val_le  := _enemy_row_widgets.get("%s|bonus_%d_val" % [eid, i]) as LineEdit
+		if key_btn == null or val_le == null:
+			continue
+		var key := key_btn.get_item_text(key_btn.selected)
+		if key == "---":
+			continue
+		if not val_le.text.is_valid_int():
+			continue
+		out[key] = val_le.text.to_int()
+	return out
+
+
+# ----------------------------------------------------------------------------
+# 敵一覧タブの保存
+# ----------------------------------------------------------------------------
+
+## 敵一覧タブの保存：enemy_list.json + dirty な個別敵 JSON
+func _save_enemy_list_tab() -> Dictionary:
+	var result := {"saved": [], "errors": []}
+	# 1. enemy_list.json（dirty の場合のみ）
+	if _enemy_list_dirty:
+		var new_list := _apply_enemy_list_edits()
+		if new_list == null:
+			(result["errors"] as Array).append("enemy_list.json: 型変換失敗")
+		else:
+			var f := FileAccess.open(ENEMY_LIST_PATH, FileAccess.WRITE)
+			if f == null:
+				(result["errors"] as Array).append(
+					"enemy_list.json: 書き込み失敗 err=%d" % FileAccess.get_open_error())
+			else:
+				f.store_string(JSON.stringify(new_list, "  ", false))
+				f.close()
+				_enemy_list_data = new_list as Dictionary
+				_enemy_list_dirty = false
+				(result["saved"] as Array).append("enemy_list.json")
+	# 2. 個別敵 JSON（dirty のみ）
+	for eid: String in ENEMY_IDS:
+		if not _enemy_indiv_dirty.get(eid, false):
+			continue
+		var new_indiv := _apply_enemy_indiv_edits(eid)
+		if new_indiv == null:
+			(result["errors"] as Array).append("%s: 型変換失敗" % _enemy_id_to_filename(eid))
+			continue
+		var path := ENEMY_DIR + _enemy_id_to_filename(eid)
+		var f := FileAccess.open(path, FileAccess.WRITE)
+		if f == null:
+			(result["errors"] as Array).append(
+				"%s: 書き込み失敗 err=%d" % [_enemy_id_to_filename(eid), FileAccess.get_open_error()])
+			continue
+		f.store_string(JSON.stringify(new_indiv, "  ", false))
+		f.close()
+		_enemy_indiv_data[eid] = new_indiv as Dictionary
+		_enemy_indiv_dirty[eid] = false
+		(result["saved"] as Array).append(_enemy_id_to_filename(eid))
+	# ハイライト解除（保存成功分）
+	_clear_enemy_cell_highlights()
+	return result
+
+
+## LineEdit セル群のハイライトを全解除
+func _clear_enemy_cell_highlights() -> void:
+	for raw_key: Variant in _enemy_cell_styles.keys():
+		var sb := _enemy_cell_styles[raw_key] as StyleBoxFlat
+		if sb != null:
+			sb.bg_color = Color(0.12, 0.12, 0.16)
+
+
+## enemy_list.json の現在の UI 状態を反映した新 Dictionary を返す
+## 元 JSON のキー順（16 敵の順序）を保持するため、元を duplicate してから上書き
+func _apply_enemy_list_edits() -> Variant:
+	var out := _enemy_list_data.duplicate(true) as Dictionary
+	for eid: String in ENEMY_IDS:
+		if not out.has(eid):
+			continue
+		var entry := out[eid] as Dictionary
+		# rank
+		var rank_btn := _enemy_row_widgets.get("%s|rank" % eid) as OptionButton
+		if rank_btn != null:
+			entry["rank"] = rank_btn.get_item_text(rank_btn.selected)
+		# stat_type
+		var stat_btn := _enemy_row_widgets.get("%s|stat_type" % eid) as OptionButton
+		if stat_btn != null:
+			entry["stat_type"] = stat_btn.get_item_text(stat_btn.selected)
+		# stat_bonus
+		entry["stat_bonus"] = _build_bonus_dict_from_slots(eid)
+	return out
+
+
+## 個別敵 JSON の現在の UI 状態を反映した新 Dictionary を返す
+## 元 JSON（legacy を含む）を duplicate し、編集対象 6 フィールドのみ
+## 「元値と違うときだけ」上書きする。元にフィールドが無かった場合は
+## 値がデフォルトから変更された時だけ追加する。
+func _apply_enemy_indiv_edits(eid: String) -> Variant:
+	var orig: Dictionary = (_enemy_indiv_data.get(eid, {}) as Dictionary)
+	var out := orig.duplicate(true) as Dictionary
+	# bool 3 フィールド
+	for f: String in ["is_undead", "is_flying", "instant_death_immune"]:
+		var cb := _enemy_row_widgets.get("%s|%s" % [eid, f]) as CheckBox
+		if cb == null:
+			continue
+		var orig_had := orig.has(f)
+		var orig_val: bool = bool(orig.get(f, false))
+		var cur_val: bool = cb.button_pressed
+		if cur_val == orig_val and orig_had:
+			continue  # 変化なし・元にあった → そのまま
+		if cur_val == false and not orig_had:
+			continue  # デフォルト値で元にも無かった → 追加しない
+		out[f] = cur_val
+	# 文字列
+	var beh_le := _enemy_row_widgets.get("%s|behavior_description" % eid) as LineEdit
+	if beh_le != null:
+		var orig_beh := str(orig.get("behavior_description", ""))
+		if beh_le.text != orig_beh:
+			out["behavior_description"] = beh_le.text
+		elif not orig.has("behavior_description") and beh_le.text.is_empty():
+			pass  # デフォルトかつ元に無かった → 追加しない
+	# int 2 フィールド
+	for f: String in ["chase_range", "territory_range"]:
+		var le := _enemy_row_widgets.get("%s|%s" % [eid, f]) as LineEdit
+		if le == null:
+			continue
+		if not le.text.is_valid_int():
+			push_warning("[ConfigEditor] %s.%s int 変換失敗: '%s'" % [eid, f, le.text])
+			return null
+		var cur: int = le.text.to_int()
+		var orig_had := orig.has(f)
+		if orig_had:
+			out[f] = cur
+		elif cur != 0:
+			out[f] = cur
+	return out
 
 
 ## 「ステータス」トップタブ：クラスステータス・属性補正のサブタブ
@@ -1620,8 +2160,8 @@ func _current_top_tab_name() -> String:
 
 ## 上段タブが切り替わったときに下部ボタンの有効/無効を更新する
 ## - 定数タブ：保存 / リセット / デフォルト化がすべて有効
-## - 味方クラス・敵クラス・ステータス：保存のみ有効（デフォルト値を保持しない方針）
-## - それ以外（敵一覧/アイテム）：プレースホルダー段階なのですべて無効
+## - 味方クラス・敵クラス・敵一覧・ステータス：保存のみ有効（デフォルト値を保持しない方針）
+## - アイテム：プレースホルダー段階なのですべて無効
 func _on_top_tab_changed(_idx: int) -> void:
 	if _btn_save == null:
 		return
@@ -1629,8 +2169,9 @@ func _on_top_tab_changed(_idx: int) -> void:
 	var is_constants := top == TOP_TAB_CONSTANTS
 	var is_ally := top == TOP_TAB_ALLY_CLASS
 	var is_enemy_class := top == TOP_TAB_ENEMY_CLASS
+	var is_enemy_list := top == TOP_TAB_ENEMY_LIST
 	var is_stats := top == TOP_TAB_STATS
-	_btn_save.disabled = not (is_constants or is_ally or is_enemy_class or is_stats)
+	_btn_save.disabled = not (is_constants or is_ally or is_enemy_class or is_enemy_list or is_stats)
 	_btn_reset.disabled = not is_constants
 	_btn_commit.disabled = not is_constants
 
@@ -1658,6 +2199,17 @@ func _on_save_pressed() -> void:
 				_set_status("エラー: %s" % " / ".join(errors), Color(1.0, 0.5, 0.5))
 		TOP_TAB_STATS:
 			var result := _save_stats_files()
+			var saved: Array = result.get("saved", [])
+			var errors: Array = result.get("errors", [])
+			if errors.is_empty():
+				if saved.is_empty():
+					_set_status("変更なし（保存対象の差分がありません）", Color(0.8, 0.8, 0.6))
+				else:
+					_set_status("保存しました: %s" % ", ".join(saved), Color(0.55, 1.0, 0.55))
+			else:
+				_set_status("エラー: %s" % " / ".join(errors), Color(1.0, 0.5, 0.5))
+		TOP_TAB_ENEMY_LIST:
+			var result := _save_enemy_list_tab()
 			var saved: Array = result.get("saved", [])
 			var errors: Array = result.get("errors", [])
 			if errors.is_empty():
