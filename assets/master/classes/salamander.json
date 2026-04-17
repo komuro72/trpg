@@ -1,0 +1,22 @@
+{
+  "id": "salamander",
+  "name": "サラマンダー",
+  "weapon_type": "flame",
+  "base_defense": 2,
+  "attack_type": "magic",
+  "attack_range": 4,
+  "is_flying": false,
+  "behavior_description": "炎を吐く大型トカゲ。遠距離から火炎を放つ。",
+  "slots": {
+    "Z": {
+      "name": "火炎",
+      "action": "ranged",
+      "type": "magic",
+      "range": 4,
+      "damage_mult": 1.0,
+      "pre_delay": 0.50,
+      "post_delay": 0.70
+    },
+    "V": null
+  }
+}

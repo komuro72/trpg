@@ -961,3 +961,45 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
 - 下部ボタンを上段タブに応じて有効/無効切替：定数タブは全ボタン有効・味方クラスタブは保存のみ・その他はすべて無効
 - **重要**：Godot 4 の `JSON.stringify` デフォルトは `sort_keys=true`（キーをアルファベット順にソート）。クラス JSON のキー順を保持するため `sort_keys=false` を明示指定。同じ理由で `GlobalConstants.save_constants()` / `commit_as_defaults()` にも `false` を追加
 - 「すべてデフォルトに戻す」「現在値をすべてデフォルト化」は味方クラスタブでは無効化（デフォルト値を保持しない方針・復帰は git 履歴で管理）
+
+## 敵データの構造整理（2026-04-17）
+
+### 背景
+将来の Config Editor「敵クラス」タブ実装に向けた下準備。
+- 旧実装では個別敵 JSON（`goblin.json` 等）に `attack_type` / `pre_delay` / `post_delay` / `attack_range` などの「クラスで決まる項目」が書かれており、同じ fighter-axe クラスを使うゴブリンとホブゴブリンで異なる値を持てる状態だった
+- 人間クラス JSON（`classes/fighter-sword.json` 等）はこれらをクラス単位で定義しており、敵側と対称性がない
+- 敵固有 5 クラス（zombie / wolf / salamander / harpy / dark-lord）のクラス JSON が存在しない
+
+### 変更方針
+人間クラスと敵クラスの構造を対称に揃える：
+- 敵固有 5 クラスのクラス JSON を `assets/master/classes/` に新規作成
+- 個別敵 JSON からクラス項目を除去
+- `CharacterGenerator.apply_enemy_stats()` でクラス JSON を読んで `CharacterData` に注入
+
+### 新規作成（5 クラス JSON）
+- `classes/zombie.json` / `wolf.json` / `salamander.json` / `harpy.json` / `dark-lord.json`
+- 構造は人間クラスと同じ（`id` / `name` / `weapon_type` / `base_defense` / `attack_type` / `attack_range` / `is_flying` / `behavior_description` / `slots.Z` / `slots.V`）
+- slots.V は全て null（敵固有クラスは特殊攻撃スロットを持たない。dark-lord のワープ・炎陣は `dark_lord_unit_ai.gd` 側の AI 実装）
+
+### 個別敵 JSON から除去（16 ファイル）
+- 全敵：`attack_type` / `attack_range` / `pre_delay` / `post_delay`
+- dark-priest のみ：`heal_mp_cost` / `buff_mp_cost`（healer クラス経由で自動適用）
+- `projectile_type`（demon のみ）は個別 JSON に残す（共用の magician-fire クラスでは指定できない個体値）
+
+### `healer.json` の正規化
+- top-level の `heal_mp_cost` / `buff_mp_cost` を削除
+- `slots.Z.mp_cost`（action="heal"）と `slots.V.mp_cost`（action="buff_defense"）を唯一の真実源に
+- `CharacterGenerator._build_data` と `apply_enemy_stats` で slot action を見て `heal_mp_cost` / `buff_mp_cost` を設定
+
+### `CharacterGenerator` の変更
+- `_build_data`（味方）：top-level `heal_mp_cost` / `buff_mp_cost` の読み込みを削除し、slots.Z.mp_cost / slots.V.mp_cost から action 条件付きで取得する方式に
+- `apply_enemy_stats`（敵）：既存の stats 計算後に `_load_class_json(stat_type)` を呼び、`attack_type` / `attack_range` / `slots.Z/V` 由来値（pre_delay / post_delay / mp_cost）を `CharacterData` に注入
+
+### 副次的な挙動変更
+- **dark-priest の攻撃**：旧 `attack_type="magic"` → クラス healer 経由で `attack_type="heal"` に。純粋ヒーラー化し、非アンデッド対象には攻撃しなくなる（`_execute_attack` の `atype=="heal"` 分岐でアンデッド以外は早期 return）
+- **敵の攻撃クールダウン**：同一クラスを流用する敵は同一の Z スロット pre/post_delay 値を使うようになる。goblin と hobgoblin は両者ともに fighter-axe の 0.20 / 0.45 に統一
+
+### 確認済み
+- Godot `--check-only` / `--quit` とも EXIT: 0
+- すべての敵 JSON から対象 4 フィールド（attack_type / attack_range / pre_delay / post_delay）の削除完了（grep で 0 件）
+- healer.json / dark-priest.json から heal_mp_cost / buff_mp_cost の削除完了（grep で 0 件）

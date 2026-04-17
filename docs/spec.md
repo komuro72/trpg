@@ -4870,3 +4870,77 @@ CONDITION_COLOR_TEXT_CRITICAL = Color(1.00, 0.35, 0.35)
 - Config Editor からは**新ステータスの追加は不可**（既存ステータスの値編集のみ）
 - 新ステータスを追加する場合は、JSON ファイルと `CharacterData` / `CharacterGenerator` などのコードを直接編集する別タスクとして実施
 - 「すべてデフォルトに戻す」「現在値をすべてデフォルト化」はステータスタブでは無効化（デフォルト値を保持しない方針・復帰は git 履歴で管理）
+
+---
+
+## 敵データの構造整理（Phase B 下準備・2026-04-17）
+
+### 目的
+「クラスで決まる項目」（攻撃タイプ・攻撃間隔・スロット定義等）を個別敵 JSON から集約し、人間クラスと対称な構造に統一する。Config Editor「敵クラス」タブ実装の前準備。
+
+### ファイル追加（`assets/master/classes/`）
+敵固有 5 クラスのクラス JSON を新規作成：
+- `zombie.json` — 近接・つかみ（melee / pre 0.70 / post 0.80）
+- `wolf.json` — 高速近接・かみつき（melee / pre 0.30 / post 0.40）
+- `salamander.json` — 遠距離炎（magic / range 4 / pre 0.50 / post 0.70）
+- `harpy.json` — 飛行降下攻撃（dive / is_flying=true / pre 0.40 / post 0.60）
+- `dark-lord.json` — 近接斬撃（melee / pre 0.60 / post 0.90）。ワープ・炎陣は AI 側実装
+
+構造は人間クラス JSON と同じ（`id` / `name` / `weapon_type` / `base_defense` / `attack_type` / `attack_range` / `is_flying` / `behavior_description` / `slots.Z` / `slots.V`）。敵固有クラスの slots.V は null（特殊攻撃なし）。
+
+### ファイル名の表記ルール
+- **クラス JSON**：ハイフン区切り（`fighter-sword.json` / `dark-lord.json`）
+- **個別敵 JSON**：アンダースコア区切り（`dark_lord.json` / `fighter_axe` の命名は無し）
+- これは既存の命名に合わせた差異。今回は揃えない
+
+### 個別敵 JSON から除去したフィールド（16 ファイル）
+すべて：
+- `attack_type` / `attack_range`
+- `pre_delay` / `post_delay`
+
+dark-priest のみ（`heal` / `buff` は healer クラス経由で自動適用されるため）：
+- `heal_mp_cost` / `buff_mp_cost`
+
+demon の `projectile_type` は個別敵 JSON に残す（`magician-fire` 共用クラスでは指定できない個体特有の値）。
+
+### 個別敵 JSON に残す項目
+- `id` / `name`（個体名。ゴブリン vs ホブゴブリンのように同クラスでも個体名は異なる）
+- `is_undead` / `is_flying` / `instant_death_immune`（個体フラグ）
+- `chase_range` / `territory_range`（個体の行動範囲）
+- `behavior_description`（**個体固有の特徴説明**。「臆病で逃げる」「狂暴」等の個性）
+- `projectile_type`（demon のみ）
+- `sprites`
+- `hp` / `power` / `skill` / `mp` 等（legacy。`apply_enemy_stats()` で上書き）
+- `rank`（legacy。enemy_list.json で上書き）
+
+### `healer.json` の正規化
+- 削除：top-level `heal_mp_cost` / `buff_mp_cost`
+- 保持：`slots.Z.mp_cost`（heal コスト = 5）/ `slots.V.mp_cost`（buff コスト = 8）
+- `CharacterGenerator._build_data` で action="heal" の slots.Z から `heal_mp_cost` を、action="buff_defense" の slots.V から `buff_mp_cost` を読む
+
+### `CharacterGenerator.apply_enemy_stats()` の拡張
+既存のステータス上書き処理に加えて、`_load_class_json(stat_type)` でクラス JSON を読み、以下を CharacterData に注入：
+- `attack_type` / `attack_range`
+- `class_id`（stat_type と同じ）
+- `slots.Z` から `z_pre_delay` / `z_post_delay` / `heal_mp_cost`（action="heal" のとき）
+- `slots.V` から `v_pre_delay` / `v_post_delay` / `v_slot_mp_cost` / `v_slot_sp_cost` / `buff_mp_cost`（action="buff_defense" のとき）
+
+クラス JSON が見つからない場合は CharacterData の既定値（attack_type="melee" 等）のまま続行。
+
+### 副次的な挙動変更
+- **dark-priest の攻撃**：旧実装では `attack_type="magic"`（個別 JSON）だったが、`stat_type="healer"` → クラス `attack_type="heal"` に統一。結果、dark-priest は「回復・バフ専用」の純粋なヒーラーとなり、非アンデッド（プレイヤー）には攻撃を仕掛けなくなる
+- **敵の攻撃クールダウン**：敵は全て同一クラスの Z スロット値を使うようになり、個別調整値は失われる。人間クラス流用敵（例：goblin は fighter-axe）は「前回調整した Z スロット値（0.20 / 0.45）」に統一される
+
+### 参照フロー
+```
+PartyManager → CharacterData.load_from_json(enemy_path)  // 個体固有項目のみ
+            → CharacterGenerator.apply_enemy_graphics(data)
+            → CharacterGenerator.apply_enemy_stats(data)
+                  ↓
+                  _load_stat_configs() で class_stats + enemy_class_stats をマージ
+                  _load_enemy_list() で stat_type を取得
+                  _calc_stats(stat_type, rank, sex, age, build) でステータス算出
+                  stat_bonus 加算
+                  _load_class_json(stat_type) でクラス JSON ロード
+                  → attack_type / attack_range / slots.Z/V 由来値を CharacterData に上書き
+```

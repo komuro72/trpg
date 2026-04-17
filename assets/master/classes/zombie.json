@@ -1,0 +1,22 @@
+{
+  "id": "zombie",
+  "name": "ゾンビ",
+  "weapon_type": "claw",
+  "base_defense": 2,
+  "attack_type": "melee",
+  "attack_range": 1,
+  "is_flying": false,
+  "behavior_description": "死者の成れ果て。低速だが止まらない近接攻撃。",
+  "slots": {
+    "Z": {
+      "name": "つかみ",
+      "action": "melee",
+      "type": "physical",
+      "range": 1,
+      "damage_mult": 1.0,
+      "pre_delay": 0.70,
+      "post_delay": 0.80
+    },
+    "V": null
+  }
+}

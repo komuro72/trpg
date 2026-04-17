@@ -124,15 +124,17 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	data.behavior_description = str(class_json.get("behavior_description", ""))
 	data.attack_type        = str(class_json.get("attack_type",  "melee"))
 	data.attack_range       = int(class_json.get("attack_range", 1))
-	data.heal_mp_cost       = int(class_json.get("heal_mp_cost",  0))
-	data.buff_mp_cost       = int(class_json.get("buff_mp_cost",  0))
-	# スロット Z / V の pre_delay / post_delay と V スロット特殊攻撃のコストを読み取る
-	# 味方クラスは slots から読む。敵は別経路（CharacterData.load_from_json）のため影響なし
+	# スロット Z / V の pre_delay / post_delay / コストを読み取る
+	# ヒーラーの heal_mp_cost / buff_mp_cost は slots.Z.mp_cost / slots.V.mp_cost から算出
+	# （action="heal"/"buff_defense" のスロットのみ）
 	var slots: Dictionary = class_json.get("slots", {}) as Dictionary
 	var z_data: Variant = slots.get("Z")
 	if z_data != null and z_data is Dictionary:
-		data.z_pre_delay  = float((z_data as Dictionary).get("pre_delay",  0.0))
-		data.z_post_delay = float((z_data as Dictionary).get("post_delay", 0.0))
+		var z_dict := z_data as Dictionary
+		data.z_pre_delay  = float(z_dict.get("pre_delay",  0.0))
+		data.z_post_delay = float(z_dict.get("post_delay", 0.0))
+		if str(z_dict.get("action", "")) == "heal":
+			data.heal_mp_cost = int(z_dict.get("mp_cost", 0))
 	var v_data: Variant = slots.get("V")
 	if v_data != null and v_data is Dictionary:
 		var v_dict := v_data as Dictionary
@@ -140,6 +142,8 @@ static func generate_character(class_id: String = "") -> CharacterData:
 		data.v_slot_sp_cost = int(v_dict.get("sp_cost", 0))
 		data.v_pre_delay    = float(v_dict.get("pre_delay",  0.0))
 		data.v_post_delay   = float(v_dict.get("post_delay", 0.0))
+		if str(v_dict.get("action", "")) == "buff_defense":
+			data.buff_mp_cost = int(v_dict.get("mp_cost", 0))
 
 	var folder: String = GRAPHIC_SET_DIR + str(chosen_set.get("folder", ""))
 	data.image_set         = folder
@@ -259,6 +263,35 @@ static func apply_enemy_stats(data: CharacterData) -> void:
 	data.block_front         = mini(100, stats.get("block_front",       0) as int)
 	if stats.has("move_speed"):
 		data.move_speed = _convert_move_speed(stats.move_speed)
+
+	# クラス JSON（assets/master/classes/{stat_type}.json）を読み込んで
+	# attack_type / attack_range / slots.Z/V 由来の pre/post_delay 等を上書きする。
+	# 敵の個別 JSON からこれらは除去されているため、クラス経由で注入する。
+	# 個体固有項目（is_flying / is_undead / instant_death_immune / chase_range /
+	# territory_range / behavior_description / projectile_type / sprites）は
+	# 個別 JSON が source of truth。ここでは上書きしない。
+	var class_json := _load_class_json(stat_type)
+	if not class_json.is_empty():
+		data.attack_type  = str(class_json.get("attack_type",  data.attack_type))
+		data.attack_range = int(class_json.get("attack_range", data.attack_range))
+		data.class_id     = stat_type
+		var slots: Dictionary = class_json.get("slots", {}) as Dictionary
+		var z_data: Variant = slots.get("Z")
+		if z_data != null and z_data is Dictionary:
+			var z_dict := z_data as Dictionary
+			data.z_pre_delay  = float(z_dict.get("pre_delay",  0.0))
+			data.z_post_delay = float(z_dict.get("post_delay", 0.0))
+			if str(z_dict.get("action", "")) == "heal":
+				data.heal_mp_cost = int(z_dict.get("mp_cost", 0))
+		var v_data: Variant = slots.get("V")
+		if v_data != null and v_data is Dictionary:
+			var v_dict := v_data as Dictionary
+			data.v_pre_delay    = float(v_dict.get("pre_delay",  0.0))
+			data.v_post_delay   = float(v_dict.get("post_delay", 0.0))
+			data.v_slot_mp_cost = int(v_dict.get("mp_cost", 0))
+			data.v_slot_sp_cost = int(v_dict.get("sp_cost", 0))
+			if str(v_dict.get("action", "")) == "buff_defense":
+				data.buff_mp_cost = int(v_dict.get("mp_cost", 0))
 
 
 ## assets/images/characters/ を走査して利用可能なグラフィックセット情報を返す

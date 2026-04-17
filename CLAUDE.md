@@ -94,8 +94,19 @@ assets/images/tiles/
 
 ## ファイル構成
 - assets/master/characters/：味方キャラクターのマスターデータ（JSON）
-- assets/master/enemies/：敵キャラクターのマスターデータ（JSON、種類ごとにファイルを分ける）
-- assets/master/enemies/enemies_list.json：読み込む敵ファイルのリスト
+- **assets/master/classes/**：クラスのマスターデータ（JSON）
+  - 人間系 7 クラス：`fighter-sword.json` / `fighter-axe.json` / `archer.json` / `magician-fire.json` / `magician-water.json` / `healer.json` / `scout.json`
+  - 敵固有 5 クラス：`zombie.json` / `wolf.json` / `salamander.json` / `harpy.json` / `dark-lord.json`
+  - クラス JSON には `attack_type` / `attack_range` / `is_flying` / `slots.Z` / `slots.V`（pre_delay・post_delay・damage_mult・mp_cost 等）などの「クラスで決まる項目」を集約する
+- assets/master/enemies/：敵個体ごとのマスターデータ（JSON、16 種）
+  - **個体固有項目のみ**: `id` / `name` / `is_undead` / `is_flying` / `instant_death_immune` / `chase_range` / `territory_range` / `behavior_description` / `projectile_type` / `sprites`
+  - クラス項目（`attack_type` / `pre_delay` / `post_delay` 等）は個別 JSON には持たない。クラス JSON から起動時に注入する
+  - `hp` / `power` / `skill` 等の直書きステータスは legacy（`apply_enemy_stats()` で上書きされる）
+- assets/master/enemies/enemies_list.json：読み込む敵ファイルのパス一覧
+- assets/master/stats/class_stats.json：人間クラスのステータス定義
+- assets/master/stats/enemy_class_stats.json：敵固有クラスのステータス定義
+- assets/master/stats/attribute_stats.json：性別・年齢・体格の補正値・random_max
+- assets/master/stats/enemy_list.json：敵 ID → `{stat_type, rank, stat_bonus}` のマッピング
 - assets/master/maps/：マップデータ（JSON、マップごとにファイルを分ける）
 - assets/master/names.json：名前ストック（性別ごと）
 - assets/images/characters/：味方キャラクターの画像（{class}_{sex}_{age}_{build}_{id}/ フォルダ構成）
@@ -651,6 +662,7 @@ rank値: C=0, B=1, A=2, S=3
 - [x] Config Editor（開発用定数エディタ）を実装。F4 でタイトル画面・ゲーム中ともトグル起動。5定数（Phase A）を外部 JSON（`assets/master/config/constants.json` / `constants_default.json`）化し、7 + Unknown タブでカテゴリ分け表示・保存・デフォルト復帰・デフォルト化に対応
 - [x] Config Editor にトップレベルタブ構造（定数/味方クラス/敵/ステータス/アイテム）を導入し、「味方クラス」タブで 7 クラス JSON を横断表で編集できるよう実装（`slots.Z/V` 平坦化・LineEdit セル・元値型に合わせた書き戻し・キー順保持）
 - [x] Config Editor「ステータス」タブを実装。`class_stats.json`（クラス × ステータス × base/rank の 2 LineEdit セル）と `attribute_stats.json`（属性補正表 + random_max 表）を直接編集可能
+- [x] 敵データの構造整理：敵固有 5 クラス（zombie / wolf / salamander / harpy / dark-lord）の JSON を `assets/master/classes/` に新規作成。個別敵 JSON 16 ファイルから `attack_type` / `attack_range` / `pre_delay` / `post_delay` / `heal_mp_cost` / `buff_mp_cost` を除去し、クラス経由で注入する仕組みに統一。`healer.json` の top-level `heal_mp_cost` / `buff_mp_cost` も削除し、`slots.Z.mp_cost` / `slots.V.mp_cost` を正規化
 - [ ] Phase 14: Steam配布準備
 
 ## 装備システム
@@ -1003,6 +1015,11 @@ rank値: C=0, B=1, A=2, S=3
 - 降下攻撃（dive）：飛行キャラが地上の隣接対象のみ攻撃可。攻撃中も飛行扱いを維持
 
 ### 敵キャラクター一覧
+- **クラスと個体の区別**：各敵は `enemy_list.json` の `stat_type` で「敵クラス」を参照する。「攻撃タイプ」や「攻撃間隔」はクラス側（`assets/master/classes/*.json`）で決まる
+- 人間系クラス（fighter-sword / fighter-axe / archer / magician-fire / healer）は味方と共通の定義を流用。敵固有クラスは `zombie` / `wolf` / `salamander` / `harpy` / `dark-lord` の 5 種類
+- **`behavior_description` は個体側の属性**：同じクラスでも個体ごとに異なる個性（例：ゴブリンの「臆病」、ホブゴブリンの「狂暴」）を表現する
+- `is_flying` / `is_undead` / `instant_death_immune` / `chase_range` / `territory_range` / `projectile_type` も個体側
+
 | 敵 | 攻撃タイプ | 特徴 |
 |----|-----------|------|
 | ゴブリン | 近接 | 集団行動。臆病で強い相手からすぐ逃げる |

@@ -4,8 +4,6 @@
   "weapon_type": "staff",
   "base_defense": 4,
   "mp": 80,
-  "heal_mp_cost": 5,
-  "buff_mp_cost": 8,
   "attack_type": "heal",
   "attack_range": 4,
   "is_flying": false,

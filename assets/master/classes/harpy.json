@@ -1,0 +1,22 @@
+{
+  "id": "harpy",
+  "name": "ハーピー",
+  "weapon_type": "talon",
+  "base_defense": 1,
+  "attack_type": "dive",
+  "attack_range": 1,
+  "is_flying": true,
+  "behavior_description": "飛行して障害物を無視し、地上の敵に降下攻撃を仕掛ける。",
+  "slots": {
+    "Z": {
+      "name": "降下攻撃",
+      "action": "dive",
+      "type": "physical",
+      "range": 1,
+      "damage_mult": 1.0,
+      "pre_delay": 0.40,
+      "post_delay": 0.60
+    },
+    "V": null
+  }
+}

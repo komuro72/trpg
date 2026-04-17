@@ -1,0 +1,22 @@
+{
+  "id": "wolf",
+  "name": "ウルフ",
+  "weapon_type": "fang",
+  "base_defense": 2,
+  "attack_type": "melee",
+  "attack_range": 1,
+  "is_flying": false,
+  "behavior_description": "群れで行動し高速移動で奇襲する獰猛な獣。",
+  "slots": {
+    "Z": {
+      "name": "かみつき",
+      "action": "melee",
+      "type": "physical",
+      "range": 1,
+      "damage_mult": 1.0,
+      "pre_delay": 0.30,
+      "post_delay": 0.40
+    },
+    "V": null
+  }
+}
