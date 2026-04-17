@@ -1013,15 +1013,26 @@ func _make_option_button(choices: Array[String], current_text: String, width: in
 
 
 func _add_enemy_checkbox(parent: HBoxContainer, eid: String, field: String, value: bool) -> void:
-	var wrapper := Control.new()
+	# PanelContainer でラップして StyleBoxFlat を持たせる（LineEdit 同様に
+	# 値変更時に bg_color を薄黄色に切り替えてハイライトするため）
+	var wrapper := PanelContainer.new()
 	wrapper.custom_minimum_size = Vector2(ENEMY_CHECK_COL_W, 0)
+	var sb := _make_cell_style()
+	wrapper.add_theme_stylebox_override("panel", sb)
 	parent.add_child(wrapper)
+
+	# CenterContainer で中央寄せ（旧実装の手動オフセットを廃止）
+	var center := CenterContainer.new()
+	wrapper.add_child(center)
+
 	var cb := CheckBox.new()
 	cb.button_pressed = value
-	cb.position = Vector2(ENEMY_CHECK_COL_W * 0.5 - 10, 2)
-	wrapper.add_child(cb)
+	center.add_child(cb)
 	cb.toggled.connect(_on_enemy_indiv_field_changed.bind(eid, field))
-	_enemy_row_widgets["%s|%s" % [eid, field]] = cb
+
+	var wk := "%s|%s" % [eid, field]
+	_enemy_row_widgets[wk] = cb
+	_enemy_cell_styles[wk] = sb
 
 
 func _add_enemy_lineedit(parent: HBoxContainer, eid: String, field: String,
@@ -1074,12 +1085,21 @@ func _add_enemy_bonus_slot(parent: HBoxContainer, eid: String, slot_idx: int,
 ## enemy_list.json 系の変更（rank / stat_type）。エンジン Dirty 立てて再評価
 func _on_enemy_list_field_changed(_idx: int, eid: String, field: String) -> void:
 	_enemy_list_dirty = _enemy_list_has_any_diff()
+	_update_enemy_list_tab_indicator()
 	# 視覚フィードバックは OptionButton には付けない（選択されたものが見えるため）
 
 
 ## 個別敵 JSON 系の bool 値変更（3 つのチェックボックス）
-func _on_enemy_indiv_field_changed(_pressed: bool, eid: String, field: String) -> void:
+func _on_enemy_indiv_field_changed(pressed: bool, eid: String, field: String) -> void:
+	var wk := "%s|%s" % [eid, field]
+	var sb := _enemy_cell_styles.get(wk) as StyleBoxFlat
+	if sb != null:
+		var indiv: Dictionary = (_enemy_indiv_data.get(eid, {}) as Dictionary)
+		var orig_val: bool = bool(indiv.get(field, false))
+		sb.bg_color = HIGHLIGHT_BG_COLOR if pressed != orig_val else Color(0.12, 0.12, 0.16)
 	_enemy_indiv_dirty[eid] = _enemy_indiv_has_any_diff(eid)
+	# タブインジケータ（タブ名末尾 ●）を再評価
+	_update_enemy_list_tab_indicator()
 
 
 ## 個別敵 JSON 系の LineEdit 変更（behavior_description / chase_range / territory_range）
@@ -1090,6 +1110,7 @@ func _on_enemy_indiv_field_text_changed(new_text: String, eid: String, field: St
 		var orig := _enemy_indiv_orig_text(eid, field)
 		sb.bg_color = HIGHLIGHT_BG_COLOR if new_text != orig else Color(0.12, 0.12, 0.16)
 	_enemy_indiv_dirty[eid] = _enemy_indiv_has_any_diff(eid)
+	_update_enemy_list_tab_indicator()
 
 
 ## stat_bonus のキー（OptionButton）変更：LineEdit の編集可否を切替、enemy_list 再評価
@@ -1107,6 +1128,7 @@ func _on_enemy_bonus_slot_changed(idx: int, eid: String, slot_idx: int) -> void:
 		if val_le.text.is_empty():
 			val_le.text = "0"
 	_enemy_list_dirty = _enemy_list_has_any_diff()
+	_update_enemy_list_tab_indicator()
 
 
 ## stat_bonus の値（LineEdit）変更
@@ -1120,6 +1142,36 @@ func _on_enemy_bonus_val_changed(new_text: String, eid: String, slot_idx: int) -
 		var changed := new_text != "0" and not new_text.is_empty()
 		sb.bg_color = HIGHLIGHT_BG_COLOR if changed else Color(0.12, 0.12, 0.16)
 	_enemy_list_dirty = _enemy_list_has_any_diff()
+	_update_enemy_list_tab_indicator()
+
+
+## 「敵一覧」トップタブ名の末尾に ● を付加するか判定して更新
+## _enemy_list_dirty または _enemy_indiv_dirty に true があれば付与
+func _update_enemy_list_tab_indicator() -> void:
+	if _top_tab_container == null:
+		return
+	var idx := _find_top_tab_index(TOP_TAB_ENEMY_LIST)
+	if idx < 0:
+		return
+	var has_change := _enemy_list_dirty
+	if not has_change:
+		for eid: String in ENEMY_IDS:
+			if bool(_enemy_indiv_dirty.get(eid, false)):
+				has_change = true
+				break
+	var title: String = TOP_TAB_ENEMY_LIST + " ●" if has_change else TOP_TAB_ENEMY_LIST
+	_top_tab_container.set_tab_title(idx, title)
+
+
+## トップタブの現在のタイトル（● 付き / なし問わず）から指定名のタブインデックスを検索
+func _find_top_tab_index(tab_name: String) -> int:
+	if _top_tab_container == null:
+		return -1
+	for i: int in range(_top_tab_container.get_tab_count()):
+		var t := _top_tab_container.get_tab_title(i)
+		if t == tab_name or t == tab_name + " ●":
+			return i
+	return -1
 
 
 # ----------------------------------------------------------------------------
@@ -1243,6 +1295,8 @@ func _save_enemy_list_tab() -> Dictionary:
 		(result["saved"] as Array).append(_enemy_id_to_filename(eid))
 	# ハイライト解除（保存成功分）
 	_clear_enemy_cell_highlights()
+	# タブ末尾の ● インジケータを再評価
+	_update_enemy_list_tab_indicator()
 	return result
 
 
@@ -2152,16 +2206,20 @@ func _on_color_changed(color: Color, key: String) -> void:
 # ============================================================================
 
 ## 現在の上段タブ名を返す（TOP_TAB_CONSTANTS / TOP_TAB_ALLY_CLASS / ...）
+## タブ名末尾の " ●" インジケータは除去して返す（純粋なタブ識別名を保証）
 func _current_top_tab_name() -> String:
 	if _top_tab_container == null:
 		return ""
-	return _top_tab_container.get_tab_title(_top_tab_container.current_tab)
+	var t := _top_tab_container.get_tab_title(_top_tab_container.current_tab)
+	if t.ends_with(" ●"):
+		t = t.substr(0, t.length() - 2)
+	return t
 
 
 ## 上段タブが切り替わったときに下部ボタンの有効/無効を更新する
-## - 定数タブ：保存 / リセット / デフォルト化がすべて有効
-## - 味方クラス・敵クラス・敵一覧・ステータス：保存のみ有効（デフォルト値を保持しない方針）
-## - アイテム：プレースホルダー段階なのですべて無効
+## - 保存：各タブで対象ファイルがある場合のみ有効（アイテムタブはプレースホルダーなので無効）
+## - リセット / デフォルト化：常に有効。作用対象は定数タブの SpinBox/ColorPicker のみだが
+##   どのタブからでも実行可能（ユーザーが意図的にタブを跨いで操作できる）
 func _on_top_tab_changed(_idx: int) -> void:
 	if _btn_save == null:
 		return
@@ -2172,8 +2230,10 @@ func _on_top_tab_changed(_idx: int) -> void:
 	var is_enemy_list := top == TOP_TAB_ENEMY_LIST
 	var is_stats := top == TOP_TAB_STATS
 	_btn_save.disabled = not (is_constants or is_ally or is_enemy_class or is_enemy_list or is_stats)
-	_btn_reset.disabled = not is_constants
-	_btn_commit.disabled = not is_constants
+	# リセット / デフォルト化は定数タブ専用機能だが、どのタブからでも押せるようにする
+	# （ボタンを見て「押せる」と認識できる状態にしておく方が UX として分かりやすい）
+	_btn_reset.disabled = false
+	_btn_commit.disabled = false
 
 
 func _on_save_pressed() -> void:
@@ -2227,10 +2287,13 @@ func _on_reset_pressed() -> void:
 	var dlg := ConfirmationDialog.new()
 	dlg.dialog_text = "すべての定数をデフォルト値に戻します。よろしいですか？\n（UI 上の値のみ変更・保存は別途「保存」ボタンで）"
 	dlg.title = "デフォルトに戻す"
-	add_child(dlg)
+	# CanvasLayer 直下だと Window サブウィンドウの表示が安定しないため、
+	# 明示的にメインの Viewport（get_tree().root）に追加する
+	get_tree().root.add_child(dlg)
 	dlg.confirmed.connect(_on_reset_confirmed.bind(dlg))
 	dlg.canceled.connect(dlg.queue_free)
-	dlg.popup_centered()
+	dlg.close_requested.connect(dlg.queue_free)
+	dlg.popup_centered(Vector2i(480, 180))
 
 
 func _on_reset_confirmed(dlg: ConfirmationDialog) -> void:
@@ -2247,10 +2310,12 @@ func _on_commit_pressed() -> void:
 	var dlg := ConfirmationDialog.new()
 	dlg.dialog_text = "現在値を constants_default.json の value として書き換えます。\nこれは復帰不能な上書きです。よろしいですか？"
 	dlg.title = "現在値をデフォルト化"
-	add_child(dlg)
+	# _on_reset_pressed と同じ理由で Viewport 根に付ける
+	get_tree().root.add_child(dlg)
 	dlg.confirmed.connect(_on_commit_confirmed.bind(dlg))
 	dlg.canceled.connect(dlg.queue_free)
-	dlg.popup_centered()
+	dlg.close_requested.connect(dlg.queue_free)
+	dlg.popup_centered(Vector2i(480, 200))
 
 
 func _on_commit_confirmed(dlg: ConfirmationDialog) -> void:

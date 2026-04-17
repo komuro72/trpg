@@ -1003,3 +1003,32 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
 - Godot `--check-only` / `--quit` とも EXIT: 0
 - すべての敵 JSON から対象 4 フィールド（attack_type / attack_range / pre_delay / post_delay）の削除完了（grep で 0 件）
 - healer.json / dark-priest.json から heal_mp_cost / buff_mp_cost の削除完了（grep で 0 件）
+
+## Config Editor の不具合 3 件修正（2026-04-18）
+
+### バグ修正: 「敵一覧」タブでチェックボックス変更時に行ハイライトが付かない
+- 症状: is_flying / is_undead / instant_death_immune のチェックボックスを ON/OFF しても、その行が薄黄色ハイライトされない（LineEdit の変更では正しくハイライトされる）
+- 原因: `_add_enemy_checkbox()` は CheckBox を単純な Control でラップするだけで `_enemy_cell_styles` に StyleBoxFlat を登録していなかった。また `_on_enemy_indiv_field_changed()` ハンドラも dirty フラグ更新のみで視覚フィードバック処理がなかった
+- 修正:
+  - `_add_enemy_checkbox()` を PanelContainer + CenterContainer 構成に変更し、`_make_cell_style()` で生成した StyleBoxFlat を wrapper に `add_theme_stylebox_override("panel", sb)` でアタッチ。`_enemy_cell_styles[wk] = sb` に登録
+  - `_on_enemy_indiv_field_changed()` を更新。元値（`_enemy_indiv_data[eid].get(field, false)`）と比較して `sb.bg_color` を `HIGHLIGHT_BG_COLOR` / `Color(0.12, 0.12, 0.16)` に切り替え
+  - 保存時の `_clear_enemy_cell_highlights()` は既に全 `_enemy_cell_styles` を走査するため、チェックボックスの style も自動でクリアされる
+- 元 JSON に is_flying フィールドがなかった場合: `_apply_enemy_indiv_edits()` の既存ロジック（line 1295-1296）が「cur_val == false and not orig_had」の場合にフィールド追加をスキップするため、CLAUDE.md 545行目のルールは引き続き守られる
+
+### 機能追加: 「敵一覧」トップタブ名末尾の ● インジケータ
+- 追加: `_update_enemy_list_tab_indicator()` / `_find_top_tab_index()` を新設
+- `_enemy_list_dirty` または `_enemy_indiv_dirty` に true があれば「敵一覧」トップタブ名の末尾に " ●" を付加
+- 敵一覧タブの全変更ハンドラ（5 つ）と `_save_enemy_list_tab()` から呼び出し
+- 副次的な修正: `_current_top_tab_name()` が末尾の " ●" を除去してから純粋なタブ識別名を返すよう変更（下部ボタンの有効判定で TOP_TAB_ENEMY_LIST と比較失敗を防ぐ）
+
+### バグ修正: 「すべてデフォルトに戻す」「現在値をすべてデフォルト化」ボタンが効かない
+- 症状 A: 「敵一覧」タブなど定数タブ以外では、両ボタンが常に disabled で押せない状態
+- 症状 B: 定数タブで押した場合でも、ConfirmationDialog が表示されず動作しない（CanvasLayer の子として Window サブウィンドウを add_child すると表示が不安定になる環境依存の挙動）
+- 原因 A: `_on_top_tab_changed()` で `_btn_reset.disabled = not is_constants` / `_btn_commit.disabled = not is_constants` と定数タブ以外で常時無効化していた
+- 原因 B: `add_child(dlg)` が CanvasLayer 直下に Window を追加しており、`popup_centered()` のサイズ指定もなかったため初期サイズ不定で非表示状態になるケースがあった
+- 修正:
+  - ボタンを常時有効（`_btn_reset.disabled = false` / `_btn_commit.disabled = false`）に変更。作用対象は定数タブの SpinBox / ColorPicker のみだが、どのタブからでも操作できるように
+  - ConfirmationDialog の親を `get_tree().root.add_child(dlg)`（メイン Viewport）に変更し、`popup_centered(Vector2i(480, 180))` / `popup_centered(Vector2i(480, 200))` で明示的なサイズを指定
+  - `dlg.close_requested.connect(dlg.queue_free)` を追加（X ボタンでも確実に解放されるように）
+- 動作: 定数タブで値変更 → 「すべてデフォルトに戻す」→ 確認ダイアログ OK → `GlobalConstants.reset_to_defaults()` が constants_default.json を読み直して全定数をリセット → `_refresh_all()` で全 SpinBox / ColorPicker が更新されハイライトも解除される
+
