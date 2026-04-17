@@ -2136,7 +2136,20 @@ func _update_character_visibility() -> void:
 
 
 ## F4 ConfigEditor を表示・非表示トグル（初回のみ生成）
+## 他UI（OrderWindow / PauseMenu / DebugWindow / NpcDialogueWindow）表示中は F4 を無視
+## ただし ConfigEditor 自身が既に開いている場合は閉じる操作のみ許可
 func _toggle_config_editor() -> void:
+	var already_open := config_editor != null and config_editor.visible
+	if not already_open:
+		# 他のモーダル UI が開いていたら F4 は無視
+		if order_window != null and order_window.visible:
+			return
+		if pause_menu != null and pause_menu.is_open():
+			return
+		if debug_window != null and debug_window.visible:
+			return
+		if npc_dialogue_window != null and npc_dialogue_window.visible:
+			return
 	if config_editor == null:
 		var packed: PackedScene = load("res://scenes/config_editor.tscn") as PackedScene
 		if packed == null:
