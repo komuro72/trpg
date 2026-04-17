@@ -190,10 +190,10 @@ func _process(delta: float) -> void:
 	if _debug_follow_target != null and not is_instance_valid(_debug_follow_target):
 		set_debug_follow_target(null)
 
-	# 射程オーバーレイの再描画（ターゲット選択モード切り替わり時）
-	var now_targeting := player_controller != null and player_controller.is_targeting()
-	if now_targeting != _was_targeting:
-		_was_targeting = now_targeting
+	# 射程オーバーレイの再描画（PRE_DELAY / TARGETING モード切り替わり時）
+	var now_windup := player_controller != null and player_controller.is_in_attack_windup()
+	if now_windup != _was_targeting:
+		_was_targeting = now_windup
 		queue_redraw()
 
 	# 階段クールダウン

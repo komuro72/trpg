@@ -500,11 +500,10 @@ func _process_pre_delay(delta: float) -> void:
 	# 他ボタンによる攻撃キャンセル＋機能切替
 	if _handle_attack_switch_input():
 		return
-	# pre_delay を消化しながらターゲット候補を表示
+	# pre_delay を消化する。射程オーバーレイは game_map._draw 側で表示済み。
+	# ターゲット選択・カーソル・アウトラインは TARGETING モード以降で生成する
 	# タイマーは「ゲーム内秒」で持つ（game_speed 倍速時は実時間が短縮される）
 	_pre_delay_remaining -= delta * GlobalConstants.game_speed
-	_refresh_targets()
-	_update_cursor()
 	if _pre_delay_remaining <= 0.0:
 		_start_targeting()
 
@@ -600,19 +599,21 @@ func _enter_pre_delay() -> void:
 	_pre_delay_remaining = float(sd.get("pre_delay", 0.0))
 	character.is_targeting_mode = true
 
-	_valid_targets = _get_sorted_targets()
+	# PRE_DELAY 中は射程オーバーレイだけを見せる（ターゲット選択・カーソル・アウトラインは TARGETING 以降）
+	_valid_targets = []
 	_target_index  = 0
-	if map_node != null:
-		_cursor = TargetCursor.new()
-		_cursor.z_index = 3
-		map_node.add_child(_cursor)
-	_update_cursor()
 
 
 ## PRE_DELAY 消化後に TARGETING モードへ移行する
 func _start_targeting() -> void:
-	_refresh_targets()
 	_mode = Mode.TARGETING
+	# このタイミングで初めて有効ターゲットを確定し、カーソル・アウトラインを生成する
+	_valid_targets = _get_sorted_targets()
+	_target_index  = 0
+	if _cursor == null and map_node != null:
+		_cursor = TargetCursor.new()
+		_cursor.z_index = 3
+		map_node.add_child(_cursor)
 	# 射程内の全対象をグレー細アウトラインで下地表示
 	for t: Character in _valid_targets:
 		if is_instance_valid(t):
