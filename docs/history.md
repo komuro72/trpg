@@ -1048,3 +1048,12 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
   - `_on_commit_pressed()` 冒頭に定数タブ以外の早期 return を追加
 - 注意点: CheckBox の `button_pressed` プロパティ代入は `toggled` シグナルを発火するため、代入ではなく `set_pressed_no_signal()` を使う。LineEdit の `.text` 代入・OptionButton の `.select()` は Godot 4 ではシグナル非発火のためそのまま代入でよい
 
+### 仕様変更: 「現在値をすべてデフォルト化」を全タブで使えるようにする
+- 背景: 前回修正で「現在値をすべてデフォルト化」ボタンを定数タブ専用にしていたが、他のタブでも押せるようにしたいという要望
+- 実装方針: タブごとに意味合いを分けて動作させる
+  - 定数タブ: 従来通り `GlobalConstants.commit_as_defaults()` で constants_default.json の value フィールドに書き戻し（constants.json とは別ファイル）
+  - 味方クラス / 敵クラス / 敵一覧 / ステータスタブ: 対応する `_save_*` 関数を呼び出してディスクに書き戻し（他タブには専用の「デフォルトファイル」が存在せず、ソース JSON 自体が真実なので、動作としては通常の保存と同じ）
+  - アイテムタブなど対象外: 警告ステータスのみ
+- UI: ダイアログ文言をタブごとに切替。非定数タブでは「専用のデフォルトファイルはないため、通常の保存と同じ動作です」と明示
+- 新設ヘルパー: `_report_commit_save_result()` が `{"saved": Array, "errors": Array}` 形式の保存結果をステータスラベル表示に変換（既存 `_on_save_pressed` 内で重複していたロジックを切り出し）
+

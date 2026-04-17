@@ -2399,33 +2399,78 @@ func _on_reset_confirmed(dlg: ConfirmationDialog) -> void:
 	dlg.queue_free()
 
 
-## デフォルト化ボタン：定数タブ専用機能（他タブでは警告表示のみ）
+## デフォルト化ボタン：現在タブに応じて動作を切替
+## - 定数タブ：現在値を constants_default.json の value として書き戻す
+## - 敵一覧 / クラス / ステータスタブ：各 JSON の現在値が「デフォルト状態」なので、
+##   通常の保存（ディスクへの書き戻し）と同じ動作。dirty 状態に関わらず強制保存する
+## - アイテムタブなど対象外：警告のみ
 func _on_commit_pressed() -> void:
 	var top := _current_top_tab_name()
-	if top != TOP_TAB_CONSTANTS:
-		_set_status("「現在値をすべてデフォルト化」は定数タブ専用の機能です",
-			Color(0.8, 0.8, 0.6))
-		return
+	var dialog_text: String = ""
+	match top:
+		TOP_TAB_CONSTANTS:
+			dialog_text = "現在値を constants_default.json の value として書き換えます。\nこれは復帰不能な上書きです。よろしいですか？"
+		TOP_TAB_ALLY_CLASS:
+			dialog_text = "味方クラス JSON の現在値を「デフォルト」としてディスクに書き込みます。\n（他タブと異なり専用のデフォルトファイルはないため、通常の保存と同じ動作です）"
+		TOP_TAB_ENEMY_CLASS:
+			dialog_text = "敵クラス JSON の現在値を「デフォルト」としてディスクに書き込みます。\n（他タブと異なり専用のデフォルトファイルはないため、通常の保存と同じ動作です）"
+		TOP_TAB_ENEMY_LIST:
+			dialog_text = "敵一覧 JSON の現在値を「デフォルト」としてディスクに書き込みます。\n（他タブと異なり専用のデフォルトファイルはないため、通常の保存と同じ動作です）"
+		TOP_TAB_STATS:
+			dialog_text = "ステータス JSON の現在値を「デフォルト」としてディスクに書き込みます。\n（他タブと異なり専用のデフォルトファイルはないため、通常の保存と同じ動作です）"
+		_:
+			_set_status("このタブでは「現在値をすべてデフォルト化」は使えません",
+				Color(0.8, 0.8, 0.6))
+			return
 
 	var dlg := ConfirmationDialog.new()
-	dlg.dialog_text = "現在値を constants_default.json の value として書き換えます。\nこれは復帰不能な上書きです。よろしいですか？"
+	dlg.dialog_text = dialog_text
 	dlg.title = "現在値をデフォルト化"
 	# _on_reset_pressed と同じ理由で Viewport 根に付ける
 	get_tree().root.add_child(dlg)
 	dlg.confirmed.connect(_on_commit_confirmed.bind(dlg))
 	dlg.canceled.connect(dlg.queue_free)
 	dlg.close_requested.connect(dlg.queue_free)
-	dlg.popup_centered(Vector2i(480, 200))
+	dlg.popup_centered(Vector2i(520, 220))
 
 
 func _on_commit_confirmed(dlg: ConfirmationDialog) -> void:
-	var ok := GlobalConstants.commit_as_defaults()
-	if ok:
-		_refresh_all()  # デフォルト列の再描画
-		_set_status("現在値を constants_default.json に書き込みました", Color(0.55, 1.0, 0.55))
-	else:
-		_set_status(GlobalConstants.last_config_error, Color(1.0, 0.5, 0.5))
+	var top := _current_top_tab_name()
+	match top:
+		TOP_TAB_CONSTANTS:
+			var ok := GlobalConstants.commit_as_defaults()
+			if ok:
+				_refresh_all()  # デフォルト列の再描画
+				_set_status("現在値を constants_default.json に書き込みました",
+					Color(0.55, 1.0, 0.55))
+			else:
+				_set_status(GlobalConstants.last_config_error, Color(1.0, 0.5, 0.5))
+		TOP_TAB_ALLY_CLASS, TOP_TAB_ENEMY_CLASS:
+			# 定数以外のタブは専用デフォルトファイルを持たないため、保存と同じ動作
+			var result: Dictionary = _save_class_files()
+			_report_commit_save_result(result)
+		TOP_TAB_ENEMY_LIST:
+			var result: Dictionary = _save_enemy_list_tab()
+			_report_commit_save_result(result)
+		TOP_TAB_STATS:
+			var result: Dictionary = _save_stats_files()
+			_report_commit_save_result(result)
+		_:
+			_set_status("このタブではデフォルト化操作はありません", Color(0.8, 0.8, 0.6))
 	dlg.queue_free()
+
+
+## 保存結果ディクショナリ ({"saved": Array, "errors": Array}) をステータス表示に変換
+func _report_commit_save_result(result: Dictionary) -> void:
+	var saved: Array = result.get("saved", [])
+	var errors: Array = result.get("errors", [])
+	if not errors.is_empty():
+		_set_status("エラー: %s" % " / ".join(errors), Color(1.0, 0.5, 0.5))
+	elif saved.is_empty():
+		_set_status("変更なし（書き込み対象の差分がありません）", Color(0.8, 0.8, 0.6))
+	else:
+		_set_status("現在値をデフォルトとして書き込みました: %s" % ", ".join(saved),
+			Color(0.55, 1.0, 0.55))
 
 
 # ============================================================================
