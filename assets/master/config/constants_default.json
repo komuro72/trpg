@@ -1,4 +1,40 @@
 {
+  "CONDITION_HEALTHY_THRESHOLD": {
+    "category": "Character",
+    "description": "HP割合がこの値以上で healthy 状態（点滅なし）",
+    "type": "float",
+    "value": 0.5
+  },
+  "CONDITION_WOUNDED_THRESHOLD": {
+    "category": "Character",
+    "description": "HP割合がこの値未満で wounded 状態（黄色・点滅開始）",
+    "max": 1.0,
+    "min": 0.0,
+    "step": 0.05,
+    "type": "float",
+    "value": 0.35
+  },
+  "CONDITION_INJURED_THRESHOLD": {
+    "category": "Character",
+    "description": "HP割合がこの値未満で injured 状態（これより低ければ critical）",
+    "type": "float",
+    "value": 0.25
+  },
+  "CONDITION_PULSE_HZ": {
+    "category": "Character",
+    "description": "状態ラベル点滅の速度（Hz）。wounded 以降のスプライト・顔アイコンに適用",
+    "max": 10.0,
+    "min": 0.5,
+    "step": 0.5,
+    "type": "float",
+    "value": 3.0
+  },
+  "CONDITION_COLOR_SPRITE_HEALTHY": {
+    "category": "Character",
+    "description": "healthy 状態のスプライト・顔アイコン色（RGBA）",
+    "type": "color",
+    "value": [1.0, 1.0, 1.0, 1.0]
+  },
   "CONDITION_COLOR_SPRITE_WOUNDED": {
     "category": "Character",
     "description": "wounded 状態のスプライト・顔アイコン色（RGBA）",
@@ -10,23 +46,80 @@
       1.0
     ]
   },
-  "CONDITION_PULSE_HZ": {
+  "CONDITION_COLOR_SPRITE_INJURED": {
     "category": "Character",
-    "description": "状態ラベル点滅の速度（Hz）。wounded 以降のスプライト・顔アイコンに適用",
-    "max": 10.0,
-    "min": 0.5,
-    "step": 0.5,
-    "type": "float",
-    "value": 3.0
+    "description": "injured 状態のスプライト・顔アイコン色（RGBA）",
+    "type": "color",
+    "value": [1.0, 0.65, 0.25, 1.0]
   },
-  "CONDITION_WOUNDED_THRESHOLD": {
+  "CONDITION_COLOR_SPRITE_CRITICAL": {
     "category": "Character",
-    "description": "HP割合がこの値未満で wounded 状態（黄色・点滅開始）",
-    "max": 1.0,
-    "min": 0.0,
-    "step": 0.05,
+    "description": "critical 状態のスプライト・顔アイコン色（RGBA）",
+    "type": "color",
+    "value": [1.0, 0.35, 0.35, 1.0]
+  },
+  "CONDITION_COLOR_GAUGE_HEALTHY": {
+    "category": "Character",
+    "description": "healthy 状態の HP ゲージ色（RGBA）",
+    "type": "color",
+    "value": [0.25, 0.8, 0.3, 1.0]
+  },
+  "CONDITION_COLOR_GAUGE_WOUNDED": {
+    "category": "Character",
+    "description": "wounded 状態の HP ゲージ色（RGBA）",
+    "type": "color",
+    "value": [0.95, 0.8, 0.15, 1.0]
+  },
+  "CONDITION_COLOR_GAUGE_INJURED": {
+    "category": "Character",
+    "description": "injured 状態の HP ゲージ色（RGBA）",
+    "type": "color",
+    "value": [0.95, 0.55, 0.15, 1.0]
+  },
+  "CONDITION_COLOR_GAUGE_CRITICAL": {
+    "category": "Character",
+    "description": "critical 状態の HP ゲージ色（RGBA）",
+    "type": "color",
+    "value": [0.9, 0.2, 0.2, 1.0]
+  },
+  "CONDITION_COLOR_TEXT_HEALTHY": {
+    "category": "Character",
+    "description": "healthy 状態ラベルのテキスト色（RGBA）",
+    "type": "color",
+    "value": [0.4, 0.9, 0.4, 1.0]
+  },
+  "CONDITION_COLOR_TEXT_WOUNDED": {
+    "category": "Character",
+    "description": "wounded 状態ラベルのテキスト色（RGBA）",
+    "type": "color",
+    "value": [1.0, 0.85, 0.2, 1.0]
+  },
+  "CONDITION_COLOR_TEXT_INJURED": {
+    "category": "Character",
+    "description": "injured 状態ラベルのテキスト色（RGBA）",
+    "type": "color",
+    "value": [1.0, 0.6, 0.2, 1.0]
+  },
+  "CONDITION_COLOR_TEXT_CRITICAL": {
+    "category": "Character",
+    "description": "critical 状態ラベルのテキスト色（RGBA）",
+    "type": "color",
+    "value": [1.0, 0.35, 0.35, 1.0]
+  },
+  "SELF_FLEE_HP_THRESHOLD": {
+    "category": "UnitAI",
+    "description": "種族固有自己逃走HP閾値（ゴブリン系の _should_self_flee がこの値未満で true）",
     "type": "float",
-    "value": 0.35
+    "value": 0.3
+  },
+  "SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES": {
+    "category": "UnitAI",
+    "description": "隣接8マスに敵がこの数以上いると AI が特殊攻撃発動を検討（近接3クラス・炎陣）",
+    "max": 8.0,
+    "min": 0.0,
+    "step": 1.0,
+    "type": "int",
+    "value": 2
   },
   "PARTY_FLEE_ALIVE_RATIO": {
     "category": "PartyLeader",
@@ -37,13 +130,100 @@
     "type": "float",
     "value": 0.5
   },
-  "SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES": {
-    "category": "UnitAI",
-    "description": "隣接8マスに敵がこの数以上いると AI が特殊攻撃発動を検討（近接3クラス・炎陣）",
-    "max": 8.0,
-    "min": 0.0,
-    "step": 1.0,
-    "type": "int",
-    "value": 2
+  "NEAR_DEATH_THRESHOLD": {
+    "category": "PartyLeader",
+    "description": "瀕死判定 HP 率。HPポーション自動使用・on_low_hp 発動・heal aggressive 対象選定に使用",
+    "type": "float",
+    "value": 0.25
+  },
+  "COMBAT_RATIO_OVERWHELMING": {
+    "category": "PartyLeader",
+    "description": "戦況判断：自軍/敵軍戦力比がこの値以上で OVERWHELMING（圧倒的優勢）",
+    "type": "float",
+    "value": 2.0
+  },
+  "COMBAT_RATIO_ADVANTAGE": {
+    "category": "PartyLeader",
+    "description": "戦況判断：戦力比がこの値以上で ADVANTAGE（優勢）",
+    "type": "float",
+    "value": 1.2
+  },
+  "COMBAT_RATIO_EVEN": {
+    "category": "PartyLeader",
+    "description": "戦況判断：戦力比がこの値以上で EVEN（互角）",
+    "type": "float",
+    "value": 0.8
+  },
+  "COMBAT_RATIO_DISADVANTAGE": {
+    "category": "PartyLeader",
+    "description": "戦況判断：戦力比がこの値以上で DISADVANTAGE（これ未満は CRITICAL）",
+    "type": "float",
+    "value": 0.5
+  },
+  "POWER_BALANCE_OVERWHELMING": {
+    "category": "PartyLeader",
+    "description": "戦力比（ランク和のみ）：この値以上で OVERWHELMING",
+    "type": "float",
+    "value": 2.0
+  },
+  "POWER_BALANCE_SUPERIOR": {
+    "category": "PartyLeader",
+    "description": "戦力比（ランク和のみ）：この値以上で SUPERIOR",
+    "type": "float",
+    "value": 1.2
+  },
+  "POWER_BALANCE_EVEN": {
+    "category": "PartyLeader",
+    "description": "戦力比（ランク和のみ）：この値以上で EVEN",
+    "type": "float",
+    "value": 0.8
+  },
+  "POWER_BALANCE_INFERIOR": {
+    "category": "PartyLeader",
+    "description": "戦力比（ランク和のみ）：この値以上で INFERIOR（これ未満は DESPERATE）",
+    "type": "float",
+    "value": 0.5
+  },
+  "HP_STATUS_FULL": {
+    "category": "PartyLeader",
+    "description": "自軍HP充足率（ポーション込み）：この値以上で FULL",
+    "type": "float",
+    "value": 0.75
+  },
+  "HP_STATUS_STABLE": {
+    "category": "PartyLeader",
+    "description": "自軍HP充足率：この値以上で STABLE",
+    "type": "float",
+    "value": 0.5
+  },
+  "HP_STATUS_LOW": {
+    "category": "PartyLeader",
+    "description": "自軍HP充足率：この値以上で LOW（これ未満は CRITICAL）",
+    "type": "float",
+    "value": 0.25
+  },
+  "NPC_HP_THRESHOLD": {
+    "category": "NpcLeaderAI",
+    "description": "NPC フロア遷移・戦闘継続の最低 HP 率。これを下回ると適正フロアを 1 下げる",
+    "type": "float",
+    "value": 0.5
+  },
+  "NPC_ENERGY_THRESHOLD": {
+    "category": "NpcLeaderAI",
+    "description": "NPC フロア遷移・戦闘継続の平均エネルギー（MP/SP）率。下回ると適正フロアを 1 下げる",
+    "type": "float",
+    "value": 0.3
+  },
+  "HEALER_HEAL_THRESHOLD": {
+    "category": "Healer",
+    "description": "ヒーラーの回復対象判定 HP 率。lowest_hp_first / leader_first モードで対象選定に使用",
+    "type": "float",
+    "value": 0.5
+  },
+  "POTION_SP_MP_AUTOUSE_THRESHOLD": {
+    "category": "PlayerController",
+    "description": "SP/MPポーション自動使用閾値。sp_mp_potion=\"use\" 設定時、この率未満で自動使用",
+    "type": "float",
+    "value": 0.5
   }
 }

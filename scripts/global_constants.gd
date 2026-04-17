@@ -60,20 +60,26 @@ const ATTACK_TYPE_MULT: Dictionary = {
 const FLOOR_RANK: Dictionary = {0: 0, 1: 8, 2: 13, 3: 18, 4: 24}
 
 ## NPC フロア遷移・戦闘継続の HP 最低閾値（最低 HP 率がこれを下回ると適正フロア-1）
-const NPC_HP_THRESHOLD: float = 0.5
+## [ConfigEditor 対象]
+var NPC_HP_THRESHOLD: float = 0.5
 ## NPC フロア遷移・戦闘継続の エネルギー（MP/SP）平均閾値（平均エネルギー率がこれを下回ると適正フロア-1）
-const NPC_ENERGY_THRESHOLD: float = 0.3
+## [ConfigEditor 対象]
+var NPC_ENERGY_THRESHOLD: float = 0.3
 
 ## アイテム取得範囲（item_pickup=passive 設定時の取得判定距離・マンハッタン距離）
 const ITEM_PICKUP_RANGE: int = 2
 ## 瀕死判定閾値（HP率がこれ以下で「瀕死」と判定。HPポーション自動使用・on_low_hp発動・heal "aggressive" モード対象選定に使用）
-const NEAR_DEATH_THRESHOLD: float = 0.25
+## [ConfigEditor 対象]
+var NEAR_DEATH_THRESHOLD: float = 0.25
 ## ヒーラー回復閾値（heal "lowest_hp_first" / "leader_first" モードの対象判定。HP率がこれ未満のメンバーが回復対象）
-const HEALER_HEAL_THRESHOLD: float = 0.5
+## [ConfigEditor 対象]
+var HEALER_HEAL_THRESHOLD: float = 0.5
 ## SP/MPポーション自動使用閾値（sp_mp_potion="use" 設定時、SP率/MP率がこれ未満で自動使用）
-const POTION_SP_MP_AUTOUSE_THRESHOLD: float = 0.5
+## [ConfigEditor 対象]
+var POTION_SP_MP_AUTOUSE_THRESHOLD: float = 0.5
 ## 種族固有自己逃走HP閾値（goblin系の _should_self_flee がこの値未満で true を返す）
-const SELF_FLEE_HP_THRESHOLD: float = 0.3
+## [ConfigEditor 対象]
+var SELF_FLEE_HP_THRESHOLD: float = 0.3
 ## パーティー逃走の生存率閾値（goblin/wolf リーダー：生存メンバー率がこれ未満で FLEE 戦略に切り替え）
 ## [ConfigEditor 対象] 外部 JSON (assets/master/config/constants.json) から読み込み
 var PARTY_FLEE_ALIVE_RATIO: float = 0.5
@@ -114,10 +120,12 @@ enum ConsumableDisplayMode { NORMAL, ITEM_SELECT, ACTION_SELECT, TRANSFER_SELECT
 ## 状態ラベル（condition）の HP% 閾値（4段階）
 ## Character.get_condition() が返す文字列の判定基準
 ## 戦力評価で敵のHP推定に使用する（_estimate_hp_ratio_from_condition）
-const CONDITION_HEALTHY_THRESHOLD:  float = 0.5   ## HP50%以上 → "healthy"
+## [ConfigEditor 対象]
+var CONDITION_HEALTHY_THRESHOLD:  float = 0.5   ## HP50%以上 → "healthy"
 ## [ConfigEditor 対象]
 var CONDITION_WOUNDED_THRESHOLD:  float = 0.35  ## HP35%以上50%未満 → "wounded"
-const CONDITION_INJURED_THRESHOLD:  float = 0.25  ## HP25%以上35%未満 → "injured"
+## [ConfigEditor 対象]
+var CONDITION_INJURED_THRESHOLD:  float = 0.25  ## HP25%以上35%未満 → "injured"
 ## HP25%未満 → "critical"
 
 ## 状態ラベル色（全要素統一・2026-04-17〜）
@@ -127,23 +135,25 @@ const CONDITION_INJURED_THRESHOLD:  float = 0.25  ## HP25%以上35%未満 → "i
 var CONDITION_PULSE_HZ: float = 3.0
 
 ## スプライト・顔アイコンの modulate 色（白 / 黄 / 橙 / 赤）
-const CONDITION_COLOR_SPRITE_HEALTHY:  Color = Color.WHITE
-## [ConfigEditor 対象]
+## [ConfigEditor 対象・すべて]
+var CONDITION_COLOR_SPRITE_HEALTHY:  Color = Color.WHITE
 var CONDITION_COLOR_SPRITE_WOUNDED:  Color = Color(1.00, 0.85, 0.20)
-const CONDITION_COLOR_SPRITE_INJURED:  Color = Color(1.00, 0.65, 0.25)
-const CONDITION_COLOR_SPRITE_CRITICAL: Color = Color(1.00, 0.35, 0.35)
+var CONDITION_COLOR_SPRITE_INJURED:  Color = Color(1.00, 0.65, 0.25)
+var CONDITION_COLOR_SPRITE_CRITICAL: Color = Color(1.00, 0.35, 0.35)
 
 ## HP ゲージ色（緑 / 黄 / 橙 / 赤）
-const CONDITION_COLOR_GAUGE_HEALTHY:  Color = Color(0.25, 0.80, 0.30)
-const CONDITION_COLOR_GAUGE_WOUNDED:  Color = Color(0.95, 0.80, 0.15)
-const CONDITION_COLOR_GAUGE_INJURED:  Color = Color(0.95, 0.55, 0.15)
-const CONDITION_COLOR_GAUGE_CRITICAL: Color = Color(0.90, 0.20, 0.20)
+## [ConfigEditor 対象・すべて]
+var CONDITION_COLOR_GAUGE_HEALTHY:  Color = Color(0.25, 0.80, 0.30)
+var CONDITION_COLOR_GAUGE_WOUNDED:  Color = Color(0.95, 0.80, 0.15)
+var CONDITION_COLOR_GAUGE_INJURED:  Color = Color(0.95, 0.55, 0.15)
+var CONDITION_COLOR_GAUGE_CRITICAL: Color = Color(0.90, 0.20, 0.20)
 
 ## 状態ラベルテキスト色（緑 / 黄 / 橙 / 赤）
-const CONDITION_COLOR_TEXT_HEALTHY:  Color = Color(0.40, 0.90, 0.40)
-const CONDITION_COLOR_TEXT_WOUNDED:  Color = Color(1.00, 0.85, 0.20)
-const CONDITION_COLOR_TEXT_INJURED:  Color = Color(1.00, 0.60, 0.20)
-const CONDITION_COLOR_TEXT_CRITICAL: Color = Color(1.00, 0.35, 0.35)
+## [ConfigEditor 対象・すべて]
+var CONDITION_COLOR_TEXT_HEALTHY:  Color = Color(0.40, 0.90, 0.40)
+var CONDITION_COLOR_TEXT_WOUNDED:  Color = Color(1.00, 0.85, 0.20)
+var CONDITION_COLOR_TEXT_INJURED:  Color = Color(1.00, 0.60, 0.20)
+var CONDITION_COLOR_TEXT_CRITICAL: Color = Color(1.00, 0.35, 0.35)
 
 
 ## HP 比率 → 状態ラベル文字列（"healthy"/"wounded"/"injured"/"critical"）
@@ -207,10 +217,11 @@ func _pulse_color(base: Color) -> Color:
 
 ## 戦況判断（_evaluate_combat_situation）の比率閾値
 ## 自軍戦力 / 敵戦力 の比率で戦況を分類する
-const COMBAT_RATIO_OVERWHELMING: float = 2.0  ## 圧倒的優勢
-const COMBAT_RATIO_ADVANTAGE:    float = 1.2  ## 優勢
-const COMBAT_RATIO_EVEN:         float = 0.8  ## 互角
-const COMBAT_RATIO_DISADVANTAGE: float = 0.5  ## 劣勢
+## [ConfigEditor 対象・すべて]
+var COMBAT_RATIO_OVERWHELMING: float = 2.0  ## 圧倒的優勢
+var COMBAT_RATIO_ADVANTAGE:    float = 1.2  ## 優勢
+var COMBAT_RATIO_EVEN:         float = 0.8  ## 互角
+var COMBAT_RATIO_DISADVANTAGE: float = 0.5  ## 劣勢
 ## 0.5 未満 → CRITICAL（危険）
 
 ## 戦況の分類値（_evaluate_combat_situation の戻り値 "situation" キー）
@@ -218,16 +229,18 @@ enum CombatSituation { SAFE, OVERWHELMING, ADVANTAGE, EVEN, DISADVANTAGE, CRITIC
 
 ## 戦力比の段階（ランク和のみ。HP を含めない純粋な戦力比較）
 enum PowerBalance { OVERWHELMING, SUPERIOR, EVEN, INFERIOR, DESPERATE }
-const POWER_BALANCE_OVERWHELMING: float = 2.0
-const POWER_BALANCE_SUPERIOR:     float = 1.2
-const POWER_BALANCE_EVEN:         float = 0.8
-const POWER_BALANCE_INFERIOR:     float = 0.5
+## [ConfigEditor 対象・すべて]
+var POWER_BALANCE_OVERWHELMING: float = 2.0
+var POWER_BALANCE_SUPERIOR:     float = 1.2
+var POWER_BALANCE_EVEN:         float = 0.8
+var POWER_BALANCE_INFERIOR:     float = 0.5
 
 ## 自軍HP充足率の段階（ポーション込み）
 enum HpStatus { FULL, STABLE, LOW, CRITICAL }
-const HP_STATUS_FULL:    float = 0.75
-const HP_STATUS_STABLE:  float = 0.5
-const HP_STATUS_LOW:     float = 0.25
+## [ConfigEditor 対象・すべて]
+var HP_STATUS_FULL:    float = 0.75
+var HP_STATUS_STABLE:  float = 0.5
+var HP_STATUS_LOW:     float = 0.25
 
 ## ダメージ段階の閾値（battle メッセージの「小/中/大/特大ダメージ」判定に使用）
 const DAMAGE_LEVEL_SMALL:  int = 5   ## 小ダメージの上限（これ以下）
@@ -271,12 +284,50 @@ const CONFIG_DEFAULT_PATH: String = "res://assets/master/config/constants_defaul
 
 ## ConfigEditor 管理対象の定数名一覧（var 宣言されているもの）
 ## 新規に外出しする定数はこのリストに追加する
+## 並びは ConfigEditor 画面の「定数」タブに流れる順序となる
+## （上から下 → 保存時に constants.json へ書き出す順序）
 const CONFIG_KEYS: Array[String] = [
+	# Character タブ
+	"CONDITION_HEALTHY_THRESHOLD",
 	"CONDITION_WOUNDED_THRESHOLD",
+	"CONDITION_INJURED_THRESHOLD",
 	"CONDITION_PULSE_HZ",
-	"SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES",
+	"CONDITION_COLOR_SPRITE_HEALTHY",
 	"CONDITION_COLOR_SPRITE_WOUNDED",
+	"CONDITION_COLOR_SPRITE_INJURED",
+	"CONDITION_COLOR_SPRITE_CRITICAL",
+	"CONDITION_COLOR_GAUGE_HEALTHY",
+	"CONDITION_COLOR_GAUGE_WOUNDED",
+	"CONDITION_COLOR_GAUGE_INJURED",
+	"CONDITION_COLOR_GAUGE_CRITICAL",
+	"CONDITION_COLOR_TEXT_HEALTHY",
+	"CONDITION_COLOR_TEXT_WOUNDED",
+	"CONDITION_COLOR_TEXT_INJURED",
+	"CONDITION_COLOR_TEXT_CRITICAL",
+	# UnitAI タブ
+	"SELF_FLEE_HP_THRESHOLD",
+	"SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES",
+	# PartyLeader タブ
 	"PARTY_FLEE_ALIVE_RATIO",
+	"NEAR_DEATH_THRESHOLD",
+	"COMBAT_RATIO_OVERWHELMING",
+	"COMBAT_RATIO_ADVANTAGE",
+	"COMBAT_RATIO_EVEN",
+	"COMBAT_RATIO_DISADVANTAGE",
+	"POWER_BALANCE_OVERWHELMING",
+	"POWER_BALANCE_SUPERIOR",
+	"POWER_BALANCE_EVEN",
+	"POWER_BALANCE_INFERIOR",
+	"HP_STATUS_FULL",
+	"HP_STATUS_STABLE",
+	"HP_STATUS_LOW",
+	# NpcLeaderAI タブ
+	"NPC_HP_THRESHOLD",
+	"NPC_ENERGY_THRESHOLD",
+	# Healer タブ
+	"HEALER_HEAL_THRESHOLD",
+	# PlayerController タブ
+	"POTION_SP_MP_AUTOUSE_THRESHOLD",
 ]
 
 ## 最後のセーブ／書き込み結果（ConfigEditor がエラー表示に使う）

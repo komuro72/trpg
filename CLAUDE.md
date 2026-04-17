@@ -515,6 +515,7 @@ rank値: C=0, B=1, A=2, S=3
 ### ファイル構成
 - `assets/master/config/constants.json` … ユーザー編集中の値（シンプル key:value）
 - `assets/master/config/constants_default.json` … デフォルト値＋メタ情報（value / type / category / min / max / step / description）
+- 現在 **約 35 個**の定数を外出し済み。Character（16）/ UnitAI（2）/ PartyLeader（13）/ NpcLeaderAI（2）/ Healer（1）/ PlayerController（1）の各タブに配置。未登録の定数が見つかった場合は運用ルール 1〜5 に従って追加する
 
 ### トップレベルタブ
 - **定数** — `constants.json` / `constants_default.json` を編集
