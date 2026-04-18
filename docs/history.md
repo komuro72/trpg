@@ -1451,3 +1451,52 @@ AI ヒーラーの過剰回復（3.4 倍）が解消され、Player と完全一
 - Godot `--check-only` exit 0
 - `grep 'ATTACK_TYPE_MULT\.get' scripts/` で呼び出し 15 件、すべて `.get("キー", 1.0)` 形式で互換動作
 
+## 味方クラスタブの整理（V_duration統合・V_tick_interval明文化・要調査項目の掃除）（2026-04-18）
+
+### 調査で判明した事実
+1. `V_stun_duration`（magician-water）・`V_buff_duration`（healer）・`V_duration`（magician-fire）は意味は同じ「効果持続秒数」だが、キー名が統一されていなかった
+2. **`V_buff_duration` は完全に未使用**（`apply_defense_buff()` が `DEFENSE_BUFF_DURATION = 10.0` ハードコードを使用し JSON 値を読まない）
+3. `V_stun_duration` は Player 側のみ JSON を読み、**AI 側は `apply_stun(2.5, ...)` ハードコード**でバグ
+4. `V_duration`（炎陣）は Player 側のみ JSON を読み、**AI 側は `flame.setup(..., 2.5, 0.5, ...)` ハードコード**でバグ
+5. `V_tick_interval` は炎陣の「ダメージ判定間隔」で、ゲームロジック定数（UI 側の点滅周期ではない）
+
+### 変更方針（ケース1採用）
+- `V_*_duration` 3 キー（stun/buff/duration）は意味が同じなので **`V_duration` に統合**
+- `V_tick_interval` は炎陣固有のゲームロジック定数なので slots.V 直下に維持
+- Player / AI で同じ計算フロー（JSON 値を尊重）に統一
+
+### JSON 変更
+- `healer.json` slots.V: `buff_duration: 10.0` → `duration: 10.0`
+- `magician-water.json` slots.V: `stun_duration: 4.0` → `duration: 4.0`
+- `magician-fire.json` slots.V: `duration: 2.5` / `tick_interval: 0.5`（変更なし）
+
+### コード変更
+- `CharacterData` に `v_duration: float` と `v_tick_interval: float` を追加
+- `CharacterGenerator._build_data` / `apply_enemy_stats` で `slots.V.duration` / `tick_interval` をロード
+- `Character.apply_defense_buff(duration: float = 0.0)` に引数追加。0.0 は `DEFENSE_BUFF_DURATION` 定数フォールバック
+- `player_controller.gd`:
+  - `_execute_water_stun`: `slot_data.get("stun_duration", ...)` → `slot_data.get("duration", 3.0)`
+  - `_execute_buff`: `apply_defense_buff()` に `slot_data.get("duration", 0.0)` を渡すよう変更
+  - `_execute_flame_circle`: 既に `duration` / `tick_interval` を読んでいたため変更なし
+- `unit_ai.gd`:
+  - `_v_water_stun`: ハードコード `apply_stun(2.5, ...)` → `apply_stun(cd.v_duration or 2.5, ...)`
+  - `_v_flame_circle`: ハードコード `setup(..., 2.5, 0.5, ...)` → `setup(..., cd.v_duration or 2.5, cd.v_tick_interval or 0.5, ...)`
+  - `"buff"` アクション: `apply_defense_buff()` → `apply_defense_buff(cd.v_duration)`
+- `config_editor.gd`: `CLASS_PARAM_GROUPS` の V スロットから `V_stun_duration` / `V_buff_duration` を削除（`V_duration` / `V_tick_interval` は残置）
+
+### CLAUDE.md 更新
+- **demon の is_flying 要調査項目を削除**（Config Editor で既に修正済み）
+- 炎陣仕様：「2〜3秒間」→「`slots.V.duration` 秒間、`slots.V.tick_interval` 秒ごとにダメージ判定」
+- 無力化水魔法仕様：「2〜3秒間」→「`slots.V.duration` 秒間」
+- 防御バフ仕様：「`slots.V.duration` 秒間バフ状態」明記
+- Vスロット仕様セクションに **「Vスロット JSON パラメータ」サブセクション**を新設：`duration` と `tick_interval` の用途を明文化
+
+### バグ修正副次効果
+- AI の水魔法使い：スタン秒数が 2.5 固定 → 4.0（JSON 値）
+- AI の魔法使い(火)：炎陣の燃焼秒数・tick 間隔が JSON 値を反映
+- AI のヒーラー（味方 NPC / 敵 dark_priest）：バフ秒数が JSON 値を反映
+
+### 確認
+- Godot `--check-only` exit 0
+- `grep '"stun_duration"\|"buff_duration"' assets/master/classes/` 0 件
+

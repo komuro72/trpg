@@ -423,12 +423,17 @@ game_map
 - **振り回し（fighter-axe）**：周囲1マス（斜め含む隣接8マス）の敵全員に通常攻撃相当のダメージ。SP消費
   - AI発動条件：隣接8マスの敵が `SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES` 以上（近接3クラス専用）
 - **ヘッドショット（archer）**：`instant_death_immune == false` の敵に即死。ボス級（`instant_death_immune == true`）には無効で通常の3倍ダメージ。SP消費大
-- **炎陣（magician-fire）**：自分を中心に半径3マスに設置。設置直後から2〜3秒間燃え続け複数回ヒット。敵のみ判定（巻き添えは将来課題）。MP消費大
+- **炎陣（magician-fire）**：自分を中心に半径3マスに設置。設置直後から `slots.V.duration` 秒間燃え続け、`slots.V.tick_interval` 秒ごとにダメージ判定。敵のみ判定（巻き添えは将来課題）。MP消費大
   - AI発動条件（指示「強敵なら使う」等を満たした上で追加判定）：自分を中心に半径 `SPECIAL_ATTACK_FIRE_ZONE_RANGE` マス以内の敵が `SPECIAL_ATTACK_FIRE_ZONE_MIN_ENEMIES` 以上
-- **無力化水魔法（magician-water）**：単体・射程あり・MP消費大。命中した対象の攻撃・移動を2〜3秒間完全停止（回転エフェクト）。全種族共通。被弾時ダメージは受けるが持続時間は変わらない。ボス級には持続時間を短縮（将来調整）
-- **防御バフ（healer）**：単体・射程あり・MP消費（`buff_defense` アクション）。**自分自身も対象に含める・方向制限なし（全方向）**。バフ中は半透明の緑色六角形バリアエフェクト（`BuffEffect.gd`）がキャラクターに重ねて表示される。バフ終了時に自動削除。重複付与時はタイマーリセット＋エフェクト再生成
+- **無力化水魔法（magician-water）**：単体・射程あり・MP消費大。命中した対象の攻撃・移動を `slots.V.duration` 秒間完全停止（回転エフェクト）。全種族共通。被弾時ダメージは受けるが持続時間は変わらない。ボス級には持続時間を短縮（将来調整）
+- **防御バフ（healer）**：単体・射程あり・MP消費（`buff_defense` アクション）。**自分自身も対象に含める・方向制限なし（全方向）**。`slots.V.duration` 秒間バフ状態。バフ中は半透明の緑色六角形バリアエフェクト（`BuffEffect.gd`）がキャラクターに重ねて表示される。バフ終了時に自動削除。重複付与時はタイマーリセット＋エフェクト再生成
 - **スライディング（scout）**：向いている方向に3マス高速移動。移動中は無敵・敵をすり抜け可能。SP消費
   - AI発動条件：隣接8マスの敵が `SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES` 以上（近接3クラス専用・包囲脱出兼ダメージ）
+
+#### Vスロット JSON パラメータ
+- `slots.V.duration`：効果の持続秒数。無力化水魔法=スタン秒数、防御バフ=バフ秒数、炎陣=燃焼秒数（クラスごとに用途は異なるが、キーは統一）
+- `slots.V.tick_interval`：継続ダメージ攻撃のダメージ判定間隔（秒）。現状は炎陣（magician-fire）のみで使用
+- その他の用途固有パラメータは `slots.V` 直下の固有キーで表現（将来拡張）
 
 ### 魔法使い（水）の仕様
 - クラスID：`magician-water`
@@ -1214,7 +1219,6 @@ rank値: C=0, B=1, A=2, S=3
   - 個別敵 JSON の `hp` / `power` / `skill` / `physical_resistance` / `magic_resistance` / `rank`（`apply_enemy_stats` で上書きされる legacy）
   - 他にも潜んでいる可能性あり。定期的に Claude Code に全体棚卸しを依頼する運用
 - **敵ヒーラー（dark_priest）の回復が機能しているか動作確認**：2026-04-18 の energy 統合で `apply_enemy_stats` が `max_energy = stats.energy` を設定するようになったため、dark_priest も通常の魔法クラス同様に回復・バフが撃てるはず。実機で確認したら本項目は削除
-- **demon の `is_flying`**：Step 1 の構造整理後、敵一覧タブで demon の `is_flying` が false に表示されていた。CLAUDE.md の仕様では demon は飛行のはず（`is_flying=true`）。要確認・修正
 - **「敵クラス」vs「種族」の概念整理**：Excel 仕様書では「敵クラス」、コード／AI 実装では「種族」（GoblinLeaderAI 等）と呼んでいる。現状は動作に問題ないが用語の使い分けがあいまいで将来混乱の元になる可能性。整理したい
 - **ファイル名のハイフン／アンダースコア統一**：個別敵 JSON は `dark_lord.json` 等アンダースコア、クラス JSON は `dark-lord.json` 等ハイフン。統一するなら個別敵 JSON をハイフンに寄せる。ファイル名変更はコード側の参照も書き換えが必要
 - **`enemy_list.json` と `enemies_list.json` の紛らわしい命名**：役割が全く違う（前者はステータスタイプ参照マップ、後者は敵ファイルパス一覧）のにファイル名が酷似。片方リネーム候補

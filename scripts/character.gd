@@ -721,8 +721,10 @@ func use_consumable(item: Dictionary) -> void:
 
 
 ## 防御バフを付与する（重複時はタイマーをリセット・エフェクトも再生成）
-func apply_defense_buff() -> void:
-	defense_buff_timer = DEFENSE_BUFF_DURATION
+## duration: 持続秒数。0 以下の場合は DEFENSE_BUFF_DURATION 定数をフォールバック
+func apply_defense_buff(duration: float = 0.0) -> void:
+	var dur: float = duration if duration > 0.0 else DEFENSE_BUFF_DURATION
+	defense_buff_timer = dur
 	# 既存エフェクトがあれば削除してから再生成（タイマーリセット時に視覚的なフィードバック）
 	_remove_buff_effect()
 	var effect := BuffEffect.new()

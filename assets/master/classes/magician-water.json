@@ -34,7 +34,7 @@
       "type": "magic",
       "range": 4,
       "damage_mult": 0.5,
-      "stun_duration": 4.0,
+      "duration": 4.0,
       "cost": 15,
       "pre_delay": 0.6,
       "post_delay": 0.6

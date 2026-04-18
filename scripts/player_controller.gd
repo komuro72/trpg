@@ -1016,7 +1016,8 @@ func _execute_water_stun(target: Character, slot_data: Dictionary) -> void:
 	if cost > 0:
 		character.use_energy(cost)
 	var dmg_mult      := float(slot_data.get("damage_mult", 0.5))
-	var stun_duration := float(slot_data.get("stun_duration", 3.0))
+	# duration（旧 stun_duration）: スタン持続秒数。V_*_duration 系は V_duration に統合済み
+	var stun_duration := float(slot_data.get("duration", 3.0))
 	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
 	var raw_damage    := int(float(character.power) * dmg_mult * type_mult)
 	character.face_toward(target.grid_pos)
@@ -1087,7 +1088,9 @@ func _execute_buff(target: Character, slot_data: Dictionary) -> void:
 	if cost > 0:
 		character.use_energy(cost)
 	character.face_toward(target.grid_pos)
-	target.apply_defense_buff()
+	# duration（旧 buff_duration）: V_*_duration 系は V_duration に統合済み
+	var buff_duration := float(slot_data.get("duration", 0.0))
+	target.apply_defense_buff(buff_duration)
 	SoundManager.play(SoundManager.HEAL)
 	_spawn_heal_effect(character.position, "cast")
 	_spawn_heal_effect(target.position, "hit")

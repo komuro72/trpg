@@ -135,9 +135,11 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	var v_data: Variant = slots.get("V")
 	if v_data != null and v_data is Dictionary:
 		var v_dict := v_data as Dictionary
-		data.v_slot_cost    = _slot_cost(v_dict)
-		data.v_pre_delay    = float(v_dict.get("pre_delay",  0.0))
-		data.v_post_delay   = float(v_dict.get("post_delay", 0.0))
+		data.v_slot_cost      = _slot_cost(v_dict)
+		data.v_pre_delay      = float(v_dict.get("pre_delay",     0.0))
+		data.v_post_delay     = float(v_dict.get("post_delay",    0.0))
+		data.v_duration       = float(v_dict.get("duration",      0.0))
+		data.v_tick_interval  = float(v_dict.get("tick_interval", 0.0))
 		if str(v_dict.get("action", "")) == "buff_defense":
 			data.buff_cost = _slot_cost(v_dict)
 
@@ -283,9 +285,11 @@ static func apply_enemy_stats(data: CharacterData) -> void:
 		var v_data: Variant = slots.get("V")
 		if v_data != null and v_data is Dictionary:
 			var v_dict := v_data as Dictionary
-			data.v_pre_delay    = float(v_dict.get("pre_delay",  0.0))
-			data.v_post_delay   = float(v_dict.get("post_delay", 0.0))
-			data.v_slot_cost    = _slot_cost(v_dict)
+			data.v_pre_delay      = float(v_dict.get("pre_delay",     0.0))
+			data.v_post_delay     = float(v_dict.get("post_delay",    0.0))
+			data.v_slot_cost      = _slot_cost(v_dict)
+			data.v_duration       = float(v_dict.get("duration",      0.0))
+			data.v_tick_interval  = float(v_dict.get("tick_interval", 0.0))
 			if str(v_dict.get("action", "")) == "buff_defense":
 				data.buff_cost = _slot_cost(v_dict)
 

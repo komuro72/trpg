@@ -564,10 +564,12 @@ func _start_action(action: Dictionary) -> void:
 			if _manhattan(_member.grid_pos, tgt.grid_pos) > range_val:
 				_complete_action()
 				return
-			# バフ付与
-			var cost := _member.character_data.buff_cost if _member.character_data else 0
+			# バフ付与：duration は CharacterData.v_duration から取得（0.0 なら apply_defense_buff 側の既定値）
+			var cd_b := _member.character_data
+			var cost: int = cd_b.buff_cost if cd_b else 0
+			var buff_dur: float = cd_b.v_duration if cd_b != null else 0.0
 			if _member.use_energy(cost):
-				tgt.apply_defense_buff()
+				tgt.apply_defense_buff(buff_dur)
 				SoundManager.play_from(SoundManager.HEAL, _member)
 				_member.spawn_heal_effect("cast")
 				tgt.spawn_heal_effect("hit")
@@ -1205,11 +1207,15 @@ func _v_flame_circle(cost: int) -> void:
 	if map_node == null:
 		_complete_action()
 		return
+	# duration / tick_interval は CharacterData から取得（slot_data を持たないため）
+	var cd := _member.character_data
+	var flame_duration: float = cd.v_duration if cd != null and cd.v_duration > 0.0 else 2.5
+	var flame_tick: float = cd.v_tick_interval if cd != null and cd.v_tick_interval > 0.0 else 0.5
 	var flame := FlameCircle.new()
 	flame.z_index = 1
 	map_node.add_child(flame)
 	flame.setup(_member.position, _member.grid_pos, 3, damage,
-			2.5, 0.5, _member, _all_members)
+			flame_duration, flame_tick, _member, _all_members)
 	SoundManager.play(SoundManager.FLAME_SHOOT)
 	var fn := _v_name()
 	var fsegs := Character._make_segs([
@@ -1239,7 +1245,10 @@ func _v_water_stun(cost: int) -> void:
 		proj.setup(_member.position, _target.position,
 				true, _target, raw_damage, 1.0, _member, true,
 				0.0, true, "")
-	_target.apply_stun(2.5, _member)
+	# duration（旧 stun_duration）を CharacterData から取得。未設定時のみ 2.5 フォールバック
+	var cd_w := _member.character_data
+	var stun_dur: float = cd_w.v_duration if cd_w != null and cd_w.v_duration > 0.0 else 2.5
+	_target.apply_stun(stun_dur, _member)
 	_target.take_damage(raw_damage, 1.0, _member, true, true)
 	# 状態・タイマーは ATTACKING_PRE → POST 遷移で slot.V.post_delay を適用
 

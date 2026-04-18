@@ -99,7 +99,6 @@ const CLASS_PARAM_GROUPS: Array = [
 			"V_damage_mult",
 			"V_cost",
 			"V_pre_delay", "V_post_delay",
-			"V_stun_duration", "V_buff_duration",
 			"V_duration", "V_tick_interval",
 		],
 	},

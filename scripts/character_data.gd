@@ -125,6 +125,13 @@ var z_damage_mult: float = 1.0
 ## 0.0 = 未設定 → フォールバックで pre_delay / post_delay を使用
 var v_pre_delay:  float = 0.0
 var v_post_delay: float = 0.0
+## スロット V の効果持続時間（秒。slots.V.duration から設定）
+## 用途：水魔法=スタン秒数 / 防御バフ=バフ持続秒数 / 炎陣=燃焼秒数
+## 0.0 = 未設定（Player 側は slot_data から直接読むためフォールバックのみ）
+var v_duration: float = 0.0
+## スロット V の継続ダメージ判定間隔（秒。slots.V.tick_interval から設定）
+## 用途：炎陣のダメージ tick 間隔（他クラスでは未使用）
+var v_tick_interval: float = 0.0
 
 ## 統率力（リーダー側）：高いほど無理な指示でも従わせやすい。クラス・ランクから算出して確定後不変。当面は値のみ保持
 var leadership: int = 5
