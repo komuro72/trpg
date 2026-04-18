@@ -111,7 +111,7 @@ assets/images/tiles/
 - assets/master/names.json：名前ストック（性別ごと）
 - assets/images/characters/：味方キャラクターの画像（{class}_{sex}_{age}_{build}_{id}/ フォルダ構成）
 - assets/images/enemies/：敵キャラクターの画像
-- assets/images/items/：アイテム画像（potion_hp.png, potion_mp.png 等）
+- assets/images/items/：アイテム画像（potion_heal.png, potion_energy.png 等）
 - assets/images/effects/：エフェクト画像（飛翔体: arrow.png, fire_bullet.png 等 / 渦: whirlpool.png）
 - JSONに画像ファイルパスを含めて一元管理
 - work/：作業用ファイル置き場（コードから参照しない。AI生成の元画像・参考資料など）
@@ -1200,7 +1200,6 @@ rank値: C=0, B=1, A=2, S=3
   - 他にも潜んでいる可能性あり。定期的に Claude Code に全体棚卸しを依頼する運用
 - **敵ヒーラー（dark_priest）の回復が機能しているか動作確認**：2026-04-18 の energy 統合で `apply_enemy_stats` が `max_energy = stats.energy` を設定するようになったため、dark_priest も通常の魔法クラス同様に回復・バフが撃てるはず。実機で確認したら本項目は削除
 - **demon の `is_flying`**：Step 1 の構造整理後、敵一覧タブで demon の `is_flying` が false に表示されていた。CLAUDE.md の仕様では demon は飛行のはず（`is_flying=true`）。要確認・修正
-- **アイテム effect キー名の不整合**：マスター側（`assets/master/items/potion_hp.json`）は `heal_hp`、インスタンス側（`dungeon_handcrafted.json`）は `restore_hp`。現状は両方未使用なので問題顕在化していないが、将来のランダム生成実装時に統一が必要
 - **「敵クラス」vs「種族」の概念整理**：Excel 仕様書では「敵クラス」、コード／AI 実装では「種族」（GoblinLeaderAI 等）と呼んでいる。現状は動作に問題ないが用語の使い分けがあいまいで将来混乱の元になる可能性。整理したい
 - **ファイル名のハイフン／アンダースコア統一**：個別敵 JSON は `dark_lord.json` 等アンダースコア、クラス JSON は `dark-lord.json` 等ハイフン。統一するなら個別敵 JSON をハイフンに寄せる。ファイル名変更はコード側の参照も書き換えが必要
 - **`enemy_list.json` と `enemies_list.json` の紛らわしい命名**：役割が全く違う（前者はステータスタイプ参照マップ、後者は敵ファイルパス一覧）のにファイル名が酷似。片方リネーム候補

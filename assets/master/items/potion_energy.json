@@ -6,5 +6,5 @@
 		"restore_energy": 20
 	},
 	"depth_scale": 0.3,
-	"image": "assets/images/items/potion_mp.png"
+	"image": "assets/images/items/potion_energy.png"
 }

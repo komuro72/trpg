@@ -1,0 +1,10 @@
+{
+	"item_type": "potion_heal",
+	"category": "consumable",
+	"allowed_classes": [],
+	"effect": {
+		"restore_hp": 30
+	},
+	"depth_scale": 0.3,
+	"image": "assets/images/items/potion_heal.png"
+}

@@ -1274,3 +1274,34 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
 - `grep '\.mp\b\|\.sp\b\|\.max_mp\b\|\.max_sp\b' scripts/` で残存ヒットなし（magic_power 用のローカル変数 `var mp: int` とコメント内の legacy 言及のみ）
 - `grep 'mp_cost\|sp_cost' assets/master/classes/*.json` 0 件
 
+## ポーション命名の整理（2026-04-18）
+
+### 背景
+前回の energy 統合で MP/SP ポーションを `potion_energy` に統合。ついでに HP ポーションも命名を揃える：`potion_hp` → `potion_heal`（アイテム名として「回復」の意味で統一）。
+ついでに、以前から「要調査」に残っていた effect キー名の不整合（マスター側 `heal_hp` vs インスタンス側 `restore_hp`）も同時に解消。
+
+### 画像
+- `assets/images/items/potion_hp.png` → `potion_heal.png` にリネーム（ユーザー側で事前配置済み）
+- `assets/images/items/potion_energy.png` を新規追加（`potion_mp.png` のコピー・ユーザー側で事前配置済み）
+- 旧 `potion_mp.png` / `potion_sp.png` は legacy 互換用に残置
+
+### JSON
+- `assets/master/items/potion_hp.json` → `potion_heal.json` にリネーム
+  - `item_type`: `potion_hp` → `potion_heal`
+  - `effect.heal_hp` → `effect.restore_hp`（legacy キー `heal_hp` を撤去・インスタンス側の `restore_hp` に統一）
+  - `image` パスも `potion_heal.png` に更新
+- `assets/master/items/potion_energy.json` の `image` を `potion_mp.png` → `potion_energy.png` に更新
+- `assets/master/maps/dungeon_handcrafted.json`: `"item_type": "potion_hp"` → `"potion_heal"`（78 箇所）
+
+### コード
+- `game_map.gd`: 初期ポーション付与の `"item_type": "potion_hp"` → `"potion_heal"`
+- `consumable_bar.gd`: `ITEM_COLORS` に `potion_heal` を追加（旧 `potion_hp` / `potion_mp` / `potion_sp` は legacy として残置）
+
+### CLAUDE.md
+- 「assets/images/items/ ：アイテム画像」の例を `potion_heal.png / potion_energy.png` に更新
+- 「要調査・要整理」から `heal_hp` vs `restore_hp` の不整合項目を削除（今回解消）
+
+### 確認
+- `grep '"potion_hp"' assets/master/maps/dungeon_handcrafted.json` 0 件
+- `grep 'heal_hp' assets/master/` 0 件（マスター側も統一）
+

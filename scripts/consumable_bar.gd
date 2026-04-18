@@ -7,10 +7,12 @@ extends CanvasLayer
 
 ## アイテム種別ごとのアイコン色
 const ITEM_COLORS: Dictionary = {
-	"potion_hp": Color(0.85, 0.20, 0.20),   # 赤：HP回復
-	"potion_energy": Color(0.20, 0.40, 0.90),   # 青：エネルギー回復（旧 MP アイコン流用）
-	"potion_mp": Color(0.20, 0.40, 0.90),   # legacy（旧保存データ対応）
-	"potion_sp": Color(0.20, 0.80, 0.30),   # legacy
+	"potion_heal":   Color(0.85, 0.20, 0.20),   # 赤：HP回復
+	"potion_energy": Color(0.20, 0.40, 0.90),   # 青：エネルギー回復
+	# legacy（旧保存データ対応。将来削除）
+	"potion_hp":     Color(0.85, 0.20, 0.20),
+	"potion_mp":     Color(0.20, 0.40, 0.90),
+	"potion_sp":     Color(0.20, 0.80, 0.30),
 }
 const DEFAULT_COLOR := Color(1.0, 0.85, 0.15)  # 黄：その他消耗品
 

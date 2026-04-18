@@ -303,7 +303,7 @@ func _setup_hero() -> void:
 	# 辞書を erase するため、N個持たせるには N個の個別エントリが必要
 	for _i in range(5):
 		hero_items.append({
-			"item_type": "potion_hp", "category": "consumable",
+			"item_type": "potion_heal", "category": "consumable",
 			"item_name": "HPポーション", "effect": {"restore_hp": 30}, "quantity": 1,
 		})
 	# エネルギーポーション（全クラス共通。UI 表示だけクラス種別で MP/SP に切替）
