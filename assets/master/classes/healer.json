@@ -2,7 +2,6 @@
   "id": "healer",
   "name": "ヒーラー",
   "weapon_type": "staff",
-  "mp": 80,
   "attack_type": "heal",
   "attack_range": 4,
   "is_flying": false,

@@ -1194,8 +1194,9 @@ rank値: C=0, B=1, A=2, S=3
 バグ可能性・構造整理・命名整理など、実装ではなく調査系のタスク：
 
 - **legacy フィールドの棚卸し**：
-  - 個別敵 JSON の `hp` / `power` / `skill` / `physical_resistance` / `magic_resistance` / `rank` / `mp`（`apply_enemy_stats` で上書きされる legacy）
+  - 個別敵 JSON の `hp` / `power` / `skill` / `physical_resistance` / `magic_resistance` / `rank`（`apply_enemy_stats` で上書きされる legacy）
   - 他にも潜んでいる可能性あり。定期的に Claude Code に全体棚卸しを依頼する運用
+- **敵ヒーラー（dark_priest）の回復が機能していない可能性**：`apply_enemy_stats` が全敵に `max_mp = 0` を設定するため、`_generate_heal_queue` が `mp < cost` でスキップされる。dark_priest の仕様（CLAUDE.md「支援（回復・バリア）」）と実装が乖離している疑い。要調査
 - **demon の `is_flying`**：Step 1 の構造整理後、敵一覧タブで demon の `is_flying` が false に表示されていた。CLAUDE.md の仕様では demon は飛行のはず（`is_flying=true`）。要確認・修正
 - **アイテム effect キー名の不整合**：マスター側（`assets/master/items/potion_hp.json`）は `heal_hp`、インスタンス側（`dungeon_handcrafted.json`）は `restore_hp`。現状は両方未使用なので問題顕在化していないが、将来のランダム生成実装時に統一が必要
 - **「敵クラス」vs「種族」の概念整理**：Excel 仕様書では「敵クラス」、コード／AI 実装では「種族」（GoblinLeaderAI 等）と呼んでいる。現状は動作に問題ないが用語の使い分けがあいまいで将来混乱の元になる可能性。整理したい

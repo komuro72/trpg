@@ -4,7 +4,6 @@
   "hp": 48.0,
   "power": 17.0,
   "skill": 20.0,
-  "mp": 40.0,
   "physical_resistance": 8.0,
   "magic_resistance": 8.0,
   "is_flying": true,

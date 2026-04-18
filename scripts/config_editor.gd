@@ -81,7 +81,7 @@ const CLASS_PARAM_GROUPS: Array = [
 	},
 	{
 		"title": "リソース",
-		"params": ["mp", "max_sp", "heal_mp_cost", "buff_mp_cost"],
+		"params": ["heal_mp_cost", "buff_mp_cost"],
 	},
 	{
 		"title": "特性",

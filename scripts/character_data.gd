@@ -145,8 +145,8 @@ static func load_from_json(path: String) -> CharacterData:
 	data.character_id         = d.get("id", "")
 	data.character_name       = d.get("name", "")
 	data.max_hp               = int(d.get("hp", 1))
-	data.max_mp               = int(d.get("mp", 0))
-	data.max_sp               = int(d.get("max_sp", 0))
+	# max_mp / max_sp はクラスの energy 値から apply_enemy_stats / generate() で設定するため
+	# ここでは JSON から読まない（mp / max_sp フィールドは廃止済み）
 	# power: 新 "power" キーを優先。旧キー "attack_power"/"magic_power" にフォールバック
 	var raw_power: int = int(d.get("power", -1))
 	if raw_power < 0:

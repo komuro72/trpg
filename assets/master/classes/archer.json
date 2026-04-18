@@ -4,7 +4,6 @@
   "weapon_type": "bow",
   "attack_type": "ranged",
   "attack_range": 5,
-  "max_sp": 60,
   "is_flying": false,
   "behavior_description": "弓で遠距離攻撃する。距離を保ちながら狙い撃つ。",
   "slots": {

@@ -4,7 +4,6 @@
   "weapon_type": "dagger",
   "attack_type": "melee",
   "attack_range": 1,
-  "max_sp": 60,
   "is_flying": false,
   "behavior_description": "素早い動きで死角から急所を突く。ヒット＆アウェイが得意。",
   "slots": {

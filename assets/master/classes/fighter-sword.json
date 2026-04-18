@@ -4,7 +4,6 @@
   "weapon_type": "sword",
   "attack_type": "melee",
   "attack_range": 1,
-  "max_sp": 60,
   "is_flying": false,
   "behavior_description": "剣で近接攻撃する。正面からの真っ向勝負を好む。",
   "slots": {

@@ -1156,3 +1156,35 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
 - Godot `--check-only` exit 0、パースエラーなし
 - `grep -n "\.defense\b" scripts/` で残存ヒットなし（battle_policy 文字列の `"defense"` のみ）
 
+## クラス JSON / 敵 JSON から mp / max_sp フィールドを廃止（2026-04-18）
+
+### 背景
+`docs/investigation_mp_max_sp_divergence.md` の調査で、味方クラス JSON の `mp` / `max_sp` フィールドはコードから一切参照されない完全な legacy と判明（パターン A）。CLAUDE.md 450-452 行は既に「廃止（energy で代替）」と記述しており、JSON 側の物理削除が漏れていただけ。Phase 12-15 で移行宣言済みだが削除忘れ。
+
+### ランタイムの実際の経路
+- **味方・NPC**: `CharacterGenerator.generate()` が `class_stats.json` の `energy` から `data.max_mp`（魔法クラス）または `data.max_sp`（非魔法クラス）を設定
+- **敵**: `CharacterData.load_from_json` で JSON の `"mp"` を読んでいたが、直後の `apply_enemy_stats()` が `max_mp = 0` / `max_sp = stats.energy` で上書きするため未使用
+
+### JSON 変更
+- `assets/master/classes/` 味方 7 ファイル:
+  - `magician-fire.json` / `healer.json`: `mp` フィールド削除
+  - `magician-water.json`: `mp` ＋ `max_sp` フィールド削除（max_sp=0 の削除忘れも同時整理）
+  - `fighter-sword.json` / `fighter-axe.json` / `archer.json` / `scout.json`: `max_sp` フィールド削除
+- `assets/master/enemies/` 6 ファイル: `mp` フィールド削除
+  - dark_priest / dark_mage / dark_lord / goblin_mage / lich / demon
+- 計 14 フィールド削除
+
+### コード変更
+- `scripts/character_data.gd:148-149` の `d.get("mp")` / `d.get("max_sp")` 読み込みを撤去
+  - `max_mp` / `max_sp` はフィールドの既定値 0 のまま残し、`apply_enemy_stats` / `generate()` 側で energy 由来値を設定する経路に一本化
+- `scripts/config_editor.gd:84` の `CLASS_PARAM_GROUPS`「リソース」グループから `mp` / `max_sp` を削除（残るのは `heal_mp_cost` / `buff_mp_cost` のみ）
+
+### CLAUDE.md 更新
+- 450-452 行の「廃止（energy で代替）」記述はそのまま（今回の変更で実装と記述が完全一致）
+- 「要調査・要整理」セクションの legacy フィールド棚卸しから `mp` を削除（廃止完了）
+- 「要調査・要整理」セクションに新項目を追加：「敵ヒーラー（dark_priest）の回復が機能していない可能性」（`apply_enemy_stats` が全敵 `max_mp=0` に設定する結果、`_generate_heal_queue` が `mp < cost` で無限スキップされる疑い。本調査の副次発見・別タスクで追跡）
+
+### 確認
+- Godot `--check-only` exit 0
+- `grep '"mp"\|"max_sp"' assets/master/classes/*.json` と `grep '"mp"' assets/master/enemies/*.json` いずれも 0 件
+
