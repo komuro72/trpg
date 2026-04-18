@@ -492,6 +492,14 @@ SkillExecutor（static メソッド群）
 - 乱数（クリティカル判定・命中判定）は SkillExecutor 内で解決する
 - サウンド再生・メッセージログ出力もこの層で統一する（現状は UnitAI / PlayerController / Character に分散）
 
+### エフェクト生成の方針（段階移行中）
+- **現状**：視覚エフェクトの生成が 2 系統に分かれている
+  - Character 経由で生成：`HitEffect` / `HealEffect` / `BuffEffect` / `WhirlpoolEffect` — それぞれ `Character._spawn_hit_effect` / `spawn_heal_effect` / `apply_defense_buff` / `apply_stun` が内包
+  - SkillExecutor 内で直接 `.new()`：`FlameCircle`（1 箇所）/ `Projectile`（4 箇所）
+  - `DiveEffect` は UnitAI 内に残留（dive は SkillExecutor 未移行のため）
+- **将来方針**：エフェクト生成は SkillExecutor に集約する（または Character の薄いヘルパ経由で統一）。Projectile / FlameCircle のラッパを SkillExecutor に持たせるのが最短
+- **未実装**。別タスクで段階的に移行する。現状でゲーム動作には影響なし
+
 ### 例外的実装（要整理）
 - **dark-lord のワープ・炎陣**：キュー外で `_process` と並走（`UnitAI._update_dark_lord_behavior()` 相当）。通常のアクションキュー経由では時間粒度が合わないため分離されているが、SkillExecutor 導入時には JSON 駆動のスケジューラ化を検討する
 
@@ -504,6 +512,7 @@ SkillExecutor（static メソッド群）
 ### 参照
 - `docs/investigation_class_structure.md` — クラス構成・役割分担の現状分析
 - `docs/investigation_action_queue.md` — アクションキュー実装の詳細と移行難易度評価
+- `docs/investigation_skill_executor_constants.md` — SkillExecutor で参照する定数・エフェクト実装の棚卸し
 
 ## キャラクター生成システム
 
@@ -600,7 +609,7 @@ rank値: C=0, B=1, A=2, S=3
 ### ファイル構成
 - `assets/master/config/constants.json` … ユーザー編集中の値（シンプル key:value）
 - `assets/master/config/constants_default.json` … デフォルト値＋メタ情報（value / type / category / min / max / step / description）
-- 現在 **約 35 個**の定数を外出し済み。Character（16）/ PartyLeader（11）/ EnemyLeaderAI（1）/ UnitAI（7）の各タブに配置。NpcLeaderAI タブは定数 0 個（将来の NPC 固有定数追加用プレースホルダー）。未登録の定数が見つかった場合は運用ルール 1〜5 に従って追加する
+- 現在 **約 38 個**の定数を外出し済み。Character（17）/ PartyLeader（11）/ EnemyLeaderAI（1）/ UnitAI（7）/ SkillExecutor（2）の各タブに配置。NpcLeaderAI タブは定数 0 個（将来の NPC 固有定数追加用プレースホルダー）。未登録の定数が見つかった場合は運用ルール 1〜5 に従って追加する
 
 ### トップレベルタブ
 - **定数** — `constants.json` / `constants_default.json` を編集
@@ -613,8 +622,8 @@ rank値: C=0, B=1, A=2, S=3
 ### 「定数」タブのカテゴリ
 コード上のクラス名で分類：
 
-- Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / Unknown（未分類検出用）
-- タブ順は陣営・階層順（上位概念 → 下位概念）：リーダー層（PartyLeader → NpcLeaderAI → EnemyLeaderAI）→ 個体層（UnitAI）
+- Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / SkillExecutor / Unknown（未分類検出用）
+- タブ順は陣営・階層順（上位概念 → 下位概念）：リーダー層（PartyLeader → NpcLeaderAI → EnemyLeaderAI）→ 個体層（UnitAI）→ 実処理層（SkillExecutor）
 
 タブ順は `config_editor.gd` の `TABS` 配列で定義。追加したい場合は配列末尾に追記する。
 
@@ -648,7 +657,7 @@ rank値: C=0, B=1, A=2, S=3
 
 ### 定数追加時の運用ルール（「定数」タブ）
 1. `GlobalConstants.gd` に `const`/`var` を追加するときは、`constants_default.json` にも同時に追加する
-2. `category` フィールドは既存5タブ（Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI）のいずれかを指定
+2. `category` フィールドは既存6タブ（Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / SkillExecutor）のいずれかを指定
 3. 上記7タブに属さない場合は `config_editor.gd` の `TABS` 配列にタブを追加することを検討
 4. カテゴリ未定義・不明な値の定数は Unknown タブに自動振り分け（起動時に push_warning で警告）
 5. 定期的に Claude Code に「外出しされていない定数」の棚卸し指示を出す
@@ -1290,6 +1299,8 @@ rank値: C=0, B=1, A=2, S=3
   全 10 種類の特殊行動を `SkillExecutor` クラス（`scripts/skill_executor.gd`）に集約済み。詳細は CLAUDE.md「AI と実処理の責務分離方針」→「実処理の共通化（完了）」セクションを参照。今後の新スキル追加時は SkillExecutor に `execute_*()` を実装し、Player / AI の両方から呼ぶこと。
   残課題：
   - **dark-lord のワープ・炎陣**：現状キュー外で動く例外的実装。将来 SkillExecutor 経由にリファクタする余地あり（CLAUDE.md の「例外的実装（要整理）」を参照）
+
+- **エフェクト生成の一系統化**：視覚エフェクトの生成が「Character 経由」と「SkillExecutor 内で直接 `.new()`」の 2 系統混在。詳細は CLAUDE.md「AI と実処理の責務分離方針」→「エフェクト生成の方針（段階移行中）」セクションおよび `docs/investigation_skill_executor_constants.md` を参照。ゲーム動作には影響なし・別タスクで段階的に対応
 
 ## 参照ファイル
 - docs/spec.md：詳細仕様書（実装前に参照すること）

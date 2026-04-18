@@ -54,8 +54,7 @@ var current_floor: int = 0
 
 ## エネルギー自動回復の端数蓄積（整数回復のロスをなくす）
 var _energy_recovery_accum: float = 0.0
-## エネルギーの自動回復速度（毎秒）
-const ENERGY_RECOVERY_RATE: float = 3.0
+## エネルギーの自動回復速度は GlobalConstants.ENERGY_RECOVERY_RATE を参照
 
 ## スタン状態（水魔法等で発生。is_stunned=true 中は UnitAI が行動をスキップする）
 var is_stunned:   bool  = false
@@ -85,8 +84,7 @@ func get_condition() -> String:
 ## 廃止（2026-04-18）に伴い DEFENSE_BUFF_BONUS による加算は撤去された。バランス微調整時に
 ## 物理耐性などへの再割り当てを検討
 var defense_buff_timer: float = 0.0
-## バフ持続時間（秒）
-const DEFENSE_BUFF_DURATION: float = 10.0
+## 持続時間は呼出側（SkillExecutor.execute_buff 経由 slot.duration）から指定する
 ## バリアエフェクトノード（バフ中のみ存在。null=バフなし or 未生成）
 var _buff_effect: Node2D = null
 ## フレンドリーフラグ（NPC など味方側キャラクターに設定。緑のリングで表示）
@@ -668,7 +666,7 @@ func _update_visual_move(delta: float) -> void:
 ## エネルギーを時間経過で自動回復する（_process() から毎フレーム呼ぶ）
 func _recover_energy(delta: float) -> void:
 	if max_energy > 0 and energy < max_energy:
-		_energy_recovery_accum += ENERGY_RECOVERY_RATE * delta
+		_energy_recovery_accum += GlobalConstants.ENERGY_RECOVERY_RATE * delta
 		var gain := int(_energy_recovery_accum)
 		if gain > 0:
 			energy = mini(energy + gain, max_energy)
@@ -721,10 +719,11 @@ func use_consumable(item: Dictionary) -> void:
 
 
 ## 防御バフを付与する（重複時はタイマーをリセット・エフェクトも再生成）
-## duration: 持続秒数。0 以下の場合は DEFENSE_BUFF_DURATION 定数をフォールバック
+## duration: 持続秒数（slot.duration 由来）。0 以下なら何もしない（早期リターン）
 func apply_defense_buff(duration: float = 0.0) -> void:
-	var dur: float = duration if duration > 0.0 else DEFENSE_BUFF_DURATION
-	defense_buff_timer = dur
+	if duration <= 0.0:
+		return  # 呼出側が slot.duration を渡す前提。0 は「バフを付けない」の意
+	defense_buff_timer = duration
 	# 既存エフェクトがあれば削除してから再生成（タイマーリセット時に視覚的なフィードバック）
 	_remove_buff_effect()
 	var effect := BuffEffect.new()
@@ -783,7 +782,7 @@ func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character =
 	var is_critical := false
 	if attacker != null:
 		var atk_skill: int = attacker.skill
-		var crit_chance: float = float(atk_skill) / 300.0  # skill ÷ 3 %
+		var crit_chance: float = float(atk_skill) / GlobalConstants.CRITICAL_RATE_DIVISOR
 		if randf() < crit_chance:
 			is_critical = true
 			multiplier *= 2.0  # クリティカル: ダメージ2倍

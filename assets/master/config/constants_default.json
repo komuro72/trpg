@@ -267,5 +267,32 @@
     "description": "SP/MPポーション自動使用閾値。sp_mp_potion=\"use\" 設定時、この率未満で自動使用",
     "type": "float",
     "value": 0.5
+  },
+  "CRITICAL_RATE_DIVISOR": {
+    "category": "SkillExecutor",
+    "description": "クリティカル発生率の計算に使用する除数。critical_rate = skill / この値（例：300 なら skill 30 で 10%）。小さいほどクリ率が上がる",
+    "max": 1000.0,
+    "min": 50.0,
+    "step": 10.0,
+    "type": "float",
+    "value": 300.0
+  },
+  "PROJECTILE_SPEED": {
+    "category": "SkillExecutor",
+    "description": "飛翔体（矢・火弾・水弾・雷弾・水魔法）の移動速度（px/秒）。当たり判定は発射時点で確定しているため演出速度にのみ影響",
+    "max": 5000.0,
+    "min": 100.0,
+    "step": 100.0,
+    "type": "float",
+    "value": 2000.0
+  },
+  "ENERGY_RECOVERY_RATE": {
+    "category": "Character",
+    "description": "エネルギー（MP/SP）の自動回復速度（/秒）。各スキルの cost と直接連動するため慎重に調整",
+    "max": 20.0,
+    "min": 0.0,
+    "step": 0.5,
+    "type": "float",
+    "value": 3.0
   }
 }

@@ -29,6 +29,7 @@ const TABS: Array[String] = [
 	"NpcLeaderAI",
 	"EnemyLeaderAI",
 	"UnitAI",
+	"SkillExecutor",
 ]
 ## TABS に含まれないカテゴリの定数を集める予備タブ
 const UNKNOWN_TAB: String = "Unknown"

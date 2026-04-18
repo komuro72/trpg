@@ -245,6 +245,20 @@ var HP_STATUS_FULL:    float = 0.75
 var HP_STATUS_STABLE:  float = 0.5
 var HP_STATUS_LOW:     float = 0.25
 
+## ------------------------------------------------------------
+## SkillExecutor 関連（2026-04-18〜）
+## ------------------------------------------------------------
+## クリティカル率の計算に使用する除数。critical_rate = skill / この値（%表現）
+## 例：CRITICAL_RATE_DIVISOR=300 なら skill 30 → 10% のクリ率。数値を下げるとクリ率上昇
+## [ConfigEditor 対象]
+var CRITICAL_RATE_DIVISOR: float = 300.0
+## 飛翔体（矢・火弾・水弾・雷弾）の移動速度（px/秒）。移動中の回避は不可のため演出速度のみに影響
+## [ConfigEditor 対象]
+var PROJECTILE_SPEED: float = 2000.0
+## エネルギー（MP/SP）の自動回復速度（/秒）。各スキルの cost と直接連動するため慎重に調整
+## [ConfigEditor 対象]
+var ENERGY_RECOVERY_RATE: float = 3.0
+
 ## ダメージ段階の閾値（battle メッセージの「小/中/大/特大ダメージ」判定に使用）
 const DAMAGE_LEVEL_SMALL:  int = 5   ## 小ダメージの上限（これ以下）
 const DAMAGE_LEVEL_MEDIUM: int = 15  ## 中ダメージの上限（これ以下）
@@ -333,6 +347,11 @@ const CONFIG_KEYS: Array[String] = [
 	"NEAR_DEATH_THRESHOLD",
 	"HEALER_HEAL_THRESHOLD",
 	"POTION_SP_MP_AUTOUSE_THRESHOLD",
+	# SkillExecutor タブ
+	"CRITICAL_RATE_DIVISOR",
+	"PROJECTILE_SPEED",
+	# Character タブ（追加）
+	"ENERGY_RECOVERY_RATE",
 ]
 
 ## 最後のセーブ／書き込み結果（ConfigEditor がエラー表示に使う）

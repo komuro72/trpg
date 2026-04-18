@@ -3,6 +3,36 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-18（Config Editor に SkillExecutor タブ新設・関連定数を外出し）
+
+### 変更内容
+- **GlobalConstants 追加（3 定数）**：
+  - `CRITICAL_RATE_DIVISOR: float = 300.0` — クリティカル率除数。`critical_rate = skill / CRITICAL_RATE_DIVISOR`。SkillExecutor カテゴリ
+  - `PROJECTILE_SPEED: float = 2000.0` — 飛翔体の移動速度（px/秒）。SkillExecutor カテゴリ
+  - `ENERGY_RECOVERY_RATE: float = 3.0` — エネルギー自動回復速度（/秒）。Character カテゴリ（個体のステータス回復速度）
+- **Config Editor タブ追加**：`TABS` 配列に `"SkillExecutor"` を追加（`"UnitAI"` の後・陣営階層順）。`constants_default.json` に 3 定数のメタ情報（min/max/step/description）を追加。
+- **ハードコード撤去**：
+  - `character.gd:58` `const ENERGY_RECOVERY_RATE: float = 3.0` を削除 → `GlobalConstants.ENERGY_RECOVERY_RATE` 参照に変更
+  - `character.gd:786` クリティカル判定 `float(atk_skill) / 300.0` を `GlobalConstants.CRITICAL_RATE_DIVISOR` 参照に変更
+  - `projectile.gd:8` `const SPEED := 2000.0` を削除 → `GlobalConstants.PROJECTILE_SPEED` 参照に変更
+- **`DEFENSE_BUFF_DURATION` を削除**：Character 内 `const DEFENSE_BUFF_DURATION: float = 10.0`（slot.duration が 0 時のフォールバック値）を撤廃。`apply_defense_buff(duration)` は duration ≤ 0 のとき早期 return（バフを付与しない）に変更。slot.duration を単一の真実として扱う設計に統一。
+  - 削除前の参照箇所確認：唯一の呼出は `SkillExecutor.execute_buff` のみ。`slot.get("duration", 0.0)` で 0.0 フォールバックが入るが、`healer.json` V スロットは `duration: 10.0` を明示しているため、通常フローで 0.0 が渡ることはない。削除しても機能喪失なし。
+
+### CLAUDE.md 更新
+- 「AI と実処理の責務分離方針」に「エフェクト生成の方針（段階移行中）」セクションを追記。2 系統混在（Character 経由 / SkillExecutor 直 new）の現状と将来の一系統化方針を明文化。
+- 「実処理の共通化（完了）」に SkillExecutor 抽出完遂を反映。
+- 「Config Editor」節のカテゴリ一覧に SkillExecutor を追加（6 タブ体制）。外出し済み定数数を 35 → 38 に更新。
+- 「要調査・要整理項目」に「エフェクト生成の一系統化」を追加（ゲーム動作には影響なし・段階対応）。
+
+### 決定事項
+- **DEFENSE_BUFF_DURATION 削除**：フォールバックチェーン（slot.duration → 0.0 → DEFENSE_BUFF_DURATION=10.0）を 1 段短縮。slot.duration が未設定なら「バフを付けない」ことを明示的な失敗として扱う。healer.json に duration=10.0 が常に設定されているため現行挙動は変化なし。
+- **ENERGY_RECOVERY_RATE を Character タブ**（SkillExecutor タブでなく）：回復速度は個体のステータス特性として扱う方が直感的。各 skill の cost 値とセットで調整する際も Character タブ内で完結できる。
+- **CRITICAL_RATE_DIVISOR / PROJECTILE_SPEED を SkillExecutor タブ**：どちらも計算式・演出に直接効く値で、バランス調整時に SkillExecutor 関連としてまとめて扱うのが自然。
+
+### 動作確認
+- `godot --headless --check-only` でスクリプトのパース成功を確認（エラー 0 件）。
+- 実機動作確認（クリティカル率・飛翔体速度・エネルギー回復・防御バフ持続時間・Config Editor の SkillExecutor タブ表示）は次回セッションで実施予定。
+
 ## 2026-04-18（SkillExecutor 抽出・ステージ3b：rush / whirlwind / headshot / sliding 移行・全10種完了）
 
 ### 変更内容

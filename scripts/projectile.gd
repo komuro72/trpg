@@ -5,7 +5,7 @@ extends Node2D
 ## 発射元から目標座標まで直線飛行し、着弾時にダメージを与える。
 ## 命中判定は発射時点で確定済み（will_hit）。
 
-const SPEED := 2000.0  # px/秒（移動での回避不可）
+## 移動速度は GlobalConstants.PROJECTILE_SPEED（px/秒・移動中の回避は不可）を参照
 
 const _ARROW_PATH          := "res://assets/images/effects/arrow.png"
 const _FIRE_BULLET_PATH    := "res://assets/images/effects/fire_bullet.png"
@@ -86,7 +86,7 @@ func _process(delta: float) -> void:
 	if _done:
 		return
 	var to_dest := _dest - position
-	var step    := SPEED * delta
+	var step    := GlobalConstants.PROJECTILE_SPEED * delta
 	if to_dest.length() <= step:
 		position = _dest
 		_on_arrive()
