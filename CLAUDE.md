@@ -2,6 +2,35 @@
 半リアルタイムタクティクスRPG
 ゲームタイトル：Rally the Parties
 
+## セッション開始時のガイド
+
+新しいセッションを開始する際、まず以下を確認すると全体像を迅速に把握できます。
+
+### 現在のフェーズ
+- Phase 13（パーティーシステム刷新）完了
+- Phase 14（Steam 配布準備）未着手
+- 現状は「リファクタリング・定数整理・設計明示化」の段階（2026-04-18 時点）
+
+### 最近の大きな変更（2026-04-18）
+- **SkillExecutor 抽出完了**：10 種スキル（heal / melee / ranged / flame_circle / water_stun / buff / rush / whirlwind / headshot / sliding）の Player/AI 計算を統一
+- **MP/SP を `energy` に統合**：内部データは単一フィールド、UI はクラスに応じて MP/SP 表示を切替
+- **ポーション刷新**：ヒールポーション（旧 HP ポーション）/ エナジーポーション（旧 MP・SP ポーション統合）
+- **定数タブの大再編**：Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / SkillExecutor の 6 タブ構成（約 38 個の定数）
+- **複数のハードコード問題を修正**：heal_mult 未適用 / water_stun の duration ハードコード / AI magician-water の水弾未判定 / water_stun の二重ダメージ等
+
+### 参照順序の推奨
+1. CLAUDE.md「アーキテクチャ方針」「パーティーシステムのアーキテクチャ」「AI と実処理の責務分離方針」
+2. CLAUDE.md「要調査・要整理項目」で未完了タスクを把握
+3. `docs/` 配下の `investigation_*.md` で詳細な背景情報を参照
+4. 実装前に `docs/spec.md` で仕様詳細を確認
+
+### コードベースの主要ファイル
+- `scripts/skill_executor.gd` — スキル計算の集約（2026-04-18 新設）
+- `scripts/unit_ai.gd` — AI 個体行動（種族別にサブクラス継承）
+- `scripts/player_controller.gd` — プレイヤー操作
+- `scripts/character.gd` — キャラクター実体（状態変化・HP 管理）
+- `scripts/party_manager.gd` — パーティー管理（全 `party_type` で共通）
+
 ## ジャンル・コンセプト
 - 半リアルタイム進行（ターン制なし）。`world_time_running` フラグで AI タイマーを制御
   - プレイヤー行動中（移動・攻撃前後）：時間進行（AI・タイマーが動く）
@@ -1284,6 +1313,33 @@ rank値: C=0, B=1, A=2, S=3
 - **Config Editor のアイテムタブ**：アイテムランダム生成機構の実装とセットで実装予定（単独実装ではゲーム反映が確認できないため保留）
 - **NPC フロア遷移判定のための戦況判断拡張（検討）**：`NPC_HP_THRESHOLD` / `NPC_ENERGY_THRESHOLD` 廃止により、現在は HpStatus のパーティー平均HP率で判定している。ただし元の「最低HP率」ベースや「エネルギー率」ベースの判定は NPC 行動として意味があるため、戦況判断（`_evaluate_combat_situation`）の副情報として最低HP指標・エネルギー指標を追加することを検討。別系統の判定を走らせず、戦況判断に一元化する設計方針を維持する。
 
+### Phase 14 バランス調整の事前情報
+
+バランス調整を開始する前に認識しておくべき、本日（2026-04-18）までのリファクタリングによる影響と観察事項：
+
+#### 敵が盾で防御するようになった
+- SkillExecutor 統一（2026-04-18 完了）により、Player 側でしか機能していなかった防御判定ロジックが AI 側でも正しく機能するようになった
+- 結果として**敵が盾で攻撃を防ぐケースが増加** → 敵の生存率が上昇している可能性
+- **バランス調整候補**：
+  - 敵の `defense_accuracy`（防御判定成功率）を下げる
+  - 敵の `block_*`（防御強度）を下げる
+  - 味方の `power`（攻撃力）を上げる
+  - 盾装備の補正値を見直す
+
+#### Player / AI の計算式統一完了
+- 2026-04-18 より前に調整した値は、片方でしか機能していない可能性がある（`damage_mult` / `duration` / `heal_mult` / AI の水弾未判定 等）
+- **バランス調整は「統一後の値」を正として行う**
+- 同じ条件で Player と AI で同じダメージが出ることを前提にできる
+
+#### Config Editor で編集可能な主要定数（バランス調整の起点）
+- **クラス単位**：各クラス JSON の `power` / `skill` / 各スロットの `damage_mult` / `heal_mult` / `duration` / `tick_interval` / `range` / `cost` 等（「味方クラス」「敵クラス」タブ）
+- **`ATTACK_TYPE_MULT[melee/ranged/magic/dive]`**：定数タブ > Character カテゴリ
+- **`CRITICAL_RATE_DIVISOR`**：定数タブ > SkillExecutor カテゴリ（`skill ÷ 300` が既定）
+- **`PROJECTILE_SPEED`**：定数タブ > SkillExecutor カテゴリ（飛翔体演出速度）
+- **`ENERGY_RECOVERY_RATE`**：定数タブ > Character カテゴリ（MP/SP 回復速度）
+- **戦況評価閾値**：`HP_STATUS_*` / `COMBAT_RATIO_*` / `POWER_BALANCE_*`（定数タブ > PartyLeader カテゴリ）
+- **属性・個別ステータス**：`assets/master/stats/class_stats.json` / `attribute_stats.json` / `enemy_list.json`（ステータスタブ・敵一覧タブ）
+
 ## 要調査・要整理項目
 バグ可能性・構造整理・命名整理など、実装ではなく調査系のタスク：
 
@@ -1301,6 +1357,17 @@ rank値: C=0, B=1, A=2, S=3
   - **dark-lord のワープ・炎陣**：現状キュー外で動く例外的実装。将来 SkillExecutor 経由にリファクタする余地あり（CLAUDE.md の「例外的実装（要整理）」を参照）
 
 - **エフェクト生成の一系統化**：視覚エフェクトの生成が「Character 経由」と「SkillExecutor 内で直接 `.new()`」の 2 系統混在。詳細は CLAUDE.md「AI と実処理の責務分離方針」→「エフェクト生成の方針（段階移行中）」セクションおよび `docs/investigation_skill_executor_constants.md` を参照。ゲーム動作には影響なし・別タスクで段階的に対応
+
+- **Legacy LLM AI コードの棚卸し削除**：LLM 駆動 AI 時代の遺産として、以下の未使用コード約 1221 行がコードベースに残存：
+  - `BaseAI`（547 行）
+  - `EnemyAI`（401 行）
+  - `LLMClient`（109 行）
+  - `DungeonGenerator`（119 行）
+  - `GoblinAI`（45 行）
+
+  完全未使用なので削除してもゲーム動作に影響なし。ただし削除前に本当に参照がないか確認が必要。作業量 S（30〜60 分）。詳細は `docs/investigation_class_structure.md` 参照
+
+- **`PlayerController._spawn_heal_effect` の実態確認**：`docs/investigation_skill_executor_constants.md` の調査で、このメソッドがどこからも呼ばれていない可能性が指摘されている。SkillExecutor 移行後の残骸の可能性。参照調査して本当に未使用ならデッドコードとして削除
 
 ## 参照ファイル
 - docs/spec.md：詳細仕様書（実装前に参照すること）

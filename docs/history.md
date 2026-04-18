@@ -3,6 +3,89 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-18 の大規模リファクタリング総括
+
+本日のセッションは Phase 13 → 14 の橋渡しとなる「節目」の日。多数の設計整理・計算統一・定数外出し・調査を連続して実施した。以下は全体を俯瞰する総括。個別の詳細は同日付の後続エントリ参照。
+
+### 主な完了項目
+
+#### 1. Config Editor の大再編
+- 従来 5 タブ（Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI）→ 6 タブ（+ SkillExecutor）へ拡張
+- 約 35 → 約 38 個の定数が Config Editor から編集可能
+- チェックボックスハイライト・リセット/コミット動作のバグを修正
+- 「敵クラス」タブ・「敵一覧」タブの新設（敵固有 5 クラス × 16 敵個体）
+
+#### 2. データ構造の整理
+- MP / max_mp / sp / max_sp → `energy` / `max_energy` に統合（内部データ単一化・UI 表示は魔法クラスで MP / 非魔法クラスで SP）
+- `base_defense` / `defense` フィールドの廃止
+- ポーション名統一（ヒールポーション / エナジーポーション）
+- 敵固有 5 クラス JSON の新設（`assets/master/classes/zombie.json` 等）。個別敵 JSON からクラス項目を除去し、クラス経由で注入する構造へ
+- legacy フィールド（個別敵 JSON の `hp` / `power` / `skill` 等）は保持したまま段階整理
+
+#### 3. SkillExecutor 抽出完了（全 10 種）
+Player / AI で二重実装されていたスキル計算式を `scripts/skill_executor.gd` に集約：
+- ステージ1: heal
+- ステージ2: melee / ranged
+- ステージ3a: flame_circle / water_stun / buff
+- ステージ3b: rush / whirlwind / headshot / sliding
+
+#### 4. ハードコード定数の外出し
+- `ATTACK_TYPE_MULT[melee/ranged/magic/dive]` を Config Editor 可能に
+- `CRITICAL_RATE_DIVISOR`（skill / 300 → `GlobalConstants` 参照）
+- `PROJECTILE_SPEED`（2000 px/s → `GlobalConstants` 参照）
+- `ENERGY_RECOVERY_RATE`（3.0/秒 → `GlobalConstants` 参照）
+- `DEFENSE_BUFF_DURATION` フォールバックを撤廃（slot.duration を単一の真実に）
+- Vスロット `V_duration` / `V_tick_interval` への統一（旧 `V_stun_duration` / `V_buff_duration` は廃止）
+
+#### 5. 設計方針の明文化（CLAUDE.md 更新）
+- 「AI と実処理の責務分離方針」セクションを新設（意思決定層・実処理層・2 系統アーキテクチャ維持方針・エフェクト生成の段階移行方針）
+- 「セッション開始時のガイド」を新設
+- 「Phase 14 バランス調整の事前情報」を新設
+
+#### 6. 調査ドキュメント作成（7 本）
+`docs/investigation_*.md`：
+- `investigation_healer_structure.md`
+- `investigation_base_defense.md`
+- `investigation_mp_max_sp_divergence.md`
+- `investigation_healer_undead_damage.md`
+- `investigation_enemy_v_slot.md`
+- `investigation_class_structure.md`
+- `investigation_action_queue.md`
+- `investigation_skill_executor_constants.md`
+
+### 発見・修正されたバグ（乖離バグが連鎖的に発覚）
+
+- **AI ヒーラーの `heal_mult` 未適用**：Player は適用・AI は raw power で回復（約 3.4× 強い回復）
+- **AI の `water_stun` 二重ダメージ**：Projectile の damage と直接 `take_damage` の両方で適用されていた
+- **AI の `flame_circle` / `water_stun` / `buff_defense` で JSON 値を無視しハードコード**：`damage_mult` / `duration` が slot から読まれていなかった
+- **AI 操作 magician-water の水弾未判定**：`_get_is_water_shot()` の基底実装が false を返すため火弾画像になっていた
+- **Player の `projectile_type` 未参照**：demon の thunder_bullet が Player 側では反映されない（実害なし）
+- **headshot 非免疫時の処理分岐**：Player は Projectile 経由 99999 ダメージ / AI は直接 `hp=0+die()` と実装が分かれていた
+- **メッセージ重複**（複数件）：回復メッセージの白文字系と色付き系が重複表示
+- **Config Editor 各種バグ**：チェックボックスハイライト未反応 / リセット/コミット動作不全 / 「現在値をすべてデフォルト化」がタブ限定になっていた
+- **ラベル露出**：プレイヤー向け UI に「エネルギー」という内部用語が露出 → 「MP/SP」固定表記に修正
+
+### 次セッションに持ち越された課題
+
+- **実機動作確認**：SkillExecutor の全 10 種スキルの Player/AI 実機動作・ダメージ一貫性・飛翔体・エフェクト・SE
+- **Legacy LLM AI コードの削除**（BaseAI / EnemyAI / LLMClient / DungeonGenerator / GoblinAI = 約 1221 行）
+- **`PlayerController._spawn_heal_effect` のデッドコード判定と削除**
+- **エフェクト生成の一系統化**（Character 経由と SkillExecutor 直 new の 2 系統混在）
+- **dark-lord のワープ・炎陣のキュー外処理**を SkillExecutor 経由にリファクタ
+- **Phase 14 バランス調整**：敵の防御判定が正常機能するようになったことによる敵生存率上昇への対応
+- **敵ヒーラー（dark_priest）の実機動作確認**（energy 統合後）
+- **用語整理**：「敵クラス」vs「種族」、`enemy_list.json` vs `enemies_list.json`、ハイフン/アンダースコア統一
+
+### 今日の教訓・学び
+
+1. **計算ロジックの重複は乖離バグの温床**：Player と AI で同じ計算式を別々に実装していたため、調整が片方にしか反映されない事故が連続して発生。SkillExecutor 抽出により構造的に解消。
+2. **JSON 駆動の徹底**：AI 側がクラス JSON を「読まずにハードコード」している箇所が複数発覚。slot を Dictionary として渡し、slot.get(key, fallback) で統一することで JSON を単一の真実に。
+3. **調査ドキュメントの先行作成が効いた**：`investigation_*.md` を書いてから実装に入ることで、無駄な手戻りが減った。特に `investigation_class_structure.md` / `investigation_action_queue.md` / `investigation_skill_executor_constants.md` は設計判断の根拠として今後も参照価値が高い。
+4. **段階移行の有効性**：SkillExecutor 抽出を 4 ステージに分けたことで、各段階で動作確認の単位を小さく保てた。全 10 種を一度に移行するよりリスクが低い。
+5. **内部用語と UI 用語の分離**：`energy` は内部実装、`MP / SP` は UI 表示、と明確に分離することで多クラス対応（魔法/非魔法）を内部では単一フィールドで扱える。
+
+---
+
 ## 2026-04-18（Config Editor に SkillExecutor タブ新設・関連定数を外出し）
 
 ### 変更内容
