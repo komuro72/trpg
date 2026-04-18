@@ -1339,3 +1339,28 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
 ### 対象外（歴史的記録として原文維持）
 - `docs/history.md`: 過去の変更履歴セクション内の旧名称は記録として保持
 
+## ポーション効果表示をMP/SP表記に統一（プレイヤーUIから「エネルギー」用語を排除）（2026-04-18）
+
+### 方針
+プレイヤー向け UI で「エネルギー」という内部用語を露出させない。エナジーポーション名との一貫性と、プレイヤーから見た自然さを優先。
+
+### 変更内容
+- `scripts/order_window.gd`:
+  - `_EFFECT_LABELS` 定数（`Dictionary`）を廃止し、動的関数 `_effect_label(key, ch)` に変更
+  - `restore_energy` キーを `ch.character_data.is_magic_class()` で「MP回復 / SP回復」に切替
+  - 呼び出し元 2 箇所（`_draw_status_section` の所持アイテム欄・`_item_char` の未装備アイテム欄）で `ch` / `_item_char` を渡すよう修正
+- `scripts/consumable_bar.gd`: 既に `_energy_label` 動的切替が実装済み（変更なし）
+- `scripts/player_controller.gd`: 既に `_build_effect_lines` で動的切替が実装済み（変更なし）
+- `scripts/character.gd`: ポーション使用時の MessageLog も既に動的切替済み（変更なし）
+
+### CLAUDE.md 更新
+- 「メッセージ表記方針」セクション直下に **「UI 用語の分離方針」** を新設。プレイヤー向け UI / 内部データ / デバッグ表示の用語分担を明文化：
+  - プレイヤー UI：MP / SP（クラス別）・ヒール / エナジー（アイテム名）
+  - 内部データ：`energy` / `max_energy` 等の英語
+  - デバッグ表示：`energy` 英語のまま
+  - 「エネルギー」カタカナ表記はプレイヤー UI では使わない
+
+### 確認
+- `grep '"[^"]*エネルギー[^"]*"' scripts/` で 0 件（文字列リテラル内の「エネルギー」がプレイヤー UI に露出していないことを確認）
+- コメント内の「エネルギー」は開発者向け説明として残置
+

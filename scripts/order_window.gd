@@ -1294,12 +1294,12 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 				if stats_d.has(k) and int(stats_d[k]) != 0:
 					var jp: String = GlobalConstants.STAT_NAME_JP.get(k, k) as String
 					stat_strs.append("%s+%d" % [jp, int(stats_d[k])])
-			# 消耗品は effect を日本語表記で表示
+			# 消耗品は effect を日本語表記で表示（ch のクラス種別で MP/SP 切替）
 			var effect_d: Dictionary = item_d.get("effect", {}) as Dictionary
 			for ek: String in effect_d:
 				var ev: int = int(effect_d[ek])
 				if ev != 0:
-					var elbl: String = _effect_label(ek)
+					var elbl: String = _effect_label(ek, ch)
 					stat_strs.append("%s %d" % [elbl, ev])
 			var qty_str := " ×%d" % count2 if count2 > 1 else ""
 			var stat_str := " [%s]" % ", ".join(stat_strs) if not stat_strs.is_empty() else ""
@@ -1328,15 +1328,21 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 # ── ユーティリティ ────────────────────────────────────────────────────────────
 
 ## 消耗品 effect キーを日本語ラベルに変換する
-const _EFFECT_LABELS: Dictionary = {
-	"restore_hp": "HP回復",
-	"restore_energy": "エネルギー回復",
-	"restore_mp": "MP回復",  # legacy
-	"restore_sp": "SP回復",  # legacy
-}
-
-static func _effect_label(key: String) -> String:
-	return _EFFECT_LABELS.get(key, key) as String
+## ch を渡すと restore_energy を「MP回復 / SP回復」に切り替えて返す
+## （ch が null のときは「SP回復」をデフォルトに。プレイヤー UI から「エネルギー」表記を排除）
+static func _effect_label(key: String, ch: Character = null) -> String:
+	match key:
+		"restore_hp":
+			return "HP回復"
+		"restore_energy":
+			var is_magic := ch != null and ch.character_data != null \
+				and ch.character_data.is_magic_class()
+			return "MP回復" if is_magic else "SP回復"
+		"restore_mp":
+			return "MP回復"  # legacy
+		"restore_sp":
+			return "SP回復"  # legacy
+	return key
 
 
 ## ランク文字の色（right_panel と共通ルール）
@@ -1593,7 +1599,7 @@ func _draw_item_list_overlay(ox: float, main_py: float, ow: float,
 			for ek: String in effect_d:
 				var ev: int = int(effect_d[ek])
 				if ev != 0:
-					var elbl: String = _effect_label(ek)
+					var elbl: String = _effect_label(ek, _item_char)
 					parts.append("%s %d" % [elbl, ev])
 			var stat_str := "" if parts.is_empty() else " [%s]" % ", ".join(parts)
 			var can_equip := _can_equip(_item_char, item)
