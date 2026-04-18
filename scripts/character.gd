@@ -1212,7 +1212,7 @@ func log_heal(healer: Character, amount: int, hp_before: int) -> void:
 			if healer != null and is_instance_valid(healer) else null
 	var heal_name := _battle_name(healer)
 	var target_name := _battle_name(self)
-	var battle_msg := "%sが%sに回復魔法をかけ、体力を回復した" % [heal_name, target_name]
+	var battle_msg := "%sが%sに回復魔法をかけ、HPを回復した" % [heal_name, target_name]
 	MessageLog.add_battle(healer_data, character_data, battle_msg, healer, self)
 
 
