@@ -19,7 +19,8 @@ const KNOWN_CLASSES: Array = [
 	"fighter-sword", "fighter-axe", "magician-fire", "magician-water", "archer", "healer", "scout"
 ]
 
-## 魔法クラス（energy → max_mp に格納）。それ以外は max_sp に格納
+## 魔法クラス（UI 上では max_energy を「MP」として表示）
+## 非魔法クラスは「SP」として表示するが、内部データは同じ energy / max_energy
 const MAGIC_CLASS_IDS: Array = ["magician-fire", "magician-water", "healer"]
 
 ## ランク値（加算式: final = base + rank_amount × rank_value）
@@ -101,13 +102,8 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	data.age                = age
 	data.build              = build
 	data.max_hp              = stats.vitality
-	# energy は魔法クラス→max_mp、非魔法クラス→max_sp に格納（どちらも 0-100 スケール）
-	if chosen_class in MAGIC_CLASS_IDS:
-		data.max_mp = stats.energy
-		data.max_sp = 0
-	else:
-		data.max_mp = 0
-		data.max_sp = stats.energy
+	# energy は全クラス共通で max_energy に格納（UI 表示名のみクラス種別で切替）
+	data.max_energy          = stats.energy
 	data.power                   = stats.power
 	data.skill                   = stats.skill
 	data.physical_resistance     = stats.physical_resistance
@@ -123,9 +119,9 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	data.behavior_description = str(class_json.get("behavior_description", ""))
 	data.attack_type        = str(class_json.get("attack_type",  "melee"))
 	data.attack_range       = int(class_json.get("attack_range", 1))
-	# スロット Z / V の pre_delay / post_delay / コストを読み取る
-	# ヒーラーの heal_mp_cost / buff_mp_cost は slots.Z.mp_cost / slots.V.mp_cost から算出
-	# （action="heal"/"buff_defense" のスロットのみ）
+	# スロット Z / V の pre_delay / post_delay / cost を読み取る
+	# energy 統合に伴い slots.X.cost（旧 mp_cost / sp_cost）を唯一のキーとする
+	# ヒーラーの heal_cost / buff_cost は action="heal"/"buff_defense" スロットの cost から算出
 	var slots: Dictionary = class_json.get("slots", {}) as Dictionary
 	var z_data: Variant = slots.get("Z")
 	if z_data != null and z_data is Dictionary:
@@ -133,16 +129,15 @@ static func generate_character(class_id: String = "") -> CharacterData:
 		data.z_pre_delay  = float(z_dict.get("pre_delay",  0.0))
 		data.z_post_delay = float(z_dict.get("post_delay", 0.0))
 		if str(z_dict.get("action", "")) == "heal":
-			data.heal_mp_cost = int(z_dict.get("mp_cost", 0))
+			data.heal_cost = _slot_cost(z_dict)
 	var v_data: Variant = slots.get("V")
 	if v_data != null and v_data is Dictionary:
 		var v_dict := v_data as Dictionary
-		data.v_slot_mp_cost = int(v_dict.get("mp_cost", 0))
-		data.v_slot_sp_cost = int(v_dict.get("sp_cost", 0))
+		data.v_slot_cost    = _slot_cost(v_dict)
 		data.v_pre_delay    = float(v_dict.get("pre_delay",  0.0))
 		data.v_post_delay   = float(v_dict.get("post_delay", 0.0))
 		if str(v_dict.get("action", "")) == "buff_defense":
-			data.buff_mp_cost = int(v_dict.get("mp_cost", 0))
+			data.buff_cost = _slot_cost(v_dict)
 
 	var folder: String = GRAPHIC_SET_DIR + str(chosen_set.get("folder", ""))
 	data.image_set         = folder
@@ -249,9 +244,8 @@ static func apply_enemy_stats(data: CharacterData) -> void:
 		stats[k] = mini(100, stats.get(k, 0) + int(stat_bonus[k]))
 	# ステータスを CharacterData に格納
 	data.max_hp = stats.get("vitality", data.max_hp)
-	# 敵は MP/SP 区別なし。energy はすべて max_sp に格納
-	data.max_sp = stats.get("energy", data.max_sp)
-	data.max_mp = 0
+	# 敵も味方と同じく energy / max_energy に統合（UI 表示は魔法クラス敵なら「MP」として表示）
+	data.max_energy = stats.get("energy", data.max_energy)
 	data.power               = stats.get("power",               data.power)
 	data.skill               = stats.get("skill",               data.skill)
 	data.physical_resistance = stats.get("physical_resistance", data.physical_resistance)
@@ -281,16 +275,15 @@ static func apply_enemy_stats(data: CharacterData) -> void:
 			data.z_pre_delay  = float(z_dict.get("pre_delay",  0.0))
 			data.z_post_delay = float(z_dict.get("post_delay", 0.0))
 			if str(z_dict.get("action", "")) == "heal":
-				data.heal_mp_cost = int(z_dict.get("mp_cost", 0))
+				data.heal_cost = _slot_cost(z_dict)
 		var v_data: Variant = slots.get("V")
 		if v_data != null and v_data is Dictionary:
 			var v_dict := v_data as Dictionary
 			data.v_pre_delay    = float(v_dict.get("pre_delay",  0.0))
 			data.v_post_delay   = float(v_dict.get("post_delay", 0.0))
-			data.v_slot_mp_cost = int(v_dict.get("mp_cost", 0))
-			data.v_slot_sp_cost = int(v_dict.get("sp_cost", 0))
+			data.v_slot_cost    = _slot_cost(v_dict)
 			if str(v_dict.get("action", "")) == "buff_defense":
-				data.buff_mp_cost = int(v_dict.get("mp_cost", 0))
+				data.buff_cost = _slot_cost(v_dict)
 
 
 ## assets/images/characters/ を走査して利用可能なグラフィックセット情報を返す
@@ -491,6 +484,16 @@ static func _calc_stats(class_id: String, rank: String, sex: String,
 			+ float(randi() % (rand_m + 1) if rand_m > 0 else 0)
 		result[stat_key] = maxi(0, roundi(raw))
 	return result
+
+
+## スロット定義から energy コストを読む
+## 新形式 "cost" を優先、旧形式 "mp_cost" / "sp_cost" にフォールバック（段階移行用）
+static func _slot_cost(slot_dict: Dictionary) -> int:
+	if slot_dict.has("cost"):
+		return int(slot_dict.get("cost", 0))
+	var mp_c: int = int(slot_dict.get("mp_cost", 0))
+	var sp_c: int = int(slot_dict.get("sp_cost", 0))
+	return maxi(mp_c, sp_c)
 
 
 ## move_speed スコア（0-100）を秒/タイルに変換する

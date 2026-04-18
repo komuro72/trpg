@@ -26,7 +26,7 @@ func _should_ignore_flee() -> bool:
 ## MP不足なら攻撃不可
 func _can_attack() -> bool:
 	if _member != null and is_instance_valid(_member):
-		if _member.mp < MP_ATTACK_COST:
+		if _member.energy < MP_ATTACK_COST:
 			return false
 	return true
 
@@ -40,7 +40,7 @@ func _get_is_water_shot() -> bool:
 func _on_after_attack() -> void:
 	_lich_water = not _lich_water
 	if _member != null and is_instance_valid(_member):
-		_member.use_mp(MP_ATTACK_COST)
+		_member.use_energy(MP_ATTACK_COST)
 
 
 ## 経路探索方法: A* 最短経路（後方維持）

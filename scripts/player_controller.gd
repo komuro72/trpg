@@ -584,12 +584,9 @@ func _process_post_delay(delta: float) -> void:
 ## Z 押下後に PRE_DELAY モードに入る（pre_delay 消化後に TARGETING へ）
 func _enter_pre_delay() -> void:
 	var sd := _get_slot()
-	# MP/SP不足なら入れない
-	var mp_cost := int(sd.get("mp_cost", 0))
-	if mp_cost > 0 and character.mp < mp_cost:
-		return
-	var sp_cost := int(sd.get("sp_cost", 0))
-	if sp_cost > 0 and character.sp < sp_cost:
+	# エネルギー不足なら入れない（新形式 "cost" / 旧 "mp_cost"/"sp_cost" にフォールバック）
+	var cost := _slot_cost(sd)
+	if cost > 0 and character.energy < cost:
 		return
 
 	_attack_buffer       = false
@@ -985,12 +982,9 @@ func _get_valid_targets() -> Array[Character]:
 # --------------------------------------------------------------------------
 
 func _execute_melee(target: Character, slot_data: Dictionary) -> void:
-	var mp_cost := int(slot_data.get("mp_cost", 0))
-	if mp_cost > 0:
-		character.use_mp(mp_cost)
-	var sp_cost := int(slot_data.get("sp_cost", 0))
-	if sp_cost > 0:
-		character.use_sp(sp_cost)
+	var cost := _slot_cost(slot_data)
+	if cost > 0:
+		character.use_energy(cost)
 	var dmg_mult: float = float(slot_data.get("damage_mult", 1.0))
 	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
 	character.face_toward(target.grid_pos)
@@ -1005,12 +999,9 @@ func _execute_melee(target: Character, slot_data: Dictionary) -> void:
 
 
 func _execute_ranged(target: Character, slot_data: Dictionary) -> void:
-	var mp_cost := int(slot_data.get("mp_cost", 0))
-	if mp_cost > 0:
-		character.use_mp(mp_cost)
-	var sp_cost := int(slot_data.get("sp_cost", 0))
-	if sp_cost > 0:
-		character.use_sp(sp_cost)
+	var cost := _slot_cost(slot_data)
+	if cost > 0:
+		character.use_energy(cost)
 	var dmg_mult: float = float(slot_data.get("damage_mult", 1.0))
 	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
 	character.face_toward(target.grid_pos)
@@ -1021,9 +1012,9 @@ func _execute_ranged(target: Character, slot_data: Dictionary) -> void:
 
 
 func _execute_water_stun(target: Character, slot_data: Dictionary) -> void:
-	var mp_cost := int(slot_data.get("mp_cost", 0))
-	if mp_cost > 0:
-		character.use_mp(mp_cost)
+	var cost := _slot_cost(slot_data)
+	if cost > 0:
+		character.use_energy(cost)
 	var dmg_mult      := float(slot_data.get("damage_mult", 0.5))
 	var stun_duration := float(slot_data.get("stun_duration", 3.0))
 	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
@@ -1056,9 +1047,9 @@ func _spawn_projectile(target: Character, raw_damage: int, is_magic: bool = fals
 
 
 func _execute_heal(target: Character, slot_data: Dictionary) -> void:
-	var mp_cost := int(slot_data.get("mp_cost", 0))
-	if mp_cost > 0:
-		character.use_mp(mp_cost)
+	var cost := _slot_cost(slot_data)
+	if cost > 0:
+		character.use_energy(cost)
 	var heal_mult  := float(slot_data.get("heal_mult", 0.3))
 	var heal_amount := maxi(1, int(float(character.power) * heal_mult))
 	character.face_toward(target.grid_pos)
@@ -1085,9 +1076,9 @@ func _execute_heal(target: Character, slot_data: Dictionary) -> void:
 
 
 func _execute_buff(target: Character, slot_data: Dictionary) -> void:
-	var mp_cost := int(slot_data.get("mp_cost", 0))
-	if mp_cost > 0:
-		character.use_mp(mp_cost)
+	var cost := _slot_cost(slot_data)
+	if cost > 0:
+		character.use_energy(cost)
 	character.face_toward(target.grid_pos)
 	target.apply_defense_buff()
 	SoundManager.play(SoundManager.HEAL)
@@ -1140,17 +1131,24 @@ func _emit_v_skill_battle_msg(skill_name: String, atk: Character, def: Character
 # V スロット特殊攻撃
 # --------------------------------------------------------------------------
 
-## V スロットを使用するための MP/SP リソースが足りているかチェック
+## V スロットを使用するためのエネルギーリソースが足りているかチェック
 func _has_v_slot_resources() -> bool:
 	if character == null:
 		return false
-	var mp_cost := int(_slot_v.get("mp_cost", 0))
-	var sp_cost := int(_slot_v.get("sp_cost", 0))
-	if mp_cost > 0 and character.mp < mp_cost:
-		return false
-	if sp_cost > 0 and character.sp < sp_cost:
+	var cost := _slot_cost(_slot_v)
+	if cost > 0 and character.energy < cost:
 		return false
 	return true
+
+
+## スロット定義から energy コストを読む
+## 新形式 "cost" を優先、旧形式 "mp_cost" / "sp_cost" にフォールバック（段階移行用）
+func _slot_cost(slot_dict: Dictionary) -> int:
+	if slot_dict.has("cost"):
+		return int(slot_dict.get("cost", 0))
+	var mp_c: int = int(slot_dict.get("mp_cost", 0))
+	var sp_c: int = int(slot_dict.get("sp_cost", 0))
+	return maxi(mp_c, sp_c)
 
 
 ## V スロットクールダウンを開始し ConsumableBar を更新する
@@ -1173,9 +1171,9 @@ func _execute_v_instant(action: String) -> void:
 
 ## 斥候：スライディング（3マスダッシュ・移動中無敵・敵をすり抜け可能）
 func _execute_sliding() -> void:
-	var sp_cost := int(_slot_v.get("sp_cost", 20))
-	if sp_cost > 0:
-		character.use_sp(sp_cost)
+	var cost := _slot_cost(_slot_v)
+	if cost > 0:
+		character.use_energy(cost)
 	var dir      := Character.dir_to_vec(character.facing)
 	var step_dur := 0.12 / GlobalConstants.game_speed
 	character.is_sliding = true
@@ -1212,9 +1210,9 @@ func _execute_sliding() -> void:
 
 ## 斧戦士：振り回し（周囲8マスの敵全員にダメージ）
 func _execute_whirlwind() -> void:
-	var sp_cost  := int(_slot_v.get("sp_cost", 15))
-	if sp_cost > 0:
-		character.use_sp(sp_cost)
+	var cost := _slot_cost(_slot_v)
+	if cost > 0:
+		character.use_energy(cost)
 	var dmg_mult: float  = float(_slot_v.get("damage_mult", 1.0))
 	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
 	var raw_damage := int(float(character.power) * dmg_mult * type_mult)
@@ -1250,9 +1248,9 @@ func _execute_whirlwind() -> void:
 
 ## 剣士：突進斬り（向いている方向に最大2マス前進、経路上の敵全員にダメージ、次の空きマスに着地）
 func _execute_rush() -> void:
-	var sp_cost    := int(_slot_v.get("sp_cost", 15))
-	if sp_cost > 0:
-		character.use_sp(sp_cost)
+	var cost := _slot_cost(_slot_v)
+	if cost > 0:
+		character.use_energy(cost)
 	var dmg_mult: float  = float(_slot_v.get("damage_mult", 1.2))
 	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
 	var raw_damage := int(float(character.power) * dmg_mult * type_mult)
@@ -1301,9 +1299,9 @@ func _execute_rush() -> void:
 ## 弓使い：ヘッドショット（即死耐性なし→即死、あり→×3ダメージ）
 ## ターゲット選択モード経由で呼ばれる
 func _execute_headshot(target: Character, slot_data: Dictionary) -> void:
-	var sp_cost := int(slot_data.get("sp_cost", 25))
-	if sp_cost > 0:
-		character.use_sp(sp_cost)
+	var cost := _slot_cost(slot_data)
+	if cost > 0:
+		character.use_energy(cost)
 	character.face_toward(target.grid_pos)
 	SoundManager.play(SoundManager.ARROW_SHOOT)
 	var is_immune: bool = false
@@ -1323,9 +1321,9 @@ func _execute_headshot(target: Character, slot_data: Dictionary) -> void:
 
 ## 魔法使い(火)：炎陣（自分を中心に半径3マスの炎ゾーンを設置・2.5秒間継続ダメージ）
 func _execute_flame_circle() -> void:
-	var mp_cost     := int(_slot_v.get("mp_cost", 20))
-	if mp_cost > 0:
-		character.use_mp(mp_cost)
+	var cost := _slot_cost(_slot_v)
+	if cost > 0:
+		character.use_energy(cost)
 	var dmg_mult: float  = float(_slot_v.get("damage_mult", 0.8))
 	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("magic", 1.0)
 	var damage      := maxi(1, int(float(character.power) * dmg_mult * type_mult))
@@ -1905,11 +1903,11 @@ func _use_item_from_ui(item: Dictionary) -> void:
 		return
 	var cd     := character.character_data
 	var effect := item.get("effect", {}) as Dictionary
-	# 効果キーは restore_hp / restore_mp / restore_sp（旧キー heal_hp は廃止）
+	# 効果キーは restore_hp / restore_energy（旧 restore_mp / restore_sp は段階移行中の互換）
 	var restore_hp := int(effect.get("restore_hp", 0))
-	var restore_mp := int(effect.get("restore_mp", 0))
-	var restore_sp := int(effect.get("restore_sp", 0))
-	if restore_hp == 0 and restore_mp == 0 and restore_sp == 0:
+	var restore_energy := int(effect.get("restore_energy",
+		effect.get("restore_mp", effect.get("restore_sp", 0))))
+	if restore_hp == 0 and restore_energy == 0:
 		return
 
 	# use_consumable() が内部で inventory.erase(item) を呼ぶため、
@@ -2030,15 +2028,18 @@ func _can_equip_item_for_char(ch: Character, item: Dictionary) -> bool:
 
 
 ## 消耗品の効果行を返す（使用する アクションの右パネル用）
+## エネルギー表示は character のクラス種別で MP/SP を切替
 func _build_effect_lines(item: Dictionary) -> Array[String]:
 	var lines: Array[String] = []
 	var eff: Dictionary = item.get("effect", {}) as Dictionary
 	var hp: int = int(eff.get("restore_hp", 0))
-	var mp: int = int(eff.get("restore_mp", 0))
-	var sp: int = int(eff.get("restore_sp", 0))
+	var energy: int = int(eff.get("restore_energy",
+		eff.get("restore_mp", eff.get("restore_sp", 0))))
 	if hp > 0: lines.append("HP回復 %d" % hp)
-	if mp > 0: lines.append("MP回復 %d" % mp)
-	if sp > 0: lines.append("SP回復 %d" % sp)
+	if energy > 0:
+		var label := "MP" if character != null and character.character_data != null \
+			and character.character_data.is_magic_class() else "SP"
+		lines.append("%s回復 %d" % [label, energy])
 	return lines
 
 
@@ -2127,16 +2128,14 @@ func _switch_character(dir: int) -> void:
 
 
 ## このキャラクターがアイテムを使用できるか判定する
-## max_mp==0のキャラにMPポーションは不要・max_sp==0のキャラにSPポーションは不要
+## エネルギーポーションは max_energy==0 のキャラには不要（現状は全キャラ >0 なので常に使用可）
 func _is_consumable_usable_by_char(item: Dictionary) -> bool:
 	if character == null or character.character_data == null:
 		return true
-	var effect     := item.get("effect", {}) as Dictionary
-	var restore_mp := int(effect.get("restore_mp", 0))
-	var restore_sp := int(effect.get("restore_sp", 0))
-	if restore_mp > 0 and character.max_mp == 0:
-		return false
-	if restore_sp > 0 and character.max_sp == 0:
+	var effect := item.get("effect", {}) as Dictionary
+	var restore_energy := int(effect.get("restore_energy",
+		effect.get("restore_mp", effect.get("restore_sp", 0))))
+	if restore_energy > 0 and character.max_energy == 0:
 		return false
 	return true
 

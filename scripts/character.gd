@@ -37,10 +37,10 @@ var is_player_controlled: bool = false
 ## 基本ステータス（character_data から _ready() で初期化）
 var hp:           int  = 1
 var max_hp:       int  = 1
-var mp:           int  = 0
-var max_mp:       int  = 0
-var sp:           int  = 0   ## スタミナポイント（非魔法クラス専用。魔法クラスは0のまま）
-var max_sp:       int  = 0
+## エネルギー（全クラス共通。UI 表示は character_data.is_magic_class() で
+## 魔法クラス→「MP」/ 非魔法クラス→「SP」として切り替え）
+var energy:       int  = 0
+var max_energy:   int  = 0
 var power:        int  = 1   ## 物理威力 or 魔法威力（クラスに応じて使い分け）
 var skill:        int  = 0   ## 物理技量 or 魔法技量（命中・クリティカル率の基礎値）
 var attack_range: int  = 1   ## 装備補正込みの射程（refresh_stats_from_equipment() で更新）
@@ -52,11 +52,10 @@ var last_attacker: Character = null
 ## 現在いるフロアインデックス（0 = 最上層）
 var current_floor: int = 0
 
-## MP/SP 自動回復の端数蓄積（整数回復のロスをなくす）
-var _mp_recovery_accum: float = 0.0
-var _sp_recovery_accum: float = 0.0
-## MP/SP の自動回復速度（毎秒）
-const MP_SP_RECOVERY_RATE: float = 3.0
+## エネルギー自動回復の端数蓄積（整数回復のロスをなくす）
+var _energy_recovery_accum: float = 0.0
+## エネルギーの自動回復速度（毎秒）
+const ENERGY_RECOVERY_RATE: float = 3.0
 
 ## スタン状態（水魔法等で発生。is_stunned=true 中は UnitAI が行動をスキップする）
 var is_stunned:   bool  = false
@@ -203,7 +202,7 @@ func _process(delta: float) -> void:
 	# タイマー類も停止
 	if not GlobalConstants.world_time_running:
 		return
-	_recover_mp_sp(delta)
+	_recover_energy(delta)
 	# スタンタイマーを消化する
 	if stun_timer > 0.0:
 		stun_timer -= delta
@@ -263,10 +262,8 @@ func _init_stats() -> void:
 		return
 	max_hp       = character_data.max_hp
 	hp           = max_hp
-	max_mp       = character_data.max_mp
-	mp           = max_mp
-	max_sp       = character_data.max_sp
-	sp           = max_sp
+	max_energy   = character_data.max_energy
+	energy       = max_energy
 	power        = character_data.power
 	skill        = character_data.skill
 	is_flying    = character_data.is_flying
@@ -668,43 +665,26 @@ func _update_visual_move(delta: float) -> void:
 			_sprite.texture = _tex_top
 
 
-## MP/SP を時間経過で自動回復する（_process() から毎フレーム呼ぶ）
-func _recover_mp_sp(delta: float) -> void:
-	if max_mp > 0 and mp < max_mp:
-		_mp_recovery_accum += MP_SP_RECOVERY_RATE * delta
-		var gain := int(_mp_recovery_accum)
+## エネルギーを時間経過で自動回復する（_process() から毎フレーム呼ぶ）
+func _recover_energy(delta: float) -> void:
+	if max_energy > 0 and energy < max_energy:
+		_energy_recovery_accum += ENERGY_RECOVERY_RATE * delta
+		var gain := int(_energy_recovery_accum)
 		if gain > 0:
-			mp = mini(mp + gain, max_mp)
-			_mp_recovery_accum -= float(gain)
+			energy = mini(energy + gain, max_energy)
+			_energy_recovery_accum -= float(gain)
 	else:
-		_mp_recovery_accum = 0.0
-	if max_sp > 0 and sp < max_sp:
-		_sp_recovery_accum += MP_SP_RECOVERY_RATE * delta
-		var gain := int(_sp_recovery_accum)
-		if gain > 0:
-			sp = mini(sp + gain, max_sp)
-			_sp_recovery_accum -= float(gain)
-	else:
-		_sp_recovery_accum = 0.0
+		_energy_recovery_accum = 0.0
 
 
-## MP を消費する。消費可能なら true を返す
-func use_mp(cost: int) -> bool:
+## エネルギーを消費する。消費可能なら true を返す
+## 魔法クラスでは MP、非魔法クラスでは SP として UI 表示されるが内部データは同一
+func use_energy(cost: int) -> bool:
 	if cost <= 0:
 		return true
-	if mp < cost:
+	if energy < cost:
 		return false
-	mp -= cost
-	return true
-
-
-## SP を消費する。消費可能なら true を返す
-func use_sp(cost: int) -> bool:
-	if cost <= 0:
-		return true
-	if sp < cost:
-		return false
-	sp -= cost
+	energy -= cost
 	return true
 
 
@@ -716,27 +696,25 @@ func heal(amount: int) -> void:
 
 ## 消耗品を使用する（Phase 10-3〜）
 ## item: inventory 内の辞書（category == "consumable"）
+## 効果キー：restore_hp / restore_energy（旧 restore_mp / restore_sp は廃止）
 func use_consumable(item: Dictionary) -> void:
 	var effect: Dictionary = item.get("effect", {}) as Dictionary
 	var restore_hp_val: int = int(effect.get("restore_hp", 0))
-	var restore_mp: int = int(effect.get("restore_mp", 0))
-	var restore_sp: int = int(effect.get("restore_sp", 0))
+	# 互換のため restore_mp / restore_sp も受ける（古い保存データ等）
+	var restore_energy_val: int = int(effect.get("restore_energy",
+		effect.get("restore_mp", effect.get("restore_sp", 0))))
 	var char_name := character_data.character_name if character_data != null else str(name)
-	var item_name: String = item.get("item_name", "ポーション") as String
 	if restore_hp_val > 0:
 		heal(restore_hp_val)  # heal() 内で効果音を再生
 		MessageLog.add_battle(character_data, null,
 			"%sがHPポーションを使い、自身のHPを回復した" % char_name, self)
-	if restore_mp > 0:
-		mp = mini(mp + restore_mp, max_mp)
+	if restore_energy_val > 0:
+		energy = mini(energy + restore_energy_val, max_energy)
 		SoundManager.play_from(SoundManager.HEAL, self)
+		# UI ラベルをクラス種別で切り替え（内部は同じ energy）
+		var energy_label := "MP" if character_data != null and character_data.is_magic_class() else "SP"
 		MessageLog.add_battle(character_data, null,
-			"%sがMPポーションを使い、自身のMPを回復した" % char_name, self)
-	if restore_sp > 0:
-		sp = mini(sp + restore_sp, max_sp)
-		SoundManager.play_from(SoundManager.HEAL, self)
-		MessageLog.add_battle(character_data, null,
-			"%sがSPポーションを使い、自身のSPを回復した" % char_name, self)
+			"%sがエネルギーポーションを使い、自身の%sを回復した" % [char_name, energy_label], self)
 	# インベントリからアイテムを削除
 	if character_data != null:
 		character_data.inventory.erase(item)

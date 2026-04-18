@@ -679,10 +679,10 @@ func _get_stat_rows(ch: Character) -> Dictionary:
 
 	# ── 左列 ──────────────────────────────────────────────────────────────────
 	left.append({"label": "HP", "type": "hp_mp", "current": ch.hp, "max": ch.max_hp})
-	if _is_magic_cls:
-		left.append({"label": "MP", "type": "hp_mp", "current": ch.mp, "max": ch.max_mp})
-	else:
-		left.append({"label": "SP", "type": "hp_mp", "current": ch.sp, "max": ch.max_sp})
+	# エネルギー表示（内部データは energy / max_energy 共通。ラベルだけクラス種別で切替）
+	var energy_label := "MP" if _is_magic_cls else "SP"
+	left.append({"label": energy_label, "type": "hp_mp",
+		"current": ch.energy, "max": ch.max_energy})
 	var power_label := "魔法威力" if _is_magic_cls else "物理威力"
 	left.append({"label": power_label, "type": "num",
 		"base": cd.power, "bonus": cd.get_weapon_power_bonus()})
@@ -1330,8 +1330,9 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 ## 消耗品 effect キーを日本語ラベルに変換する
 const _EFFECT_LABELS: Dictionary = {
 	"restore_hp": "HP回復",
-	"restore_mp": "MP回復",
-	"restore_sp": "SP回復",
+	"restore_energy": "エネルギー回復",
+	"restore_mp": "MP回復",  # legacy
+	"restore_sp": "SP回復",  # legacy
 }
 
 static func _effect_label(key: String) -> String:

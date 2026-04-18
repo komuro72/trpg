@@ -211,29 +211,20 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 	_draw_bar(tx, bar_y, tw, bar_h, hp_cur_r, Color.TRANSPARENT, hp_max_r)
 
 	var content_y := bar_y + bar_h + 4.0   # バー直下の開始 y
-	var class_id := c.character_data.class_id if c.character_data != null else ""
-	if class_id in MAGIC_CLASS_IDS:
-		# 魔法クラス：MPバー（濃い青 / 特殊攻撃不可時は濃い紫）
-		if c.max_mp > 0:
-			var mp_cur_r := minf(float(c.mp)    / MP_REF, 1.0)
-			var mp_max_r := minf(float(c.max_mp)/ MP_REF, 1.0)
-			var mp_color := Color(0.2, 0.5, 1.0)
-			var v_cost := c.character_data.v_slot_mp_cost if c.character_data != null else 0
-			if v_cost > 0 and c.mp < v_cost:
-				mp_color = Color(0.5, 0.2, 0.8)  # 濃い紫
-			_draw_bar(tx, content_y, tw, bar_h, mp_cur_r, mp_color, mp_max_r)
-			content_y += bar_h + 4.0
-	else:
-		# 非魔法クラス：SPバー（水色 / 特殊攻撃不可時は明るい紫）
-		if c.max_sp > 0:
-			var sp_cur_r := minf(float(c.sp)    / SP_REF, 1.0)
-			var sp_max_r := minf(float(c.max_sp)/ SP_REF, 1.0)
-			var sp_color := Color(0.4, 0.8, 1.0)
-			var v_cost := c.character_data.v_slot_sp_cost if c.character_data != null else 0
-			if v_cost > 0 and c.sp < v_cost:
-				sp_color = Color(0.7, 0.4, 1.0)  # 明るい紫
-			_draw_bar(tx, content_y, tw, bar_h, sp_cur_r, sp_color, sp_max_r)
-			content_y += bar_h + 4.0
+	# エネルギーバー（内部データは energy / max_energy 共通。UI 色と REF 値はクラス種別で切替）
+	if c.max_energy > 0:
+		var is_magic := c.character_data != null and c.character_data.is_magic_class()
+		var ref: float = MP_REF if is_magic else SP_REF
+		var en_cur_r := minf(float(c.energy)     / ref, 1.0)
+		var en_max_r := minf(float(c.max_energy) / ref, 1.0)
+		# 通常色：魔法クラス=濃い青 / 非魔法クラス=水色
+		# コスト不足時の色：魔法クラス=濃い紫 / 非魔法クラス=明るい紫
+		var normal_color: Color = Color(0.2, 0.5, 1.0) if is_magic else Color(0.4, 0.8, 1.0)
+		var low_color:    Color = Color(0.5, 0.2, 0.8) if is_magic else Color(0.7, 0.4, 1.0)
+		var v_cost := c.character_data.v_slot_cost if c.character_data != null else 0
+		var bar_color: Color = low_color if v_cost > 0 and c.energy < v_cost else normal_color
+		_draw_bar(tx, content_y, tw, bar_h, en_cur_r, bar_color, en_max_r)
+		content_y += bar_h + 4.0
 
 	# 指示状態（current_order から読み込み。move/on_low_hp/item_pickup は全体方針から同期）
 	var ord: Dictionary = c.current_order

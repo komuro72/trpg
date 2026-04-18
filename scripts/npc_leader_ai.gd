@@ -376,18 +376,12 @@ func _auto_share_potions() -> void:
 				var pot: Variant = _take_potion_from_party(needer, "hp")
 				if pot != null:
 					cd.inventory.append(pot)
-		# SP/MP ポーション受け渡し
-		var use_mp := needer.max_mp > 0
-		if use_mp:
-			var mp_ratio := float(needer.mp) / float(needer.max_mp) if needer.max_mp > 0 else 1.0
-			if mp_ratio < GlobalConstants.POTION_SP_MP_AUTOUSE_THRESHOLD and _find_potion_in_cd(cd, "mp") == null:
-				var pot: Variant = _take_potion_from_party(needer, "mp")
-				if pot != null:
-					cd.inventory.append(pot)
-		elif needer.max_sp > 0:
-			var sp_ratio := float(needer.sp) / float(needer.max_sp)
-			if sp_ratio < GlobalConstants.POTION_SP_MP_AUTOUSE_THRESHOLD and _find_potion_in_cd(cd, "sp") == null:
-				var pot: Variant = _take_potion_from_party(needer, "sp")
+		# エネルギーポーション受け渡し（全クラス共通）
+		if needer.max_energy > 0:
+			var en_ratio := float(needer.energy) / float(needer.max_energy)
+			if en_ratio < GlobalConstants.POTION_SP_MP_AUTOUSE_THRESHOLD \
+					and _find_potion_in_cd(cd, "energy") == null:
+				var pot: Variant = _take_potion_from_party(needer, "energy")
 				if pot != null:
 					cd.inventory.append(pot)
 
@@ -416,8 +410,14 @@ func _get_equipped_for_type(cd: CharacterData, itype: String) -> Dictionary:
 
 
 ## キャラクターのインベントリからポーションを検索する
+## kind: "hp" / "energy"（旧 "mp" / "sp" は "energy" に正規化）
 func _find_potion_in_cd(cd: CharacterData, kind: String) -> Variant:
+	if kind == "mp" or kind == "sp":
+		kind = "energy"
 	var key := "restore_" + kind
+	var legacy_keys: Array[String] = []
+	if kind == "energy":
+		legacy_keys = ["restore_mp", "restore_sp"]
 	for item_var: Variant in cd.inventory:
 		var it := item_var as Dictionary
 		if it == null:
@@ -425,6 +425,9 @@ func _find_potion_in_cd(cd: CharacterData, kind: String) -> Variant:
 		var eff := it.get("effect", {}) as Dictionary
 		if (eff.get(key, 0) as int) > 0:
 			return it
+		for lk: String in legacy_keys:
+			if (eff.get(lk, 0) as int) > 0:
+				return it
 	return null
 
 

@@ -15,7 +15,7 @@
       "damage_mult": 0.9,
       "pre_delay": 0.1,
       "post_delay": 0.25,
-      "sp_cost": 2
+      "cost": 2
     },
     "X": {
       "name": "狙い撃ち",
@@ -33,7 +33,7 @@
       "type": "physical",
       "range": 6,
       "damage_mult": 3.0,
-      "sp_cost": 25,
+      "cost": 25,
       "pre_delay": 0.4,
       "post_delay": 0.5
     }

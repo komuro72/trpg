@@ -13,7 +13,7 @@
       "type": "support",
       "range": 4,
       "heal_mult": 0.3,
-      "mp_cost": 5,
+      "cost": 5,
       "pre_delay": 0.1,
       "post_delay": 0.3
     },
@@ -23,7 +23,7 @@
       "type": "support",
       "range": 4,
       "heal_mult": 0.6,
-      "mp_cost": 10,
+      "cost": 10,
       "pre_delay": 0.8,
       "post_delay": 0.5
     },
@@ -34,7 +34,7 @@
       "type": "support",
       "range": 4,
       "buff_duration": 10.0,
-      "mp_cost": 8,
+      "cost": 8,
       "pre_delay": 0.4,
       "post_delay": 0.5
     }

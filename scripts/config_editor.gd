@@ -80,10 +80,6 @@ const CLASS_PARAM_GROUPS: Array = [
 		"params": ["id", "name", "weapon_type", "attack_type", "attack_range", "behavior_description"],
 	},
 	{
-		"title": "リソース",
-		"params": ["heal_mp_cost", "buff_mp_cost"],
-	},
-	{
 		"title": "特性",
 		"params": ["is_flying"],
 	},
@@ -93,7 +89,7 @@ const CLASS_PARAM_GROUPS: Array = [
 			"Z_name", "Z_action", "Z_type", "Z_range",
 			"Z_damage_mult", "Z_heal_mult",
 			"Z_pre_delay", "Z_post_delay",
-			"Z_sp_cost", "Z_mp_cost",
+			"Z_cost",
 		],
 	},
 	{
@@ -101,7 +97,7 @@ const CLASS_PARAM_GROUPS: Array = [
 		"params": [
 			"V_name", "V_action", "V_type", "V_range",
 			"V_damage_mult",
-			"V_sp_cost", "V_mp_cost",
+			"V_cost",
 			"V_pre_delay", "V_post_delay",
 			"V_stun_duration", "V_buff_duration",
 			"V_duration", "V_tick_interval",

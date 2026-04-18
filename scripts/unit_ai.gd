@@ -527,18 +527,18 @@ func _start_action(action: Dictionary) -> void:
 			if _manhattan(_member.grid_pos, tgt.grid_pos) > range_val:
 				_complete_action()
 				return
-			var cost := _member.character_data.heal_mp_cost if _member.character_data else 0
+			var cost := _member.character_data.heal_cost if _member.character_data else 0
 			# アンデッド特効：回復量をダメージとして適用
 			if tgt.character_data != null and tgt.character_data.is_undead \
 					and tgt.is_friendly != _member.is_friendly:
-				if _member.use_mp(cost):
+				if _member.use_energy(cost):
 					var power := _member.character_data.power if _member.character_data else 0
 					tgt.take_damage(power, 1.0, _member, true)
 					_member.spawn_heal_effect("cast")
 					tgt.spawn_heal_effect("hit")
 			else:
 				# 通常回復
-				if _member.use_mp(cost):
+				if _member.use_energy(cost):
 					var power := _member.character_data.power if _member.character_data else 0
 					var hp_before := tgt.hp
 					tgt.heal(power)  # heal() 内で HEAL SE 再生
@@ -559,8 +559,8 @@ func _start_action(action: Dictionary) -> void:
 				_complete_action()
 				return
 			# バフ付与
-			var cost := _member.character_data.buff_mp_cost if _member.character_data else 0
-			if _member.use_mp(cost):
+			var cost := _member.character_data.buff_cost if _member.character_data else 0
+			if _member.use_energy(cost):
 				tgt.apply_defense_buff()
 				SoundManager.play_from(SoundManager.HEAL, _member)
 				_member.spawn_heal_effect("cast")
@@ -1061,36 +1061,32 @@ func _execute_v_attack() -> void:
 		_complete_action()
 		return
 	var cd := _member.character_data
-	# MP/SP コスト確認
-	var mp_cost := cd.v_slot_mp_cost
-	var sp_cost := cd.v_slot_sp_cost
-	if mp_cost > 0 and _member.mp < mp_cost:
+	# エネルギーコスト確認
+	var cost := cd.v_slot_cost
+	if cost > 0 and _member.energy < cost:
 		_complete_action()  # コスト不足 → スキップ
-		return
-	if sp_cost > 0 and _member.sp < sp_cost:
-		_complete_action()
 		return
 
 	match cd.class_id:
 		"fighter-sword":
-			_v_rush_slash(sp_cost)
+			_v_rush_slash(cost)
 		"fighter-axe":
-			_v_whirlwind(sp_cost)
+			_v_whirlwind(cost)
 		"archer":
-			_v_headshot(sp_cost)
+			_v_headshot(cost)
 		"magician-fire":
-			_v_flame_circle(mp_cost)
+			_v_flame_circle(cost)
 		"magician-water":
-			_v_water_stun(mp_cost)
+			_v_water_stun(cost)
 		"scout":
-			_v_sliding(sp_cost)
+			_v_sliding(cost)
 		_:
 			_complete_action()
 
 
 ## 剣士: 突進斬り（ターゲット方向に最大2マス前進・経路上の敵にダメージ）
 func _v_rush_slash(cost: int) -> void:
-	_member.use_sp(cost)
+	_member.use_energy(cost)
 	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
 	var raw_damage := int(float(_member.power) * 1.2 * type_mult)
 	if _target != null and is_instance_valid(_target):
@@ -1129,7 +1125,7 @@ func _v_rush_slash(cost: int) -> void:
 
 ## 斧戦士: 振り回し（周囲8マスの敵全員にダメージ）
 func _v_whirlwind(cost: int) -> void:
-	_member.use_sp(cost)
+	_member.use_energy(cost)
 	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
 	var raw_damage := int(float(_member.power) * 1.0 * type_mult)
 	var hit_count := 0
@@ -1151,7 +1147,7 @@ func _v_whirlwind(cost: int) -> void:
 
 ## 弓使い: ヘッドショット（即死耐性なし→即死、あり→×3ダメージ）
 func _v_headshot(cost: int) -> void:
-	_member.use_sp(cost)
+	_member.use_energy(cost)
 	if _target == null or not is_instance_valid(_target):
 		_complete_action()
 		return
@@ -1196,7 +1192,7 @@ func _v_headshot(cost: int) -> void:
 
 ## 魔法使い(火): 炎陣（自分を中心に半径3マスの炎ゾーン設置）
 func _v_flame_circle(cost: int) -> void:
-	_member.use_mp(cost)
+	_member.use_energy(cost)
 	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("magic", 1.0)
 	var damage := maxi(1, int(float(_member.power) * 0.8 * type_mult))
 	var map_node := _member.get_parent()
@@ -1221,7 +1217,7 @@ func _v_flame_circle(cost: int) -> void:
 
 ## 魔法使い(水): 無力化水魔法（ターゲットをスタン）
 func _v_water_stun(cost: int) -> void:
-	_member.use_mp(cost)
+	_member.use_energy(cost)
 	if _target == null or not is_instance_valid(_target):
 		_complete_action()
 		return
@@ -1244,7 +1240,7 @@ func _v_water_stun(cost: int) -> void:
 
 ## 斥候: スライディング（3マスダッシュ・敵すり抜け）
 func _v_sliding(cost: int) -> void:
-	_member.use_sp(cost)
+	_member.use_energy(cost)
 	if _target != null and is_instance_valid(_target):
 		_member.face_toward(_target.grid_pos)
 	var dir := Character.dir_to_vec(_member.facing)
@@ -1916,10 +1912,10 @@ func _generate_heal_queue() -> Array:
 		return []
 	if _member.character_data.power <= 0:
 		return []
-	var cost := _member.character_data.heal_mp_cost
+	var cost := _member.character_data.heal_cost
 	if cost <= 0:
 		return []
-	if _member.mp < cost:
+	if _member.energy < cost:
 		return []
 	# 味方の回復を優先
 	var heal_target := _find_heal_target()
@@ -1939,9 +1935,9 @@ func _generate_heal_queue() -> Array:
 func _generate_buff_queue() -> Array:
 	if _member == null or _member.character_data == null:
 		return []
-	if _member.character_data.buff_mp_cost <= 0:
+	if _member.character_data.buff_cost <= 0:
 		return []
-	if _member.mp < _member.character_data.buff_mp_cost:
+	if _member.energy < _member.character_data.buff_cost:
 		return []
 	# special_skill 指示による発動判定
 	if not _should_use_special_skill():
@@ -1954,14 +1950,12 @@ func _generate_buff_queue() -> Array:
 			{"action": "buff", "target": buff_target}]
 
 
-## Vスロット特殊攻撃の MP/SP コストが足りているか返す
+## Vスロット特殊攻撃のエネルギーコストが足りているか返す
 func _has_v_slot_cost() -> bool:
 	if _member == null or _member.character_data == null:
 		return false
 	var cd := _member.character_data
-	if cd.v_slot_mp_cost > 0 and _member.mp >= cd.v_slot_mp_cost:
-		return true
-	if cd.v_slot_sp_cost > 0 and _member.sp >= cd.v_slot_sp_cost:
+	if cd.v_slot_cost > 0 and _member.energy >= cd.v_slot_cost:
 		return true
 	return false
 
@@ -1992,10 +1986,8 @@ func _generate_special_attack_queue(target: Character) -> Array:
 	if not _should_use_special_skill():
 		return []
 	var cd := _member.character_data
-	# MP/SP コスト確認
-	var has_mp := cd.v_slot_mp_cost > 0 and _member.mp >= cd.v_slot_mp_cost
-	var has_sp := cd.v_slot_sp_cost > 0 and _member.sp >= cd.v_slot_sp_cost
-	if not has_mp and not has_sp:
+	# エネルギーコスト確認
+	if cd.v_slot_cost > 0 and _member.energy < cd.v_slot_cost:
 		return []  # コスト不足 → 通常攻撃にフォールバック
 	# クラスごとの特殊攻撃使用判定
 	# 近接3クラス（剣士・斧戦士・斥候）は囲まれた状況で効果を発揮するため、隣接8マスの敵数で発動判定する
@@ -2236,26 +2228,26 @@ func _generate_potion_queue() -> Array:
 			if potion != null:
 				return [{"action": "use_potion", "item": potion}]
 
-	# SP/MPポーション
-	if _sp_mp_potion == "use":
-		var is_magic := cd.class_id in ["magician-fire", "magician-water", "healer"]
-		if is_magic and _member.max_mp > 0 \
-				and float(_member.mp) / float(_member.max_mp) < GlobalConstants.POTION_SP_MP_AUTOUSE_THRESHOLD:
-			var potion: Variant = _find_potion_in_inventory(cd, "mp")
-			if potion != null:
-				return [{"action": "use_potion", "item": potion}]
-		elif not is_magic and _member.max_sp > 0 \
-				and float(_member.sp) / float(_member.max_sp) < GlobalConstants.POTION_SP_MP_AUTOUSE_THRESHOLD:
-			var potion: Variant = _find_potion_in_inventory(cd, "sp")
-			if potion != null:
-				return [{"action": "use_potion", "item": potion}]
+	# エネルギーポーション（指示名は旧 sp_mp_potion のまま維持・データは energy に作用）
+	if _sp_mp_potion == "use" and _member.max_energy > 0 \
+			and float(_member.energy) / float(_member.max_energy) < GlobalConstants.POTION_SP_MP_AUTOUSE_THRESHOLD:
+		var potion: Variant = _find_potion_in_inventory(cd, "energy")
+		if potion != null:
+			return [{"action": "use_potion", "item": potion}]
 
 	return []
 
 
 ## インベントリからポーション種別を検索して返す（なければ null）
+## kind: "hp" / "energy"（旧 "mp" / "sp" は "energy" として統合）
 func _find_potion_in_inventory(cd: CharacterData, kind: String) -> Variant:
-	var effect_key := "restore_" + kind  ## "restore_hp" / "restore_mp" / "restore_sp"
+	# 後方互換: "mp" / "sp" が渡された場合は "energy" に正規化
+	if kind == "mp" or kind == "sp":
+		kind = "energy"
+	var effect_key := "restore_" + kind  ## "restore_hp" / "restore_energy"
+	var legacy_keys: Array[String] = []
+	if kind == "energy":
+		legacy_keys = ["restore_mp", "restore_sp"]  # 旧保存データ対応
 	for item_v: Variant in cd.inventory:
 		var item := item_v as Dictionary
 		if item == null:
@@ -2269,6 +2261,9 @@ func _find_potion_in_inventory(cd: CharacterData, kind: String) -> Variant:
 		var effect := item.get("effect", {}) as Dictionary
 		if effect.has(effect_key) and int(effect[effect_key]) > 0:
 			return item
+		for lk: String in legacy_keys:
+			if effect.has(lk) and int(effect[lk]) > 0:
+				return item
 	return null
 
 

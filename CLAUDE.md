@@ -228,7 +228,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
   - 良い例：「○○がHPポーションを使い、自身のHPを回復した」
   - 悪い例：「○○がHPポーションを使った（HP+30）」
 - 数値は原則として表示しない（ダメージ段階「小/中/大/特大」等の表現を使う）
-- アイテム名は統一表記を使う：HPポーション / MPポーション / SPポーション
+- アイテム名は統一表記を使う：HPポーション / エネルギーポーション（旧 MPポーション / SPポーションは energy 統合により「エネルギーポーション」に一本化）
 
 ### 指示／ステータスウィンドウ（OrderWindow）
 - 専用ボタンでいつでも開閉可能（ポーズなし・時間進行継続）
@@ -449,8 +449,9 @@ rank値: C=0, B=1, A=2, S=3
 
 ### vitality / energy の格納先
 - `vitality`（0-100）→ `character_data.max_hp`（`hp` はゲーム開始時に `max_hp` で初期化）
-- `energy`（0-100）→ 魔法クラス（magician-fire / magician-water / healer）は `max_mp`、非魔法クラスは `max_sp` に格納（`mp` / `sp` はゲーム開始時に上限値で初期化）
-- クラスJSON（`assets/master/classes/*.json`）の `"mp"` / `"max_sp"` フィールドは廃止（energy で代替）
+- `energy`（0-100）→ 全クラス共通で `character_data.max_energy` に格納（`energy` はゲーム開始時に上限値で初期化）
+- UI 表示は `CharacterData.is_magic_class()` で判定し、魔法クラスでは「MP」、非魔法クラスでは「SP」として表示する（内部データは同一）
+- クラスJSON（`assets/master/classes/*.json`）の `"mp"` / `"max_sp"` フィールドは廃止（energy で代替・2026-04-18）
 
 ### move_speed の変換
 - 0〜100 スコアで生成し `_convert_move_speed(score)` で秒/タイルに変換して `character_data.move_speed` に格納
@@ -922,8 +923,7 @@ rank値: C=0, B=1, A=2, S=3
 | ステータス | フィールド名（実装） | 説明 |
 |-----------|-------------------|------|
 | HP | `max_hp` / `hp` | ヒットポイント |
-| MP | `max_mp` / `mp` | マジックポイント。魔法クラス（magician-fire/magician-water/healer）専用 |
-| SP | `max_sp` / `sp` | スタミナポイント。非魔法クラス（fighter-sword/fighter-axe/archer/scout）専用 |
+| エネルギー | `max_energy` / `energy` | 全クラス共通のリソース。UI 表示は `CharacterData.is_magic_class()` で魔法クラス→「MP」/ 非魔法クラス→「SP」に切替（内部データは同じ `energy`）|
 | 物理威力／魔法威力 | `power` | 攻撃ダメージ・回復量の共通値。UI表示ラベルはクラスに応じて「物理威力」（物理クラス）または「魔法威力」（魔法クラス）に切り替え |
 | 物理技量／魔法技量 | `skill` | 命中精度・クリティカル率の基礎値。UI表示ラベルはクラスに応じて「物理技量」または「魔法技量」に切り替え |
 | 物理攻撃耐性 | `physical_resistance` | 物理ダメージ軽減の能力値（整数）。軽減率 = 値/(値+100)。クラスごとに素値を設定＋装備補正 |
@@ -961,16 +961,18 @@ rank値: C=0, B=1, A=2, S=3
 - 軽減方式：逓減カーブ（軽減率 = 能力値 / (能力値 + 100)。100で50%、200で67%）
 - OrderWindow では数値のみ表示（%表記はしない）
 
-### MP/SPシステム
-- **魔法クラス**（`magician-fire` / `magician-water` / `healer`）：`mp` / `max_mp` を使用
-- **非魔法クラス**（`fighter-sword` / `fighter-axe` / `archer` / `scout`）：`sp` / `max_sp` を使用
-- バー表示（左パネル）：MPは濃い青・SPは水色系。それぞれのクラスで対応するバーのみ表示。Vスロット特殊攻撃のコスト未満になるとバー色が紫系に変化（MP=濃い紫・SP=明るい紫）
+### energyシステム
+- 全クラス共通で `energy` / `max_energy` を持つ（内部データは単一フィールド）
+- UI 表示は `CharacterData.is_magic_class()` で魔法クラス→「MP」/ 非魔法クラス→「SP」として表示（ラベル色・バー色も切替）
+- **魔法クラス**（`magician-fire` / `magician-water` / `healer`）：UI 表示は「MP」
+- **非魔法クラス**（`fighter-sword` / `fighter-axe` / `archer` / `scout`）：UI 表示は「SP」
+- バー表示（左パネル）：魔法クラス→濃い青・非魔法クラス→水色系。Vスロット特殊攻撃のコスト未満になるとバー色が紫系に変化（魔法=濃い紫・非魔法=明るい紫）
 - 通常攻撃（Z）：全クラス微量消費（自動回復と相殺される程度）
-- 特殊攻撃（V）：魔法クラスはMP消費大・非魔法クラスはSP消費大
-- ヒーラーのZ（回復）はMP消費大（例外扱い）
-- 自動回復：MP・SP ともに時間経過でゆっくり回復
-- 回復アイテム：MPポーション（魔法クラス用）・SPポーション（非魔法クラス用）に分離
-- 敵キャラクターは当面 SP/MP システムを持たない（AI の行動クールタイムで代替）
+- 特殊攻撃（V）：全クラス共通でエネルギー消費（クラス JSON の `slots.V.cost` で定義）
+- ヒーラーのZ（回復）もエネルギー消費（クラス JSON の `slots.Z.cost`）
+- 自動回復：エネルギーは時間経過でゆっくり回復（`Character.ENERGY_RECOVERY_RATE`）
+- 回復アイテム：エネルギーポーション 1 種に統合（使用キャラのクラス種別で MP/SP どちらとしてログ表示されるかが決まる）
+- 敵キャラクターも energy を持つ（`apply_enemy_stats` が `max_energy = stats.energy` を設定）
 
 ### 命中・被ダメージ計算
 
@@ -1196,7 +1198,7 @@ rank値: C=0, B=1, A=2, S=3
 - **legacy フィールドの棚卸し**：
   - 個別敵 JSON の `hp` / `power` / `skill` / `physical_resistance` / `magic_resistance` / `rank`（`apply_enemy_stats` で上書きされる legacy）
   - 他にも潜んでいる可能性あり。定期的に Claude Code に全体棚卸しを依頼する運用
-- **敵ヒーラー（dark_priest）の回復が機能していない可能性**：`apply_enemy_stats` が全敵に `max_mp = 0` を設定するため、`_generate_heal_queue` が `mp < cost` でスキップされる。dark_priest の仕様（CLAUDE.md「支援（回復・バリア）」）と実装が乖離している疑い。要調査
+- **敵ヒーラー（dark_priest）の回復が機能しているか動作確認**：2026-04-18 の energy 統合で `apply_enemy_stats` が `max_energy = stats.energy` を設定するようになったため、dark_priest も通常の魔法クラス同様に回復・バフが撃てるはず。実機で確認したら本項目は削除
 - **demon の `is_flying`**：Step 1 の構造整理後、敵一覧タブで demon の `is_flying` が false に表示されていた。CLAUDE.md の仕様では demon は飛行のはず（`is_flying=true`）。要確認・修正
 - **アイテム effect キー名の不整合**：マスター側（`assets/master/items/potion_hp.json`）は `heal_hp`、インスタンス側（`dungeon_handcrafted.json`）は `restore_hp`。現状は両方未使用なので問題顕在化していないが、将来のランダム生成実装時に統一が必要
 - **「敵クラス」vs「種族」の概念整理**：Excel 仕様書では「敵クラス」、コード／AI 実装では「種族」（GoblinLeaderAI 等）と呼んでいる。現状は動作に問題ないが用語の使い分けがあいまいで将来混乱の元になる可能性。整理したい

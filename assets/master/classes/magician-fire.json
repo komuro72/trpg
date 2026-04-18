@@ -13,7 +13,7 @@
       "type": "magic",
       "range": 5,
       "damage_mult": 1.0,
-      "mp_cost": 5,
+      "cost": 5,
       "pre_delay": 0.1,
       "post_delay": 0.3
     },
@@ -23,7 +23,7 @@
       "type": "magic",
       "range": 5,
       "damage_mult": 2.0,
-      "mp_cost": 10,
+      "cost": 10,
       "pre_delay": 0.8,
       "post_delay": 0.6
     },
@@ -34,7 +34,7 @@
       "range": 4,
       "area_radius": 2,
       "damage_mult": 1.5,
-      "mp_cost": 15,
+      "cost": 15,
       "pre_delay": 1.0,
       "post_delay": 0.8
     },
@@ -44,7 +44,7 @@
       "type": "magic",
       "range": 3,
       "damage_mult": 0.8,
-      "mp_cost": 20,
+      "cost": 20,
       "duration": 2.5,
       "tick_interval": 0.5,
       "pre_delay": 0.5,

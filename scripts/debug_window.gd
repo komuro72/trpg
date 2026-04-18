@@ -140,16 +140,12 @@ func _toggle_godmode() -> void:
 func _apply_godmode(ch: Character, on: bool) -> void:
 	if on:
 		ch.hp = ch.max_hp * 10
-		if ch.max_mp > 0:
-			ch.mp = ch.max_mp * 10
-		if ch.max_sp > 0:
-			ch.sp = ch.max_sp * 10
+		if ch.max_energy > 0:
+			ch.energy = ch.max_energy * 10
 	else:
 		ch.hp = mini(ch.hp, ch.max_hp)
-		if ch.max_mp > 0:
-			ch.mp = mini(ch.mp, ch.max_mp)
-		if ch.max_sp > 0:
-			ch.sp = mini(ch.sp, ch.max_sp)
+		if ch.max_energy > 0:
+			ch.energy = mini(ch.energy, ch.max_energy)
 
 
 ## リーダー一覧内でカーソルを移動する。_leader_list は前回の描画で構築済み

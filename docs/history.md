@@ -1188,3 +1188,89 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
 - Godot `--check-only` exit 0
 - `grep '"mp"\|"max_sp"' assets/master/classes/*.json` と `grep '"mp"' assets/master/enemies/*.json` いずれも 0 件
 
+## MP / SP を energy に統合（2026-04-18）
+
+### 背景・設計意図
+- 1 キャラは MP または SP のどちらか一方しか持たない排他構造で、「魔法クラスは max_mp / sp=0」「非魔法クラスは max_sp / mp=0」と冗長なフィールド対を維持していた
+- ポーションも MP / SP の 2 種類があり、プレイヤー間のアイテム受け渡し負担が大きかった
+- クラス JSON の `mp` / `max_sp` は 2026-04-18 に廃止済み（energy ベースに移行）で、内部データのみ置き換えれば完全統合できる状態だった
+- UI 上の「MP」「SP」という区別はプレイヤーの直感に馴染んでいるため、**見た目は維持し、内部データのみ統合**する方針
+
+### 変更方針
+- 内部データ：`mp` / `max_mp` / `sp` / `max_sp` → **`energy` / `max_energy`** の 2 フィールドに統合
+- UI 表示：`CharacterData.is_magic_class()` で判定し、魔法クラスは「MP」、非魔法クラスは「SP」として表示
+- スロット定義：`slots.*.mp_cost` / `slots.*.sp_cost` → `slots.*.cost`
+- CharacterData フィールド：`heal_mp_cost` → `heal_cost`、`buff_mp_cost` → `buff_cost`、`v_slot_mp_cost` + `v_slot_sp_cost` → `v_slot_cost`
+- ポーション：`potion_mp.json` + `potion_sp.json` → **`potion_energy.json`**（1種類・エネルギーポーション）
+- effect キー：`restore_mp` / `restore_sp` → `restore_energy`（旧キーもフォールバックで読めるようにする）
+
+### JSON 変更
+- `assets/master/classes/*.json` 12 ファイル: `slots.Z.mp_cost` / `slots.Z.sp_cost` → `slots.Z.cost`（V スロットも同様）
+- `assets/master/items/potion_mp.json` / `potion_sp.json` を削除、`potion_energy.json` を新設（アイコンは `potion_mp.png` を流用）
+- `assets/master/maps/dungeon_handcrafted.json`: `"item_type": "potion_mp"/"potion_sp"` → `"potion_energy"`、`"restore_mp"/"restore_sp"` → `"restore_energy"`（178 箇所）
+
+### コード変更（主要箇所）
+- `character_data.gd`:
+  - `max_mp` / `max_sp` → `max_energy`
+  - `heal_mp_cost` / `buff_mp_cost` → `heal_cost` / `buff_cost`
+  - `v_slot_mp_cost` / `v_slot_sp_cost` → `v_slot_cost`（単一フィールドに統合）
+  - **新ヘルパー `is_magic_class()`** を追加（UI 表示切替用・`class_id in ["magician-fire", "magician-water", "healer"]`）
+- `character.gd`:
+  - `mp` / `max_mp` / `sp` / `max_sp` → `energy` / `max_energy`
+  - `use_mp()` / `use_sp()` → `use_energy()`（単一メソッドに統合）
+  - `_mp_recovery_accum` / `_sp_recovery_accum` → `_energy_recovery_accum`、`MP_SP_RECOVERY_RATE` → `ENERGY_RECOVERY_RATE`
+  - `_recover_mp_sp()` → `_recover_energy()`
+  - `use_consumable()` を `restore_energy` に対応（`restore_mp` / `restore_sp` は legacy 互換で読める）
+- `character_generator.gd`:
+  - `generate()`: 全クラス共通で `data.max_energy = stats.energy`（分岐廃止）
+  - `apply_enemy_stats()`: 敵も同じく `max_energy = stats.energy`（旧 `max_mp=0` 固定の副作用で dark_priest が回復不能だった問題も自動解消）
+  - 新ヘルパー `_slot_cost()`: 新形式 `"cost"` 優先、旧形式 `"mp_cost"` / `"sp_cost"` にフォールバック
+- `unit_ai.gd`:
+  - `_member.mp` / `_member.sp` 参照を全て `_member.energy` に
+  - `_has_v_slot_cost()` / `_execute_v_attack()` / `_generate_heal_queue()` / `_generate_buff_queue()` などを energy ベースに書き換え
+  - `_find_potion_in_inventory()` に legacy キー（`restore_mp` / `restore_sp`）のフォールバックを追加
+- `player_controller.gd`:
+  - 各 `_execute_*()` の MP/SP コスト計算を `_slot_cost()` ベースに統一
+  - `_build_effect_lines()` / `_is_consumable_usable_by_char()` を energy に対応
+  - `character.use_mp()` / `character.use_sp()` → `character.use_energy()` に全置換
+- `left_panel.gd`:
+  - 二本立ての MP / SP バー描画を `max_energy > 0` の単一判定に統合
+  - バー色は `is_magic_class()` で決定（魔法=濃い青 / 非魔法=水色、コスト不足時は紫系）
+- `order_window.gd`:
+  - ステータス表示の MP/SP 行を「energy を MP/SP どちらのラベルで表示するか」のみの分岐に変更
+  - `_EFFECT_LABELS` に `restore_energy` を追加
+- `consumable_bar.gd`:
+  - `ITEM_COLORS` に `potion_energy` を追加（legacy の `potion_mp` / `potion_sp` も残存）
+  - `_is_consumable_usable()` を `max_energy` 判定に
+  - 詳細表示のラベル（MP回復/SP回復）をキャラクターの `is_magic_class()` で切替
+- `npc_leader_ai.gd`:
+  - SP/MP ポーション受け渡しロジックを energy 単一判定に統合
+  - `_find_potion_in_cd()` に legacy キーのフォールバック追加
+- `game_map.gd`:
+  - 初期ポーション付与を `potion_energy` 1 種に統合（魔法クラス=MP / 非魔法=SP の分岐を撤去）
+- `debug_window.gd`:
+  - ゴッドモードの MP/SP 無限化を `energy` の 10 倍化に統合
+- 敵魔法AI 3 ファイル（`dark_mage_unit_ai.gd` / `goblin_mage_unit_ai.gd` / `lich_unit_ai.gd`）:
+  - `_member.mp` → `_member.energy`、`use_mp()` → `use_energy()`
+- `config_editor.gd`:
+  - `CLASS_PARAM_GROUPS` の Z スロット / V スロットグループから `_mp_cost` / `_sp_cost` を削除、`Z_cost` / `V_cost` を追加
+  - リソースグループから `heal_mp_cost` / `buff_mp_cost` を削除（プレーンな `cost` キー経由でスロット側から読み取られるため）
+
+### ポーションアイコンの扱い
+- 新しい `potion_energy.json` のアイコンは既存の `potion_mp.png` を流用（`"image": "assets/images/items/potion_mp.png"`）
+- 旧 `potion_sp.png` は残置（将来独立アイコンを作る際の素材として・現状未参照）
+- 色の付け方：魔法クラスが持っていれば UI 上「MP」として、非魔法クラスが持っていれば「SP」として表示されるが、ポーションアイコン自体はクラス中立（同じ色・同じ絵）
+
+### 副次的に解消したはずの問題
+- `apply_enemy_stats` が `max_mp = 0` を設定していたため dark_priest が回復できなかった問題は、本変更で `max_energy = stats.energy` になることで自動解消される見込み（実機確認は別途）
+
+### 注意点・後方互換
+- effect キーの legacy（`restore_mp` / `restore_sp`）は `use_consumable` / `_find_potion_in_inventory` / `_find_potion_in_cd` が `restore_energy` にフォールバックする互換ロジックを持つ。セーブデータに旧キーが残っていても動作する
+- スロット cost の legacy（`mp_cost` / `sp_cost`）は `_slot_cost()` ヘルパーが `cost` を優先しつつ旧キーにフォールバック。古い class JSON でも動作する
+- 旧 `potion_mp` / `potion_sp` item_type も `ITEM_COLORS` に残しているため、旧データを拾った場合もアイコン色が決まる
+
+### 確認
+- Godot `--check-only` exit 0・パースエラーなし
+- `grep '\.mp\b\|\.sp\b\|\.max_mp\b\|\.max_sp\b' scripts/` で残存ヒットなし（magic_power 用のローカル変数 `var mp: int` とコメント内の legacy 言及のみ）
+- `grep 'mp_cost\|sp_cost' assets/master/classes/*.json` 0 件
+

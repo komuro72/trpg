@@ -8,8 +8,9 @@ extends CanvasLayer
 ## アイテム種別ごとのアイコン色
 const ITEM_COLORS: Dictionary = {
 	"potion_hp": Color(0.85, 0.20, 0.20),   # 赤：HP回復
-	"potion_mp": Color(0.20, 0.40, 0.90),   # 青：MP回復
-	"potion_sp": Color(0.20, 0.80, 0.30),   # 緑：SP回復
+	"potion_energy": Color(0.20, 0.40, 0.90),   # 青：エネルギー回復（旧 MP アイコン流用）
+	"potion_mp": Color(0.20, 0.40, 0.90),   # legacy（旧保存データ対応）
+	"potion_sp": Color(0.20, 0.80, 0.30),   # legacy
 }
 const DEFAULT_COLOR := Color(1.0, 0.85, 0.15)  # 黄：その他消耗品
 
@@ -378,11 +379,15 @@ func _build_detail_lines(entry: Dictionary) -> Array[String]:
 		var sign_s: String = "+" if val > 0 else ""
 		lines.append("%s %s%d" % [label, sign_s, val])
 	# 消耗品：effect
+	# エネルギー回復ラベルは現在のキャラクターのクラス種別で MP/SP を切替
 	var effect: Dictionary = entry.get("effect", {}) as Dictionary
-	const EFFECT_LABELS: Dictionary = {
+	var _energy_label := "MP" if _character != null and _character.character_data != null \
+		and _character.character_data.is_magic_class() else "SP"
+	var EFFECT_LABELS: Dictionary = {
 		"restore_hp": "HP回復",
-		"restore_mp": "MP回復",
-		"restore_sp": "SP回復",
+		"restore_energy": "%s回復" % _energy_label,
+		"restore_mp": "MP回復",  # legacy
+		"restore_sp": "SP回復",  # legacy
 	}
 	for key_v: Variant in effect.keys():
 		var key := key_v as String
@@ -488,14 +493,14 @@ func _draw_item_list() -> void:
 	_draw_detail_pane(bx + total_w, by, box_h)
 
 
-## 消耗品が現在のキャラクターで使用できるかを簡易判定する（max_mp / max_sp チェック）
+## 消耗品が現在のキャラクターで使用できるかを簡易判定する（max_energy チェック）
 func _is_consumable_usable(item: Dictionary) -> bool:
 	if _character == null or not is_instance_valid(_character):
 		return true
 	var effect: Dictionary = item.get("effect", {}) as Dictionary
-	if int(effect.get("restore_mp", 0)) > 0 and _character.max_mp == 0:
-		return false
-	if int(effect.get("restore_sp", 0)) > 0 and _character.max_sp == 0:
+	var restore_energy := int(effect.get("restore_energy",
+		effect.get("restore_mp", effect.get("restore_sp", 0))))
+	if restore_energy > 0 and _character.max_energy == 0:
 		return false
 	return true
 

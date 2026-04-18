@@ -306,19 +306,12 @@ func _setup_hero() -> void:
 			"item_type": "potion_hp", "category": "consumable",
 			"item_name": "HPポーション", "effect": {"restore_hp": 30}, "quantity": 1,
 		})
-	var magic_classes: Array[String] = ["magician-fire", "magician-water", "healer"]
-	if class_id in magic_classes:
-		for _i in range(5):
-			hero_items.append({
-				"item_type": "potion_mp", "category": "consumable",
-				"item_name": "MPポーション", "effect": {"restore_mp": 20}, "quantity": 1,
-			})
-	else:
-		for _i in range(5):
-			hero_items.append({
-				"item_type": "potion_sp", "category": "consumable",
-				"item_name": "SPポーション", "effect": {"restore_sp": 20}, "quantity": 1,
-			})
+	# エネルギーポーション（全クラス共通。UI 表示だけクラス種別で MP/SP に切替）
+	for _i in range(5):
+		hero_items.append({
+			"item_type": "potion_energy", "category": "consumable",
+			"item_name": "エネルギーポーション", "effect": {"restore_energy": 20}, "quantity": 1,
+		})
 
 	hero = Character.new()
 	hero.grid_pos = spawn_pos

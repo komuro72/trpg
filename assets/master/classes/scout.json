@@ -15,7 +15,7 @@
       "damage_mult": 0.9,
       "pre_delay": 0.05,
       "post_delay": 0.2,
-      "sp_cost": 2
+      "cost": 2
     },
     "X": {
       "name": "急所狙い",
@@ -32,7 +32,7 @@
       "name": "スライディング",
       "action": "sliding",
       "type": "physical",
-      "sp_cost": 20,
+      "cost": 20,
       "pre_delay": 0.15,
       "post_delay": 0.4
     }

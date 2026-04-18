@@ -170,11 +170,11 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_sp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "SPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_sp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 1
                 },
@@ -262,11 +262,11 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_sp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "SPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_sp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 1
                 }
@@ -336,11 +336,11 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_sp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "SPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_sp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 1
                 },
@@ -498,47 +498,47 @@
                       "quantity": 1
                     },
                     {
-                      "item_type": "potion_sp",
+                      "item_type": "potion_energy",
                       "category": "consumable",
-                      "item_name": "SPポーション",
+                      "item_name": "エネルギーポーション",
                       "effect": {
-                        "restore_sp": 20
+                        "restore_energy": 20
                       },
                       "quantity": 1
                     },
                     {
-                      "item_type": "potion_sp",
+                      "item_type": "potion_energy",
                       "category": "consumable",
-                      "item_name": "SPポーション",
+                      "item_name": "エネルギーポーション",
                       "effect": {
-                        "restore_sp": 20
+                        "restore_energy": 20
                       },
                       "quantity": 1
                     },
                     {
-                      "item_type": "potion_sp",
+                      "item_type": "potion_energy",
                       "category": "consumable",
-                      "item_name": "SPポーション",
+                      "item_name": "エネルギーポーション",
                       "effect": {
-                        "restore_sp": 20
+                        "restore_energy": 20
                       },
                       "quantity": 1
                     },
                     {
-                      "item_type": "potion_sp",
+                      "item_type": "potion_energy",
                       "category": "consumable",
-                      "item_name": "SPポーション",
+                      "item_name": "エネルギーポーション",
                       "effect": {
-                        "restore_sp": 20
+                        "restore_energy": 20
                       },
                       "quantity": 1
                     },
                     {
-                      "item_type": "potion_sp",
+                      "item_type": "potion_energy",
                       "category": "consumable",
-                      "item_name": "SPポーション",
+                      "item_name": "エネルギーポーション",
                       "effect": {
-                        "restore_sp": 20
+                        "restore_energy": 20
                       },
                       "quantity": 1
                     }
@@ -623,47 +623,47 @@
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       }
@@ -756,47 +756,47 @@
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       }
@@ -889,47 +889,47 @@
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       }
@@ -1022,47 +1022,47 @@
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       }
@@ -1146,47 +1146,47 @@
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       }
@@ -1270,47 +1270,47 @@
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       }
@@ -1389,47 +1389,47 @@
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       }
@@ -1522,47 +1522,47 @@
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       }
@@ -1641,47 +1641,47 @@
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       }
@@ -1765,47 +1765,47 @@
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_sp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "SPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_sp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       }
@@ -1884,47 +1884,47 @@
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       }
@@ -2003,47 +2003,47 @@
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       },
                       {
-                        "item_type": "potion_mp",
+                        "item_type": "potion_energy",
                         "category": "consumable",
-                        "item_name": "MPポーション",
+                        "item_name": "エネルギーポーション",
                         "effect": {
-                          "restore_mp": 20
+                          "restore_energy": 20
                         },
                         "quantity": 1
                       }
@@ -2290,11 +2290,11 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_mp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "MPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_mp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 1
                 },
@@ -2336,11 +2336,11 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_mp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "MPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_mp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 1
                 },
@@ -2428,11 +2428,11 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_mp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "MPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_mp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 1
                 }
@@ -2728,11 +2728,11 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_mp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "MPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_mp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 2
                 },
@@ -2893,11 +2893,11 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_sp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "SPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_sp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 2
                 }
@@ -2935,11 +2935,11 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_sp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "SPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_sp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 2
                 },
@@ -3324,11 +3324,11 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_sp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "SPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_sp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 1
                 }
@@ -3774,11 +3774,11 @@
                   }
                 },
                 {
-                  "item_type": "potion_sp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "SPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_sp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 1
                 }
@@ -3887,20 +3887,20 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_mp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "MPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_mp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 2
                 },
                 {
-                  "item_type": "potion_mp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "MPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_mp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 2
                 }
@@ -4125,11 +4125,11 @@
                   }
                 },
                 {
-                  "item_type": "potion_sp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "SPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_sp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 2
                 }
@@ -4615,11 +4615,11 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_sp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "SPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_sp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 1
                 }
@@ -4657,11 +4657,11 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_mp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "MPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_mp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 2
                 },
@@ -4957,11 +4957,11 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_sp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "SPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_sp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 1
                 }
@@ -5243,11 +5243,11 @@
                   }
                 },
                 {
-                  "item_type": "potion_mp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "MPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_mp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 1
                 }
@@ -5342,20 +5342,20 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_mp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "MPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_mp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 1
                 },
                 {
-                  "item_type": "potion_mp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "MPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_mp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 2
                 }
@@ -6455,20 +6455,20 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_mp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "MPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_mp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 2
                 },
                 {
-                  "item_type": "potion_mp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "MPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_mp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 2
                 }
@@ -6572,11 +6572,11 @@
                   }
                 },
                 {
-                  "item_type": "potion_sp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "SPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_sp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 1
                 }
@@ -7143,11 +7143,11 @@
               ],
               "items": [
                 {
-                  "item_type": "potion_mp",
+                  "item_type": "potion_energy",
                   "category": "consumable",
-                  "item_name": "MPポーション",
+                  "item_name": "エネルギーポーション",
                   "effect": {
-                    "restore_mp": 20
+                    "restore_energy": 20
                   },
                   "quantity": 2
                 },

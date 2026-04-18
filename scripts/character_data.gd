@@ -31,8 +31,9 @@ var sprite_face:      String = ""  # 顔アイコン（LeftPanel 表示用）
 
 ## 基本ステータス
 var max_hp:       int   = 1
-var max_mp:       int   = 0     ## 0 = MP なし（物理攻撃のみのキャラはデフォルト0）
-var max_sp:       int   = 0     ## 0 = SP なし（魔法クラスはデフォルト0）
+## エネルギー（全クラス共通。魔法クラスは UI 上「MP」、非魔法クラスは「SP」として表示）
+## 0 = エネルギーなし（class_stats.json の energy 値から生成）
+var max_energy:   int   = 0
 var power:        int   = 1     ## 物理威力 or 魔法威力（クラスに応じてUI表示名を切り替え）
 var skill:        int   = 0     ## 物理技量 or 魔法技量（命中・クリティカル率の基礎値）
 var defense_accuracy: int = 50  ## 防御技量（0〜100。防御判定の成功率%。装備による変化なし）
@@ -44,15 +45,14 @@ var attack_type: String = "melee"
 ## 遠距離・魔法・回復の射程（タイル数。melee は 1 固定）
 var attack_range: int = 1
 
-## 回復スキルのMP消費（power を回復量として使用）
-var heal_mp_cost: int = 0
+## 回復スキルのエネルギー消費（power を回復量として使用）
+var heal_cost: int = 0
 
-## バフスキルのMP消費（防御力アップなど）
-var buff_mp_cost: int = 0
+## バフスキルのエネルギー消費（防御力アップなど）
+var buff_cost: int = 0
 
-## Vスロット特殊攻撃のコスト（クラスJSONから読み込み。MP系クラスは mp_cost、SP系クラスは sp_cost）
-var v_slot_mp_cost: int = 0
-var v_slot_sp_cost: int = 0
+## Vスロット特殊攻撃のエネルギー消費（クラスJSONの slots.V.cost から読み込み）
+var v_slot_cost: int = 0
 
 ## 耐性（能力値。内部で軽減率に変換。クラス素値＋装備補正。Phase 10-2〜）
 ## 変換式: 軽減率 = 能力値 / (能力値 + 100.0)（逓減カーブ・100で50%軽減）
@@ -145,7 +145,7 @@ static func load_from_json(path: String) -> CharacterData:
 	data.character_id         = d.get("id", "")
 	data.character_name       = d.get("name", "")
 	data.max_hp               = int(d.get("hp", 1))
-	# max_mp / max_sp はクラスの energy 値から apply_enemy_stats / generate() で設定するため
+	# max_energy はクラスの energy 値から apply_enemy_stats / generate() で設定するため
 	# ここでは JSON から読まない（mp / max_sp フィールドは廃止済み）
 	# power: 新 "power" キーを優先。旧キー "attack_power"/"magic_power" にフォールバック
 	var raw_power: int = int(d.get("power", -1))
@@ -167,8 +167,8 @@ static func load_from_json(path: String) -> CharacterData:
 		data.defense_accuracy = int(float(da_raw))
 	data.attack_type          = d.get("attack_type",  "melee")
 	data.attack_range         = int(d.get("attack_range", 1))
-	data.heal_mp_cost         = int(d.get("heal_mp_cost", 0))
-	data.buff_mp_cost         = int(d.get("buff_mp_cost", 0))
+	# heal_cost / buff_cost は apply_enemy_stats で slot 定義から設定される
+	# （旧 heal_mp_cost / buff_mp_cost は廃止）
 	data.chase_range          = int(d.get("chase_range", 10))
 	data.territory_range      = int(d.get("territory_range", 50))
 	data.is_flying            = bool(d.get("is_flying", false))
@@ -207,6 +207,12 @@ static func load_from_json(path: String) -> CharacterData:
 	data.sprite_top_attack = sprites.get("top_attack", "") as String
 
 	return data
+
+
+## 魔法クラスか判定する（UI ラベル「MP」/「SP」切替用。
+## 内部データは energy で統一されているが、表示だけはクラス種別で分岐する）
+func is_magic_class() -> bool:
+	return class_id in ["magician-fire", "magician-water", "healer"]
 
 
 ## inventory 内の消耗品（category == "consumable"）リストを返す
