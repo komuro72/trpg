@@ -20,16 +20,15 @@ const HIGHLIGHT_BG_COLOR: Color = Color(1.0, 1.0, 0.8)
 const PANEL_BG_COLOR:     Color = Color(0.10, 0.10, 0.14, 0.98)
 const TITLE_TEXT:         String = "Config Editor (開発用)"
 
-## カテゴリタブの順序（依存順：上位概念 → 下位概念）
-## 定数がないタブもプレースホルダーとして表示する
+## カテゴリタブの順序（陣営・階層順：Character → PartyLeader →
+## NpcLeaderAI → EnemyLeaderAI → UnitAI）
+## 定数がないタブもプレースホルダーとして表示する（将来の拡張用）
 const TABS: Array[String] = [
 	"Character",
-	"UnitAI",
 	"PartyLeader",
 	"NpcLeaderAI",
-	"Healer",
-	"PlayerController",
 	"EnemyLeaderAI",
+	"UnitAI",
 ]
 ## TABS に含まれないカテゴリの定数を集める予備タブ
 const UNKNOWN_TAB: String = "Unknown"

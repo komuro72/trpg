@@ -105,9 +105,9 @@ func _evaluate_party_strategy() -> Strategy:
 	return Strategy.ATTACK
 
 
-## 現在の状態に基づく目標フロアを返す（戦力値 + MP/SP 補正）
+## 現在の状態に基づく目標フロアを返す（戦力値 + HP 補正）
 ## 戦力値 = ランク和 × HP充足率（_evaluate_party_strength()）
-## MP/SP 平均充足率が NPC_ENERGY_THRESHOLD 未満の場合は適正フロア - 1
+## パーティーHP充足率（ポーション込み・平均）が HP_STATUS_STABLE 未満の場合は適正フロア - 1
 ## suppress_floor_navigation = true またはメンバーなしの場合は現在フロアをそのまま返す
 func _get_target_floor() -> int:
 	var current_floor := 0
@@ -135,26 +135,16 @@ func _get_target_floor() -> int:
 		if strength < float(this_rank) / 2.0:
 			appropriate_floor = current_floor - 1
 
-	# --- 3. MP/SP 充足率チェック（ポーション込み・平均値） ---
-	var energy_fail := false
-	var energy_sum := 0.0
-	var energy_count := 0
-	for m: Character in _party_members:
-		if not is_instance_valid(m):
-			continue
-		var max_energy := m.max_mp if m.max_mp > 0 else m.max_sp
-		if max_energy <= 0:
-			continue
-		var cur_energy := m.mp if m.max_mp > 0 else m.sp
-		var recoverable := float(_calc_recoverable_energy(m))
-		energy_sum += clampf((float(cur_energy) + recoverable) / float(max_energy), 0.0, 1.0)
-		energy_count += 1
-	if energy_count > 0 and energy_sum / float(energy_count) < GlobalConstants.NPC_ENERGY_THRESHOLD:
-		energy_fail = true
+	# --- 3. HP 充足率チェック（ポーション込み・パーティー平均） ---
+	# HpStatus 計算と同じ式で raw な ratio を求め、HP_STATUS_STABLE (0.5) 未満なら補正-1
+	# 旧実装の「最低HP率 or MP/SP平均率」ベースから「HP充足率平均」ベースに一本化
+	# （エネルギー率は戦況判断拡張で後日検討）
+	var hp_ratio := _calc_party_hp_ratio()
+	var hp_fail: bool = hp_ratio < GlobalConstants.HP_STATUS_STABLE
 
-	# --- 4. 目標フロア決定（MP/SP が低ければ-1） ---
+	# --- 4. 目標フロア決定（HP 充足率が低ければ-1） ---
 	var target_floor := appropriate_floor
-	if energy_fail:
+	if hp_fail:
 		target_floor = maxi(0, appropriate_floor - 1)
 
 	# --- 5. デバッグログ（初回 or 目標フロア変化時） ---
@@ -164,17 +154,33 @@ func _get_target_floor() -> int:
 		var half_rank  := floori(float(GlobalConstants.FLOOR_RANK.get(current_floor, 0) as int) / 2.0)
 		var score_part := "戦力%.1f（次F%d基準%d / 退避%d）" % [
 			strength, current_floor + 1, next_rank, half_rank]
-		var en_avg  := (energy_sum / float(energy_count) * 100.0) if energy_count > 0 else 100.0
-		var en_part := "En平均%.0f%%%s" % [en_avg, "×" if energy_fail else "○"]
-		var adj_part := " →補正-1" if energy_fail else ""
+		var hp_part := "HP充足率%.0f%%%s" % [hp_ratio * 100.0, "×" if hp_fail else "○"]
+		var adj_part := " →補正-1" if hp_fail else ""
 		MessageLog.add_ai(
 			"[NPCフロア判断] %s: %s / %s / 適正F%d%s → 目標F%d" % [
-				leader_name, score_part, en_part,
+				leader_name, score_part, hp_part,
 				appropriate_floor, adj_part, target_floor]
 		)
 		_prev_target_floor = target_floor
 
 	return target_floor
+
+
+## パーティー全体の HP 充足率（ポーション込み・平均）を返す
+## _calc_hp_status_for と同じ計算式（ただし enum バケットではなく生の ratio を返す）
+func _calc_party_hp_ratio() -> float:
+	var total_hp := 0
+	var total_max := 0
+	var total_potion := 0
+	for m: Character in _party_members:
+		if not is_instance_valid(m) or m.hp <= 0:
+			continue
+		total_hp += m.hp
+		total_max += m.max_hp
+		total_potion += _calc_total_potion_hp(m)
+	if total_max <= 0:
+		return 0.0
+	return clampf(float(total_hp + total_potion) / float(total_max), 0.0, 1.0)
 
 
 ## 探索時の移動方針を返す（_get_target_floor() の結果を方針文字列に変換）
@@ -192,22 +198,6 @@ func _get_explore_move_policy() -> String:
 	if target_floor < current_floor:
 		return "stairs_up"
 	return "explore"
-
-
-## インベントリ内のポーションで回復できるエネルギー（MP または SP）量を計算する
-func _calc_recoverable_energy(member: Character) -> int:
-	if member.character_data == null:
-		return 0
-	var use_mp := member.max_mp > 0
-	var key := "restore_mp" if use_mp else "restore_sp"
-	var total := 0
-	for item: Variant in member.character_data.inventory:
-		var it := item as Dictionary
-		if it == null:
-			continue
-		var eff := it.get("effect", {}) as Dictionary
-		total += eff.get(key, 0) as int
-	return total
 
 
 ## NPC パーティーの global_orders ヒントを返す（デバッグウィンドウ表示用）

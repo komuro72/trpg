@@ -59,13 +59,6 @@ const ATTACK_TYPE_MULT: Dictionary = {
 ## F2→F3: rank_sum≥18（A3+以上が必要）/ F3→F4: rank_sum≥24（事実上不達・ボスフロア）
 const FLOOR_RANK: Dictionary = {0: 0, 1: 8, 2: 13, 3: 18, 4: 24}
 
-## NPC フロア遷移・戦闘継続の HP 最低閾値（最低 HP 率がこれを下回ると適正フロア-1）
-## [ConfigEditor 対象]
-var NPC_HP_THRESHOLD: float = 0.5
-## NPC フロア遷移・戦闘継続の エネルギー（MP/SP）平均閾値（平均エネルギー率がこれを下回ると適正フロア-1）
-## [ConfigEditor 対象]
-var NPC_ENERGY_THRESHOLD: float = 0.3
-
 ## アイテム取得範囲（item_pickup=passive 設定時の取得判定距離・マンハッタン距離）
 const ITEM_PICKUP_RANGE: int = 2
 ## 瀕死判定閾値（HP率がこれ以下で「瀕死」と判定。HPポーション自動使用・on_low_hp発動・heal "aggressive" モード対象選定に使用）
@@ -84,9 +77,16 @@ var SELF_FLEE_HP_THRESHOLD: float = 0.3
 ## [ConfigEditor 対象] 外部 JSON (assets/master/config/constants.json) から読み込み
 var PARTY_FLEE_ALIVE_RATIO: float = 0.5
 ## 特殊攻撃の状況判定で使う「隣接敵数の最小値」
-## 近接3クラス（剣士・斧戦士・斥候）と magician-fire の発動条件: 隣接8マスの敵がこの数以上
+## 近接3クラス（剣士・斧戦士・斥候）の発動条件: 隣接8マスの敵がこの数以上
 ## [ConfigEditor 対象]
 var SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES: int = 2
+## 炎陣（magician-fire）の発動判定範囲。自分中心の半径マス数
+## この範囲内の敵数が SPECIAL_ATTACK_FIRE_ZONE_MIN_ENEMIES 以上で発動検討
+## [ConfigEditor 対象]
+var SPECIAL_ATTACK_FIRE_ZONE_RANGE: int = 2
+## 炎陣（magician-fire）の発動に必要な範囲内の敵数
+## [ConfigEditor 対象]
+var SPECIAL_ATTACK_FIRE_ZONE_MIN_ENEMIES: int = 2
 ## 劣勢判定閾値（特殊攻撃「劣勢なら使う」用の参考値。現在は HpStatus enum で代替されており未使用）
 const DISADVANTAGE_THRESHOLD: float = 0.6
 
@@ -304,12 +304,7 @@ const CONFIG_KEYS: Array[String] = [
 	"CONDITION_COLOR_TEXT_WOUNDED",
 	"CONDITION_COLOR_TEXT_INJURED",
 	"CONDITION_COLOR_TEXT_CRITICAL",
-	# UnitAI タブ
-	"SELF_FLEE_HP_THRESHOLD",
-	"SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES",
-	# PartyLeader タブ
-	"PARTY_FLEE_ALIVE_RATIO",
-	"NEAR_DEATH_THRESHOLD",
+	# PartyLeader タブ（戦況判断系）
 	"COMBAT_RATIO_OVERWHELMING",
 	"COMBAT_RATIO_ADVANTAGE",
 	"COMBAT_RATIO_EVEN",
@@ -321,12 +316,15 @@ const CONFIG_KEYS: Array[String] = [
 	"HP_STATUS_FULL",
 	"HP_STATUS_STABLE",
 	"HP_STATUS_LOW",
-	# NpcLeaderAI タブ
-	"NPC_HP_THRESHOLD",
-	"NPC_ENERGY_THRESHOLD",
-	# Healer タブ
+	# EnemyLeaderAI タブ
+	"PARTY_FLEE_ALIVE_RATIO",
+	# UnitAI タブ
+	"SELF_FLEE_HP_THRESHOLD",
+	"SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES",
+	"SPECIAL_ATTACK_FIRE_ZONE_RANGE",
+	"SPECIAL_ATTACK_FIRE_ZONE_MIN_ENEMIES",
+	"NEAR_DEATH_THRESHOLD",
 	"HEALER_HEAL_THRESHOLD",
-	# PlayerController タブ
 	"POTION_SP_MP_AUTOUSE_THRESHOLD",
 ]
 

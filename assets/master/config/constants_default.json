@@ -106,57 +106,27 @@
     "type": "color",
     "value": [1.0, 0.35, 0.35, 1.0]
   },
-  "SELF_FLEE_HP_THRESHOLD": {
-    "category": "UnitAI",
-    "description": "種族固有自己逃走HP閾値（ゴブリン系の _should_self_flee がこの値未満で true）",
-    "type": "float",
-    "value": 0.3
-  },
-  "SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES": {
-    "category": "UnitAI",
-    "description": "隣接8マスに敵がこの数以上いると AI が特殊攻撃発動を検討（近接3クラス・炎陣）",
-    "max": 8.0,
-    "min": 0.0,
-    "step": 1.0,
-    "type": "int",
-    "value": 2
-  },
-  "PARTY_FLEE_ALIVE_RATIO": {
-    "category": "PartyLeader",
-    "description": "パーティーの生存メンバー率がこの値未満で FLEE 戦略へ切替（ゴブリン・ウルフ系）",
-    "max": 1.0,
-    "min": 0.0,
-    "step": 0.05,
-    "type": "float",
-    "value": 0.5
-  },
-  "NEAR_DEATH_THRESHOLD": {
-    "category": "PartyLeader",
-    "description": "瀕死判定 HP 率。HPポーション自動使用・on_low_hp 発動・heal aggressive 対象選定に使用",
-    "type": "float",
-    "value": 0.25
-  },
   "COMBAT_RATIO_OVERWHELMING": {
     "category": "PartyLeader",
-    "description": "戦況判断：自軍/敵軍戦力比がこの値以上で OVERWHELMING（圧倒的優勢）",
+    "description": "戦況判断：戦況（ランク和×HP充足率の比）がこの値以上で OVERWHELMING（圧倒的優勢）",
     "type": "float",
     "value": 2.0
   },
   "COMBAT_RATIO_ADVANTAGE": {
     "category": "PartyLeader",
-    "description": "戦況判断：戦力比がこの値以上で ADVANTAGE（優勢）",
+    "description": "戦況判断：戦況がこの値以上で ADVANTAGE（優勢）",
     "type": "float",
     "value": 1.2
   },
   "COMBAT_RATIO_EVEN": {
     "category": "PartyLeader",
-    "description": "戦況判断：戦力比がこの値以上で EVEN（互角）",
+    "description": "戦況判断：戦況がこの値以上で EVEN（互角）",
     "type": "float",
     "value": 0.8
   },
   "COMBAT_RATIO_DISADVANTAGE": {
     "category": "PartyLeader",
-    "description": "戦況判断：戦力比がこの値以上で DISADVANTAGE（これ未満は CRITICAL）",
+    "description": "戦況判断：戦況がこの値以上で DISADVANTAGE（これ未満は CRITICAL）",
     "type": "float",
     "value": 0.5
   },
@@ -202,26 +172,62 @@
     "type": "float",
     "value": 0.25
   },
-  "NPC_HP_THRESHOLD": {
-    "category": "NpcLeaderAI",
-    "description": "NPC フロア遷移・戦闘継続の最低 HP 率。これを下回ると適正フロアを 1 下げる",
+  "PARTY_FLEE_ALIVE_RATIO": {
+    "category": "EnemyLeaderAI",
+    "description": "パーティーの生存メンバー率がこの値未満で FLEE 戦略へ切替（ゴブリン・ウルフ系）",
+    "max": 1.0,
+    "min": 0.0,
+    "step": 0.05,
     "type": "float",
     "value": 0.5
   },
-  "NPC_ENERGY_THRESHOLD": {
-    "category": "NpcLeaderAI",
-    "description": "NPC フロア遷移・戦闘継続の平均エネルギー（MP/SP）率。下回ると適正フロアを 1 下げる",
+  "SELF_FLEE_HP_THRESHOLD": {
+    "category": "UnitAI",
+    "description": "種族固有自己逃走HP閾値（ゴブリン系の _should_self_flee がこの値未満で true）",
     "type": "float",
     "value": 0.3
   },
+  "SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES": {
+    "category": "UnitAI",
+    "description": "隣接8マスに敵がこの数以上いると AI が特殊攻撃発動を検討（近接3クラス専用：剣士・斧戦士・斥候）",
+    "max": 8.0,
+    "min": 0.0,
+    "step": 1.0,
+    "type": "int",
+    "value": 2
+  },
+  "SPECIAL_ATTACK_FIRE_ZONE_RANGE": {
+    "category": "UnitAI",
+    "description": "炎陣（magician-fire）の発動判定範囲。自分中心の半径マス数。この範囲内の敵数が SPECIAL_ATTACK_FIRE_ZONE_MIN_ENEMIES 以上で発動検討",
+    "max": 5.0,
+    "min": 0.0,
+    "step": 1.0,
+    "type": "int",
+    "value": 2
+  },
+  "SPECIAL_ATTACK_FIRE_ZONE_MIN_ENEMIES": {
+    "category": "UnitAI",
+    "description": "炎陣（magician-fire）の発動に必要な範囲内の敵数",
+    "max": 10.0,
+    "min": 1.0,
+    "step": 1.0,
+    "type": "int",
+    "value": 2
+  },
+  "NEAR_DEATH_THRESHOLD": {
+    "category": "UnitAI",
+    "description": "瀕死判定 HP 率。HPポーション自動使用・on_low_hp 発動・heal aggressive 対象選定に使用",
+    "type": "float",
+    "value": 0.25
+  },
   "HEALER_HEAL_THRESHOLD": {
-    "category": "Healer",
+    "category": "UnitAI",
     "description": "ヒーラーの回復対象判定 HP 率。lowest_hp_first / leader_first モードで対象選定に使用",
     "type": "float",
     "value": 0.5
   },
   "POTION_SP_MP_AUTOUSE_THRESHOLD": {
-    "category": "PlayerController",
+    "category": "UnitAI",
     "description": "SP/MPポーション自動使用閾値。sp_mp_potion=\"use\" 設定時、この率未満で自動使用",
     "type": "float",
     "value": 0.5

@@ -404,15 +404,16 @@ game_map
 
 ### Vスロット特殊攻撃仕様
 - **突進斬り（fighter-sword）**：向いている方向に最大2マス前進。経路上の敵全員にダメージ。次の空きマスに着地。壁・障害物で止まる。SP消費
-  - AI発動条件（指示「強敵なら使う」等を満たした上で追加判定）：隣接8マスの敵が `SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES` 以上 かつ 前方最大2マスに敵がいて着地可能な空きマスがある
+  - AI発動条件（指示「強敵なら使う」等を満たした上で追加判定）：隣接8マスの敵が `SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES` 以上（近接3クラス専用）かつ 前方最大2マスに敵がいて着地可能な空きマスがある
 - **振り回し（fighter-axe）**：周囲1マス（斜め含む隣接8マス）の敵全員に通常攻撃相当のダメージ。SP消費
-  - AI発動条件：隣接8マスの敵が `SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES` 以上
+  - AI発動条件：隣接8マスの敵が `SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES` 以上（近接3クラス専用）
 - **ヘッドショット（archer）**：`instant_death_immune == false` の敵に即死。ボス級（`instant_death_immune == true`）には無効で通常の3倍ダメージ。SP消費大
 - **炎陣（magician-fire）**：自分を中心に半径3マスに設置。設置直後から2〜3秒間燃え続け複数回ヒット。敵のみ判定（巻き添えは将来課題）。MP消費大
+  - AI発動条件（指示「強敵なら使う」等を満たした上で追加判定）：自分を中心に半径 `SPECIAL_ATTACK_FIRE_ZONE_RANGE` マス以内の敵が `SPECIAL_ATTACK_FIRE_ZONE_MIN_ENEMIES` 以上
 - **無力化水魔法（magician-water）**：単体・射程あり・MP消費大。命中した対象の攻撃・移動を2〜3秒間完全停止（回転エフェクト）。全種族共通。被弾時ダメージは受けるが持続時間は変わらない。ボス級には持続時間を短縮（将来調整）
 - **防御バフ（healer）**：単体・射程あり・MP消費（`buff_defense` アクション）。**自分自身も対象に含める・方向制限なし（全方向）**。バフ中は半透明の緑色六角形バリアエフェクト（`BuffEffect.gd`）がキャラクターに重ねて表示される。バフ終了時に自動削除。重複付与時はタイマーリセット＋エフェクト再生成
 - **スライディング（scout）**：向いている方向に3マス高速移動。移動中は無敵・敵をすり抜け可能。SP消費
-  - AI発動条件：隣接8マスの敵が `SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES` 以上（包囲脱出兼ダメージ）
+  - AI発動条件：隣接8マスの敵が `SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES` 以上（近接3クラス専用・包囲脱出兼ダメージ）
 
 ### 魔法使い（水）の仕様
 - クラスID：`magician-water`
@@ -515,7 +516,7 @@ rank値: C=0, B=1, A=2, S=3
 ### ファイル構成
 - `assets/master/config/constants.json` … ユーザー編集中の値（シンプル key:value）
 - `assets/master/config/constants_default.json` … デフォルト値＋メタ情報（value / type / category / min / max / step / description）
-- 現在 **約 35 個**の定数を外出し済み。Character（16）/ UnitAI（2）/ PartyLeader（13）/ NpcLeaderAI（2）/ Healer（1）/ PlayerController（1）の各タブに配置。未登録の定数が見つかった場合は運用ルール 1〜5 に従って追加する
+- 現在 **約 35 個**の定数を外出し済み。Character（16）/ PartyLeader（11）/ EnemyLeaderAI（1）/ UnitAI（7）の各タブに配置。NpcLeaderAI タブは定数 0 個（将来の NPC 固有定数追加用プレースホルダー）。未登録の定数が見つかった場合は運用ルール 1〜5 に従って追加する
 
 ### トップレベルタブ
 - **定数** — `constants.json` / `constants_default.json` を編集
@@ -528,7 +529,8 @@ rank値: C=0, B=1, A=2, S=3
 ### 「定数」タブのカテゴリ
 コード上のクラス名で分類：
 
-- Character / UnitAI / PartyLeader / NpcLeaderAI / Healer / PlayerController / EnemyLeaderAI / Unknown（未分類検出用）
+- Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / Unknown（未分類検出用）
+- タブ順は陣営・階層順（上位概念 → 下位概念）：リーダー層（PartyLeader → NpcLeaderAI → EnemyLeaderAI）→ 個体層（UnitAI）
 
 タブ順は `config_editor.gd` の `TABS` 配列で定義。追加したい場合は配列末尾に追記する。
 
@@ -562,7 +564,7 @@ rank値: C=0, B=1, A=2, S=3
 
 ### 定数追加時の運用ルール（「定数」タブ）
 1. `GlobalConstants.gd` に `const`/`var` を追加するときは、`constants_default.json` にも同時に追加する
-2. `category` フィールドは既存7タブ（Character / UnitAI / PartyLeader / NpcLeaderAI / Healer / PlayerController / EnemyLeaderAI）のいずれかを指定
+2. `category` フィールドは既存5タブ（Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI）のいずれかを指定
 3. 上記7タブに属さない場合は `config_editor.gd` の `TABS` 配列にタブを追加することを検討
 4. カテゴリ未定義・不明な値の定数は Unknown タブに自動振り分け（起動時に push_warning で警告）
 5. 定期的に Claude Code に「外出しされていない定数」の棚卸し指示を出す
@@ -898,9 +900,9 @@ rank値: C=0, B=1, A=2, S=3
 | 用途 | 定数名 | 値 |
 |------|-------|-----|
 | パーティー逃走（ゴブリン/ウルフ：生存メンバー率がこれ未満で FLEE 戦略） | `PARTY_FLEE_ALIVE_RATIO` | 0.5 |
-| 特殊攻撃の発動状況判定（隣接8マスの敵数） | `SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES` | 2 |
-| NPC フロア遷移の最低 HP 閾値（最低 HP 率がこれを下回ると適正フロア-1） | `NPC_HP_THRESHOLD` | 0.5 |
-| NPC フロア遷移の最低エネルギー（MP/SP）閾値 | `NPC_ENERGY_THRESHOLD` | 0.3 |
+| 特殊攻撃の発動状況判定（隣接8マスの敵数・近接3クラス用） | `SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES` | 2 |
+| 炎陣の発動判定範囲（自分中心の半径マス数・magician-fire専用） | `SPECIAL_ATTACK_FIRE_ZONE_RANGE` | 2 |
+| 炎陣の発動に必要な範囲内の敵数（magician-fire専用） | `SPECIAL_ATTACK_FIRE_ZONE_MIN_ENEMIES` | 2 |
 
 #### 戦況系
 本セクション上部の「戦況判断（CombatSituation）」「戦力比（PowerBalance）」「HP充足率（HpStatus）」表の閾値は、それぞれ以下の定数で定義されている:
@@ -1186,6 +1188,7 @@ rank値: C=0, B=1, A=2, S=3
 - NpcLeaderAI のアイテム収集方針の動的切り替え：目標フロアに到達している場合（余裕がある状態）、item_pickup を "passive"（近くなら拾う）から "aggressive"（積極的に拾う）に切り替える。装備強化のために能動的にアイテムを回収する行動
 - **アイテムのランダム生成機構**：フロア深度に応じた補正値のランダム生成が未実装。`assets/master/items/*.json` のマスターデータ（`base_stats` の `_min`/`_max` ペア、`depth_scale`）は用意済みだがランタイムから参照されていない。実装時には下記「effect キー名の不整合」も合わせて対応
 - **Config Editor のアイテムタブ**：アイテムランダム生成機構の実装とセットで実装予定（単独実装ではゲーム反映が確認できないため保留）
+- **NPC フロア遷移判定のための戦況判断拡張（検討）**：`NPC_HP_THRESHOLD` / `NPC_ENERGY_THRESHOLD` 廃止により、現在は HpStatus のパーティー平均HP率で判定している。ただし元の「最低HP率」ベースや「エネルギー率」ベースの判定は NPC 行動として意味があるため、戦況判断（`_evaluate_combat_situation`）の副情報として最低HP指標・エネルギー指標を追加することを検討。別系統の判定を走らせず、戦況判断に一元化する設計方針を維持する。
 
 ## 要調査・要整理項目
 バグ可能性・構造整理・命名整理など、実装ではなく調査系のタスク：

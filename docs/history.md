@@ -1057,3 +1057,66 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
 - UI: ダイアログ文言をタブごとに切替。非定数タブでは「専用のデフォルトファイルはないため、通常の保存と同じ動作です」と明示
 - 新設ヘルパー: `_report_commit_save_result()` が `{"saved": Array, "errors": Array}` 形式の保存結果をステータスラベル表示に変換（既存 `_on_save_pressed` 内で重複していたロジックを切り出し）
 
+## Config Editor 定数タブの再編（2026-04-18）
+
+### 背景・設計意図
+定数タブのカテゴリが「実装ファイル別」に分かれていたが、実際には同じ概念が複数ファイルで参照されるケースが多く、粒度がバラついていた。また「Healer」カテゴリは定数 1 個のためタブとしてほぼ空の存在になっていた。
+
+方針：
+- **タブは陣営・階層（リーダー層 → 個体層）で再編**し、実装ファイル名ではなく概念の住所で分類する
+- **AI 判断基準は戦況判断に一元化**する方向へ向かう。別系統の判定ロジック（NPC_HP/ENERGY_THRESHOLD のような独立閾値）は削除し、戦況判断が返す指標を参照する形に揃える
+
+### 新規定数追加
+- `SPECIAL_ATTACK_FIRE_ZONE_RANGE = 2`（UnitAI・int・min 0 max 5）：炎陣の発動判定範囲（自分中心の半径マス数）
+- `SPECIAL_ATTACK_FIRE_ZONE_MIN_ENEMIES = 2`（UnitAI・int・min 1 max 10）：炎陣の発動に必要な範囲内の敵数
+
+### magician-fire の発動判定ロジック変更
+- 旧：`SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES`（隣接8マスの敵数）で判定
+- 新：`SPECIAL_ATTACK_FIRE_ZONE_RANGE` 半径内の敵数が `SPECIAL_ATTACK_FIRE_ZONE_MIN_ENEMIES` 以上
+- 理由：炎陣は自分中心の範囲攻撃であり、「隣接 8 マス」より「範囲内の敵密度」で判定したほうが AI 仕様として自然
+- `SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES` は近接3クラス（fighter-sword / fighter-axe / scout）専用に用途を限定
+- 新ヘルパー `_count_enemies_in_range(range_tiles)` を追加（チェビシェフ距離ベースで同フロア敵を数える）
+
+### カテゴリ変更（4 定数）
+| 定数 | 旧 | 新 |
+|---|---|---|
+| `NEAR_DEATH_THRESHOLD` | PartyLeader | UnitAI |
+| `HEALER_HEAL_THRESHOLD` | Healer | UnitAI |
+| `POTION_SP_MP_AUTOUSE_THRESHOLD` | PlayerController | UnitAI |
+| `PARTY_FLEE_ALIVE_RATIO` | PartyLeader | EnemyLeaderAI |
+
+参照元はすべて UnitAI または EnemyLeaderAI に属するため、実態と合わせた形に修正。
+
+### 定数廃止（2 個）
+- `NPC_HP_THRESHOLD`（0.5）
+- `NPC_ENERGY_THRESHOLD`（0.3）
+
+これに伴い `NpcLeaderAI._get_target_floor()` のフロア遷移補正ロジックを変更：
+- 旧：最低 HP 率 < NPC_HP_THRESHOLD または 平均エネルギー率 < NPC_ENERGY_THRESHOLD → 適正フロア -1
+- 新：パーティー平均 HP 率（`_calc_hp_status_for` と同じ式・ポーション込み）< `HP_STATUS_STABLE` (0.5) → 適正フロア -1
+- エネルギー判定は削除（戦況判断拡張で後日検討）
+- 新ヘルパー `_calc_party_hp_ratio()` を追加（HpStatus の raw ratio を返す）
+- 未使用となった `_calc_recoverable_energy()` を削除
+
+### description 修正
+`COMBAT_RATIO_*` 4 定数の説明文を「自軍/敵軍戦力比」→「戦況（ランク和×HP充足率の比）」に修正。`PartyLeader._evaluate_combat_situation()` の実装と一致させる。
+
+### Config Editor タブ構成変更
+旧：Character / UnitAI / PartyLeader / NpcLeaderAI / Healer / PlayerController / EnemyLeaderAI / Unknown（7+Unknown）
+新：Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / Unknown（5+Unknown）
+
+- **削除**：Healer タブ（定数 1 個だったため UnitAI に吸収）、PlayerController タブ（定数 1 個だったため UnitAI に吸収）
+- **順序変更**：実装ファイル順 → 陣営・階層順（Character → リーダー層 → 個体層）
+- **NpcLeaderAI タブは空のまま残す**：将来の NPC 固有定数追加用プレースホルダー（仕様通り `_build_tab` のプレースホルダー Label で「このカテゴリには定数がまだ登録されていません。」と表示される）
+
+### 定数配分（再編後）
+- Character: 16 個（変更なし）
+- PartyLeader: 11 個（COMBAT_RATIO ×4 / POWER_BALANCE ×4 / HP_STATUS ×3）
+- NpcLeaderAI: 0 個（プレースホルダー）
+- EnemyLeaderAI: 1 個（PARTY_FLEE_ALIVE_RATIO）
+- UnitAI: 7 個（SELF_FLEE_HP_THRESHOLD / SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES / SPECIAL_ATTACK_FIRE_ZONE_RANGE / SPECIAL_ATTACK_FIRE_ZONE_MIN_ENEMIES / NEAR_DEATH_THRESHOLD / HEALER_HEAL_THRESHOLD / POTION_SP_MP_AUTOUSE_THRESHOLD）
+- 合計 35 個
+
+### CONFIG_KEYS 配列
+`GlobalConstants.CONFIG_KEYS` の並び順を新カテゴリ順に並べ直し。これにより `constants.json` 書き出し時のキー順も変わる（sort_keys=false なので保証される順序）。
+

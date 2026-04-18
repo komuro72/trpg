@@ -2021,8 +2021,11 @@ func _generate_special_attack_queue(target: Character) -> Array:
 			if target != null and is_instance_valid(target):
 				return [{"action": "move_to_attack"}, {"action": "v_attack"}]
 		"magician-fire":
-			# 炎陣: 敵が密集しているとき（隣接2体以上）使用
-			if _count_adjacent_enemies() >= min_adj:
+			# 炎陣: 自分中心の範囲内の敵数が閾値以上で発動
+			# （近接3クラスの「隣接8マス」判定とは別用途のため専用定数で制御）
+			var fire_range: int = GlobalConstants.SPECIAL_ATTACK_FIRE_ZONE_RANGE
+			var fire_min: int = GlobalConstants.SPECIAL_ATTACK_FIRE_ZONE_MIN_ENEMIES
+			if _count_enemies_in_range(fire_range) >= fire_min:
 				return [{"action": "v_attack"}]
 		"magician-water":
 			# 無力化水魔法: ターゲットに使用（通常攻撃の代わり）
@@ -2033,7 +2036,7 @@ func _generate_special_attack_queue(target: Character) -> Array:
 
 
 ## 自分の周囲（隣接8マス・斜め含む）にいる敵の数を返す
-## 特殊攻撃の発動状況判定（振り回し・スライディング・突進斬り・炎陣）で使用
+## 特殊攻撃の発動状況判定（振り回し・スライディング・突進斬り）で使用
 func _count_adjacent_enemies() -> int:
 	if _member == null or not is_instance_valid(_member):
 		return 0
@@ -2054,6 +2057,30 @@ func _count_adjacent_enemies() -> int:
 			if pos in other.get_occupied_tiles():
 				count += 1
 				break
+	return count
+
+
+## 自分を中心とした半径 range_tiles 内（チェビシェフ距離）にいる敵の数を返す
+## 炎陣（magician-fire）の発動判定で使用。range_tiles=2 なら 5×5 マス範囲
+func _count_enemies_in_range(range_tiles: int) -> int:
+	if _member == null or not is_instance_valid(_member):
+		return 0
+	if range_tiles <= 0:
+		return 0
+	var count := 0
+	var origin: Vector2i = _member.grid_pos
+	for other: Character in _all_members:
+		if not is_instance_valid(other) or other == _member:
+			continue
+		if other.is_friendly == _member.is_friendly:
+			continue
+		if other.hp <= 0:
+			continue
+		if other.current_floor != _member.current_floor:
+			continue
+		var d: Vector2i = other.grid_pos - origin
+		if maxi(absi(d.x), absi(d.y)) <= range_tiles:
+			count += 1
 	return count
 
 
