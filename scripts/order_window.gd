@@ -1299,7 +1299,7 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 			for ek: String in effect_d:
 				var ev: int = int(effect_d[ek])
 				if ev != 0:
-					var elbl: String = _effect_label(ek, ch)
+					var elbl: String = _effect_label(ek)
 					stat_strs.append("%s %d" % [elbl, ev])
 			var qty_str := " ×%d" % count2 if count2 > 1 else ""
 			var stat_str := " [%s]" % ", ".join(stat_strs) if not stat_strs.is_empty() else ""
@@ -1328,20 +1328,14 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 # ── ユーティリティ ────────────────────────────────────────────────────────────
 
 ## 消耗品 effect キーを日本語ラベルに変換する
-## ch を渡すと restore_energy を「MP回復 / SP回復」に切り替えて返す
-## （ch が null のときは「SP回復」をデフォルトに。プレイヤー UI から「エネルギー」表記を排除）
-static func _effect_label(key: String, ch: Character = null) -> String:
+## restore_energy は固定で「MP/SP回復」表記（ポーションを他メンバーに渡すこともあるため、
+## 閲覧中キャラのクラスで MP/SP を決め打ちしない）
+static func _effect_label(key: String) -> String:
 	match key:
-		"restore_hp":
-			return "HP回復"
-		"restore_energy":
-			var is_magic := ch != null and ch.character_data != null \
-				and ch.character_data.is_magic_class()
-			return "MP回復" if is_magic else "SP回復"
-		"restore_mp":
-			return "MP回復"  # legacy
-		"restore_sp":
-			return "SP回復"  # legacy
+		"restore_hp":     return "HP回復"
+		"restore_energy": return "MP/SP回復"
+		"restore_mp":     return "MP/SP回復"  # legacy
+		"restore_sp":     return "MP/SP回復"  # legacy
 	return key
 
 
@@ -1599,7 +1593,7 @@ func _draw_item_list_overlay(ox: float, main_py: float, ow: float,
 			for ek: String in effect_d:
 				var ev: int = int(effect_d[ek])
 				if ev != 0:
-					var elbl: String = _effect_label(ek, _item_char)
+					var elbl: String = _effect_label(ek)
 					parts.append("%s %d" % [elbl, ev])
 			var stat_str := "" if parts.is_empty() else " [%s]" % ", ".join(parts)
 			var can_equip := _can_equip(_item_char, item)

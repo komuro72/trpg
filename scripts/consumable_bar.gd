@@ -381,15 +381,14 @@ func _build_detail_lines(entry: Dictionary) -> Array[String]:
 		var sign_s: String = "+" if val > 0 else ""
 		lines.append("%s %s%d" % [label, sign_s, val])
 	# 消耗品：effect
-	# エネルギー回復ラベルは現在のキャラクターのクラス種別で MP/SP を切替
+	# restore_energy は固定で「MP/SP回復」（ポーションを他メンバーに渡すこともあるため
+	# 閲覧中キャラのクラスで決め打ちしない）
 	var effect: Dictionary = entry.get("effect", {}) as Dictionary
-	var _energy_label := "MP" if _character != null and _character.character_data != null \
-		and _character.character_data.is_magic_class() else "SP"
 	var EFFECT_LABELS: Dictionary = {
-		"restore_hp": "HP回復",
-		"restore_energy": "%s回復" % _energy_label,
-		"restore_mp": "MP回復",  # legacy
-		"restore_sp": "SP回復",  # legacy
+		"restore_hp":     "HP回復",
+		"restore_energy": "MP/SP回復",
+		"restore_mp":     "MP/SP回復",  # legacy
+		"restore_sp":     "MP/SP回復",  # legacy
 	}
 	for key_v: Variant in effect.keys():
 		var key := key_v as String

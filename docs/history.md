@@ -1364,3 +1364,23 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
 - `grep '"[^"]*エネルギー[^"]*"' scripts/` で 0 件（文字列リテラル内の「エネルギー」がプレイヤー UI に露出していないことを確認）
 - コメント内の「エネルギー」は開発者向け説明として残置
 
+## アイテム効果表記を「MP/SP回復」固定に変更（2026-04-18）
+
+### 背景
+直前のコミットで `restore_energy` の UI ラベルを「閲覧中キャラのクラスで MP/SP 切替」としていたが、ポーションは他メンバーに渡すこともあるため、閲覧中キャラのクラスで決め打ちすると混乱する（魔法クラスで「MP回復」と表示されていたポーションを物理クラスに渡すと実際は SP 回復になる）。
+
+### 変更内容
+アイテム効果の表記は**固定で「MP/SP回復」と両併記**に変更：
+- `scripts/order_window.gd`: `_effect_label(key, ch)` から `ch` 引数を削除。`restore_energy` は固定で `"MP/SP回復"`
+- `scripts/consumable_bar.gd`: `EFFECT_LABELS` の `restore_energy` を `"MP/SP回復"` に固定
+- `scripts/player_controller.gd`: `_build_effect_lines` で `"MP/SP回復 %d"` 固定表記に
+
+### 維持する動的切替（キャラクター特定済みの箇所）
+- `scripts/character.gd:use_consumable()` のバトルメッセージ：「自身の%sを回復した」% energy_label はキャラクター使用時なので MP / SP 切替を維持
+- 左パネルのエネルギーバー・OrderWindow の MP/SP 行：そのキャラクターのリソースを表示するので `is_magic_class()` 切替を維持
+
+### CLAUDE.md 更新
+「UI 用語の分離方針」セクションを詳細化：
+- ステータス表示・バトルメッセージ（キャラ特定時）：MP / SP 切替
+- アイテム効果表示（複数キャラ間で受け渡し可能）：固定「MP/SP回復」
+

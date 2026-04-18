@@ -2028,7 +2028,8 @@ func _can_equip_item_for_char(ch: Character, item: Dictionary) -> bool:
 
 
 ## 消耗品の効果行を返す（使用する アクションの右パネル用）
-## エネルギー表示は character のクラス種別で MP/SP を切替
+## restore_energy は固定で「MP/SP回復」表記（ポーションを他メンバーに渡すこともあるため
+## 閲覧中キャラのクラスで決め打ちしない）
 func _build_effect_lines(item: Dictionary) -> Array[String]:
 	var lines: Array[String] = []
 	var eff: Dictionary = item.get("effect", {}) as Dictionary
@@ -2036,10 +2037,7 @@ func _build_effect_lines(item: Dictionary) -> Array[String]:
 	var energy: int = int(eff.get("restore_energy",
 		eff.get("restore_mp", eff.get("restore_sp", 0))))
 	if hp > 0: lines.append("HP回復 %d" % hp)
-	if energy > 0:
-		var label := "MP" if character != null and character.character_data != null \
-			and character.character_data.is_magic_class() else "SP"
-		lines.append("%s回復 %d" % [label, energy])
+	if energy > 0: lines.append("MP/SP回復 %d" % energy)
 	return lines
 
 
