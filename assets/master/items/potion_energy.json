@@ -1,5 +1,6 @@
 {
 	"item_type": "potion_energy",
+	"name": "エナジーポーション",
 	"category": "consumable",
 	"allowed_classes": [],
 	"effect": {

@@ -1305,3 +1305,37 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
 - `grep '"potion_hp"' assets/master/maps/dungeon_handcrafted.json` 0 件
 - `grep 'heal_hp' assets/master/` 0 件（マスター側も統一）
 
+## ポーション表示名を刷新（2026-04-18）
+
+### 方針
+- 「HPポーション」→「**ヒールポーション**」
+- 「エネルギーポーション」→「**エナジーポーション**」（ファイル名 `potion_energy.json` は維持）
+- 内部データ名（`energy` / `max_energy` / `restore_energy` 等）は英語のまま維持
+
+### 命名方針メモ
+ポーション名は「ヒール」「エナジー」というカタカナ英語を採用する：
+- MP/SP 統合でポーションが 1 種類になった際、既存 RPG 用語の「HPポーション」に対する自然な対として「ヒールポーション」を採用
+- 統合ポーションは「エナジーポーション」（energy のカタカナ表記は「エネルギー」より「エナジー」のほうが英語発音に近く短いため）
+
+内部データと UI 表示の用語は意図的に分離している：
+- **内部**：開発者向けの統一性（`energy` / `max_energy`）
+- **UI**：プレイヤー向けの慣例用語（MP/SP バー表示）とアイテム名（ヒール / エナジー）
+
+### JSON
+- `assets/master/items/potion_heal.json`: `"name": "ヒールポーション"` を追加
+- `assets/master/items/potion_energy.json`: `"name": "エナジーポーション"` を追加
+- `dungeon_handcrafted.json`: インスタンス側の `item_name` を置換（`HPポーション` → `ヒールポーション`、`エネルギーポーション` → `エナジーポーション`）
+
+### コード
+- `game_map.gd`: 初期ポーション付与時の `item_name` を新名称に
+- `character.gd`: ポーション使用時のバトルメッセージを新名称に
+- コード内コメント（`scripts/*.gd`）で参照されていた旧名称も新名称に置換
+
+### ドキュメント
+- `CLAUDE.md`: メッセージ表記方針（228-231行）を新名称に、その他の現行仕様の記述も置換
+- `docs/spec.md`: 現行仕様の箇所を置換
+- `constants_default.json`: description 文字列内のポーション名を置換（Config Editor 表示）
+
+### 対象外（歴史的記録として原文維持）
+- `docs/history.md`: 過去の変更履歴セクション内の旧名称は記録として保持
+

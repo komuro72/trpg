@@ -2128,7 +2128,7 @@ func _switch_character(dir: int) -> void:
 
 
 ## このキャラクターがアイテムを使用できるか判定する
-## エネルギーポーションは max_energy==0 のキャラには不要（現状は全キャラ >0 なので常に使用可）
+## エナジーポーションは max_energy==0 のキャラには不要（現状は全キャラ >0 なので常に使用可）
 func _is_consumable_usable_by_char(item: Dictionary) -> bool:
 	if character == null or character.character_data == null:
 		return true

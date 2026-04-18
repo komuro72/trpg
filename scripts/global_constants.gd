@@ -61,7 +61,7 @@ const FLOOR_RANK: Dictionary = {0: 0, 1: 8, 2: 13, 3: 18, 4: 24}
 
 ## アイテム取得範囲（item_pickup=passive 設定時の取得判定距離・マンハッタン距離）
 const ITEM_PICKUP_RANGE: int = 2
-## 瀕死判定閾値（HP率がこれ以下で「瀕死」と判定。HPポーション自動使用・on_low_hp発動・heal "aggressive" モード対象選定に使用）
+## 瀕死判定閾値（HP率がこれ以下で「瀕死」と判定。ヒールポーション自動使用・on_low_hp発動・heal "aggressive" モード対象選定に使用）
 ## [ConfigEditor 対象]
 var NEAR_DEATH_THRESHOLD: float = 0.25
 ## ヒーラー回復閾値（heal "lowest_hp_first" / "leader_first" モードの対象判定。HP率がこれ未満のメンバーが回復対象）

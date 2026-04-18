@@ -707,14 +707,14 @@ func use_consumable(item: Dictionary) -> void:
 	if restore_hp_val > 0:
 		heal(restore_hp_val)  # heal() 内で効果音を再生
 		MessageLog.add_battle(character_data, null,
-			"%sがHPポーションを使い、自身のHPを回復した" % char_name, self)
+			"%sがヒールポーションを使い、自身のHPを回復した" % char_name, self)
 	if restore_energy_val > 0:
 		energy = mini(energy + restore_energy_val, max_energy)
 		SoundManager.play_from(SoundManager.HEAL, self)
 		# UI ラベルをクラス種別で切り替え（内部は同じ energy）
 		var energy_label := "MP" if character_data != null and character_data.is_magic_class() else "SP"
 		MessageLog.add_battle(character_data, null,
-			"%sがエネルギーポーションを使い、自身の%sを回復した" % [char_name, energy_label], self)
+			"%sがエナジーポーションを使い、自身の%sを回復した" % [char_name, energy_label], self)
 	# インベントリからアイテムを削除
 	if character_data != null:
 		character_data.inventory.erase(item)

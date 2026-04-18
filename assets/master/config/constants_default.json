@@ -216,7 +216,7 @@
   },
   "NEAR_DEATH_THRESHOLD": {
     "category": "UnitAI",
-    "description": "瀕死判定 HP 率。HPポーション自動使用・on_low_hp 発動・heal aggressive 対象選定に使用",
+    "description": "瀕死判定 HP 率。ヒールポーション自動使用・on_low_hp 発動・heal aggressive 対象選定に使用",
     "type": "float",
     "value": 0.25
   },

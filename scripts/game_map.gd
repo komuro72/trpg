@@ -298,19 +298,19 @@ func _setup_hero() -> void:
 	}
 	hero_items = (_dbg_items.get(class_id, []) as Array).duplicate()
 
-	# 初期ポーション（全人間キャラ共通）：HPポーション×5 + SP/MPポーション×5
+	# 初期ポーション（全人間キャラ共通）：ヒールポーション×5 + SP/MPポーション×5
 	# ConsumableBar は inventory 内のエントリ数で ×n を表示し、use_consumable は
 	# 辞書を erase するため、N個持たせるには N個の個別エントリが必要
 	for _i in range(5):
 		hero_items.append({
 			"item_type": "potion_heal", "category": "consumable",
-			"item_name": "HPポーション", "effect": {"restore_hp": 30}, "quantity": 1,
+			"item_name": "ヒールポーション", "effect": {"restore_hp": 30}, "quantity": 1,
 		})
-	# エネルギーポーション（全クラス共通。UI 表示だけクラス種別で MP/SP に切替）
+	# エナジーポーション（全クラス共通。UI 表示だけクラス種別で MP/SP に切替）
 	for _i in range(5):
 		hero_items.append({
 			"item_type": "potion_energy", "category": "consumable",
-			"item_name": "エネルギーポーション", "effect": {"restore_energy": 20}, "quantity": 1,
+			"item_name": "エナジーポーション", "effect": {"restore_energy": 20}, "quantity": 1,
 		})
 
 	hero = Character.new()

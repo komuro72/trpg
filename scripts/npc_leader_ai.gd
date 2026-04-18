@@ -376,7 +376,7 @@ func _auto_share_potions() -> void:
 				var pot: Variant = _take_potion_from_party(needer, "hp")
 				if pot != null:
 					cd.inventory.append(pot)
-		# エネルギーポーション受け渡し（全クラス共通）
+		# エナジーポーション受け渡し（全クラス共通）
 		if needer.max_energy > 0:
 			var en_ratio := float(needer.energy) / float(needer.max_energy)
 			if en_ratio < GlobalConstants.POTION_SP_MP_AUTOUSE_THRESHOLD \

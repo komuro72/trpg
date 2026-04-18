@@ -617,7 +617,7 @@ func _select_weakest_target(member: Character) -> Character:
 
 
 ## パーティーの戦力値を算出する（ランク和 × HP充足率）
-## HP充足率にはHPポーションの回復量を加味する
+## HP充足率にはヒールポーションの回復量を加味する
 ## 生存メンバーが0人の場合は 0.0 を返す
 ## 自パーティーの戦力を評価する（正確なHP%とポーション回復量を使用）
 ## 既存の呼び出し箇所を壊さないラッパー
@@ -664,7 +664,7 @@ func _estimate_hp_ratio_from_condition(condition: String) -> float:
 		_:          return 1.0  # 不明な値 → 安全側（敵を強く見積もる）
 
 
-## メンバーが所持しているHPポーションの合計回復量を返す
+## メンバーが所持しているヒールポーションの合計回復量を返す
 func _calc_total_potion_hp(member: Character) -> int:
 	if member.character_data == null:
 		return 0

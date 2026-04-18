@@ -705,7 +705,7 @@ func _generate_queue(strategy: int, target: Character) -> Array:
 		var follow_dir: int = sign(_leader_ref.current_floor - _member.current_floor)
 		return _generate_stair_queue(follow_dir, true)
 
-	# HPポーション自動使用（瀕死かつ在庫あり・heal/buff より前に処理）
+	# ヒールポーション自動使用（瀕死かつ在庫あり・heal/buff より前に処理）
 	var potion_q := _generate_potion_queue()
 	if not potion_q.is_empty():
 		return potion_q
@@ -2212,7 +2212,7 @@ func _find_undead_target() -> Character:
 	return null
 
 
-## HPポーション / SP・MPポーション自動使用キューを生成する
+## ヒールポーション / SP・MPポーション自動使用キューを生成する
 ## _hp_potion == "use" かつ 瀕死（NEAR_DEATH_THRESHOLD 未満）かつ在庫ありのとき "use_potion" を返す
 ## SP/MPポーションは _sp_mp_potion == "use" かつ MP/SP が半分以下のとき使用
 func _generate_potion_queue() -> Array:
@@ -2220,7 +2220,7 @@ func _generate_potion_queue() -> Array:
 		return []
 	var cd := _member.character_data
 
-	# HPポーション
+	# ヒールポーション
 	if _hp_potion == "use" and _member.max_hp > 0:
 		var hp_ratio := float(_member.hp) / float(_member.max_hp)
 		if hp_ratio < GlobalConstants.NEAR_DEATH_THRESHOLD:
@@ -2228,7 +2228,7 @@ func _generate_potion_queue() -> Array:
 			if potion != null:
 				return [{"action": "use_potion", "item": potion}]
 
-	# エネルギーポーション（指示名は旧 sp_mp_potion のまま維持・データは energy に作用）
+	# エナジーポーション（指示名は旧 sp_mp_potion のまま維持・データは energy に作用）
 	if _sp_mp_potion == "use" and _member.max_energy > 0 \
 			and float(_member.energy) / float(_member.max_energy) < GlobalConstants.POTION_SP_MP_AUTOUSE_THRESHOLD:
 		var potion: Variant = _find_potion_in_inventory(cd, "energy")

@@ -33,7 +33,7 @@ const GLOBAL_ROWS: Array = [
 	{"key": "item_pickup",  "label": "アイテム取得",
 	 "options": ["aggressive", "passive", "avoid"],
 	 "labels":  ["積極的に拾う", "近くなら拾う", "拾わない"]},
-	{"key": "hp_potion",    "label": "HPポーション",
+	{"key": "hp_potion",    "label": "ヒールポーション",
 	 "options": ["use", "never"],
 	 "labels":  ["瀕死なら使う", "使わない"]},
 	{"key": "sp_mp_potion", "label": "SP/MPポーション",
