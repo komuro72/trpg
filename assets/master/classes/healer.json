@@ -8,7 +8,7 @@
   "behavior_description": "仲間を回復・強化する支援専門家。自ら攻撃はしない。",
   "slots": {
     "Z": {
-      "name": "回復(小)",
+      "name": "回復",
       "action": "heal",
       "type": "support",
       "range": 4,
