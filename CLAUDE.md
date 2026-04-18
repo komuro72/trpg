@@ -462,14 +462,16 @@ game_map
 
 この2系統は思想が異なるので、統一しない方針。Player は対話的（TARGETING 中のターゲット変更、X でキャンセル、ガードホールド等）で、キュー駆動は不向き。AI は思考サイクルの可視性のためにキュー駆動が適する。
 
-### 実処理の共通化（段階移行中）
-Player と AI で同じ特殊行動（melee / ranged / heal / V 攻撃各種）の計算式が二重実装されている。SkillExecutor クラス（`scripts/skill_executor.gd`）に抽出して共通化することで、乖離バグを構造的に解消する。
+### 実処理の共通化（完了）
+Player と AI で同じ特殊行動（melee / ranged / heal / V 攻撃各種）の計算式が二重実装されていた問題を、SkillExecutor クラス（`scripts/skill_executor.gd`）への抽出で構造的に解消した。
 
-**移行状況（2026-04-18）**:
+**移行完了状況（2026-04-18）— 全10種類 ✅**:
 - ✅ **heal（回復・アンデッド特効）** — ステージ1
 - ✅ **melee / ranged（Z 通常攻撃）** — ステージ2
 - ✅ **flame_circle / water_stun / buff（V 特殊攻撃・複雑3種）** — ステージ3a
-- ⏳ 残り 4 種類（rush / whirlwind / headshot / sliding）— 段階的に実施予定
+- ✅ **rush / whirlwind / headshot / sliding（V 特殊攻撃・近接射撃4種）** — ステージ3b
+
+Player 側は SkillExecutor を直接呼出（1 行ラッパ）。AI 側は `_synth_v_slot()` / `_synth_z_slot()` で CharacterData のフラットフィールドから slot 辞書を合成して渡す。移動アニメーション（rush / sliding）と攻撃モーションフラグ（whirlwind）だけは Player / AI でパラダイムが異なるため、SkillExecutor は着地位置算出・ダメージ適用・SE・メッセージまでを担い、実移動と `is_attacking` / `is_sliding` / `is_blocked` フラグは呼出側の責務として残す。
 
 ```
 SkillExecutor（static メソッド群）
@@ -1284,19 +1286,10 @@ rank値: C=0, B=1, A=2, S=3
 - **ファイル名のハイフン／アンダースコア統一**：個別敵 JSON は `dark_lord.json` 等アンダースコア、クラス JSON は `dark-lord.json` 等ハイフン。統一するなら個別敵 JSON をハイフンに寄せる。ファイル名変更はコード側の参照も書き換えが必要
 - **`enemy_list.json` と `enemies_list.json` の紛らわしい命名**：役割が全く違う（前者はステータスタイプ参照マップ、後者は敵ファイルパス一覧）のにファイル名が酷似。片方リネーム候補
 - **Config Editor やツール類での設定変更の git 反映方針**：JSON ファイル・画像素材などバイナリファイルの、自動 commit/push の是非を含めた運用ルール検討が必要
-- **Player 側と AI 側の計算ロジック統一（SkillExecutor 抽出）**：特殊攻撃・回復・ダメージ計算等が `player_controller.gd` と `unit_ai.gd` で独立に実装されており、実装が乖離するリスクが構造的に存在する。今日のセッションで以下の乖離バグが連続発覚した：
-  - AI ヒーラーの `heal_mult` 未適用（Player は適用・AI は未適用）
-  - AI の `water_stun` / `flame_circle` / `buff_defense` で JSON 値を無視しハードコード
-
-  対応方針：`SkillExecutor` クラス（`scripts/skill_executor.gd`）へ段階的に抽出。設計思想は CLAUDE.md「AI と実処理の責務分離方針」セクションに明文化済み。
-
-  **移行進捗（2026-04-18）**:
-  - ✅ **heal** — ステージ1で抽出完了。Player / AI 両方から `SkillExecutor.execute_heal()` を呼ぶ形に統一
-  - ✅ **melee / ranged** — ステージ2で抽出完了。Z 通常攻撃（近接・遠距離）を `SkillExecutor.execute_melee()` / `execute_ranged()` に統一。Lich の火/水交互は `opts["is_water"]` オーバーライドで維持
-  - ✅ **flame_circle / water_stun / buff** — ステージ3aで抽出完了。V 特殊攻撃の複雑3種を `SkillExecutor.execute_flame_circle()` / `execute_water_stun()` / `execute_buff()` に統一。AI 側の damage_mult / range 未参照バグ、water_stun の二重ダメージバグを解消。CharacterData に `v_damage_mult` / `v_range` を追加
-  - ⏳ 残り 4 種類（rush / whirlwind / headshot / sliding）— 段階的に実施予定
-
-  優先度：中〜高（バランス調整フェーズの前にやっておきたい）
+- **Player 側と AI 側の計算ロジック統一（SkillExecutor 抽出）** — ✅ 完了（2026-04-18）
+  全 10 種類の特殊行動を `SkillExecutor` クラス（`scripts/skill_executor.gd`）に集約済み。詳細は CLAUDE.md「AI と実処理の責務分離方針」→「実処理の共通化（完了）」セクションを参照。今後の新スキル追加時は SkillExecutor に `execute_*()` を実装し、Player / AI の両方から呼ぶこと。
+  残課題：
+  - **dark-lord のワープ・炎陣**：現状キュー外で動く例外的実装。将来 SkillExecutor 経由にリファクタする余地あり（CLAUDE.md の「例外的実装（要整理）」を参照）
 
 ## 参照ファイル
 - docs/spec.md：詳細仕様書（実装前に参照すること）

@@ -8,7 +8,8 @@ extends RefCounted
 ## ステージ1: heal 移行済み。
 ## ステージ2: melee / ranged 移行済み（Z 通常攻撃）。
 ## ステージ3a: flame_circle / water_stun / buff 移行済み（V 特殊攻撃・複雑3種）。
-## 残り（rush / whirlwind / headshot / sliding）は段階的に移行予定。
+## ステージ3b: rush / whirlwind / headshot / sliding 移行済み（V 特殊攻撃・近接射撃4種）。
+## 全10種の SkillExecutor 抽出完了。dark-lord のワープ・炎陣はキュー外のため別タスク。
 
 ## execute_heal の結果を呼び出し元に伝えるための enum
 ## FAILED        : energy 不足等で何も起きなかった
@@ -247,6 +248,277 @@ static func execute_buff(caster: Character, target: Character, slot: Dictionary)
 	MessageLog.add_combat("[%s] %s → %s" % \
 			[skill_name, _char_name(caster), _char_name(target)])
 	return true
+
+
+## V スロット（突進斬り・fighter-sword）の実処理。
+## 向いている方向に最大 3 マス走査し、経路上の敵（step 1〜2 のみ）に damage を与える。
+## 空きマスに到達したら着地位置として返す（caller が実際の移動を行う）。
+## slot: damage_mult / cost / name を参照（range は固定 2、着地探索は 3 マスまで）
+## map_data: is_walkable_for を呼ぶための MapData
+## potential_targets: 敵の候補配列（Player=blocking_characters / AI=_all_members）
+## 戻り値: {"landing_pos": Vector2i, "hit_count": int}
+static func execute_rush(attacker: Character, slot: Dictionary,
+		map_data, potential_targets: Array = []) -> Dictionary:
+	var result := {"landing_pos": attacker.grid_pos, "hit_count": 0}
+	if attacker == null or not is_instance_valid(attacker):
+		return result
+	if map_data == null:
+		return result
+
+	var cost := _slot_cost(slot)
+	if cost > 0 and not attacker.use_energy(cost):
+		return result
+
+	var dmg_mult: float = float(slot.get("damage_mult", 1.2))
+	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
+	var raw_damage := int(float(attacker.power) * dmg_mult * type_mult)
+	var dir := Character.dir_to_vec(attacker.facing)
+	var landing_pos := attacker.grid_pos
+	var hit_count := 0
+
+	# 最大 3 マス先まで探索（step 1〜2 で攻撃、空きマスに到達したら着地）
+	for step: int in range(1, 4):
+		var check_pos := attacker.grid_pos + Vector2i(dir) * step
+		if not map_data.is_walkable_for(check_pos, false):
+			break  # 壁・障害物で停止
+		var occupant := _find_hostile_at(check_pos, attacker, potential_targets)
+		if occupant != null:
+			if step <= 2:
+				var hp_before := occupant.hp
+				occupant.take_damage(raw_damage, 1.0, attacker, false, true)
+				_emit_v_skill_battle_msg("突進斬り", attacker, occupant, hp_before - occupant.hp)
+				SoundManager.play_attack_from(attacker)
+				hit_count += 1
+			continue  # 敵がいるマスは着地せず通過
+		landing_pos = check_pos
+		break  # 空きマスに到達したら停止
+
+	if hit_count == 0:
+		var atk_name := Character._battle_name(attacker)
+		var segs := Character._make_segs([
+			[atk_name, Character._party_name_color(attacker)],
+			["が突進斬りを放ったが敵に当たらなかった", Color.WHITE],
+		])
+		MessageLog.add_battle(attacker.character_data, null,
+			"%sが突進斬りを放ったが敵に当たらなかった" % atk_name, attacker, null, segs)
+
+	result["landing_pos"] = landing_pos
+	result["hit_count"] = hit_count
+	return result
+
+
+## V スロット（振り回し・fighter-axe）の実処理。
+## 自分を中心に隣接 8 マスの敵全員に damage を与える。
+## slot: damage_mult / cost / name を参照
+## potential_targets: 敵の候補配列
+## 戻り値: 命中数（caller が空振り演出を出したい場合に使える）
+static func execute_whirlwind(attacker: Character, slot: Dictionary,
+		potential_targets: Array = []) -> int:
+	if attacker == null or not is_instance_valid(attacker):
+		return 0
+
+	var cost := _slot_cost(slot)
+	if cost > 0 and not attacker.use_energy(cost):
+		return 0
+
+	var dmg_mult: float = float(slot.get("damage_mult", 1.0))
+	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
+	var raw_damage := int(float(attacker.power) * dmg_mult * type_mult)
+	var hit_count := 0
+
+	for dy: int in range(-1, 2):
+		for dx: int in range(-1, 2):
+			if dx == 0 and dy == 0:
+				continue
+			var pos := attacker.grid_pos + Vector2i(dx, dy)
+			var occupant := _find_hostile_at(pos, attacker, potential_targets)
+			if occupant != null:
+				var hp_before := occupant.hp
+				occupant.take_damage(raw_damage, 1.0, attacker, false, true)
+				_emit_v_skill_battle_msg("振り回し", attacker, occupant, hp_before - occupant.hp)
+				hit_count += 1
+
+	SoundManager.play_attack_from(attacker)
+	if hit_count == 0:
+		var atk_name := Character._battle_name(attacker)
+		var segs := Character._make_segs([
+			[atk_name, Character._party_name_color(attacker)],
+			["が振り回したが空振りに終わった", Color.WHITE],
+		])
+		MessageLog.add_battle(attacker.character_data, null,
+			"%sが振り回したが空振りに終わった" % atk_name, attacker, null, segs)
+	return hit_count
+
+
+## V スロット（ヘッドショット・archer）の実処理。
+## target.instant_death_immune をチェックし、
+##   false → 即死（hp=0 + die()）
+##   true  → 通常の 3 倍ダメージ（slot.damage_mult を参照）
+## 視覚的には両方とも飛翔体を発射（ただし damage は独立に適用。Projectile は画像のみ）。
+## slot: damage_mult（3.0 既定）/ cost / name を参照
+## 戻り値: true なら発動、false なら不発
+static func execute_headshot(attacker: Character, target: Character, slot: Dictionary) -> bool:
+	if attacker == null or not is_instance_valid(attacker):
+		return false
+	if target == null or not is_instance_valid(target) or target.hp <= 0:
+		return false
+	var map_node := attacker.get_parent()
+	if map_node == null:
+		return false
+
+	var cost := _slot_cost(slot)
+	if cost > 0 and not attacker.use_energy(cost):
+		return false
+
+	attacker.face_toward(target.grid_pos)
+	SoundManager.play_from(SoundManager.ARROW_SHOOT, attacker)
+
+	var is_immune: bool = false
+	if target.character_data != null:
+		is_immune = bool(target.character_data.instant_death_immune)
+
+	var atk_name := Character._battle_name(attacker)
+	var tgt_name := Character._battle_name(target)
+	var atk_col := Character._party_name_color(attacker)
+	var tgt_col := Character._party_name_color(target)
+
+	# 飛翔体を視覚的に発射（ダメージは別途適用するため damage=0 でも可だが、
+	# 旧 Player 実装と合わせて projectile にダメージを持たせる）
+	var proj := Projectile.new()
+	proj.z_index = 2
+	map_node.add_child(proj)
+
+	if is_immune:
+		# ボス級：×3 ダメージ（battle メッセージは抑制して SkillExecutor 側で segments 出力）
+		var dmg_mult: float = float(slot.get("damage_mult", 3.0))
+		var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
+		var raw_damage := int(float(attacker.power) * dmg_mult * type_mult)
+		proj.setup(attacker.position, target.position, false, target,
+				0, 1.0, attacker, false, 0.0, false, "")
+		target.take_damage(raw_damage, 1.0, attacker, false, true)
+		var dmg_col := Character._damage_label_color(GlobalConstants.DAMAGE_LEVEL_LARGE)
+		var segs := Character._make_segs([
+			[atk_name, atk_col], ["がヘッドショットで", Color.WHITE],
+			[tgt_name, tgt_col], ["に", Color.WHITE],
+			["大ダメージ", dmg_col], ["を与えた", Color.WHITE],
+		])
+		MessageLog.add_battle(attacker.character_data, target.character_data,
+			"%sがヘッドショットで%sに大ダメージを与えた" % [atk_name, tgt_name],
+			attacker, target, segs)
+		MessageLog.add_combat("[ヘッドショット] %s → %s ×%.1fダメージ" % \
+				[_char_name(attacker), _char_name(target), dmg_mult])
+	else:
+		# 非ボス：即死（防御・耐性を無視して直接 hp=0 + die()）
+		proj.setup(attacker.position, target.position, false, target,
+				0, 1.0, attacker, false, 0.0, false, "")
+		target.last_attacker = attacker
+		target.hp = 0
+		target.die()
+		var kill_col := Character._damage_label_color(GlobalConstants.DAMAGE_LEVEL_LARGE + 9999)
+		var segs2 := Character._make_segs([
+			[atk_name, atk_col], ["がヘッドショットで", Color.WHITE],
+			[tgt_name, tgt_col], ["を", Color.WHITE],
+			["仕留めた", kill_col, true],
+		])
+		MessageLog.add_battle(attacker.character_data, target.character_data,
+			"%sがヘッドショットで%sを仕留めた" % [atk_name, tgt_name],
+			attacker, target, segs2)
+		MessageLog.add_combat("[ヘッドショット] %s → %s 即死！" % \
+				[_char_name(attacker), _char_name(target)])
+	return true
+
+
+## V スロット（スライディング・scout）の実処理。
+## 向いている方向に最大 3 マス走査し、敵味方を無視して通過可能な着地位置を探す。
+## ダメージは発生しない（包囲脱出用）。caller が実際の移動・無敵フラグ管理を行う。
+## slot: cost を参照
+## map_data: is_walkable_for を呼ぶための MapData
+## potential_targets: 着地判定で無視するキャラクター候補（Player=blocking_characters / AI=_all_members）
+## 戻り値: 着地位置（caller が character を実際に動かす）
+static func execute_sliding(attacker: Character, slot: Dictionary,
+		map_data, potential_targets: Array = []) -> Vector2i:
+	if attacker == null or not is_instance_valid(attacker):
+		return Vector2i.ZERO
+	if map_data == null:
+		return attacker.grid_pos
+
+	var cost := _slot_cost(slot)
+	if cost > 0 and not attacker.use_energy(cost):
+		return attacker.grid_pos
+
+	var dir := Character.dir_to_vec(attacker.facing)
+	var landing_pos := attacker.grid_pos
+
+	for step: int in range(1, 4):
+		var check_pos := attacker.grid_pos + Vector2i(dir) * step
+		if not map_data.is_walkable_for(check_pos, attacker.is_flying):
+			break  # 壁・障害物で停止
+		if _find_any_occupant_at(check_pos, attacker, potential_targets) != null:
+			continue  # 敵・味方ともすり抜け
+		landing_pos = check_pos
+
+	SoundManager.play_from(SoundManager.MELEE_DAGGER, attacker)
+	var atk_name := Character._battle_name(attacker)
+	var segs := Character._make_segs([
+		[atk_name, Character._party_name_color(attacker)],
+		["がスライディングで突進した", Color.WHITE],
+	])
+	MessageLog.add_battle(attacker.character_data, null,
+		"%sがスライディングで突進した" % atk_name, attacker, null, segs)
+	return landing_pos
+
+
+## potential_targets の中から pos にいる「attacker と敵対陣営」の生存キャラクターを返す。
+## rush / whirlwind のターゲット判定用。
+static func _find_hostile_at(pos: Vector2i, attacker: Character,
+		potential_targets: Array) -> Character:
+	for c: Variant in potential_targets:
+		if not is_instance_valid(c):
+			continue
+		var ch := c as Character
+		if ch == null or ch == attacker or ch.hp <= 0:
+			continue
+		if ch.is_friendly == attacker.is_friendly:
+			continue
+		if pos in ch.get_occupied_tiles():
+			return ch
+	return null
+
+
+## potential_targets の中から pos にいる任意の生存キャラクター（敵味方問わず）を返す。
+## sliding の通過判定用。
+static func _find_any_occupant_at(pos: Vector2i, attacker: Character,
+		potential_targets: Array) -> Character:
+	for c: Variant in potential_targets:
+		if not is_instance_valid(c):
+			continue
+		var ch := c as Character
+		if ch == null or ch == attacker or ch.hp <= 0:
+			continue
+		if pos in ch.get_occupied_tiles():
+			return ch
+	return null
+
+
+## V スロット特殊攻撃の被弾メッセージ（rush / whirlwind 等で個別ヒットごとに呼ぶ）。
+## "○○が{skill_name}で△△を攻撃し、{大}ダメージを与えた" の自然言語 + segments 色分け。
+static func _emit_v_skill_battle_msg(skill_name: String, atk: Character,
+		def: Character, dmg: int) -> void:
+	if MessageLog == null or atk == null or def == null:
+		return
+	var atk_name := Character._battle_name(atk)
+	var def_name := Character._battle_name(def)
+	var dmg_val := maxi(1, dmg)
+	var dmg_label := Character._damage_label(dmg_val)
+	var dmg_color := Character._damage_label_color(dmg_val)
+	var dmg_bold := Character._damage_is_huge(dmg_val)
+	var msg := "%sが%sで%sを攻撃し、%sを与えた" % [atk_name, skill_name, def_name, dmg_label]
+	var segs := Character._make_segs([
+		[atk_name, Character._party_name_color(atk)], ["が" + skill_name + "で", Color.WHITE],
+		[def_name, Character._party_name_color(def)], ["を攻撃し、", Color.WHITE],
+		[dmg_label, dmg_color, dmg_bold], ["を与えた", Color.WHITE],
+	])
+	MessageLog.add_battle(atk.character_data, def.character_data, msg, atk, def, segs)
 
 
 ## スロット定義から energy コストを読む。

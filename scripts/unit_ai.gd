@@ -1077,109 +1077,42 @@ func _execute_v_attack() -> void:
 			_complete_action()
 
 
-## 剣士: 突進斬り（ターゲット方向に最大2マス前進・経路上の敵にダメージ）
+## 剣士: 突進斬り（SkillExecutor に委譲）
+## 着地位置のみ SkillExecutor が返すので、AI 側は従来どおり瞬間移動させる
+## （Player 側の move_to アニメーションは AI 側では不要・キュー進行を阻害しない）
 func _v_rush_slash(cost: int) -> void:
 	_member.use_energy(cost)
-	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
-	var raw_damage := int(float(_member.power) * 1.2 * type_mult)
 	if _target != null and is_instance_valid(_target):
 		_member.face_toward(_target.grid_pos)
-	var dir := Character.dir_to_vec(_member.facing)
-	var hit_count := 0
-	var landing_pos := _member.grid_pos
-	for step: int in range(1, 4):
-		var check_pos := _member.grid_pos + Vector2i(dir) * step
-		if _map_data == null or not _map_data.is_walkable_for(check_pos, false):
-			break
-		var enemy_here := _find_enemy_at(check_pos)
-		if enemy_here != null:
-			if step <= 2:
-				var hp_before := enemy_here.hp
-				enemy_here.take_damage(raw_damage, 1.0, _member, false, true)
-				_emit_v_skill_battle_msg("突進斬り", enemy_here, hp_before - enemy_here.hp)
-				SoundManager.play_attack_from(_member)
-				hit_count += 1
-			continue
-		landing_pos = check_pos
-		break
+	var slot := _synth_v_slot()
+	slot["cost"] = 0
+	var result := SkillExecutor.execute_rush(_member, slot, _map_data, _all_members)
+	var landing_pos: Vector2i = result.get("landing_pos", _member.grid_pos)
 	if landing_pos != _member.grid_pos:
 		_member.grid_pos = landing_pos
 		_member.sync_position()
 	# 状態・タイマーは ATTACKING_PRE → POST 遷移で slot.V.post_delay を適用
-	if hit_count == 0:
-		var n := _v_name()
-		var segs := Character._make_segs([
-			[n, Character._party_name_color(_member)],
-			["が突進斬りを放ったが敵に当たらなかった", Color.WHITE],
-		])
-		MessageLog.add_battle(_member.character_data, null,
-			"%sが突進斬りを放ったが敵に当たらなかった" % n, _member, null, segs)
 
 
-## 斧戦士: 振り回し（周囲8マスの敵全員にダメージ）
+## 斧戦士: 振り回し（SkillExecutor に委譲）
 func _v_whirlwind(cost: int) -> void:
 	_member.use_energy(cost)
-	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
-	var raw_damage := int(float(_member.power) * 1.0 * type_mult)
-	var hit_count := 0
-	for dy: int in range(-1, 2):
-		for dx: int in range(-1, 2):
-			if dx == 0 and dy == 0:
-				continue
-			var pos := _member.grid_pos + Vector2i(dx, dy)
-			var enemy := _find_enemy_at(pos)
-			if enemy != null:
-				var hp_before := enemy.hp
-				enemy.take_damage(raw_damage, 1.0, _member, false, true)
-				_emit_v_skill_battle_msg("振り回し", enemy, hp_before - enemy.hp)
-				hit_count += 1
-	if hit_count > 0:
-		SoundManager.play_attack_from(_member)
+	var slot := _synth_v_slot()
+	slot["cost"] = 0
+	SkillExecutor.execute_whirlwind(_member, slot, _all_members)
 	# 状態・タイマーは ATTACKING_PRE → POST 遷移で slot.V.post_delay を適用
 
 
-## 弓使い: ヘッドショット（即死耐性なし→即死、あり→×3ダメージ）
+## 弓使い: ヘッドショット（SkillExecutor に委譲）
 func _v_headshot(cost: int) -> void:
-	_member.use_energy(cost)
 	if _target == null or not is_instance_valid(_target):
 		_complete_action()
 		return
-	_member.face_toward(_target.grid_pos)
-	SoundManager.play(SoundManager.ARROW_SHOOT)
-	var is_immune := false
-	if _target.character_data != null:
-		is_immune = bool(_target.character_data.instant_death_immune)
-	var atk_n := _v_name()
-	var tgt_n := _v_tgt_name()
-	var atk_col := Character._party_name_color(_member)
-	var tgt_col := Character._party_name_color(_target)
-	if is_immune:
-		var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
-		var raw_damage := int(float(_member.power) * 3.0 * type_mult)
-		# 大ダメージ扱いで描画（オレンジ）
-		var dmg_col := Character._damage_label_color(GlobalConstants.DAMAGE_LEVEL_LARGE)
-		var segs := Character._make_segs([
-			[atk_n, atk_col], ["がヘッドショットで", Color.WHITE],
-			[tgt_n, tgt_col], ["に", Color.WHITE],
-			["大ダメージ", dmg_col], ["を与えた", Color.WHITE],
-		])
-		MessageLog.add_battle(_member.character_data, _target.character_data,
-			"%sがヘッドショットで%sに大ダメージを与えた" % [atk_n, tgt_n], _member, _target, segs)
-		_target.take_damage(raw_damage, 1.0, _member, false, true)
-	else:
-		# 即死扱いは特大色＋太字で強調
-		var kill_col := Character._damage_label_color(GlobalConstants.DAMAGE_LEVEL_LARGE + 9999)
-		var segs2 := Character._make_segs([
-			[atk_n, atk_col], ["がヘッドショットで", Color.WHITE],
-			[tgt_n, tgt_col], ["を", Color.WHITE],
-			["仕留めた", kill_col, true],
-		])
-		MessageLog.add_battle(_member.character_data, _target.character_data,
-			"%sがヘッドショットで%sを仕留めた" % [atk_n, tgt_n], _member, _target, segs2)
-		# 即死: 防御・耐性を無視して即座に倒す
-		_target.last_attacker = _member
-		_target.hp = 0
-		_target.die()
+	_member.use_energy(cost)
+	var slot := _synth_v_slot()
+	slot["cost"] = 0
+	# 即死耐性判定・飛翔体・segments メッセージ全て SkillExecutor で統一
+	SkillExecutor.execute_headshot(_member, _target, slot)
 	# 状態・タイマーは ATTACKING_PRE → POST 遷移で slot.V.post_delay を適用
 
 
@@ -1219,36 +1152,18 @@ func _synth_v_slot() -> Dictionary:
 	}
 
 
-## 斥候: スライディング（3マスダッシュ・敵すり抜け）
+## 斥候: スライディング（SkillExecutor に委譲）
+## 着地位置のみ SkillExecutor が返すので、AI 側は瞬間移動で終了
 func _v_sliding(cost: int) -> void:
 	_member.use_energy(cost)
 	if _target != null and is_instance_valid(_target):
 		_member.face_toward(_target.grid_pos)
-	var dir := Character.dir_to_vec(_member.facing)
-	var landing_pos := _member.grid_pos
-	for step: int in range(1, 4):
-		var check_pos := _member.grid_pos + Vector2i(dir) * step
-		if not _is_walkable_for_self(check_pos):
-			break
-		var occupant := _find_enemy_at(check_pos)
-		if occupant != null:
-			continue  # すり抜け
-		# 味方もすり抜け
-		var ally := _find_ally_at(check_pos)
-		if ally != null:
-			continue
-		landing_pos = check_pos
+	var slot := _synth_v_slot()
+	slot["cost"] = 0
+	var landing_pos := SkillExecutor.execute_sliding(_member, slot, _map_data, _all_members)
 	if landing_pos != _member.grid_pos:
 		_member.grid_pos = landing_pos
 		_member.sync_position()
-	SoundManager.play(SoundManager.MELEE_DAGGER)
-	var sn := _v_name()
-	var ssegs := Character._make_segs([
-		[sn, Character._party_name_color(_member)],
-		["がスライディングで突進した", Color.WHITE],
-	])
-	MessageLog.add_battle(_member.character_data, null,
-		"%sがスライディングで突進した" % sn, _member, null, ssegs)
 	# 状態・タイマーは ATTACKING_PRE → POST 遷移で slot.V.post_delay を適用
 
 
@@ -1276,39 +1191,6 @@ func _find_ally_at(pos: Vector2i) -> Character:
 		if pos in other.get_occupied_tiles():
 			return other
 	return null
-
-
-## Vスロット用: 自分の名前を返す
-func _v_name() -> String:
-	return _member.character_data.character_name if _member.character_data != null else String(_member.name)
-
-## Vスロット用: ターゲットの名前を返す
-func _v_tgt_name() -> String:
-	if _target == null or not is_instance_valid(_target):
-		return "?"
-	return _target.character_data.character_name if _target.character_data != null else String(_target.name)
-
-
-## V スロット特殊攻撃の被弾メッセージを1体ずつ MessageLog に積む
-## "○○が{skill_name}で△△を攻撃し、{大}ダメージを与えた" の形式
-## attacker / defender の両方の character_data を渡してアイコン行を表示する
-func _emit_v_skill_battle_msg(skill_name: String, def: Character, dmg: int) -> void:
-	if MessageLog == null or _member == null or def == null:
-		return
-	var atk_name := _v_name()
-	var def_name: String = def.character_data.character_name \
-			if def.character_data != null else String(def.name)
-	var dmg_val := maxi(1, dmg)
-	var dmg_label := Character._damage_label(dmg_val)
-	var dmg_color := Character._damage_label_color(dmg_val)
-	var dmg_bold  := Character._damage_is_huge(dmg_val)
-	var msg := "%sが%sで%sを攻撃し、%sを与えた" % [atk_name, skill_name, def_name, dmg_label]
-	var segments := Character._make_segs([
-		[atk_name, Character._party_name_color(_member)], ["が" + skill_name + "で", Color.WHITE],
-		[def_name, Character._party_name_color(def)], ["を攻撃し、", Color.WHITE],
-		[dmg_label, dmg_color, dmg_bold], ["を与えた", Color.WHITE],
-	])
-	MessageLog.add_battle(_member.character_data, def.character_data, msg, _member, def, segments)
 
 
 # --------------------------------------------------------------------------

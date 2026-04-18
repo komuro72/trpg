@@ -3,6 +3,39 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-18（SkillExecutor 抽出・ステージ3b：rush / whirlwind / headshot / sliding 移行・全10種完了）
+
+### 変更内容
+- **SkillExecutor 追加メソッド**：残り4種類を追加し、全10種類の抽出が完了。
+  - `execute_rush(attacker, slot, map_data, potential_targets=[]) -> Dictionary`: 向いている方向に最大3マス走査。step 1〜2 の敵にダメージを与え、空きマスを着地位置として返す。`{"landing_pos": Vector2i, "hit_count": int}` を返す。空振り時は自然言語メッセージを出す。移動は呼出側の責務（Player は `move_to` アニメ、AI は `grid_pos` 瞬間移動）。
+  - `execute_whirlwind(attacker, slot, potential_targets=[]) -> int`: 隣接8マスの敵全員にダメージ。命中数を返す。命中ごとに segments 付きバトルメッセージを出す。空振り時も専用メッセージ。
+  - `execute_headshot(attacker, target, slot) -> bool`: target.instant_death_immune を判定し、免疫あり→×3ダメージ、なし→即死。視覚用の飛翔体（damage=0）を発射した上で、ダメージ/即死は直接適用する方式に統一（従来 Player は projectile 99999 damage で間接的に、AI は `hp=0+die()` で直接的にと実装が分かれていた）。segments 付きバトルメッセージ＋combat ログ。
+  - `execute_sliding(attacker, slot, map_data, potential_targets=[]) -> Vector2i`: 向いている方向に最大3マス走査。敵味方ともすり抜ける着地位置を返す。ダメージなし。segments 付きバトルメッセージ＋SE。移動と無敵フラグ管理は呼出側の責務。
+- **SkillExecutor ヘルパー追加**：`_find_hostile_at()`（rush / whirlwind 用）/ `_find_any_occupant_at()`（sliding 用）/ `_emit_v_skill_battle_msg()`（V 攻撃のダメージログ共通フォーマット）。
+- **player_controller.gd**:
+  - `_execute_rush` / `_execute_whirlwind` / `_execute_sliding`: SkillExecutor 呼出＋move_to アニメ＋フラグ管理のみに縮小。
+  - `_execute_headshot`: 1 行ラッパに縮小。
+  - 不要になったヘルパー削除：`_emit_v_skill_battle_msg`、`_find_character_at`。
+- **unit_ai.gd**:
+  - `_v_rush_slash` / `_v_whirlwind` / `_v_headshot` / `_v_sliding`: SkillExecutor 呼出＋瞬間移動のみに縮小。`_synth_v_slot()` で slot 辞書を合成。
+  - 不要になったヘルパー削除：`_v_name` / `_v_tgt_name` / `_emit_v_skill_battle_msg`。
+
+### 修正された乖離バグ
+- **headshot 非免疫ターゲット処理の不一致**：旧 Player は projectile 経由で `99999` ダメージ（防御で理論的に減算される余地があった）、旧 AI は `hp=0+die()` で直接即死。SkillExecutor では両者とも「projectile は視覚のみ（damage=0）、即死は直接 `hp=0+die()`」に統一。
+- **rush / whirlwind / sliding のメッセージ多重化**：Player と AI で微妙に異なる segments 構造のメッセージを個別実装していた。SkillExecutor 内の `_emit_v_skill_battle_msg` で単一フォーマットに統一。
+
+### 決定事項
+- **移動アニメの扱い**：Player は `character.move_to(pos, dur)` で滑らかに、AI は `_member.grid_pos = pos; sync_position()` で瞬間移動、というパラダイムの違いは温存。SkillExecutor は着地位置のみ計算して返し、実移動は呼出側が行う。AI キュー進行を阻害しないためこの分離が必要。
+- **攻撃モーションフラグ**：`is_attacking` / `is_sliding` / `is_blocked` は Player 固有の UI ロック機構なので SkillExecutor に取り込まない。呼出側で設定・解除する。
+- **ヘッドショット即死の SE**：Player の `SoundManager.play(ARROW_SHOOT)` を `play_from(ARROW_SHOOT, attacker)` に変更（空間フィルタ対応）。Player は自身が listener のため挙動同じ。
+
+### 動作確認
+- `godot --headless --check-only` でスクリプトのパース成功を確認（エラー 0 件）。
+- 実機動作確認（全4クラスの V 特殊攻撃・Player/AI 一貫性・非免疫敵への即死・免疫敵への3倍ダメージ・スライディング時の無敵）は次回セッションで実施予定。
+
+### SkillExecutor 抽出の完了サマリ
+本日（2026-04-18）のセッションで、全 10 種類の特殊行動を 3 ステージ（ステージ1: heal / ステージ2: melee+ranged / ステージ3a: flame_circle+water_stun+buff / ステージ3b: rush+whirlwind+headshot+sliding）に分けて `SkillExecutor` に抽出完了。Player / AI の計算式乖離バグを構造的に解消。残りは dark-lord のキュー外処理のリファクタリングのみ（別タスク）。
+
 ## 2026-04-18（SkillExecutor 抽出・ステージ3a：flame_circle / water_stun / buff 移行）
 
 ### 変更内容

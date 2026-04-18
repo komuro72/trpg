@@ -1033,29 +1033,6 @@ func _char_name(c: Character) -> String:
 	return str(c.name)
 
 
-## V スロット特殊攻撃の被弾メッセージを1体ずつ MessageLog に積む
-## "○○が{skill_name}で△△を攻撃し、{大}ダメージを与えた" の形式
-## attacker / defender の両方の character_data を渡してアイコン行を表示する
-func _emit_v_skill_battle_msg(skill_name: String, atk: Character, def: Character, dmg: int) -> void:
-	if MessageLog == null or atk == null or def == null:
-		return
-	var atk_data: CharacterData = atk.character_data
-	var def_data: CharacterData = def.character_data
-	var atk_name := _char_name(atk)
-	var def_name := _char_name(def)
-	var dmg_val := maxi(1, dmg)
-	var dmg_label := Character._damage_label(dmg_val)
-	var dmg_color := Character._damage_label_color(dmg_val)
-	var dmg_bold  := Character._damage_is_huge(dmg_val)
-	var msg := "%sが%sで%sを攻撃し、%sを与えた" % [atk_name, skill_name, def_name, dmg_label]
-	var segments := Character._make_segs([
-		[atk_name, Character._party_name_color(atk)], ["が" + skill_name + "で", Color.WHITE],
-		[def_name, Character._party_name_color(def)], ["を攻撃し、", Color.WHITE],
-		[dmg_label, dmg_color, dmg_bold], ["を与えた", Color.WHITE],
-	])
-	MessageLog.add_battle(atk_data, def_data, msg, atk, def, segments)
-
-
 # --------------------------------------------------------------------------
 # V スロット特殊攻撃
 # --------------------------------------------------------------------------
@@ -1099,168 +1076,58 @@ func _execute_v_instant(action: String) -> void:
 
 
 ## 斥候：スライディング（3マスダッシュ・移動中無敵・敵をすり抜け可能）
+## SkillExecutor で着地位置算出・SE・メッセージを処理。移動アニメーション・
+## 無敵フラグは Player 側固有なのでここで扱う。
 func _execute_sliding() -> void:
-	var cost := _slot_cost(_slot_v)
-	if cost > 0:
-		character.use_energy(cost)
-	var dir      := Character.dir_to_vec(character.facing)
 	var step_dur := 0.12 / GlobalConstants.game_speed
 	character.is_sliding = true
 	is_blocked = true
-	# 3マス先まで走査し、壁・障害物で停止。敵はすり抜ける（着地位置は空きマス）
-	var landing_pos := character.grid_pos
-	for step: int in range(1, 4):
-		if not is_instance_valid(character):
-			break
-		var check_pos := character.grid_pos + Vector2i(dir) * step
-		if map_data == null or not map_data.is_walkable_for(check_pos, character.is_flying):
-			break  # 壁・障害物で停止
-		var occupant := _find_character_at(check_pos)
-		if occupant != null:
-			continue  # 敵・味方をすり抜ける
-		landing_pos = check_pos
-	# 着地位置に移動
+	var landing_pos := SkillExecutor.execute_sliding(character, _slot_v, map_data, blocking_characters)
 	if landing_pos != character.grid_pos and is_instance_valid(character):
 		character.move_to(landing_pos, step_dur * 3.0)
 		await get_tree().create_timer(step_dur * 3.0 + 0.02).timeout
 	if is_instance_valid(character):
 		character.is_sliding = false
 	is_blocked = false
-	SoundManager.play(SoundManager.MELEE_DAGGER)
-	if is_instance_valid(character):
-		var c_name := _char_name(character)
-		var segs := Character._make_segs([
-			[c_name, Character._party_name_color(character)],
-			["がスライディングで突進した", Color.WHITE],
-		])
-		MessageLog.add_battle(character.character_data, null,
-			"%sがスライディングで突進した" % c_name, character, null, segs)
 
 
 ## 斧戦士：振り回し（周囲8マスの敵全員にダメージ）
+## SkillExecutor で範囲ダメージ・SE・メッセージを処理。攻撃モーション用の
+## is_attacking フラグ管理とアニメ待機は Player 側固有なのでここで扱う。
 func _execute_whirlwind() -> void:
-	var cost := _slot_cost(_slot_v)
-	if cost > 0:
-		character.use_energy(cost)
-	var dmg_mult: float  = float(_slot_v.get("damage_mult", 1.0))
-	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
-	var raw_damage := int(float(character.power) * dmg_mult * type_mult)
 	character.is_attacking = true
-	var hit_count := 0
-	for dx: int in range(-1, 2):
-		for dy: int in range(-1, 2):
-			if dx == 0 and dy == 0:
-				continue
-			var check_pos := character.grid_pos + Vector2i(dx, dy)
-			for ch: Character in blocking_characters:
-				if not is_instance_valid(ch) or ch.is_friendly or ch.hp <= 0:
-					continue
-				if check_pos in ch.get_occupied_tiles():
-					var hp_before := ch.hp
-					ch.take_damage(raw_damage, 1.0, character, false, true)
-					_emit_v_skill_battle_msg("振り回し", character, ch, hp_before - ch.hp)
-					hit_count += 1
-					break
-	SoundManager.play_attack(character)
+	SkillExecutor.execute_whirlwind(character, _slot_v, blocking_characters)
 	await get_tree().create_timer(0.5 / GlobalConstants.game_speed).timeout
 	if is_instance_valid(character):
 		character.is_attacking = false
-	if hit_count == 0:
-		var c_name := _char_name(character)
-		var segs := Character._make_segs([
-			[c_name, Character._party_name_color(character)],
-			["が振り回したが空振りに終わった", Color.WHITE],
-		])
-		MessageLog.add_battle(character.character_data, null,
-			"%sが振り回したが空振りに終わった" % c_name, character, null, segs)
 
 
 ## 剣士：突進斬り（向いている方向に最大2マス前進、経路上の敵全員にダメージ、次の空きマスに着地）
+## SkillExecutor で経路ダメージ・着地位置算出・SE・メッセージを処理。
+## 移動アニメーション・is_attacking フラグ管理は Player 側固有なのでここで扱う。
 func _execute_rush() -> void:
-	var cost := _slot_cost(_slot_v)
-	if cost > 0:
-		character.use_energy(cost)
-	var dmg_mult: float  = float(_slot_v.get("damage_mult", 1.2))
-	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
-	var raw_damage := int(float(character.power) * dmg_mult * type_mult)
-	var dir        := Character.dir_to_vec(character.facing)
-	var step_dur   := 0.15 / GlobalConstants.game_speed
+	var step_dur := 0.15 / GlobalConstants.game_speed
 	character.is_attacking = true
 	is_blocked = true
-	var hit_count := 0
-	# 経路上の最大2マスを走査してダメージを与え、着地位置を決定する
-	var landing_pos := character.grid_pos  # 着地位置（空きマスに更新していく）
-	for step: int in range(1, 4):  # 最大3マス先まで探索（2マス攻撃 + 1マス着地余地）
-		if not is_instance_valid(character):
-			break
-		var check_pos := character.grid_pos + Vector2i(dir) * step
-		if map_data == null or not map_data.is_walkable_for(check_pos, false):
-			break  # 壁・障害物で停止
-		var enemy_here := _find_character_at(check_pos)
-		if enemy_here != null and not enemy_here.is_friendly:
-			# 攻撃範囲は最大2マス
-			if step <= 2:
-				var hp_before := enemy_here.hp
-				enemy_here.take_damage(raw_damage, 1.0, character, false, true)
-				_emit_v_skill_battle_msg("突進斬り", character, enemy_here, hp_before - enemy_here.hp)
-				SoundManager.play_attack(character)
-				hit_count += 1
-			continue  # 敵がいるマスは着地せず通過
-		landing_pos = check_pos  # 空きマスを着地位置に更新
-		break  # 空きマスに到達したら停止
-	# 着地位置に移動（元の位置と異なる場合のみ）
+	var result := SkillExecutor.execute_rush(character, _slot_v, map_data, blocking_characters)
+	var landing_pos: Vector2i = result.get("landing_pos", character.grid_pos)
 	if landing_pos != character.grid_pos and is_instance_valid(character):
 		character.move_to(landing_pos, step_dur)
 		await get_tree().create_timer(step_dur + 0.02).timeout
 	if is_instance_valid(character):
 		character.is_attacking = false
 	is_blocked = false
-	if hit_count == 0:
-		var c_name := _char_name(character)
-		var segs := Character._make_segs([
-			[c_name, Character._party_name_color(character)],
-			["が突進斬りを放ったが敵に当たらなかった", Color.WHITE],
-		])
-		MessageLog.add_battle(character.character_data, null,
-			"%sが突進斬りを放ったが敵に当たらなかった" % c_name, character, null, segs)
 
 
 ## 弓使い：ヘッドショット（即死耐性なし→即死、あり→×3ダメージ）
 ## ターゲット選択モード経由で呼ばれる
 func _execute_headshot(target: Character, slot_data: Dictionary) -> void:
-	var cost := _slot_cost(slot_data)
-	if cost > 0:
-		character.use_energy(cost)
-	character.face_toward(target.grid_pos)
-	SoundManager.play(SoundManager.ARROW_SHOOT)
-	var is_immune: bool = false
-	if target.character_data != null:
-		is_immune = bool(target.character_data.instant_death_immune)
-	if is_immune:
-		var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
-		var raw_damage := int(float(character.power) * 3.0 * type_mult)
-		_spawn_projectile(target, raw_damage, false)
-		MessageLog.add_combat("[ヘッドショット] %s → %s ×3ダメージ" % \
-				[_char_name(character), _char_name(target)])
-	else:
-		_spawn_projectile(target, 99999, false)
-		MessageLog.add_combat("[ヘッドショット] %s → %s 即死！" % \
-				[_char_name(character), _char_name(target)])
+	SkillExecutor.execute_headshot(character, target, slot_data)
 
 
 ## 魔法使い(火)：炎陣（自分を中心に半径3マスの炎ゾーンを設置・2.5秒間継続ダメージ）
 func _execute_flame_circle() -> void:
 	SkillExecutor.execute_flame_circle(character, _slot_v, blocking_characters)
-
-
-## 指定グリッド座標にいる最初のキャラクターを返す（なければ null）
-func _find_character_at(pos: Vector2i) -> Character:
-	for ch: Character in blocking_characters:
-		if not is_instance_valid(ch):
-			continue
-		if pos in ch.get_occupied_tiles():
-			return ch
-	return null
 
 
 # --------------------------------------------------------------------------
