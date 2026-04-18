@@ -3,6 +3,33 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-18（SkillExecutor 抽出・ステージ1：heal 移行）
+
+### 背景
+- Player / AI で同じ特殊行動（heal / melee / ranged / V 攻撃各種）の計算式が二重実装されており、乖離バグが本セッションで連続発覚（AI ヒーラーの `heal_mult` 未適用、`water_stun` / `flame_circle` / `buff_defense` のハードコード等）。
+- CLAUDE.md に「AI と実処理の責務分離方針」セクションを追加し、SkillExecutor クラス抽出方針を明文化。
+
+### 変更内容
+- **新規ファイル**: `scripts/skill_executor.gd` を作成。`class_name SkillExecutor extends RefCounted` の static メソッド集約クラス。
+- `SkillExecutor.execute_heal(caster, target, slot) -> HealResult` を実装。Player 側 `_execute_heal` / AI 側 `"heal":` 分岐の計算式を統合：
+  - エネルギー消費（`_slot_cost` で `cost` / `mp_cost` / `sp_cost` フォールバック）
+  - `face_toward` + キャスト側 `spawn_heal_effect("cast")`
+  - アンデッド特効（`target.is_undead && 敵対陣営`）: `power × ATTACK_TYPE_MULT[magic] × damage_mult` で魔法ダメージ適用 + `MessageLog.add_combat` で特効ログ
+  - 通常回復: `power × heal_mult` で回復量算出 + `target.heal()` + `target.log_heal()`
+  - 戻り値 `HealResult` enum（FAILED / HEALED / UNDEAD_DAMAGED）で呼び出し元が分岐可能
+- **player_controller.gd**: `_execute_heal` を 6 行に縮小。`SkillExecutor.execute_heal` を呼び、`HEALED` 結果かつ対象が未加入 NPC の場合のみ `healed_npc_member` シグナルを発火する責務に限定。
+- **unit_ai.gd**: `"heal":` 分岐を縮小。CharacterData から slot 辞書（`cost` / `heal_mult` / `damage_mult`）を合成して `SkillExecutor.execute_heal` に渡す。WAITING 状態への遷移は呼び出し元責務として維持。
+- **CLAUDE.md**: 「実処理の共通化」セクションを「推奨・未実装」→「段階移行中」に更新。進捗表（heal ✅ / 残り 9 種類 ⏳）を追加。要調査項目の「Player 側と AI 側の計算ロジック統一」エントリも進捗表付きで更新。
+
+### 決定事項
+- **slot 辞書の扱い**: AI 側はクラス JSON の `slots.Z` を保持しないため、CharacterData のフラット化フィールド（`z_heal_mult` / `z_damage_mult` / `heal_cost`）から合成する。Player 側は既存の `_slot_z` をそのまま渡す。
+- **シグナル責務**: `healed_npc_member` は UI 固有（game_map の `_on_npc_healed` が購読）なので SkillExecutor には移さず、PlayerController に残す。`HealResult.HEALED` のときだけ発火（アンデッド特効時は除外）。
+- **use_energy 挙動**: SkillExecutor では「失敗したら何もせず false を返す」防御的な挙動を採用。Player 側は事前に `_enter_pre_delay` でエネルギーチェック済みのため安全。AI 側も従来どおりの防御的な挙動と整合。
+
+### 動作確認
+- `godot --headless --check-only` でスクリプトのパース成功を確認（エラー 0 件）。
+- 実機動作確認（Player ヒーラーの Z 回復 / AI ヒーラーの Z 回復 / アンデッドへのダメージ）は次回セッションで実施予定。
+
 ## 2026-04-16（UI・演出ブラッシュアップ）
 
 ### ヒットエフェクト3層刷新

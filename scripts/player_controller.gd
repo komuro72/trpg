@@ -1048,38 +1048,10 @@ func _spawn_projectile(target: Character, raw_damage: int, is_magic: bool = fals
 
 
 func _execute_heal(target: Character, slot_data: Dictionary) -> void:
-	var cost := _slot_cost(slot_data)
-	if cost > 0:
-		character.use_energy(cost)
-	character.face_toward(target.grid_pos)
-	# キャスト側エフェクト（外広がり・白金）
-	_spawn_heal_effect(character.position, "cast")
-	var skill_name := str(slot_data.get("name", "回復"))
-	# アンデッド特効：他魔法クラスと同じフローでダメージ計算
-	# base_damage = power × ATTACK_TYPE_MULT[magic] × damage_mult
-	# Z_damage_mult（healer.json で 2.0）で特効倍率を表現
-	# take_damage 内で自然言語バトルメッセージ（「聖なる光」）も発信される
-	if not target.is_friendly and target.character_data != null and target.character_data.is_undead:
-		var damage_mult := float(slot_data.get("damage_mult", 1.0))
-		var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("magic", 1.0)
-		var base_damage := maxi(1, int(float(character.power) * type_mult * damage_mult))
-		target.take_damage(base_damage, 1.0, character, true)
-		_spawn_heal_effect(target.position, "hit")
-		MessageLog.add_combat("[%s] %s → %s %d DMG（アンデッド特効）" % \
-			[skill_name, _char_name(character), _char_name(target), base_damage])
-		return
-	# 通常回復：heal_mult で回復量を計算（heal() 内で HEAL SE 再生）
-	var heal_mult := float(slot_data.get("heal_mult", 0.3))
-	var heal_amount := maxi(1, int(float(character.power) * heal_mult))
-	var hp_before := target.hp
-	target.heal(heal_amount)
-	# ターゲット側エフェクト（内縮み・緑）
-	_spawn_heal_effect(target.position, "hit")
-	# combat ログ + 自然言語バトルメッセージ（MessageWindow 表示）
-	target.log_heal(character, heal_amount, hp_before)
-	# 未加入 NPC への回復：has_been_healed フラグ更新用シグナルを発火
-	# （パーティーメンバーでない友好キャラ = 未加入NPC）
-	if target.is_friendly and not _party_sorted_members.has(target):
+	var result := SkillExecutor.execute_heal(character, target, slot_data)
+	# 未加入 NPC への回復（通常回復時のみ）：has_been_healed フラグ更新用シグナル
+	if result == SkillExecutor.HealResult.HEALED \
+			and target.is_friendly and not _party_sorted_members.has(target):
 		healed_npc_member.emit(target)
 
 

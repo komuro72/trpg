@@ -527,30 +527,15 @@ func _start_action(action: Dictionary) -> void:
 			if _manhattan(_member.grid_pos, tgt.grid_pos) > range_val:
 				_complete_action()
 				return
+			# SkillExecutor に集約。CharacterData からスロット辞書を組み立てて渡す
+			# （AI 側はクラス JSON の slots.Z 辞書を保持しないため、同等のキーで合成する）
 			var cd := _member.character_data
-			var cost := cd.heal_cost if cd else 0
-			# アンデッド特効：他魔法クラスと同じフロー（power × ATTACK_TYPE_MULT[magic] × z_damage_mult）
-			if tgt.character_data != null and tgt.character_data.is_undead \
-					and tgt.is_friendly != _member.is_friendly:
-				if _member.use_energy(cost):
-					var power := cd.power if cd else 0
-					var d_mult: float = cd.z_damage_mult if cd else 1.0
-					var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("magic", 1.0)
-					var base_damage := maxi(1, int(float(power) * type_mult * d_mult))
-					tgt.take_damage(base_damage, 1.0, _member, true)
-					_member.spawn_heal_effect("cast")
-					tgt.spawn_heal_effect("hit")
-			else:
-				# 通常回復：z_heal_mult で回復量を計算
-				if _member.use_energy(cost):
-					var power := cd.power if cd else 0
-					var h_mult: float = cd.z_heal_mult if cd else 0.3
-					var heal_amount := maxi(1, int(float(power) * h_mult))
-					var hp_before := tgt.hp
-					tgt.heal(heal_amount)  # heal() 内で HEAL SE 再生
-					tgt.log_heal(_member, heal_amount, hp_before)
-					_member.spawn_heal_effect("cast")
-					tgt.spawn_heal_effect("hit")
+			var slot := {
+				"cost":        cd.heal_cost    if cd else 0,
+				"heal_mult":   cd.z_heal_mult  if cd else 0.3,
+				"damage_mult": cd.z_damage_mult if cd else 1.0,
+			}
+			SkillExecutor.execute_heal(_member, tgt, slot)
 			_state = _State.WAITING
 			_timer = _member.character_data.get_z_post_delay() if _member.character_data else 0.5
 

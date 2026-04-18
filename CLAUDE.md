@@ -442,6 +442,65 @@ game_map
 - Z/A：通常水弾（遠距離魔法・ダメージのみ）
 - V/Y：無力化水魔法（上記Vスロット仕様参照）
 
+## AI と実処理の責務分離方針
+
+### 意思決定層と実処理層
+- **意思決定層**（PartyLeader / UnitAI / PlayerController）
+  - 「何をするか・誰を狙うか・いつ動くか」を決定する
+  - ターゲット選択、行動タイミング、AI 判断（戦況評価等）
+- **実処理層**（SkillExecutor〔未実装・推奨〕/ エフェクトクラス / Character）
+  - 攻撃計算・ダメージ適用・エフェクト生成・位置変更
+  - 計算式・ゲーム動作そのもの
+
+### アーキテクチャの2系統（維持方針）
+- **AI 側**（UnitAI）：キュー駆動
+  - 時間ベース・事前にアクションシーケンスを構築
+  - `_queue` に辞書形式のアクション（move / attack / heal / v_attack 等）を詰め、`_start_action` の match で分岐
+- **Player 側**（PlayerController）：ステートマシン + 入力バッファ
+  - イベント駆動・入力に応じて NORMAL → PRE_DELAY → TARGETING → POST_DELAY と遷移
+  - 先行入力バッファ（`_move_buffer` / `_attack_buffer`）あり
+
+この2系統は思想が異なるので、統一しない方針。Player は対話的（TARGETING 中のターゲット変更、X でキャンセル、ガードホールド等）で、キュー駆動は不向き。AI は思考サイクルの可視性のためにキュー駆動が適する。
+
+### 実処理の共通化（段階移行中）
+Player と AI で同じ特殊行動（melee / ranged / heal / V 攻撃各種）の計算式が二重実装されている。SkillExecutor クラス（`scripts/skill_executor.gd`）に抽出して共通化することで、乖離バグを構造的に解消する。
+
+**移行状況（2026-04-18）**:
+- ✅ **heal（回復・アンデッド特効）** — ステージ1で移行済み
+- ⏳ 残り 9 種類（melee / ranged / flame_circle / water_stun / buff / rush / whirlwind / headshot / sliding）— 段階的に実施予定
+
+```
+SkillExecutor（static メソッド群）
+  ├── execute_melee(attacker, target, slot) -> void
+  ├── execute_ranged(attacker, target, slot) -> void
+  ├── execute_heal(caster, target, slot) -> void
+  ├── execute_flame_circle(caster, map_node, slot) -> void
+  ├── execute_water_stun(caster, target, slot) -> void
+  ├── execute_buff(caster, target, slot) -> void
+  ├── execute_rush(attacker, slot) -> void       （突進斬り）
+  ├── execute_whirlwind(attacker, slot) -> void  （振り回し）
+  ├── execute_headshot(attacker, target, slot) -> void
+  └── execute_sliding(attacker, slot) -> void    （スライディング）
+```
+
+- 呼び出し側（UnitAI / PlayerController）は意思決定に専念し、ダメージ計算・エフェクト生成は SkillExecutor に委譲する
+- slot 引数はクラス JSON の `slots.Z` / `slots.V` 辞書をそのまま渡す（`heal_mult` / `damage_mult` / `duration` / `tick_interval` / `cost` 等を参照）
+- 乱数（クリティカル判定・命中判定）は SkillExecutor 内で解決する
+- サウンド再生・メッセージログ出力もこの層で統一する（現状は UnitAI / PlayerController / Character に分散）
+
+### 例外的実装（要整理）
+- **dark-lord のワープ・炎陣**：キュー外で `_process` と並走（`UnitAI._update_dark_lord_behavior()` 相当）。通常のアクションキュー経由では時間粒度が合わないため分離されているが、SkillExecutor 導入時には JSON 駆動のスケジューラ化を検討する
+
+### 設計原則
+1. **計算ロジックの追加・変更は SkillExecutor に対して行う**（導入後）。UnitAI / PlayerController を個別に編集しない
+2. **JSON 値（slot の heal_mult / damage_mult / duration 等）は必ず slot から読む**。ハードコード値を残さない
+3. **Player / AI で同じスキルは同じ結果を返す**。テスト観点として「同一条件で同一ダメージ」を検証する
+4. 新しいスキルを追加する場合、先に SkillExecutor に execute_XXX を実装し、UnitAI のキューアクションと PlayerController のステート遷移から呼び出す
+
+### 参照
+- `docs/investigation_class_structure.md` — クラス構成・役割分担の現状分析
+- `docs/investigation_action_queue.md` — アクションキュー実装の詳細と移行難易度評価
+
 ## キャラクター生成システム
 
 - プレイヤー（主人公）含め全キャラクターがランダム生成
@@ -1223,15 +1282,15 @@ rank値: C=0, B=1, A=2, S=3
 - **ファイル名のハイフン／アンダースコア統一**：個別敵 JSON は `dark_lord.json` 等アンダースコア、クラス JSON は `dark-lord.json` 等ハイフン。統一するなら個別敵 JSON をハイフンに寄せる。ファイル名変更はコード側の参照も書き換えが必要
 - **`enemy_list.json` と `enemies_list.json` の紛らわしい命名**：役割が全く違う（前者はステータスタイプ参照マップ、後者は敵ファイルパス一覧）のにファイル名が酷似。片方リネーム候補
 - **Config Editor やツール類での設定変更の git 反映方針**：JSON ファイル・画像素材などバイナリファイルの、自動 commit/push の是非を含めた運用ルール検討が必要
-- **Player 側と AI 側の計算ロジック統一**：特殊攻撃・回復・ダメージ計算等が `player_controller.gd` と `unit_ai.gd` で独立に実装されており、実装が乖離するリスクが構造的に存在する。今日のセッションで以下の乖離バグが連続発覚した：
+- **Player 側と AI 側の計算ロジック統一（SkillExecutor 抽出）**：特殊攻撃・回復・ダメージ計算等が `player_controller.gd` と `unit_ai.gd` で独立に実装されており、実装が乖離するリスクが構造的に存在する。今日のセッションで以下の乖離バグが連続発覚した：
   - AI ヒーラーの `heal_mult` 未適用（Player は適用・AI は未適用）
   - AI の `water_stun` / `flame_circle` / `buff_defense` で JSON 値を無視しハードコード
 
-  対応方針の候補：
-  1. 計算ロジックを共通モジュール（例：`combat_calculator.gd`）に抽出し、Player / AI 両方から呼び出す形に統一
-  2. テストケース追加：「同じ条件で Player と AI が同じ結果を返す」ことを検証する自動テスト
-  3. CLAUDE.md に「Player/AI 計算統一」の設計原則を明記
-  4. 既存のハードコード値の棚卸し（他にも JSON を無視している箇所がないか全体調査）
+  対応方針：`SkillExecutor` クラス（`scripts/skill_executor.gd`）へ段階的に抽出。設計思想は CLAUDE.md「AI と実処理の責務分離方針」セクションに明文化済み。
+
+  **移行進捗（2026-04-18）**:
+  - ✅ **heal** — ステージ1で抽出完了。Player / AI 両方から `SkillExecutor.execute_heal()` を呼ぶ形に統一
+  - ⏳ 残り 9 種類（melee / ranged / flame_circle / water_stun / buff / rush / whirlwind / headshot / sliding）— 段階的に実施予定
 
   優先度：中〜高（バランス調整フェーズの前にやっておきたい）
 
