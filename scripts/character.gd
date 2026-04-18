@@ -1212,8 +1212,14 @@ func log_heal(healer: Character, amount: int, hp_before: int) -> void:
 			if healer != null and is_instance_valid(healer) else null
 	var heal_name := _battle_name(healer)
 	var target_name := _battle_name(self)
+	var heal_color := _party_name_color(healer)
+	var target_color := _party_name_color(self)
 	var battle_msg := "%sが%sに回復魔法をかけ、HPを回復した" % [heal_name, target_name]
-	MessageLog.add_battle(healer_data, character_data, battle_msg, healer, self)
+	var segments := _make_segs([
+		[heal_name, heal_color], ["が", Color.WHITE],
+		[target_name, target_color], ["に回復魔法をかけ、HPを回復した", Color.WHITE],
+	])
+	MessageLog.add_battle(healer_data, character_data, battle_msg, healer, self, segments)
 
 
 ## キャラクターの表示名を返す
