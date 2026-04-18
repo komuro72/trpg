@@ -2,7 +2,6 @@
   "id": "magician-fire",
   "name": "魔法使い(火)",
   "weapon_type": "staff",
-  "base_defense": 2,
   "mp": 60,
   "attack_type": "magic",
   "attack_range": 5,
@@ -16,8 +15,8 @@
       "range": 5,
       "damage_mult": 1.0,
       "mp_cost": 5,
-      "pre_delay": 0.10,
-      "post_delay": 0.30
+      "pre_delay": 0.1,
+      "post_delay": 0.3
     },
     "X": {
       "name": "火炎",
@@ -49,8 +48,8 @@
       "mp_cost": 20,
       "duration": 2.5,
       "tick_interval": 0.5,
-      "pre_delay": 0.50,
-      "post_delay": 0.60
+      "pre_delay": 0.5,
+      "post_delay": 0.6
     }
   }
 }

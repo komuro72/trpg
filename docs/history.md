@@ -1120,3 +1120,39 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
 ### CONFIG_KEYS 配列
 `GlobalConstants.CONFIG_KEYS` の並び順を新カテゴリ順に並べ直し。これにより `constants.json` 書き出し時のキー順も変わる（sort_keys=false なので保証される順序）。
 
+## base_defense / defense フィールドを廃止（2026-04-18）
+
+### 背景
+`docs/investigation_base_defense.md` の調査で、`base_defense`（味方クラス JSON）と `defense`（個別敵 JSON）が CLAUDE.md のダメージ計算フロー仕様に載っていない平ダメージカット処理として動作していることが判明。CLAUDE.md の仕様（防御強度 → 耐性の 2 段階）を正とし、実装側を整合させる方針。味方全員 `base_defense=0` でテスト済み・影響が小さいことを確認。バランス微調整は後日まとめて行う。
+
+### JSON 変更
+- `assets/master/classes/*.json` 全 12 ファイル（味方 7 ＋ 敵固有 5）から `base_defense` フィールドを削除
+- `assets/master/enemies/*.json` 全 16 ファイルから `defense` フィールドを削除
+- キー順・インデント・末尾改行は保持。副作用として一部の小数（例：`0.10` → `0.1`）が Python の JSON 正規化で表記変更（値は同一）
+
+### コード変更
+- `CharacterData.defense` フィールドを削除（[character_data.gd:38](scripts/character_data.gd#L38)）
+- `CharacterData.load_from_json` の `data.defense = ...` 行を削除（[character_data.gd:161](scripts/character_data.gd#L161)）
+- `CharacterGenerator.generate()` の `data.defense = int(class_json.get("base_defense", 3))` 行を削除（[character_generator.gd:113](scripts/character_generator.gd#L113)）
+- `Character.defense` フィールド削除（[character.gd:46](scripts/character.gd#L46)）
+- `Character._read_character_data()` の `defense = character_data.defense` 行を削除（[character.gd:271](scripts/character.gd#L271)）
+- `Character.get_effective_defense()` 関数を削除
+- `Character.DEFENSE_BUFF_BONUS` 定数（=3）を削除
+- `Character.take_damage()` のダメージ計算を `raw_after_mult - get_effective_defense() - blocked` → `raw_after_mult - blocked` に変更
+- `is_fully_blocked` の判定式も同様に簡素化
+- `Character._log_damage()` のデバッグ文字列から `get_effective_defense()` 減算を撤去
+- `Config Editor` の `CLASS_PARAM_GROUPS`「リソース」グループから `base_defense` を削除
+
+### 副次的影響：防御バフ（healer V スロット）
+- `apply_defense_buff()` / `defense_buff_timer` / `DEFENSE_BUFF_DURATION` は保持（バリアエフェクトの視覚表現は継続）
+- しかし `get_effective_defense()` 撤去により **numeric な効果は一旦失われる**（バリアエフェクト表示のみ）
+- バランス微調整時に物理耐性／防御強度への再割り当てを検討すること（`character.gd:84-86` に TODO コメント記載）
+
+### CLAUDE.md 整理
+- 「要調査・要整理項目」セクションから「legacy フィールドの棚卸し」の `base_defense` 言及を削除（廃止完了のため）
+- ダメージ計算フロー仕様セクションは元々 `defense` を記載していなかったので変更不要（実装が仕様に追いついた形）
+
+### 確認
+- Godot `--check-only` exit 0、パースエラーなし
+- `grep -n "\.defense\b" scripts/` で残存ヒットなし（battle_policy 文字列の `"defense"` のみ）
+

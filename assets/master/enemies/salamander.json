@@ -6,7 +6,6 @@
   "skill": 10,
   "physical_resistance": 5,
   "magic_resistance": 6,
-  "defense": 2,
   "is_flying": false,
   "rank": "B",
   "chase_range": 6,

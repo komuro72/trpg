@@ -2,7 +2,6 @@
   "id": "archer",
   "name": "弓使い",
   "weapon_type": "bow",
-  "base_defense": 3,
   "attack_type": "ranged",
   "attack_range": 5,
   "max_sp": 60,
@@ -15,7 +14,7 @@
       "type": "physical",
       "range": 5,
       "damage_mult": 0.9,
-      "pre_delay": 0.10,
+      "pre_delay": 0.1,
       "post_delay": 0.25,
       "sp_cost": 2
     },
@@ -36,8 +35,8 @@
       "range": 6,
       "damage_mult": 3.0,
       "sp_cost": 25,
-      "pre_delay": 0.40,
-      "post_delay": 0.50
+      "pre_delay": 0.4,
+      "post_delay": 0.5
     }
   }
 }

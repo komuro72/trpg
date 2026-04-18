@@ -110,7 +110,6 @@ static func generate_character(class_id: String = "") -> CharacterData:
 		data.max_sp = stats.energy
 	data.power                   = stats.power
 	data.skill                   = stats.skill
-	data.defense                 = int(class_json.get("base_defense", 3))
 	data.physical_resistance     = stats.physical_resistance
 	data.magic_resistance        = stats.magic_resistance
 	data.defense_accuracy        = stats.defense_accuracy

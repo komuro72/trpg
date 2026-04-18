@@ -2,7 +2,6 @@
   "id": "wolf",
   "name": "ウルフ",
   "weapon_type": "fang",
-  "base_defense": 2,
   "attack_type": "melee",
   "attack_range": 1,
   "is_flying": false,
@@ -14,8 +13,8 @@
       "type": "physical",
       "range": 1,
       "damage_mult": 1.0,
-      "pre_delay": 0.30,
-      "post_delay": 0.40
+      "pre_delay": 0.3,
+      "post_delay": 0.4
     },
     "V": null
   }

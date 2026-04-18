@@ -2,7 +2,6 @@
   "id": "salamander",
   "name": "サラマンダー",
   "weapon_type": "flame",
-  "base_defense": 2,
   "attack_type": "magic",
   "attack_range": 4,
   "is_flying": false,
@@ -14,8 +13,8 @@
       "type": "magic",
       "range": 4,
       "damage_mult": 1.0,
-      "pre_delay": 0.50,
-      "post_delay": 0.70
+      "pre_delay": 0.5,
+      "post_delay": 0.7
     },
     "V": null
   }

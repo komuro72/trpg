@@ -2,7 +2,6 @@
   "id": "magician-water",
   "name": "魔法使い(水)",
   "weapon_type": "staff",
-  "base_defense": 2,
   "mp": 60,
   "max_sp": 0,
   "attack_type": "magic",
@@ -17,8 +16,8 @@
       "range": 5,
       "damage_mult": 0.8,
       "mp_cost": 3,
-      "pre_delay": 0.10,
-      "post_delay": 0.30
+      "pre_delay": 0.1,
+      "post_delay": 0.3
     },
     "X": {
       "name": "水流",
@@ -39,8 +38,8 @@
       "damage_mult": 0.5,
       "stun_duration": 4.0,
       "mp_cost": 15,
-      "pre_delay": 0.60,
-      "post_delay": 0.60
+      "pre_delay": 0.6,
+      "post_delay": 0.6
     }
   }
 }

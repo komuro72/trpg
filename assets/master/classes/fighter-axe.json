@@ -2,7 +2,6 @@
   "id": "fighter-axe",
   "name": "斧戦士",
   "weapon_type": "axe",
-  "base_defense": 4,
   "attack_type": "melee",
   "attack_range": 1,
   "max_sp": 60,
@@ -15,7 +14,7 @@
       "type": "physical",
       "range": 1,
       "damage_mult": 1.1,
-      "pre_delay": 0.20,
+      "pre_delay": 0.2,
       "post_delay": 0.45,
       "sp_cost": 2
     },
@@ -35,8 +34,8 @@
       "type": "physical",
       "damage_mult": 1.0,
       "sp_cost": 15,
-      "pre_delay": 0.40,
-      "post_delay": 0.70
+      "pre_delay": 0.4,
+      "post_delay": 0.7
     }
   }
 }

@@ -7,7 +7,6 @@
   "mp": 20,
   "physical_resistance": 2,
   "magic_resistance": 5,
-  "defense": 1,
   "is_flying": false,
   "rank": "C",
   "chase_range": 10,

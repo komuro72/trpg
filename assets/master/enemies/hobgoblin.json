@@ -6,7 +6,6 @@
   "skill": 14,
   "physical_resistance": 8,
   "magic_resistance": 3,
-  "defense": 4,
   "is_flying": false,
   "rank": "A",
   "instant_death_immune": true,

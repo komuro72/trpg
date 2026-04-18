@@ -7,7 +7,6 @@
   "mp": 60,
   "physical_resistance": 3,
   "magic_resistance": 20,
-  "defense": 1,
   "is_flying": false,
   "is_undead": true,
   "rank": "A",

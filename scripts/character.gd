@@ -43,7 +43,6 @@ var sp:           int  = 0   ## スタミナポイント（非魔法クラス専
 var max_sp:       int  = 0
 var power:        int  = 1   ## 物理威力 or 魔法威力（クラスに応じて使い分け）
 var skill:        int  = 0   ## 物理技量 or 魔法技量（命中・クリティカル率の基礎値）
-var defense:      int  = 0
 var attack_range: int  = 1   ## 装備補正込みの射程（refresh_stats_from_equipment() で更新）
 var is_flying:    bool = false
 
@@ -83,9 +82,10 @@ func get_condition() -> String:
 	return "critical"
 
 ## バフ状態（一時的な防御力アップ。0=なし、>0=残り秒数）
+## NOTE: 現在はバリアエフェクト表示のみ（numeric な効果なし）。base_defense / defense
+## 廃止（2026-04-18）に伴い DEFENSE_BUFF_BONUS による加算は撤去された。バランス微調整時に
+## 物理耐性などへの再割り当てを検討
 var defense_buff_timer: float = 0.0
-## バフ中の防御ボーナス
-const DEFENSE_BUFF_BONUS: int = 3
 ## バフ持続時間（秒）
 const DEFENSE_BUFF_DURATION: float = 10.0
 ## バリアエフェクトノード（バフ中のみ存在。null=バフなし or 未生成）
@@ -269,7 +269,6 @@ func _init_stats() -> void:
 	sp           = max_sp
 	power        = character_data.power
 	skill        = character_data.skill
-	defense      = character_data.defense
 	is_flying    = character_data.is_flying
 	refresh_stats_from_equipment()
 
@@ -789,13 +788,6 @@ func _remove_stun_effect() -> void:
 	_stun_effect = null
 
 
-## バフ込みの防御力を返す
-func get_effective_defense() -> int:
-	if defense_buff_timer > 0.0:
-		return defense + DEFENSE_BUFF_BONUS
-	return defense
-
-
 ## ダメージを受ける（Phase 12-14: クリティカル・新防御ロジック対応版）
 ## attack_is_magic:      true なら魔法耐性を、false なら物理耐性を適用
 ## attacker:             ダメージ源（方向判定・クリティカル判定・ドロップ帰属追跡用。null 可）
@@ -835,8 +827,8 @@ func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character =
 
 	# 2. 防御強度を差し引き
 	var raw_after_mult: int = int(float(raw_amount) * multiplier)
-	var after_block: int = maxi(0, raw_after_mult - get_effective_defense() - blocked)
-	var is_fully_blocked := blocked > 0 and (raw_after_mult - get_effective_defense()) <= blocked
+	var after_block: int = maxi(0, raw_after_mult - blocked)
+	var is_fully_blocked: bool = blocked > 0 and raw_after_mult <= blocked
 
 	# 3. 耐性適用（逓減軽減）
 	var resistance := 0.0
@@ -1209,9 +1201,9 @@ func _log_damage(attacker: Character, raw: int, mult: float, is_magic: bool,
 	if dir == "back" or dir.is_empty():
 		dir_str = "方向:%s→防御スキップ" % dir_jp if not dir.is_empty() else ""
 	elif def_ok:
-		dir_str = "方向:%s→防御成功(強度%d)→%d" % [dir_jp, blocked, maxi(0, after_crit - get_effective_defense() - blocked)]
+		dir_str = "方向:%s→防御成功(強度%d)→%d" % [dir_jp, blocked, maxi(0, after_crit - blocked)]
 	else:
-		dir_str = "方向:%s→防御失敗→%d" % [dir_jp, maxi(0, after_crit - get_effective_defense())]
+		dir_str = "方向:%s→防御失敗→%d" % [dir_jp, after_crit]
 
 	# 耐性部分
 	var resist_label: String

@@ -2,7 +2,6 @@
   "id": "healer",
   "name": "ヒーラー",
   "weapon_type": "staff",
-  "base_defense": 4,
   "mp": 80,
   "attack_type": "heal",
   "attack_range": 4,
@@ -16,8 +15,8 @@
       "range": 4,
       "heal_mult": 0.3,
       "mp_cost": 5,
-      "pre_delay": 0.10,
-      "post_delay": 0.30
+      "pre_delay": 0.1,
+      "post_delay": 0.3
     },
     "X": {
       "name": "回復(大)",
@@ -37,8 +36,8 @@
       "range": 4,
       "buff_duration": 10.0,
       "mp_cost": 8,
-      "pre_delay": 0.40,
-      "post_delay": 0.50
+      "pre_delay": 0.4,
+      "post_delay": 0.5
     }
   }
 }

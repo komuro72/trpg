@@ -2,7 +2,6 @@
   "id": "harpy",
   "name": "ハーピー",
   "weapon_type": "talon",
-  "base_defense": 1,
   "attack_type": "dive",
   "attack_range": 1,
   "is_flying": true,
@@ -14,8 +13,8 @@
       "type": "physical",
       "range": 1,
       "damage_mult": 1.0,
-      "pre_delay": 0.40,
-      "post_delay": 0.60
+      "pre_delay": 0.4,
+      "post_delay": 0.6
     },
     "V": null
   }
