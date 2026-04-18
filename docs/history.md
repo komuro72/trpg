@@ -1500,3 +1500,33 @@ AI ヒーラーの過剰回復（3.4 倍）が解消され、Player と完全一
 - Godot `--check-only` exit 0
 - `grep '"stun_duration"\|"buff_duration"' assets/master/classes/` 0 件
 
+## クラス側 behavior_description を削除し個別敵側に一本化（2026-04-18）
+
+### 背景
+`behavior_description` は UnitAI 継承クラス（GoblinUnitAI 等）の実装時に Claude Code が読む自然言語仕様として機能する。UnitAI 継承単位は「種族」なので、`behavior_description` は種族単位の個別敵 JSON（`assets/master/enemies/`）にあるべき。クラス JSON（`assets/master/classes/`）の `behavior_description` は冗長で混乱の元だったため削除。
+
+### 位置付けの明文化
+- **`behavior_description` は個別敵 JSON にのみ記述**
+- UnitAI 継承クラス実装時に Claude Code が参照する「種族単位の行動仕様」
+- クラス側 JSON（味方クラス・敵固有クラス）には持たせない
+
+### 削除したファイル（12 件）
+- `assets/master/classes/` 味方 7 ファイル（fighter-sword / fighter-axe / archer / magician-fire / magician-water / healer / scout）
+- `assets/master/classes/` 敵固有 5 ファイル（zombie / wolf / salamander / harpy / dark-lord）
+
+### 残したもの（16 件）
+- `assets/master/enemies/` 個別敵 JSON 全 16 ファイル（goblin / hobgoblin / goblin-archer / goblin-mage / wolf / zombie / salamander / harpy / dark-knight / dark-mage / dark-priest / demon / lich / skeleton / skeleton-archer / dark-lord）
+
+### コード影響
+- **class-side 参照あり（発見）**：`character_generator.gd:119` の `data.behavior_description = str(class_json.get("behavior_description", ""))` — 味方・NPC 生成時にクラス JSON から読み込んでいた。今回の削除で `""`（空文字）になる。CharacterData.behavior_description フィールドは残存するが現状どこからも読まれていない legacy 状態（旧 LLM 実装の `enemy_ai.gd` のみで参照、それも未使用）
+- **Config Editor**：`CLASS_PARAM_GROUPS` の「基本」グループから `behavior_description` を削除。味方クラスタブ・敵固有クラスタブで表示されなくなる
+- 敵一覧タブは個別敵 JSON を参照するので表示維持
+
+### CLAUDE.md 更新
+- 1058 行の記述を「個体側の属性」から「個別敵 JSON にのみ記述する」に変更し、UnitAI 継承クラス実装時の参照用途を明記
+
+### 確認
+- `grep -l "behavior_description" assets/master/classes/*.json` → 0 件
+- `grep -c "behavior_description" assets/master/enemies/*.json` → 16 件（全て残存）
+- Godot `--check-only` exit 0
+

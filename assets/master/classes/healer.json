@@ -5,7 +5,6 @@
   "attack_type": "heal",
   "attack_range": 4,
   "is_flying": false,
-  "behavior_description": "仲間を回復・強化する支援専門家。自ら攻撃はしない。",
   "slots": {
     "Z": {
       "name": "回復",

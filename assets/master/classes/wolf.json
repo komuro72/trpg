@@ -5,7 +5,6 @@
   "attack_type": "melee",
   "attack_range": 1,
   "is_flying": false,
-  "behavior_description": "群れで行動し高速移動で奇襲する獰猛な獣。",
   "slots": {
     "Z": {
       "name": "かみつき",

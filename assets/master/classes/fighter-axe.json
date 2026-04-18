@@ -5,7 +5,6 @@
   "attack_type": "melee",
   "attack_range": 1,
   "is_flying": false,
-  "behavior_description": "斧で豪快に振り回す。重い一撃が持ち味。",
   "slots": {
     "Z": {
       "name": "振り下ろし",

@@ -77,7 +77,7 @@ const CLASS_DIR: String = "res://assets/master/classes/"
 const CLASS_PARAM_GROUPS: Array = [
 	{
 		"title": "基本",
-		"params": ["id", "name", "weapon_type", "attack_type", "attack_range", "behavior_description"],
+		"params": ["id", "name", "weapon_type", "attack_type", "attack_range"],
 	},
 	{
 		"title": "特性",

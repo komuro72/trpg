@@ -5,7 +5,6 @@
   "attack_type": "dive",
   "attack_range": 1,
   "is_flying": true,
-  "behavior_description": "飛行して障害物を無視し、地上の敵に降下攻撃を仕掛ける。",
   "slots": {
     "Z": {
       "name": "降下攻撃",

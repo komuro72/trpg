@@ -5,7 +5,6 @@
   "attack_type": "melee",
   "attack_range": 1,
   "is_flying": false,
-  "behavior_description": "死者の成れ果て。低速だが止まらない近接攻撃。",
   "slots": {
     "Z": {
       "name": "つかみ",

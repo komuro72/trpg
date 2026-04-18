@@ -5,7 +5,6 @@
   "attack_type": "magic",
   "attack_range": 5,
   "is_flying": false,
-  "behavior_description": "水の魔法で敵を攻撃・無力化する。後方から水弾を放ち、強力な水魔法で敵をスタンさせる。",
   "slots": {
     "Z": {
       "name": "水弾",

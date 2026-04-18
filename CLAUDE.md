@@ -1055,7 +1055,7 @@ rank値: C=0, B=1, A=2, S=3
 ### 敵キャラクター一覧
 - **クラスと個体の区別**：各敵は `enemy_list.json` の `stat_type` で「敵クラス」を参照する。「攻撃タイプ」や「攻撃間隔」はクラス側（`assets/master/classes/*.json`）で決まる
 - 人間系クラス（fighter-sword / fighter-axe / archer / magician-fire / healer）は味方と共通の定義を流用。敵固有クラスは `zombie` / `wolf` / `salamander` / `harpy` / `dark-lord` の 5 種類
-- **`behavior_description` は個体側の属性**：同じクラスでも個体ごとに異なる個性（例：ゴブリンの「臆病」、ホブゴブリンの「狂暴」）を表現する
+- **`behavior_description` は個別敵 JSON にのみ記述する**（種族単位の行動仕様として機能）。UnitAI 継承クラス（`GoblinUnitAI` 等）の実装時に Claude Code が参照する自然言語仕様として位置付ける。クラス側 JSON（味方クラス・敵固有クラス）には `behavior_description` を持たせない
 - `is_flying` / `is_undead` / `instant_death_immune` / `chase_range` / `territory_range` / `projectile_type` も個体側
 
 | 敵 | 攻撃タイプ | 特徴 |
