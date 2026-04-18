@@ -549,15 +549,13 @@ func _start_action(action: Dictionary) -> void:
 			if _manhattan(_member.grid_pos, tgt.grid_pos) > range_val:
 				_complete_action()
 				return
-			# バフ付与：duration は CharacterData.v_duration から取得（0.0 なら apply_defense_buff 側の既定値）
+			# SkillExecutor.execute_buff に委譲。AI 側は slots.V 辞書を持たないため CharacterData から合成
 			var cd_b := _member.character_data
-			var cost: int = cd_b.buff_cost if cd_b else 0
-			var buff_dur: float = cd_b.v_duration if cd_b != null else 0.0
-			if _member.use_energy(cost):
-				tgt.apply_defense_buff(buff_dur)
-				SoundManager.play_from(SoundManager.HEAL, _member)
-				_member.spawn_heal_effect("cast")
-				tgt.spawn_heal_effect("hit")
+			var slot_b := {
+				"cost":     cd_b.buff_cost if cd_b else 0,
+				"duration": cd_b.v_duration if cd_b else 0.0,
+			}
+			SkillExecutor.execute_buff(_member, tgt, slot_b)
 			# バフ発動は V スロット相当（buff_defense）のため V の post_delay を使う
 			_state = _State.WAITING
 			_timer = _member.character_data.get_v_post_delay() if _member.character_data else 0.5
@@ -1185,59 +1183,40 @@ func _v_headshot(cost: int) -> void:
 	# 状態・タイマーは ATTACKING_PRE → POST 遷移で slot.V.post_delay を適用
 
 
-## 魔法使い(火): 炎陣（自分を中心に半径3マスの炎ゾーン設置）
+## 魔法使い(火): 炎陣（SkillExecutor に委譲）
+## cost は _execute_v_attack 側で事前にチェック済み。SkillExecutor には cost=0 の slot を渡し、
+## 二重消費を防いだ上でここで明示的に use_energy する（旧実装と同じタイミング）。
 func _v_flame_circle(cost: int) -> void:
 	_member.use_energy(cost)
-	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("magic", 1.0)
-	var damage := maxi(1, int(float(_member.power) * 0.8 * type_mult))
-	var map_node := _member.get_parent()
-	if map_node == null:
-		_complete_action()
-		return
-	# duration / tick_interval は CharacterData から取得（slot_data を持たないため）
-	var cd := _member.character_data
-	var flame_duration: float = cd.v_duration if cd != null and cd.v_duration > 0.0 else 2.5
-	var flame_tick: float = cd.v_tick_interval if cd != null and cd.v_tick_interval > 0.0 else 0.5
-	var flame := FlameCircle.new()
-	flame.z_index = 1
-	map_node.add_child(flame)
-	flame.setup(_member.position, _member.grid_pos, 3, damage,
-			flame_duration, flame_tick, _member, _all_members)
-	SoundManager.play(SoundManager.FLAME_SHOOT)
-	var fn := _v_name()
-	var fsegs := Character._make_segs([
-		[fn, Character._party_name_color(_member)],
-		["が炎陣を設置した", Color.WHITE],
-	])
-	MessageLog.add_battle(_member.character_data, null,
-		"%sが炎陣を設置した" % fn, _member, null, fsegs)
+	var slot := _synth_v_slot()
+	slot["cost"] = 0
+	SkillExecutor.execute_flame_circle(_member, slot, _all_members)
 	# 状態・タイマーは ATTACKING_PRE → POST 遷移で slot.V.post_delay を適用
 
 
-## 魔法使い(水): 無力化水魔法（ターゲットをスタン）
+## 魔法使い(水): 無力化水魔法（SkillExecutor に委譲）
 func _v_water_stun(cost: int) -> void:
-	_member.use_energy(cost)
 	if _target == null or not is_instance_valid(_target):
 		_complete_action()
 		return
-	_member.face_toward(_target.grid_pos)
-	# 飛翔体で水弾を飛ばしてスタン適用
-	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("magic", 1.0)
-	var raw_damage := int(float(_member.power) * 0.5 * type_mult)
-	var map_node := _member.get_parent()
-	if map_node != null:
-		var proj := Projectile.new()
-		proj.z_index = 2
-		map_node.add_child(proj)
-		proj.setup(_member.position, _target.position,
-				true, _target, raw_damage, 1.0, _member, true,
-				0.0, true, "")
-	# duration（旧 stun_duration）を CharacterData から取得。未設定時のみ 2.5 フォールバック
-	var cd_w := _member.character_data
-	var stun_dur: float = cd_w.v_duration if cd_w != null and cd_w.v_duration > 0.0 else 2.5
-	_target.apply_stun(stun_dur, _member)
-	_target.take_damage(raw_damage, 1.0, _member, true, true)
+	_member.use_energy(cost)
+	var slot := _synth_v_slot()
+	slot["cost"] = 0
+	SkillExecutor.execute_water_stun(_member, _target, slot)
 	# 状態・タイマーは ATTACKING_PRE → POST 遷移で slot.V.post_delay を適用
+
+
+## V スロット辞書を CharacterData から合成する（AI 側は slots.V 辞書を保持しないため）
+## SkillExecutor が参照するキー（damage_mult / duration / tick_interval / range / name / cost）を揃える
+func _synth_v_slot() -> Dictionary:
+	var cd := _member.character_data
+	return {
+		"damage_mult":   cd.v_damage_mult   if cd else 1.0,
+		"duration":      cd.v_duration      if cd else 0.0,
+		"tick_interval": cd.v_tick_interval if cd else 0.0,
+		"range":         cd.v_range         if cd else 0,
+		"cost":          cd.v_slot_cost     if cd else 0,
+	}
 
 
 ## 斥候: スライディング（3マスダッシュ・敵すり抜け）

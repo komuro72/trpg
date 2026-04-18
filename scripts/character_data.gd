@@ -132,6 +132,13 @@ var v_duration: float = 0.0
 ## スロット V の継続ダメージ判定間隔（秒。slots.V.tick_interval から設定）
 ## 用途：炎陣のダメージ tick 間隔（他クラスでは未使用）
 var v_tick_interval: float = 0.0
+## スロット V のダメージ倍率（slots.V.damage_mult から設定）
+## base_damage = power × ATTACK_TYPE_MULT[...] × v_damage_mult
+## AI 側が slot 辞書を持たないため CharacterData にキャッシュして SkillExecutor 合成に使う
+var v_damage_mult: float = 1.0
+## スロット V の射程・範囲（slots.V.range から設定）
+## 用途：炎陣=半径 / 水魔法・防御バフ=射程
+var v_range: int = 0
 
 ## 統率力（リーダー側）：高いほど無理な指示でも従わせやすい。クラス・ランクから算出して確定後不変。当面は値のみ保持
 var leadership: int = 5

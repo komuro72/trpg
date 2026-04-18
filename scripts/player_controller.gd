@@ -990,26 +990,7 @@ func _execute_ranged(target: Character, slot_data: Dictionary) -> void:
 
 
 func _execute_water_stun(target: Character, slot_data: Dictionary) -> void:
-	var cost := _slot_cost(slot_data)
-	if cost > 0:
-		character.use_energy(cost)
-	var dmg_mult      := float(slot_data.get("damage_mult", 0.5))
-	# duration（旧 stun_duration）: スタン持続秒数。V_*_duration 系は V_duration に統合済み
-	var stun_duration := float(slot_data.get("duration", 3.0))
-	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
-	var raw_damage    := int(float(character.power) * dmg_mult * type_mult)
-	character.face_toward(target.grid_pos)
-	SoundManager.play(SoundManager.MAGIC_SHOOT)
-	# 水弾を発射（着弾時にダメージ＋スタン付与）
-	if map_node != null:
-		var proj := Projectile.new()
-		proj.z_index = 2
-		map_node.add_child(proj)
-		proj.setup(character.position, target.position, true, target,
-				raw_damage, 1.0, character, true, stun_duration, true)
-	var skill_name := str(slot_data.get("name", "水魔法"))
-	MessageLog.add_combat("[%s] %s → %s" % \
-		[skill_name, _char_name(character), _char_name(target)])
+	SkillExecutor.execute_water_stun(character, target, slot_data)
 
 
 func _spawn_projectile(target: Character, raw_damage: int, is_magic: bool = false) -> void:
@@ -1034,19 +1015,7 @@ func _execute_heal(target: Character, slot_data: Dictionary) -> void:
 
 
 func _execute_buff(target: Character, slot_data: Dictionary) -> void:
-	var cost := _slot_cost(slot_data)
-	if cost > 0:
-		character.use_energy(cost)
-	character.face_toward(target.grid_pos)
-	# duration（旧 buff_duration）: V_*_duration 系は V_duration に統合済み
-	var buff_duration := float(slot_data.get("duration", 0.0))
-	target.apply_defense_buff(buff_duration)
-	SoundManager.play(SoundManager.HEAL)
-	_spawn_heal_effect(character.position, "cast")
-	_spawn_heal_effect(target.position, "hit")
-	var skill_name := str(slot_data.get("name", "防御バフ"))
-	MessageLog.add_combat("[%s] %s → %s" % \
-		[skill_name, _char_name(character), _char_name(target)])
+	SkillExecutor.execute_buff(character, target, slot_data)
 
 
 func _spawn_heal_effect(pos: Vector2, eff_mode: String) -> void:
@@ -1281,24 +1250,7 @@ func _execute_headshot(target: Character, slot_data: Dictionary) -> void:
 
 ## 魔法使い(火)：炎陣（自分を中心に半径3マスの炎ゾーンを設置・2.5秒間継続ダメージ）
 func _execute_flame_circle() -> void:
-	var cost := _slot_cost(_slot_v)
-	if cost > 0:
-		character.use_energy(cost)
-	var dmg_mult: float  = float(_slot_v.get("damage_mult", 0.8))
-	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("magic", 1.0)
-	var damage      := maxi(1, int(float(character.power) * dmg_mult * type_mult))
-	var radius      := int(_slot_v.get("range", 3))
-	var duration    := float(_slot_v.get("duration", 2.5))
-	var tick_ivl    := float(_slot_v.get("tick_interval", 0.5))
-	if map_node == null:
-		return
-	var flame := FlameCircle.new()
-	flame.z_index = 1
-	map_node.add_child(flame)
-	flame.setup(character.position, character.grid_pos, radius, damage,
-			duration, tick_ivl, character, blocking_characters)
-	SoundManager.play(SoundManager.FLAME_SHOOT)
-	MessageLog.add_combat("[炎陣] %s が炎を設置！（%d秒間）" % [_char_name(character), int(duration)])
+	SkillExecutor.execute_flame_circle(character, _slot_v, blocking_characters)
 
 
 ## 指定グリッド座標にいる最初のキャラクターを返す（なければ null）

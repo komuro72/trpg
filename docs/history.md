@@ -3,6 +3,34 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-18（SkillExecutor 抽出・ステージ3a：flame_circle / water_stun / buff 移行）
+
+### 変更内容
+- **SkillExecutor 追加メソッド**：`scripts/skill_executor.gd` に V 特殊攻撃の複雑 3 種を追加。
+  - `execute_flame_circle(caster, slot, potential_targets=[]) -> bool`: 自分中心の半径 `range` マスに炎ゾーンを設置。`damage_mult` / `duration` / `tick_interval` を slot から参照。`FlameCircle.setup` 呼出＋battle/combat ログ。
+  - `execute_water_stun(caster, target, slot) -> bool`: 水弾（Projectile）を発射。`damage_mult` / `duration`（スタン秒数）を slot から参照。**Projectile の stun_duration 機能を活用し、着弾時にダメージ＋スタンを一括適用**（従来 AI 側は直接 take_damage + apply_stun を呼んで二重ダメージになっていたバグを修正）。
+  - `execute_buff(caster, target, slot) -> bool`: 対象に防御バフを付与。`apply_defense_buff(duration)` 呼出＋HealEffect（cast/hit）＋combat ログ。
+- **CharacterData 追加フィールド**：`v_damage_mult`（`1.0` 既定）/ `v_range`（`0` 既定）。AI 側が slots.V 辞書を保持しないため、`character_generator.gd` の味方・敵両方の生成パスで slots.V から読み込んでキャッシュする。
+- **player_controller.gd**: `_execute_water_stun` / `_execute_buff` / `_execute_flame_circle` を 1 行ラッパに縮小。
+- **unit_ai.gd**:
+  - `"buff":` 分岐を SkillExecutor 呼出に置換。slot 辞書は `buff_cost` / `v_duration` から合成。
+  - `_v_flame_circle` / `_v_water_stun` を SkillExecutor 呼出に置換。cost は呼出側で事前に支払い、SkillExecutor には `cost=0` の slot を渡して二重消費を防止。
+  - ヘルパー `_synth_v_slot()` を追加（CharacterData から V スロット辞書を合成）。
+
+### 修正された乖離バグ
+- **AI 側の水魔法二重ダメージバグ**：旧 AI 実装は Projectile で damage を適用した上で、直後に `_target.take_damage(raw_damage, ...)` を呼んで二重ダメージを与えていた。SkillExecutor では Projectile の `stun_duration` 機能を使って damage と stun を着弾時に一括適用する Player 側の正しい実装に統一。
+- **AI 側の flame_circle / water_stun ハードコードバグ**：旧 AI 実装は `damage_mult=0.8 / 0.5`、`radius=3`、`duration` のフォールバック 2.5 をコード内ハードコードしていた。SkillExecutor では全て slot 経由で取得し、JSON を変更すれば反映される構造に。
+- **Player 側の flame_circle battle メッセージ欠落**：旧 Player 実装は combat ログのみだった。SkillExecutor 内で battle メッセージ（自然言語・segments 色分け）を追加し、MessageWindow に表示されるようにした。
+
+### 決定事項
+- **dark-lord の炎陣・ワープはスコープ外**：現状キュー外で動いているため触らない。ただし `execute_flame_circle` の引数設計（`caster: Character` + `slot: Dictionary` + `potential_targets: Array`）は汎用的にしてあり、将来 dark-lord からも呼び出せる。
+- **メッセージ形式**：`execute_flame_circle` で segments 付き battle メッセージを追加。`execute_water_stun` の battle メッセージは Projectile 着弾時に `apply_stun` 内で生成されるため重複しないよう抑制（従来 Projectile 側の `suppress_battle_msg` が機能）。
+- **効果音の空間フィルタ**：従来 Player は `play(...)`、AI は `play_from(...)`。`play_from` に統一（Player はリスナー自身なので常に再生）。
+
+### 動作確認
+- `godot --headless --check-only` でスクリプトのパース成功を確認（エラー 0 件）。
+- 実機動作確認（Player/AI 両方の炎陣・水魔法・防御バフ、dark_priest のバフ）は次回セッションで実施予定。
+
 ## 2026-04-18（SkillExecutor 抽出・ステージ2：melee / ranged 移行）
 
 ### 変更内容

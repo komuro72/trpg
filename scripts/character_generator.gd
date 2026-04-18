@@ -140,6 +140,8 @@ static func generate_character(class_id: String = "") -> CharacterData:
 		data.v_post_delay     = float(v_dict.get("post_delay",    0.0))
 		data.v_duration       = float(v_dict.get("duration",      0.0))
 		data.v_tick_interval  = float(v_dict.get("tick_interval", 0.0))
+		data.v_damage_mult    = float(v_dict.get("damage_mult",   1.0))
+		data.v_range          = int(v_dict.get("range",           0))
 		if str(v_dict.get("action", "")) == "buff_defense":
 			data.buff_cost = _slot_cost(v_dict)
 
@@ -290,6 +292,8 @@ static func apply_enemy_stats(data: CharacterData) -> void:
 			data.v_slot_cost      = _slot_cost(v_dict)
 			data.v_duration       = float(v_dict.get("duration",      0.0))
 			data.v_tick_interval  = float(v_dict.get("tick_interval", 0.0))
+			data.v_damage_mult    = float(v_dict.get("damage_mult",   1.0))
+			data.v_range          = int(v_dict.get("range",           0))
 			if str(v_dict.get("action", "")) == "buff_defense":
 				data.buff_cost = _slot_cost(v_dict)
 
