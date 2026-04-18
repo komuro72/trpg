@@ -1384,3 +1384,70 @@ pre_delay / post_delay 周りの調査で以下の問題が判明：
 - ステータス表示・バトルメッセージ（キャラ特定時）：MP / SP 切替
 - アイテム効果表示（複数キャラ間で受け渡し可能）：固定「MP/SP回復」
 
+## AIヒーラーバグ修正 + アンデッド特効倍率の明示化 + ATTACK_TYPE_MULT外出し（2026-04-18）
+
+### 背景
+`docs/investigation_healer_undead_damage.md` の調査で以下が判明：
+1. **AI ヒーラーの heal 実行時に `heal_mult` が未適用**（Player 側の 3.4 倍のダメージ・回復量になるバグ）
+2. ヒーラー Z は現状 `ATTACK_TYPE_MULT` を経由せず独自計算
+3. アンデッド特効はアンデッド敵の `magic_resistance` 低設定で自然発生しており、ヒーラー固有の特効倍率は存在しなかった
+
+### 変更方針
+ヒーラーのアンデッド特効を設計で明確に表現するため：
+- ヒーラー Z のダメージ計算を他魔法クラスと同じフロー（`power × ATTACK_TYPE_MULT[magic] × damage_mult`）に統一
+- ヒーラー `slots.Z` に `damage_mult: 2.0` を追加（`slots.X` も同様）
+- `Z_heal_mult` は回復量専用・`Z_damage_mult` はダメージ専用として役割を分離
+- AI / Player 両方で同じ計算フローになるよう統一
+
+### ATTACK_TYPE_MULT の Config Editor 外出し
+旧：`const ATTACK_TYPE_MULT: Dictionary = { "melee": 0.3, ... }`（編集不可）
+新：個別 var 4 個として定義し、`_ready()` で `ATTACK_TYPE_MULT` 辞書に集約
+- `ATTACK_TYPE_MULT_MELEE` / `_RANGED` / `_DIVE` / `_MAGIC`（全て `var float`）
+- `_rebuild_attack_type_mult()` が 4 vars から辞書を組み立て
+- 既存の `GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)` アクセスは互換のまま動作
+- Config Editor「Character」タブに 4 定数を追加（min 0.0, max 2.0, step 0.05）
+
+### healer.json 更新
+```jsonc
+"Z": { ..., "heal_mult": 0.3, "damage_mult": 2.0, ... }
+"X": { ..., "heal_mult": 0.6, "damage_mult": 2.0, ... }
+```
+
+### CharacterData 追加フィールド
+- `z_heal_mult: float = 0.0`（回復量倍率）
+- `z_damage_mult: float = 1.0`（ダメージ倍率。ヒーラーは 2.0）
+
+### CharacterGenerator のロードロジック
+`generate()` / `apply_enemy_stats()` の slots.Z 読み込み部分に以下を追加：
+```gdscript
+data.z_heal_mult    = float(z_dict.get("heal_mult",   0.0))
+data.z_damage_mult  = float(z_dict.get("damage_mult", 1.0))
+```
+
+### Player 側（player_controller.gd _execute_heal）の計算式
+旧：`heal_amount = power × heal_mult`（回復・ダメージ兼用）
+新：
+- 回復時：`heal_amount = power × heal_mult`（従来通り）
+- アンデッドダメージ時：`base_damage = power × ATTACK_TYPE_MULT[magic] × damage_mult`
+
+### AI 側（unit_ai.gd heal 分岐）の統一
+旧：`target.heal(power)` / `target.take_damage(power, ...)` （heal_mult / damage_mult 未適用）
+新：Player 側と同じ計算式。`CharacterData.z_heal_mult` / `z_damage_mult` を参照
+
+### バランス変動（参考値・power 50 / skeleton に対して）
+| 攻撃者 | 旧 Base Damage | 新 Base Damage | 最終ダメージ（magic res 0.167） |
+|---|---:|---:|---:|
+| Player ヒーラー Z | 15 | 20（= 50 × 0.2 × 2.0） | 16 |
+| AI ヒーラー Z | 50（バグ） | 20 | 16 |
+| AI ヒーラー回復 | 50（バグ） | 15（= 50 × 0.3） | — |
+
+AI ヒーラーの過剰回復（3.4 倍）が解消され、Player と完全一致。Player ヒーラーのアンデッドへのダメージは 1.33 倍に増加。
+
+### 副次的な確認
+- `dark_priest` の回復が機能するかは、energy 統合（max_energy>0）と heal_cost 参照の両方で確認される状態に
+- バランス微調整は Phase 14 で実施予定。本コミットは設計整合性を優先
+
+### 確認
+- Godot `--check-only` exit 0
+- `grep 'ATTACK_TYPE_MULT\.get' scripts/` で呼び出し 15 件、すべて `.get("キー", 1.0)` 形式で互換動作
+

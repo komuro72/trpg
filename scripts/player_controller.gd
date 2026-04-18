@@ -1050,20 +1050,25 @@ func _execute_heal(target: Character, slot_data: Dictionary) -> void:
 	var cost := _slot_cost(slot_data)
 	if cost > 0:
 		character.use_energy(cost)
-	var heal_mult  := float(slot_data.get("heal_mult", 0.3))
-	var heal_amount := maxi(1, int(float(character.power) * heal_mult))
 	character.face_toward(target.grid_pos)
 	# キャスト側エフェクト（外広がり・白金）
 	_spawn_heal_effect(character.position, "cast")
 	var skill_name := str(slot_data.get("name", "回復"))
-	# アンデッド特効：回復量をダメージとして適用
+	# アンデッド特効：他魔法クラスと同じフローでダメージ計算
+	# base_damage = power × ATTACK_TYPE_MULT[magic] × damage_mult
+	# Z_damage_mult（healer.json で 2.0）で特効倍率を表現
 	if not target.is_friendly and target.character_data != null and target.character_data.is_undead:
-		target.take_damage(heal_amount, 1.0, character, true)
+		var damage_mult := float(slot_data.get("damage_mult", 1.0))
+		var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("magic", 1.0)
+		var base_damage := maxi(1, int(float(character.power) * type_mult * damage_mult))
+		target.take_damage(base_damage, 1.0, character, true)
 		_spawn_heal_effect(target.position, "hit")
 		MessageLog.add_combat("[%s] %s → %s %d DMG（アンデッド特効）" % \
-			[skill_name, _char_name(character), _char_name(target), heal_amount])
+			[skill_name, _char_name(character), _char_name(target), base_damage])
 		return
-	# 通常回復（heal() 内で HEAL SE 再生）
+	# 通常回復：heal_mult で回復量を計算（heal() 内で HEAL SE 再生）
+	var heal_mult := float(slot_data.get("heal_mult", 0.3))
+	var heal_amount := maxi(1, int(float(character.power) * heal_mult))
 	target.heal(heal_amount)
 	# ターゲット側エフェクト（内縮み・緑）
 	_spawn_heal_effect(target.position, "hit")

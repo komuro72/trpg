@@ -44,12 +44,15 @@ const CLASS_NAME_JP: Dictionary = {
 const MAX_PARTY_MEMBERS: int = 12
 
 ## 攻撃タイプ別ダメージ倍率（power × type_mult × damage_mult = ベースダメージ）
-const ATTACK_TYPE_MULT: Dictionary = {
-	"melee":  0.3,
-	"ranged": 0.2,
-	"dive":   0.3,
-	"magic":  0.2,
-}
+## 各要素は Config Editor で編集可能な個別 var として定義し、
+## _ready() 時に ATTACK_TYPE_MULT 辞書に集約する（既存の .get() アクセス互換性維持）
+## [ConfigEditor 対象]
+var ATTACK_TYPE_MULT_MELEE:  float = 0.3
+var ATTACK_TYPE_MULT_RANGED: float = 0.2
+var ATTACK_TYPE_MULT_DIVE:   float = 0.3
+var ATTACK_TYPE_MULT_MAGIC:  float = 0.2
+## 集約後の辞書（Character / PlayerController / UnitAI から参照）
+var ATTACK_TYPE_MULT: Dictionary = {}
 
 ## フロア難易度ランク（フロアインデックス → ランク和の基準値）
 ## NPC が同フロアに留まるか上下するかの判断に使用
@@ -304,6 +307,10 @@ const CONFIG_KEYS: Array[String] = [
 	"CONDITION_COLOR_TEXT_WOUNDED",
 	"CONDITION_COLOR_TEXT_INJURED",
 	"CONDITION_COLOR_TEXT_CRITICAL",
+	"ATTACK_TYPE_MULT_MELEE",
+	"ATTACK_TYPE_MULT_RANGED",
+	"ATTACK_TYPE_MULT_DIVE",
+	"ATTACK_TYPE_MULT_MAGIC",
 	# PartyLeader タブ（戦況判断系）
 	"COMBAT_RATIO_OVERWHELMING",
 	"COMBAT_RATIO_ADVANTAGE",
@@ -335,6 +342,18 @@ var last_config_error: String = ""
 
 func _ready() -> void:
 	_load_constants()
+	_rebuild_attack_type_mult()
+
+
+## ATTACK_TYPE_MULT 辞書を 4 個の個別 var から再構築する
+## Config Editor での値変更後にも呼び出される想定（将来）
+func _rebuild_attack_type_mult() -> void:
+	ATTACK_TYPE_MULT = {
+		"melee":  ATTACK_TYPE_MULT_MELEE,
+		"ranged": ATTACK_TYPE_MULT_RANGED,
+		"dive":   ATTACK_TYPE_MULT_DIVE,
+		"magic":  ATTACK_TYPE_MULT_MAGIC,
+	}
 
 
 ## constants.json から値を読み込む。不足キーは constants_default.json で補完

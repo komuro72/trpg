@@ -126,8 +126,10 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	var z_data: Variant = slots.get("Z")
 	if z_data != null and z_data is Dictionary:
 		var z_dict := z_data as Dictionary
-		data.z_pre_delay  = float(z_dict.get("pre_delay",  0.0))
-		data.z_post_delay = float(z_dict.get("post_delay", 0.0))
+		data.z_pre_delay    = float(z_dict.get("pre_delay",    0.0))
+		data.z_post_delay   = float(z_dict.get("post_delay",   0.0))
+		data.z_heal_mult    = float(z_dict.get("heal_mult",    0.0))
+		data.z_damage_mult  = float(z_dict.get("damage_mult",  1.0))
 		if str(z_dict.get("action", "")) == "heal":
 			data.heal_cost = _slot_cost(z_dict)
 	var v_data: Variant = slots.get("V")
@@ -272,8 +274,10 @@ static func apply_enemy_stats(data: CharacterData) -> void:
 		var z_data: Variant = slots.get("Z")
 		if z_data != null and z_data is Dictionary:
 			var z_dict := z_data as Dictionary
-			data.z_pre_delay  = float(z_dict.get("pre_delay",  0.0))
-			data.z_post_delay = float(z_dict.get("post_delay", 0.0))
+			data.z_pre_delay    = float(z_dict.get("pre_delay",    0.0))
+			data.z_post_delay   = float(z_dict.get("post_delay",   0.0))
+			data.z_heal_mult    = float(z_dict.get("heal_mult",    0.0))
+			data.z_damage_mult  = float(z_dict.get("damage_mult",  1.0))
 			if str(z_dict.get("action", "")) == "heal":
 				data.heal_cost = _slot_cost(z_dict)
 		var v_data: Variant = slots.get("V")

@@ -13,6 +13,7 @@
       "type": "support",
       "range": 4,
       "heal_mult": 0.3,
+      "damage_mult": 2.0,
       "cost": 5,
       "pre_delay": 0.1,
       "post_delay": 0.3
@@ -23,6 +24,7 @@
       "type": "support",
       "range": 4,
       "heal_mult": 0.6,
+      "damage_mult": 2.0,
       "cost": 10,
       "pre_delay": 0.8,
       "post_delay": 0.5
