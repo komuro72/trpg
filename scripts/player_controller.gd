@@ -1901,7 +1901,6 @@ func _execute_item_action(action: String) -> void:
 func _use_item_from_ui(item: Dictionary) -> void:
 	if character == null or character.character_data == null:
 		return
-	var cd     := character.character_data
 	var effect := item.get("effect", {}) as Dictionary
 	# 効果キーは restore_hp / restore_energy（旧 restore_mp / restore_sp は段階移行中の互換）
 	var restore_hp := int(effect.get("restore_hp", 0))
@@ -1910,13 +1909,10 @@ func _use_item_from_ui(item: Dictionary) -> void:
 	if restore_hp == 0 and restore_energy == 0:
 		return
 
-	# use_consumable() が内部で inventory.erase(item) を呼ぶため、
-	# ここで追加削除を行うと 2個減ってしまう（二重削除バグ）
+	# use_consumable() が内部で inventory.erase(item) を呼び、
+	# add_battle で自然言語メッセージも生成するため、ここでは追加処理しない
 	character.use_consumable(item)
 
-	var item_name := item.get("item_name", "アイテム") as String
-	var char_name := cd.character_name if not cd.character_name.is_empty() else String(character.name)
-	MessageLog.add_system("%s は %s を使った！" % [char_name, item_name])
 	if consumable_bar != null:
 		consumable_bar.refresh()
 
