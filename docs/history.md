@@ -3,6 +3,32 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-18（SkillExecutor 抽出・ステージ2：melee / ranged 移行）
+
+### 変更内容
+- **SkillExecutor 追加メソッド**：`scripts/skill_executor.gd` に `execute_melee(attacker, target, slot) -> bool` と `execute_ranged(attacker, target, slot, opts={}) -> bool` を追加。
+  - `execute_melee`: `power × ATTACK_TYPE_MULT[melee] × damage_mult` でダメージ算出。`face_toward` + `play_attack_from` + `take_damage` + `play_hit_from`。
+  - `execute_ranged`: `power × ATTACK_TYPE_MULT[ranged] × damage_mult` でダメージ算出。`face_toward` + `play_attack_from` + `_spawn_projectile`。
+  - `opts["is_water"]`: Lich の火/水交互切替用オーバーライド。省略時は `class_id == "magician-water"` で自動判定。
+  - `projectile_type`（demon の `thunder_bullet` 等）は `character_data.projectile_type` から自動取得。
+- **player_controller.gd**: `_execute_melee` / `_execute_ranged` を 1 行ラッパに縮小（`SkillExecutor.execute_melee / execute_ranged` 呼出のみ）。
+- **unit_ai.gd**: `_execute_attack` 内の `"ranged"` / `"magic"` / melee（default）分岐を SkillExecutor 呼出に置き換え。新ヘルパー `_synth_z_slot(atype)` で CharacterData のフラットフィールドから slot 辞書を合成（`damage_mult` / `type` / `cost`）。Lich は `opts["is_water"] = _get_is_water_shot()` で交互切替を維持。
+- **dive（降下攻撃）はステージ2 対象外**。UnitAI 側でハーピーの降下攻撃ロジック（`take_damage` + `_spawn_dive_effect`）はそのまま維持。
+
+### 修正された乖離バグ
+- **AI 側の `damage_mult` 未適用**：Player は `slot.damage_mult` を掛けていたが、AI 側は Z 通常攻撃で常に 1.0 扱いだった。両クラス JSON の Z スロットが `damage_mult: 1.0` を明示しているため現状は値一致しているが、将来 Z スロット倍率を変更した際に Player / AI で乖離する構造を排除。
+- **AI 側の magician-water 水弾未判定**：Player は `class_id == "magician-water"` で水弾を出していたが、AI 側の基底 `_get_is_water_shot()` は false を返すため、AI 操作の水魔法使いは火弾の画像で発射されていた。SkillExecutor 側で class_id 自動判定に統一して解消。
+- **Player 側の `projectile_type` 未参照**：Player の `_spawn_projectile` は `projectile_type` を渡していなかった（プレイヤーは demon でないため実害なし）。SkillExecutor で統一的に `character_data.projectile_type` を渡すよう改修。
+
+### 決定事項
+- **効果音**：`play_attack_from` / `play_hit_from`（空間フィルタあり）に統一。Player は常にリスナー自身なので `_is_audible` が常に true を返すため従来の `play_attack` / `play_hit` と等価。
+- **slot 合成（AI 側）**：クラス JSON の slots.Z を保持しないため、CharacterData から `z_damage_mult` と `attack_type` → `type` 変換で最小限の slot 辞書を作る。コストは 0（Lich は `_on_after_attack` で MP 消費するため SkillExecutor 内コスト消費とは独立）。
+- **debug print 削除**：Player 側の `print("[Player] %s → %s ...")` は削除（load-bearing でない）。
+
+### 動作確認
+- `godot --headless --check-only` でスクリプトのパース成功を確認（エラー 0 件）。
+- 実機動作確認（全クラスの Z 攻撃・同条件での Player/AI ダメージ一貫性・飛翔体生成）は次回セッションで実施予定。
+
 ## 2026-04-18（SkillExecutor 抽出・ステージ1：heal 移行）
 
 ### 背景

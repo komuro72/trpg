@@ -466,8 +466,9 @@ game_map
 Player と AI で同じ特殊行動（melee / ranged / heal / V 攻撃各種）の計算式が二重実装されている。SkillExecutor クラス（`scripts/skill_executor.gd`）に抽出して共通化することで、乖離バグを構造的に解消する。
 
 **移行状況（2026-04-18）**:
-- ✅ **heal（回復・アンデッド特効）** — ステージ1で移行済み
-- ⏳ 残り 9 種類（melee / ranged / flame_circle / water_stun / buff / rush / whirlwind / headshot / sliding）— 段階的に実施予定
+- ✅ **heal（回復・アンデッド特効）** — ステージ1
+- ✅ **melee / ranged（Z 通常攻撃）** — ステージ2
+- ⏳ 残り 7 種類（flame_circle / water_stun / buff / rush / whirlwind / headshot / sliding）— 段階的に実施予定
 
 ```
 SkillExecutor（static メソッド群）
@@ -1290,7 +1291,8 @@ rank値: C=0, B=1, A=2, S=3
 
   **移行進捗（2026-04-18）**:
   - ✅ **heal** — ステージ1で抽出完了。Player / AI 両方から `SkillExecutor.execute_heal()` を呼ぶ形に統一
-  - ⏳ 残り 9 種類（melee / ranged / flame_circle / water_stun / buff / rush / whirlwind / headshot / sliding）— 段階的に実施予定
+  - ✅ **melee / ranged** — ステージ2で抽出完了。Z 通常攻撃（近接・遠距離）を `SkillExecutor.execute_melee()` / `execute_ranged()` に統一。Lich の火/水交互は `opts["is_water"]` オーバーライドで維持
+  - ⏳ 残り 7 種類（flame_circle / water_stun / buff / rush / whirlwind / headshot / sliding）— 段階的に実施予定
 
   優先度：中〜高（バランス調整フェーズの前にやっておきたい）
 

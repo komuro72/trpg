@@ -1006,36 +1006,38 @@ func _execute_attack() -> void:
 		var t_data := _attack_target.character_data
 		if t_data == null or not t_data.is_undead:
 			return
-	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get(atype, 1.0)
-	var dmg_power := int(float(_member.power) * type_mult)
 	match atype:
 		"ranged", "magic":
-			# 遠距離攻撃（物理弓/魔法）：飛翔体を生成して命中確定ダメージ
-			_member.face_toward(_attack_target.grid_pos)
-			SoundManager.play_attack_from(_member)
-			var map_node := _member.get_parent()
-			if map_node != null:
-				var proj := Projectile.new()
-				proj.z_index = 2
-				map_node.add_child(proj)
-				var is_magic := (atype == "magic")
-				var is_water := _get_is_water_shot()
-				var ptype := _member.character_data.projectile_type \
-						if _member.character_data != null else ""
-				proj.setup(_member.position, _attack_target.position,
-						true, _attack_target, dmg_power, 1.0, _member, is_magic,
-						0.0, is_water, ptype)
+			# 遠距離攻撃（物理弓/魔法）：SkillExecutor に委譲。飛翔体生成を共通化。
+			# Lich は _get_is_water_shot() で火/水を交互切替するため opts 経由で上書き
+			var slot := _synth_z_slot(atype)
+			var opts := {"is_water": _get_is_water_shot()}
+			SkillExecutor.execute_ranged(_member, _attack_target, slot, opts)
 		"dive":
 			# 降下攻撃：方向倍率なし（飛行中の奇襲）、降下エフェクト表示
+			# ※ SkillExecutor ステージ2 対象外（stage 3 以降で execute_dive 抽出予定）
+			var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("dive", 1.0)
+			var dmg_power := int(float(_member.power) * type_mult)
 			SoundManager.play_attack_from(_member)
 			_attack_target.take_damage(dmg_power, 1.0, _member, false)
 			SoundManager.play_hit_from(_member)
 			_spawn_dive_effect()
 		_:
-			# melee（近接攻撃）
-			SoundManager.play_attack_from(_member)
-			_attack_target.take_damage(dmg_power, 1.0, _member, false)
-			SoundManager.play_hit_from(_member)
+			# melee（近接攻撃）：SkillExecutor に委譲
+			var slot := _synth_z_slot(atype)
+			SkillExecutor.execute_melee(_member, _attack_target, slot)
+
+
+## AI 側は slots.Z 辞書を保持しないため、CharacterData のフラット化フィールドから
+## SkillExecutor が参照する形に合成する。damage_mult / type / cost を揃える。
+func _synth_z_slot(atype: String) -> Dictionary:
+	var cd := _member.character_data
+	var is_magic := (atype == "magic")
+	return {
+		"damage_mult": cd.z_damage_mult if cd else 1.0,
+		"type":        "magic" if is_magic else "physical",
+		"cost":        0,  # AI 側の通常攻撃は現状コストなし（Lich は _on_after_attack で消費）
+	}
 
 
 ## 降下攻撃エフェクトを生成する（簡易：黄色→白のフラッシュ円）

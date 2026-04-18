@@ -5,9 +5,10 @@ extends RefCounted
 ## 意思決定層（UnitAI / PlayerController）は caster / target / slot を用意し、
 ## ここにディスパッチするだけに留める。計算式・エフェクト・ログ出力を集約する。
 ##
-## ステージ1: heal のみ移行済み。
-## 残り（melee / ranged / flame_circle / water_stun / buff / rush / whirlwind /
-## headshot / sliding）は段階的に移行予定。
+## ステージ1: heal 移行済み。
+## ステージ2: melee / ranged 移行済み（Z 通常攻撃）。
+## 残り（flame_circle / water_stun / buff / rush / whirlwind / headshot / sliding）は
+## 段階的に移行予定。
 
 ## execute_heal の結果を呼び出し元に伝えるための enum
 ## FAILED        : energy 不足等で何も起きなかった
@@ -56,6 +57,84 @@ static func execute_heal(caster: Character, target: Character, slot: Dictionary)
 	target.spawn_heal_effect("hit")
 	target.log_heal(caster, heal_amount, hp_before)
 	return HealResult.HEALED
+
+
+## Z スロット（近接攻撃）の実処理。
+## Player / AI 共通で使用。計算式・SE・ダメージ適用を一元化する。
+## slot: クラス JSON の slots.Z または同等辞書。damage_mult / type / cost を参照
+## 戻り値: true なら攻撃発動、false なら不発（対象無効・エネルギー不足）
+static func execute_melee(attacker: Character, target: Character, slot: Dictionary) -> bool:
+	if attacker == null or not is_instance_valid(attacker):
+		return false
+	if target == null or not is_instance_valid(target) or target.hp <= 0:
+		return false
+
+	var cost := _slot_cost(slot)
+	if cost > 0 and not attacker.use_energy(cost):
+		return false
+
+	var dmg_mult: float = float(slot.get("damage_mult", 1.0))
+	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
+	var raw_damage := int(float(attacker.power) * dmg_mult * type_mult)
+	var is_magic := (slot.get("type", "physical") as String) == "magic"
+
+	attacker.face_toward(target.grid_pos)
+	SoundManager.play_attack_from(attacker)
+	target.take_damage(raw_damage, 1.0, attacker, is_magic)
+	SoundManager.play_hit_from(attacker)
+	return true
+
+
+## Z スロット（遠距離攻撃）の実処理。
+## Player / AI 共通で使用。飛翔体（Projectile）を生成して命中時に take_damage。
+## opts: 補助パラメータ（Lich の水弾交互など）
+##   "is_water": bool — 水弾フラグを強制上書き（省略時は class_id=="magician-water" で自動判定）
+## 戻り値: true なら発射、false なら不発
+static func execute_ranged(attacker: Character, target: Character, slot: Dictionary,
+		opts: Dictionary = {}) -> bool:
+	if attacker == null or not is_instance_valid(attacker):
+		return false
+	if target == null or not is_instance_valid(target) or target.hp <= 0:
+		return false
+
+	var cost := _slot_cost(slot)
+	if cost > 0 and not attacker.use_energy(cost):
+		return false
+
+	var dmg_mult: float = float(slot.get("damage_mult", 1.0))
+	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
+	var raw_damage := int(float(attacker.power) * dmg_mult * type_mult)
+	var is_magic := (slot.get("type", "physical") as String) == "magic"
+
+	attacker.face_toward(target.grid_pos)
+	SoundManager.play_attack_from(attacker)
+	_spawn_projectile(attacker, target, raw_damage, is_magic, opts)
+	return true
+
+
+## 飛翔体を生成して setup する（execute_ranged 内部ヘルパー）
+## is_water 判定: opts["is_water"] > class_id=="magician-water" の順で決定
+## projectile_type: character_data.projectile_type（demon の thunder_bullet 等）
+static func _spawn_projectile(attacker: Character, target: Character,
+		raw_damage: int, is_magic: bool, opts: Dictionary) -> void:
+	var map_node := attacker.get_parent()
+	if map_node == null:
+		return
+	var proj := Projectile.new()
+	proj.z_index = 2
+	map_node.add_child(proj)
+
+	var is_water: bool
+	if opts.has("is_water"):
+		is_water = bool(opts.get("is_water"))
+	else:
+		is_water = attacker.character_data != null \
+				and attacker.character_data.class_id == "magician-water"
+	var ptype: String = attacker.character_data.projectile_type \
+			if attacker.character_data != null else ""
+
+	proj.setup(attacker.position, target.position, true, target,
+			raw_damage, 1.0, attacker, is_magic, 0.0, is_water, ptype)
 
 
 ## スロット定義から energy コストを読む。

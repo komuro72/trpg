@@ -982,33 +982,11 @@ func _get_valid_targets() -> Array[Character]:
 # --------------------------------------------------------------------------
 
 func _execute_melee(target: Character, slot_data: Dictionary) -> void:
-	var cost := _slot_cost(slot_data)
-	if cost > 0:
-		character.use_energy(cost)
-	var dmg_mult: float = float(slot_data.get("damage_mult", 1.0))
-	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("melee", 1.0)
-	character.face_toward(target.grid_pos)
-	var raw_damage := int(float(character.power) * dmg_mult * type_mult)
-	var is_magic   := (slot_data.get("type", "physical") as String) == "magic"
-	SoundManager.play_attack(character)
-	target.take_damage(raw_damage, 1.0, character, is_magic)
-	SoundManager.play_hit(character)
-	var skill_name: String = str(slot_data.get("name", "近接"))
-	print("[Player] %s → %s  スキル%.1fx  HP:%d/%d" % \
-			[skill_name, target.name, dmg_mult, target.hp, target.max_hp])
+	SkillExecutor.execute_melee(character, target, slot_data)
 
 
 func _execute_ranged(target: Character, slot_data: Dictionary) -> void:
-	var cost := _slot_cost(slot_data)
-	if cost > 0:
-		character.use_energy(cost)
-	var dmg_mult: float = float(slot_data.get("damage_mult", 1.0))
-	var type_mult: float = GlobalConstants.ATTACK_TYPE_MULT.get("ranged", 1.0)
-	character.face_toward(target.grid_pos)
-	var is_magic   := (slot_data.get("type", "physical") as String) == "magic"
-	var raw_damage := int(float(character.power) * dmg_mult * type_mult)
-	SoundManager.play_attack(character)
-	_spawn_projectile(target, raw_damage, is_magic)
+	SkillExecutor.execute_ranged(character, target, slot_data)
 
 
 func _execute_water_stun(target: Character, slot_data: Dictionary) -> void:
