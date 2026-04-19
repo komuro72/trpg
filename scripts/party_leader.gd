@@ -792,11 +792,9 @@ func _evaluate_strategic_status() -> Dictionary:
 			nearby_allied_self.append(m)
 
 	# 同陣営他パ: _all_members から my_members を除いた同陣営キャラを半径内で収集
-	var my_faction: bool = true
-	if not my_members.is_empty():
-		my_faction = my_members[0].is_friendly
-	elif not _party_members.is_empty():
-		my_faction = _party_members[0].is_friendly
+	# 陣営判定は先に算出した is_enemy_party を使う（is_friendly = not is_enemy_party）
+	# 直前ループで is_instance_valid 済みの生存者から導出しているため freed アクセスの心配なし
+	var my_faction: bool = not is_enemy_party
 	var nearby_allied_others: Array[Character] = []
 	for c: Character in _all_members:
 		if not is_instance_valid(c) or c.hp <= 0:
