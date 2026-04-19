@@ -434,6 +434,8 @@ func get_global_orders_hint() -> Dictionary:
 	hint["hp_status"] = _combat_situation.get("hp_status", 0)
 	hint["my_rank_sum"] = _combat_situation.get("my_rank_sum", 0)
 	hint["enemy_rank_sum"] = _combat_situation.get("enemy_rank_sum", 0)
+	hint["my_tier_sum"] = _combat_situation.get("my_tier_sum", 0.0)
+	hint["enemy_tier_sum"] = _combat_situation.get("enemy_tier_sum", 0.0)
 	return hint
 
 
@@ -626,10 +628,13 @@ func _evaluate_party_strength() -> float:
 
 
 ## 指定メンバーリストの戦力を評価する
+## 戦力 = (rank_sum + party_tier_sum × ITEM_TIER_STRENGTH_WEIGHT) × 平均HP充足率
 ## use_estimated_hp = false: 正確なHP%とポーション回復量を使う（自軍用）
 ## use_estimated_hp = true:  状態ラベル（condition）からHP%を推定する（敵用。hp/max_hp を直接参照しない）
+## 敵は装備を持たないため party_tier_sum = 0 となり、従来と同じ挙動になる
 func _evaluate_party_strength_for(members: Array, use_estimated_hp: bool = false) -> float:
 	var rank_sum := 0
+	var tier_sum := 0.0
 	var hp_ratio_sum := 0.0
 	var alive_count := 0
 	for mv: Variant in members:
@@ -638,6 +643,7 @@ func _evaluate_party_strength_for(members: Array, use_estimated_hp: bool = false
 			continue
 		if m.character_data != null:
 			rank_sum += RANK_VALUES.get(m.character_data.rank, 3) as int
+			tier_sum += _character_tier_avg(m)
 		alive_count += 1
 		if use_estimated_hp:
 			hp_ratio_sum += _estimate_hp_ratio_from_condition(m.get_condition())
@@ -650,7 +656,43 @@ func _evaluate_party_strength_for(members: Array, use_estimated_hp: bool = false
 	if alive_count <= 0:
 		return 0.0
 	var avg_hp_ratio := hp_ratio_sum / float(alive_count)
-	return float(rank_sum) * avg_hp_ratio
+	var base := float(rank_sum) + tier_sum * GlobalConstants.ITEM_TIER_STRENGTH_WEIGHT
+	return base * avg_hp_ratio
+
+
+## キャラクターの装備中 tier の平均を返す（装備なしなら 0.0）
+## 対象: equipped_weapon / equipped_armor / equipped_shield のうち実装備のみ
+## 各アイテムに tier フィールドがない場合は 0 扱い（セーブデータ互換・敵は装備を持たない）
+func _character_tier_avg(m: Character) -> float:
+	if m.character_data == null:
+		return 0.0
+	var total_tier := 0
+	var equipped_count := 0
+	var slots := [
+		m.character_data.equipped_weapon,
+		m.character_data.equipped_armor,
+		m.character_data.equipped_shield,
+	]
+	for it_v: Variant in slots:
+		var it := it_v as Dictionary
+		if it.is_empty():
+			continue
+		total_tier += int(it.get("tier", 0))
+		equipped_count += 1
+	if equipped_count <= 0:
+		return 0.0
+	return float(total_tier) / float(equipped_count)
+
+
+## 生存メンバーの装備 tier 平均の合計（戦力計算の補助値・DebugWindow 表示用）
+func _calc_tier_sum(members: Array) -> float:
+	var total := 0.0
+	for mv: Variant in members:
+		var m := mv as Character
+		if m == null or not is_instance_valid(m) or m.hp <= 0:
+			continue
+		total += _character_tier_avg(m)
+	return total
 
 
 ## 状態ラベルからHP割合を推定する（敵の戦力を過大評価する安全側に倒す）
@@ -767,6 +809,8 @@ func _evaluate_combat_situation() -> Dictionary:
 			"hp_status": hp_status,
 			"my_rank_sum": _calc_rank_sum(my_area_members) + _calc_rank_sum(ally_area_others),
 			"enemy_rank_sum": 0,
+			"my_tier_sum": _calc_tier_sum(my_area_members) + _calc_tier_sum(ally_area_others),
+			"enemy_tier_sum": 0.0,
 		}
 
 	# 戦力比較（ランク和 × HP充足率）。自軍側は同陣営の他パーティーのエリア内メンバーも加算
@@ -818,6 +862,8 @@ func _evaluate_combat_situation() -> Dictionary:
 		"hp_status": hp_status,
 		"my_rank_sum": my_rank_sum,
 		"enemy_rank_sum": enemy_rank_sum,
+		"my_tier_sum": _calc_tier_sum(my_area_members) + _calc_tier_sum(ally_area_others),
+		"enemy_tier_sum": _calc_tier_sum(area_enemies),
 	}
 
 

@@ -208,6 +208,15 @@
     "type": "float",
     "value": 0.25
   },
+  "ITEM_TIER_STRENGTH_WEIGHT": {
+    "category": "PartyLeader",
+    "description": "戦力計算に占める装備 tier の重み係数。strength_base = rank_sum + party_tier_sum × この値。0.33 で「装備 1 セット ≒ ランク 1 段階」に相当",
+    "max": 2.0,
+    "min": 0.0,
+    "step": 0.1,
+    "type": "float",
+    "value": 0.33
+  },
   "PARTY_FLEE_ALIVE_RATIO": {
     "category": "EnemyLeaderAI",
     "description": "パーティーの生存メンバー率がこの値未満で FLEE 戦略へ切替（ゴブリン・ウルフ系）",

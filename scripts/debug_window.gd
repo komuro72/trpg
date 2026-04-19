@@ -1,6 +1,11 @@
 ## デバッグウィンドウ（F1キーで表示/非表示トグル）
 ## 上半分：現在フロアの全パーティー状態をリアルタイム表示
 ## 下半分：combat/ai ログ（最新50件）
+##
+## 戦力表示の凡例：`PB(R:my_rank+T:my_tier/E:enemy_rank+t:enemy_tier)`
+##   PB = PowerBalance（優劣ラベル） / R = 自軍 rank_sum / T = 自軍 tier 平均の和
+##   E = 敵 rank_sum / t = 敵 tier 平均の和（通常 0）
+##   戦力 = (rank_sum + tier_sum × ITEM_TIER_STRENGTH_WEIGHT) × HP 充足率
 
 class_name DebugWindow
 extends CanvasLayer
@@ -395,7 +400,12 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 	var hp_str:     String = _label("on_low_hp",     hint.get("on_low_hp",     "-") as String)
 	var sit_str:    String = _combat_situation_label(hint.get("combat_situation", 0) as int)
 	var pb_str:     String = _power_balance_label(hint.get("power_balance", 0) as int)
-	pb_str += "(%d/%d)" % [hint.get("my_rank_sum", 0) as int, hint.get("enemy_rank_sum", 0) as int]
+	pb_str += "(R:%d+T:%.1f/E:%d+t:%.1f)" % [
+		hint.get("my_rank_sum", 0) as int,
+		float(hint.get("my_tier_sum", 0.0)),
+		hint.get("enemy_rank_sum", 0) as int,
+		float(hint.get("enemy_tier_sum", 0.0)),
+	]
 	var hs_str:     String = _hp_status_label(hint.get("hp_status", 0) as int)
 
 	var header: String
@@ -489,7 +499,12 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 		var hint: Dictionary = _hero_manager.get_global_orders_hint()
 		sit_str = _combat_situation_label(hint.get("combat_situation", 0) as int)
 		pb_str = _power_balance_label(hint.get("power_balance", 0) as int)
-		pb_str += "(%d/%d)" % [hint.get("my_rank_sum", 0) as int, hint.get("enemy_rank_sum", 0) as int]
+		pb_str += "(R:%d+T:%.1f/E:%d+t:%.1f)" % [
+			hint.get("my_rank_sum", 0) as int,
+			float(hint.get("my_tier_sum", 0.0)),
+			hint.get("enemy_rank_sum", 0) as int,
+			float(hint.get("enemy_tier_sum", 0.0)),
+		]
 		hs_str = _hp_status_label(hint.get("hp_status", 0) as int)
 
 	var header := "[プレイヤー] %s(%s)  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [

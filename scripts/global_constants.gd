@@ -241,6 +241,12 @@ var HP_STATUS_FULL:    float = 0.75
 var HP_STATUS_STABLE:  float = 0.5
 var HP_STATUS_LOW:     float = 0.25
 
+## 戦力計算に占める装備 tier の重み係数
+## strength_base = rank_sum + party_tier_sum × この値
+## 装備 1 セット ≒ ランク 1 段階となる 0.33 が既定
+## [ConfigEditor 対象]
+var ITEM_TIER_STRENGTH_WEIGHT: float = 0.33
+
 ## ------------------------------------------------------------
 ## SkillExecutor 関連（2026-04-18〜）
 ## ------------------------------------------------------------
@@ -432,6 +438,7 @@ const CONFIG_KEYS: Array[String] = [
 	"HP_STATUS_FULL",
 	"HP_STATUS_STABLE",
 	"HP_STATUS_LOW",
+	"ITEM_TIER_STRENGTH_WEIGHT",
 	# EnemyLeaderAI タブ
 	"PARTY_FLEE_ALIVE_RATIO",
 	# UnitAI タブ

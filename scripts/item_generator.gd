@@ -49,6 +49,7 @@ static func generate(item_type: String, floor_index: int) -> Dictionary:
 		"category":  category,
 		"item_name": str(picked.get("name", "")),
 		"stats":     (picked.get("stats", {}) as Dictionary).duplicate(),
+		"tier":      int(picked.get("tier", 2)),
 	}
 
 
@@ -74,6 +75,7 @@ static func generate_initial(item_type: String) -> Dictionary:
 				"category":  category,
 				"item_name": str(entry.get("name", "")),
 				"stats":     (entry.get("stats", {}) as Dictionary).duplicate(),
+				"tier":      TIER_NONE,
 				"equipped":  true,
 			}
 

@@ -418,7 +418,7 @@ PartyManager（パーティー管理。全パーティー種別で共通）
 
 ### PartyLeader（意思決定層の基底クラス）
 - パーティー全体の戦略を決定し、各メンバーの UnitAI に指示を伝達する
-- `_evaluate_party_strength()`: パーティーの戦力値を算出する共通メソッド（ランク和 × HP充足率。ヒールポーション回復量を加味）
+- `_evaluate_party_strength()`: パーティーの戦力値を算出する共通メソッド。戦力 = `(rank_sum + party_tier_sum × ITEM_TIER_STRENGTH_WEIGHT) × 平均HP充足率`（ヒールポーション回復量を加味）。`party_tier_sum` は各メンバーの装備中 tier の平均の和。敵は装備を持たないため tier 寄与は 0 となり、従来と同じ挙動
 - `_evaluate_combat_situation()`: 戦況判断の共通ルーチン（リーダーのエリア＋隣接エリアを対象）。全サブクラスで共有する。結果は `_assign_orders()` → `receive_order()` でメンバーに伝達する
 - `_evaluate_party_strategy()`: 仮想メソッド。戦略決定（ATTACK / WAIT / FLEE 等）。サブクラスがオーバーライドする
 - `_select_target_for()`: 仮想メソッド。ターゲット選択。サブクラスがオーバーライドする
@@ -995,6 +995,7 @@ rank値: C=0, B=1, A=2, S=3
 - `ItemGenerator.generate_initial(item_type)` が tier=0 エントリを返す（初期装備用・ポーションは `generate_consumable` に委譲）
 - 重み = 「各フロア帯の基準 tier（`FLOOR_X_Y_BASE_TIER`・整数）からの距離」で計算（基準=`FLOOR_BASE_WEIGHT` / 隣接=`FLOOR_NEIGHBOR_WEIGHT` / 遠隔=`FLOOR_FAR_WEIGHT`）
 - フロア境界（1 / 2）では隣接する 2 帯の重みを合算して滑らかな遷移を実現
+- **装備アイテム戻り値に `tier` を含む**（2026-04-19〜）：`{ item_type, category, item_name, stats, tier }`。戦力計算（`party_leader._character_tier_avg()`）等が参照する。ポーションは tier を持たない（戦力評価対象外のため）
 
 **マスター JSON との関係**：
 - `assets/master/items/*.json` の `base_stats.{stat}_max` のみを段階値計算の参考に使う（ランタイムは非参照・Claude Code が生成セット作成時に参照）
@@ -1131,6 +1132,10 @@ rank値: C=0, B=1, A=2, S=3
   - 敵同士でも同じルールなので、敵が密集しているエリアでは敵が強気になり、プレイヤー側が有利な時ほど敵は逃げやすくなる
 - HP充足率（HpStatus）は自パーティーのみで計算（他パーティーのポーション所持は把握不可のため）
 - 戦力比 = 自軍戦力 / 敵戦力（`_evaluate_party_strength_for()` で算出）
+- 戦力式：`(rank_sum + party_tier_sum × ITEM_TIER_STRENGTH_WEIGHT) × 平均HP充足率`（2026-04-19〜）
+  - `party_tier_sum` = 各メンバーの装備中 tier（0〜3）の平均の和
+  - `ITEM_TIER_STRENGTH_WEIGHT` は Config Editor PartyLeader カテゴリで調整可（デフォルト 0.33。装備 1 セット ≒ ランク 1 段階）
+  - 敵は装備を持たないため tier 寄与 0・従来挙動を維持
 
 | 戦況 | 戦力比 | NPC行動への影響 | アイテム拾い |
 |------|--------|----------------|-------------|

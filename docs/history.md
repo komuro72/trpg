@@ -3,6 +3,65 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-19（戦力計算への装備 tier 反映）
+
+### 背景・目的
+従来の戦力式は `rank_sum × HP充足率` のみで、装備の強さが戦力評価に反映されていなかった。低層でアイテムを集めて装備を強化しても、リーダーAIが下層へ進む判断をしなかったため、装備 tier を戦力式に組み込む。
+
+2026-04-19 に tier が整数化（0=none, 1=low, 2=mid, 3=high）されたことが前提条件。
+
+### 新しい戦力式
+```
+character_tier_avg(c) = 装備中アイテム（武器・防具・盾）の tier の平均。装備なしなら 0
+party_tier_sum       = Σ character_tier_avg(m) for m in members
+strength_base        = rank_sum + party_tier_sum × ITEM_TIER_STRENGTH_WEIGHT
+strength             = strength_base × 平均HP充足率
+```
+
+- `ITEM_TIER_STRENGTH_WEIGHT = 0.33`（Config Editor PartyLeader カテゴリ・既定値）
+- 装備 1 セット（3 スロット・tier 3 平均）≒ ランク 1 段階（3 × 0.33 ≈ 1）となる設定
+
+### 設計判断
+- **平均化する理由**：クラスごとに装備スロット数が違う（戦士=3、弓/斥候/魔/ヒーラー=2）。合計ではなくスロットあたりの平均で正規化し、クラス間公平を保つ
+- **敵側は従来挙動維持**：敵は装備を持たないため `character_tier_avg = 0`・`party_tier_sum = 0`・結果として `rank_sum × HP` と一致
+- **ポーション寄与は HP 充足率側のみ**：装備と重複してカウントしない
+
+### 実装変更
+
+#### 関連バグ修正：ItemGenerator 戻り値の tier 漏れ
+2026-04-19 の事前生成機構実装時に、`ItemGenerator.generate()` / `generate_initial()` の戻り値に `tier` フィールドを含めていなかった（source のエントリには tier があるが戻り値にコピーしていなかった実装漏れ）。戦力計算で tier を参照するにあたり本漏れを修正：
+- `generate()` 戻り値：`tier: int(picked.tier)` 追加
+- `generate_initial()` 戻り値：`tier: TIER_NONE` 追加
+- `generate_consumable()` は tier を持たない（ポーションは戦力評価対象外）
+
+#### 定数追加
+- `ITEM_TIER_STRENGTH_WEIGHT`（float・デフォルト 0.33・PartyLeader カテゴリ）
+
+#### party_leader.gd 拡張
+- `_character_tier_avg(Character) -> float` 新設：装備中 tier の平均（武器・防具・盾のうち実装備のみ）
+- `_calc_tier_sum(Array) -> float` 新設：メンバーの `character_tier_avg` の合計
+- `_evaluate_party_strength_for()` 式を `rank_sum` → `rank_sum + tier_sum × WEIGHT` に更新
+- `_combat_situation` / `get_global_orders_hint()` に `my_tier_sum` / `enemy_tier_sum` 追加
+
+#### DebugWindow 表示拡張
+戦力表示を `PB(X/Y)` → `PB(R:X+T:Y.Y/E:Z+t:z.z)` 形式に拡張：
+- `R` = 自軍 rank_sum / `T` = 自軍 tier 平均の和
+- `E` = 敵 rank_sum / `t` = 敵 tier 平均の和（通常 0）
+- 凡例はファイル冒頭のコメントに記載
+
+### セーブデータ互換性
+- 旧セーブで tier フィールドがない装備でも、`.get("tier", 0)` でデフォルト 0 フォールバックするためクラッシュしない
+- 旧セーブロード時は戦力寄与が 0 になるだけで従来挙動と一致
+
+### Komuro への動作確認依頼
+- F1 DebugWindow で戦力表示が `PB(R:X+T:Y.Y/E:Z+t:z.z)` 形式になる
+- 初期装備（全 tier=0）のうちは T:0.0 となり、戦力は従来値と一致
+- ドロップ装備を拾って装備すると T の値が上がる
+- 敵パーティーの戦力表示は `t:0.0`（装備を持たないため）
+- F4 > PartyLeader カテゴリに `ITEM_TIER_STRENGTH_WEIGHT` が表示される
+
+---
+
 ## 2026-04-19（「無」段階導入・bonus/tier 概念分離・初期装備の統合生成）
 
 ### 背景・目的
