@@ -1,13 +1,14 @@
 {
   "dagger": [
-    { "name": "斥候の短剣",     "stats": { "power": 10, "block_right_front": 10 }, "tier": "low"  },
-    { "name": "護身の短剣",     "stats": { "power": 10, "block_right_front": 20 }, "tier": "mid"  },
-    { "name": "防刃の短剣",     "stats": { "power": 10, "block_right_front": 30 }, "tier": "high" },
-    { "name": "刺突の短剣",     "stats": { "power": 20, "block_right_front": 10 }, "tier": "mid"  },
-    { "name": "忍びの短剣",     "stats": { "power": 20, "block_right_front": 20 }, "tier": "mid"  },
-    { "name": "鉄刃の短剣",     "stats": { "power": 20, "block_right_front": 30 }, "tier": "high" },
-    { "name": "暗殺の短剣",     "stats": { "power": 30, "block_right_front": 10 }, "tier": "high" },
-    { "name": "毒牙の短剣",     "stats": { "power": 30, "block_right_front": 20 }, "tier": "high" },
-    { "name": "達人の短剣",     "stats": { "power": 30, "block_right_front": 30 }, "tier": "high" }
+    { "name": "錆びた短剣",     "stats": {}, "tier": 0 },
+    { "name": "斥候の短剣",     "stats": { "power": 10, "block_right_front": 10 }, "tier": 1 },
+    { "name": "護身の短剣",     "stats": { "power": 10, "block_right_front": 20 }, "tier": 2 },
+    { "name": "防刃の短剣",     "stats": { "power": 10, "block_right_front": 30 }, "tier": 3 },
+    { "name": "刺突の短剣",     "stats": { "power": 20, "block_right_front": 10 }, "tier": 2 },
+    { "name": "忍びの短剣",     "stats": { "power": 20, "block_right_front": 20 }, "tier": 2 },
+    { "name": "鉄刃の短剣",     "stats": { "power": 20, "block_right_front": 30 }, "tier": 3 },
+    { "name": "暗殺の短剣",     "stats": { "power": 30, "block_right_front": 10 }, "tier": 3 },
+    { "name": "毒牙の短剣",     "stats": { "power": 30, "block_right_front": 20 }, "tier": 3 },
+    { "name": "達人の短剣",     "stats": { "power": 30, "block_right_front": 30 }, "tier": 3 }
   ]
 }

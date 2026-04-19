@@ -309,25 +309,27 @@ var STUN_PULSE_HZ: float = 3.0
 ## 詳細は docs/history.md の 2026-04-19 エントリおよび
 ## CLAUDE.md「装備の名前生成」節を参照。
 
-## 低段階の比率（対 _max）。例: power_max=30 × 0.33 = 9.9 → 10
+## 低 bonus 段階の比率（対 _max）。例: power_max=30 × 0.33 = 9.9 → 10
+## bonus 段階はステータスごとの補正強度（none=0 / low / mid / high）を表す
 ## [ConfigEditor 対象]
-var ITEM_TIER_LOW_RATIO:  float = 0.33
-## 中段階の比率（対 _max）。例: power_max=30 × 0.67 = 20.1 → 20
+var ITEM_BONUS_LOW_RATIO:  float = 0.33
+## 中 bonus 段階の比率（対 _max）。例: power_max=30 × 0.67 = 20.1 → 20
 ## [ConfigEditor 対象]
-var ITEM_TIER_MID_RATIO:  float = 0.67
-## 高段階の比率（対 _max）。例: power_max=30 × 1.0 = 30
+var ITEM_BONUS_MID_RATIO:  float = 0.67
+## 高 bonus 段階の比率（対 _max）。例: power_max=30 × 1.0 = 30
 ## [ConfigEditor 対象]
-var ITEM_TIER_HIGH_RATIO: float = 1.0
+var ITEM_BONUS_HIGH_RATIO: float = 1.0
 
-## フロア 0〜1 の基準段階（"low" / "mid" / "high"）
+## フロア 0〜1 の基準 tier（0=none / 1=low / 2=mid / 3=high）
+## tier は装備全体の格付け（bonus 段階から ITEM_TIER_POLICY で導出）
 ## [ConfigEditor 対象]
-var FLOOR_0_1_BASE_TIER: String = "low"
-## フロア 1〜2 の基準段階
+var FLOOR_0_1_BASE_TIER: int = 1
+## フロア 1〜2 の基準 tier
 ## [ConfigEditor 対象]
-var FLOOR_1_2_BASE_TIER: String = "mid"
-## フロア 2〜3 の基準段階
+var FLOOR_1_2_BASE_TIER: int = 2
+## フロア 2〜3 の基準 tier
 ## [ConfigEditor 対象]
-var FLOOR_2_3_BASE_TIER: String = "high"
+var FLOOR_2_3_BASE_TIER: int = 3
 
 ## 基準段階の出現重み。各フロアで最もよく出る段階の重み
 ## [ConfigEditor 対象]
@@ -340,9 +342,17 @@ var FLOOR_NEIGHBOR_WEIGHT: int = 2
 var FLOOR_FAR_WEIGHT:      int = 0
 
 ## アイテム段階判定方法（"max" / "min" / "avg"）
-## "max": 2 ステータスの高い方を採用（power中 × block高 → 高段階）
+## bonus 段階（各ステータス）から tier（装備全体の格付け）を導出する policy
+## "max": 2 ステータスの高い方を採用（power 中 × block 高 → tier 3=high）
 ## [ConfigEditor 対象]
 var ITEM_TIER_POLICY: String = "max"
+
+## 初期所持ヒールポーション数（全キャラ共通）
+## [ConfigEditor 対象]
+var INITIAL_POTION_HEAL_COUNT:   int = 5
+## 初期所持エナジーポーション数（全キャラ共通）
+## [ConfigEditor 対象]
+var INITIAL_POTION_ENERGY_COUNT: int = 5
 
 ## ダメージ段階の閾値（battle メッセージの「小/中/大/特大ダメージ」判定に使用）
 const DAMAGE_LEVEL_SMALL:  int = 5   ## 小ダメージの上限（これ以下）
@@ -449,9 +459,9 @@ const CONFIG_KEYS: Array[String] = [
 	"PROJECTILE_SIZE_RATIO",
 	"DIVE_EFFECT_RADIUS_RATIO",
 	# Item タブ（2026-04-19〜・定数ベース事前生成方式）
-	"ITEM_TIER_LOW_RATIO",
-	"ITEM_TIER_MID_RATIO",
-	"ITEM_TIER_HIGH_RATIO",
+	"ITEM_BONUS_LOW_RATIO",
+	"ITEM_BONUS_MID_RATIO",
+	"ITEM_BONUS_HIGH_RATIO",
 	"FLOOR_0_1_BASE_TIER",
 	"FLOOR_1_2_BASE_TIER",
 	"FLOOR_2_3_BASE_TIER",
@@ -459,6 +469,8 @@ const CONFIG_KEYS: Array[String] = [
 	"FLOOR_NEIGHBOR_WEIGHT",
 	"FLOOR_FAR_WEIGHT",
 	"ITEM_TIER_POLICY",
+	"INITIAL_POTION_HEAL_COUNT",
+	"INITIAL_POTION_ENERGY_COUNT",
 ]
 
 ## 最後のセーブ／書き込み結果（ConfigEditor がエラー表示に使う）

@@ -253,65 +253,26 @@ func _process(delta: float) -> void:
 func _setup_hero() -> void:
 	var spawn_pos := Vector2i(2, 2)
 	var class_id := "fighter-sword"
-	var hero_items: Array = []
 	if map_data.player_parties.size() > 0:
 		var members: Array = (map_data.player_parties[0] as Dictionary).get("members", [])
 		if members.size() > 0:
 			var m := members[0] as Dictionary
 			spawn_pos  = Vector2i(int(m.get("x", 2)), int(m.get("y", 2)))
 			class_id   = m.get("class_id", m.get("character_id", "fighter-sword")) as String
-			hero_items = m.get("items",    []) as Array
 	# デバッグ: クラスをランダムに変更（初期装備もクラスに合わせて設定）
 	var all_classes: Array[String] = ["fighter-sword", "fighter-axe", "archer", "magician-fire", "magician-water", "healer", "scout"]
 	class_id = all_classes[randi() % all_classes.size()]
+	# 初期装備は item_type 文字列リストで指定し、ItemGenerator.generate_initial（tier=0 エントリ）で実体化する
 	var _dbg_items: Dictionary = {
-		"fighter-sword": [
-			{"item_type": "sword", "category": "weapon", "item_name": "古びた片手剣", "stats": {"power": 0, "block_right_front": 0}, "equipped": true},
-			{"item_type": "armor_plate", "category": "armor", "item_name": "古い革鎧", "stats": {"physical_resistance": 0, "magic_resistance": 0}, "equipped": true},
-			{"item_type": "shield", "category": "shield", "item_name": "木の盾", "stats": {"block_left_front": 0}, "equipped": true},
-		],
-		"fighter-axe": [
-			{"item_type": "axe", "category": "weapon", "item_name": "古びた斧", "stats": {"power": 0, "block_right_front": 0}, "equipped": true},
-			{"item_type": "armor_plate", "category": "armor", "item_name": "古い革鎧", "stats": {"physical_resistance": 0, "magic_resistance": 0}, "equipped": true},
-			{"item_type": "shield", "category": "shield", "item_name": "木の盾", "stats": {"block_left_front": 0}, "equipped": true},
-		],
-		"archer": [
-			{"item_type": "bow", "category": "weapon", "item_name": "古びた弓", "stats": {"power": 0, "block_front": 0}, "equipped": true},
-			{"item_type": "armor_cloth", "category": "armor", "item_name": "古い布服", "stats": {"physical_resistance": 0, "magic_resistance": 0}, "equipped": true},
-		],
-		"scout": [
-			{"item_type": "dagger", "category": "weapon", "item_name": "古びた短剣", "stats": {"power": 0, "block_right_front": 0}, "equipped": true},
-			{"item_type": "armor_cloth", "category": "armor", "item_name": "古い布服", "stats": {"physical_resistance": 0, "magic_resistance": 0}, "equipped": true},
-		],
-		"magician-fire": [
-			{"item_type": "staff", "category": "weapon", "item_name": "古びた杖", "stats": {"power": 0, "block_front": 0}, "equipped": true},
-			{"item_type": "armor_robe", "category": "armor", "item_name": "古いローブ", "stats": {"physical_resistance": 0, "magic_resistance": 0}, "equipped": true},
-		],
-		"magician-water": [
-			{"item_type": "staff", "category": "weapon", "item_name": "古びた杖", "stats": {"power": 0, "block_front": 0}, "equipped": true},
-			{"item_type": "armor_robe", "category": "armor", "item_name": "古いローブ", "stats": {"physical_resistance": 0, "magic_resistance": 0}, "equipped": true},
-		],
-		"healer": [
-			{"item_type": "staff", "category": "weapon", "item_name": "古びた杖", "stats": {"power": 0, "block_front": 0}, "equipped": true},
-			{"item_type": "armor_robe", "category": "armor", "item_name": "古いローブ", "stats": {"physical_resistance": 0, "magic_resistance": 0}, "equipped": true},
-		],
+		"fighter-sword":  ["sword", "armor_plate", "shield"],
+		"fighter-axe":    ["axe", "armor_plate", "shield"],
+		"archer":         ["bow", "armor_cloth"],
+		"scout":          ["dagger", "armor_cloth"],
+		"magician-fire":  ["staff", "armor_robe"],
+		"magician-water": ["staff", "armor_robe"],
+		"healer":         ["staff", "armor_robe"],
 	}
-	hero_items = (_dbg_items.get(class_id, []) as Array).duplicate()
-
-	# 初期ポーション（全人間キャラ共通）：ヒールポーション×5 + SP/MPポーション×5
-	# ConsumableBar は inventory 内のエントリ数で ×n を表示し、use_consumable は
-	# 辞書を erase するため、N個持たせるには N個の個別エントリが必要
-	for _i in range(5):
-		hero_items.append({
-			"item_type": "potion_heal", "category": "consumable",
-			"item_name": "ヒールポーション", "effect": {"restore_hp": 30}, "quantity": 1,
-		})
-	# エナジーポーション（全クラス共通。UI 表示だけクラス種別で MP/SP に切替）
-	for _i in range(5):
-		hero_items.append({
-			"item_type": "potion_energy", "category": "consumable",
-			"item_name": "エナジーポーション", "effect": {"restore_energy": 20}, "quantity": 1,
-		})
+	var hero_items: Array = _build_initial_items(_dbg_items.get(class_id, []) as Array)
 
 	hero = Character.new()
 	hero.grid_pos = spawn_pos
@@ -360,6 +321,25 @@ func _setup_hero() -> void:
 	_hero_manager.set_global_orders(party.global_orders)
 	# フロアアイテム辞書への参照を渡す（UnitAI がアイテムへ向かうナビゲーションに使用）
 	_hero_manager.set_floor_items(_floor_items)
+
+
+## 初期装備（item_type 文字列リスト）を受け取り、ItemGenerator.generate_initial で
+## 実アイテム化した配列を返す。末尾に初期ポーション（定数個数）を付加する
+## 主人公・NPC 共通の初期装備組み立てヘルパ
+static func _build_initial_items(equipment_types: Array) -> Array:
+	var items: Array = []
+	for t_v: Variant in equipment_types:
+		var itype := str(t_v)
+		if itype.is_empty():
+			continue
+		var item := ItemGenerator.generate_initial(itype)
+		if not item.is_empty():
+			items.append(item)
+	for _i in range(GlobalConstants.INITIAL_POTION_HEAL_COUNT):
+		items.append(ItemGenerator.generate_initial("potion_heal"))
+	for _i in range(GlobalConstants.INITIAL_POTION_ENERGY_COUNT):
+		items.append(ItemGenerator.generate_initial("potion_energy"))
+	return items
 
 
 func _setup_floor_enemies(floor_idx: int) -> void:

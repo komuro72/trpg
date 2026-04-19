@@ -3,6 +3,97 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-19（「無」段階導入・bonus/tier 概念分離・初期装備の統合生成）
+
+### 背景・目的
+CLAUDE.md 要調査項目「無段階の導入」の実装。事前生成機構の 3 段階（low/mid/high）に「無（none）」を加えて 4 段階化する。
+
+主たる目的：
+1. **「最大 2 補正」仕様の自然な表現**：装備のスロット数と同じ次元で語れる（残りスロット = 「無」）
+2. **初期装備の統合生成**：ベイク済み辞書 → `ItemGenerator.generate_initial()` 経由の統一ルートへ移行（single source of truth）
+3. **bonus と tier の概念分離**：名称の不整合を整理
+
+### 概念整理
+
+| 概念 | 値 | 役割 |
+|---|---|---|
+| **bonus 段階**（stats 内の各値の強さ） | `none / low / mid / high` | `*_bonus` の略。stats 辞書内の各値の強さを表す |
+| **tier**（装備全体の格付け・整数） | `0 / 1 / 2 / 3` | フロア選択用。`0=none, 1=low, 2=mid, 3=high` |
+
+- 「none/low/mid/high」は「no_bonus/low_bonus/mid_bonus/high_bonus」の略
+- tier は bonus から `ITEM_TIER_POLICY`（max/min/avg）で導出される
+- 以前は両概念とも文字列 "low/mid/high" で同じ値を取り、混同しやすかった
+
+### 実装変更
+
+#### 定数リネーム（bonus 比率）
+| 旧名 | 新名 |
+|---|---|
+| `ITEM_TIER_LOW_RATIO` | `ITEM_BONUS_LOW_RATIO` |
+| `ITEM_TIER_MID_RATIO` | `ITEM_BONUS_MID_RATIO` |
+| `ITEM_TIER_HIGH_RATIO` | `ITEM_BONUS_HIGH_RATIO` |
+
+`ITEM_TIER_POLICY` は「bonus から tier を導出する policy」なのでそのまま維持。
+
+#### tier 数値化（String → int）
+- `FLOOR_0_1_BASE_TIER` / `FLOOR_1_2_BASE_TIER` / `FLOOR_2_3_BASE_TIER` を String（"low"/"mid"/"high"）→ int（1/2/3）に変更
+- `constants_default.json` の `type` を `"string"` → `"int"`、`choices` 削除、`min/max/step` 追加
+- Config Editor の UI：OptionButton → SpinBox（同じ仕組みで int 表示）
+- `generated/*.json` の全エントリ（75 エントリ）の `tier` フィールドを文字列 → 整数化
+
+#### ItemGenerator 修正（`scripts/item_generator.gd`）
+- `TIER_ORDER = ["low","mid","high"]` を廃止。tier は整数で直接比較
+- `generate(item_type, floor_index)`：`tier == 0` エントリを重み計算から除外（weight=0）
+- **新設**：`generate_initial(item_type)`：装備タイプなら tier=0 エントリを返す。`potion_*` なら `generate_consumable()` に委譲
+
+#### 生成セット拡張（+9 エントリ）
+各装備 9 タイプに tier=0 エントリを 1 個ずつ追加（stats={}）：
+- sword: 朽ちた片手剣 / axe: 欠けた斧 / dagger: 錆びた短剣
+- bow: 古びた弓 / staff: 粗末な杖
+- armor_plate: 擦り切れた革鎧 / armor_cloth: 擦り切れた布服
+- armor_robe: 褪せた法衣 / shield: 朽ちた木盾
+
+命名方針：朽ちた・古びた・粗末な・擦り切れた等のダークファンタジー寄り漢字語彙。キャラ画像生成プロンプトで許容される形状制約（片手剣 / 両手弓 / 軽装服 等）を維持。
+
+#### 初期装備の統合生成
+- `game_map.gd:_setup_hero` の `_dbg_items` を辞書ベイク → `item_type` 文字列リストに置換
+- `game_map.gd:_build_initial_items()` 新設：文字列リストを受けて `ItemGenerator.generate_initial` で実体化。末尾に `INITIAL_POTION_*_COUNT` 個数分のポーションを付加
+- `party_manager.gd:_build_npc_initial_items()` 新設：NPC 側も同じロジックで組み立て
+- 主人公・NPC 両方で共通のルートから初期装備が出る（DRY）
+
+#### dungeon_handcrafted.json の書式変更
+- `player_party.members[].items`：**物理削除**（`_dbg_items` が SoT となったため死にコード）
+- `npc_parties_multi.members[].items`：辞書リスト → **item_type 文字列リスト**（12 メンバー対応）
+  - ポーションは書かない（全 NPC 一律に `INITIAL_POTION_*_COUNT` で自動付与）
+
+#### 初期ポーション個数の Config Editor 化
+新規定数 2 個を `Item` カテゴリに追加：
+- `INITIAL_POTION_HEAL_COUNT`（デフォルト 5・min 0 / max 20）
+- `INITIAL_POTION_ENERGY_COUNT`（デフォルト 5・同上）
+
+以前はハードコード（`_setup_hero` 内に `range(5)` ベタ書き）だったため、バランス調整のため外出し。主人公・NPC ともに同じ値を参照する。
+
+### 設計判断の記録
+
+- **tier=0 エントリはドロップに出ない**：フロア重み計算で weight=0 に固定し、重み合計が 0 の場合はピック候補に入らない（`_weighted_pick` 内部で分岐）
+- **ポーションを `generate_initial` の責務に含める**：単一 API で呼出側が装備・消耗品を意識しなくて済むように。`potion_*` プレフィックスで内部分岐
+- **`_dbg_items` を残した理由**：主人公のクラスランダム化はデバッグ用途だが、現状ゲームスタート時の多様性として機能している。`dungeon_handcrafted.json` の player_party 初期装備は実質死にコードだったので削除
+
+### スコープ外・注記
+- 既存 tier 1〜3 エントリの `name` / `stats` は変更していない（命名の安定性維持）
+- 重み計算ロジック（`FLOOR_BASE_WEIGHT` / `NEIGHBOR` / `FAR`）はそのまま
+- `_bands_for_floor()` の 2 帯合算設計も維持（文字列→数値への置換のみ）
+
+### Komuro への動作確認依頼
+- ゲーム開始時：主人公・各 NPC（12 人）の初期装備がクラスに応じて正しく付与される（tier=0 の素朴な名前）
+- ポーションを 5 / 5 個ずつ所持している
+- OrderWindow で tier=0 装備を見たとき、補正値行が表示されない（stats={}）
+- フロア移動後、ドロップするアイテム（tier≥1）に tier=0 名が混ざらない
+- F4 → Item カテゴリに `INITIAL_POTION_*_COUNT`（2 個）・`ITEM_BONUS_*_RATIO`（3 個）が表示される
+- `FLOOR_*_BASE_TIER` が SpinBox（数値入力）として編集可能
+
+---
+
 ## 2026-04-19（Config Editor「アイテム」タブ実装）
 
 ### 背景

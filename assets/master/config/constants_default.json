@@ -385,27 +385,27 @@
     "type": "float",
     "value": 0.2
   },
-  "ITEM_TIER_LOW_RATIO": {
+  "ITEM_BONUS_LOW_RATIO": {
     "category": "Item",
-    "description": "アイテム段階「低」のステータス比率（対 _max）。例: power_max=30 × 0.33 = 10",
+    "description": "bonus 段階「低」の補正値比率（対 _max）。例: power_max=30 × 0.33 = 10",
     "max": 1.0,
     "min": 0.0,
     "step": 0.01,
     "type": "float",
     "value": 0.33
   },
-  "ITEM_TIER_MID_RATIO": {
+  "ITEM_BONUS_MID_RATIO": {
     "category": "Item",
-    "description": "アイテム段階「中」のステータス比率（対 _max）",
+    "description": "bonus 段階「中」の補正値比率（対 _max）",
     "max": 1.0,
     "min": 0.0,
     "step": 0.01,
     "type": "float",
     "value": 0.67
   },
-  "ITEM_TIER_HIGH_RATIO": {
+  "ITEM_BONUS_HIGH_RATIO": {
     "category": "Item",
-    "description": "アイテム段階「高」のステータス比率（対 _max）",
+    "description": "bonus 段階「高」の補正値比率（対 _max）",
     "max": 1.0,
     "min": 0.0,
     "step": 0.01,
@@ -414,24 +414,30 @@
   },
   "FLOOR_0_1_BASE_TIER": {
     "category": "Item",
-    "choices": ["low", "mid", "high"],
-    "description": "フロア 0〜1 の基準段階（最もよく出る段階）",
-    "type": "string",
-    "value": "low"
+    "description": "フロア 0〜1 の基準 tier（0=none, 1=low, 2=mid, 3=high）。最もよく出る tier",
+    "max": 3,
+    "min": 0,
+    "step": 1,
+    "type": "int",
+    "value": 1
   },
   "FLOOR_1_2_BASE_TIER": {
     "category": "Item",
-    "choices": ["low", "mid", "high"],
-    "description": "フロア 1〜2 の基準段階",
-    "type": "string",
-    "value": "mid"
+    "description": "フロア 1〜2 の基準 tier（0=none, 1=low, 2=mid, 3=high）",
+    "max": 3,
+    "min": 0,
+    "step": 1,
+    "type": "int",
+    "value": 2
   },
   "FLOOR_2_3_BASE_TIER": {
     "category": "Item",
-    "choices": ["low", "mid", "high"],
-    "description": "フロア 2〜3 の基準段階",
-    "type": "string",
-    "value": "high"
+    "description": "フロア 2〜3 の基準 tier（0=none, 1=low, 2=mid, 3=high）",
+    "max": 3,
+    "min": 0,
+    "step": 1,
+    "type": "int",
+    "value": 3
   },
   "FLOOR_BASE_WEIGHT": {
     "category": "Item",
@@ -463,8 +469,26 @@
   "ITEM_TIER_POLICY": {
     "category": "Item",
     "choices": ["max", "min", "avg"],
-    "description": "2 ステータスからアイテム段階を判定する方法（max=高い方・min=低い方・avg=平均）",
+    "description": "bonus 段階から tier を導出する方法（max=高い方・min=低い方・avg=平均）",
     "type": "string",
     "value": "max"
+  },
+  "INITIAL_POTION_HEAL_COUNT": {
+    "category": "Item",
+    "description": "初期所持ヒールポーション数（全キャラ共通）",
+    "max": 20,
+    "min": 0,
+    "step": 1,
+    "type": "int",
+    "value": 5
+  },
+  "INITIAL_POTION_ENERGY_COUNT": {
+    "category": "Item",
+    "description": "初期所持エナジーポーション数（全キャラ共通）",
+    "max": 20,
+    "min": 0,
+    "step": 1,
+    "type": "int",
+    "value": 5
   }
 }

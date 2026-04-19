@@ -16,7 +16,7 @@
 #### 2026-04-19（本日の成果）
 - **バグ修正**：敵の V スロット特殊攻撃が誤発動する問題・戦闘メッセージで敵表示名が「斧戦士」等のクラス日本語名になる問題を修正（Phase B の `class_id = stat_type` 設定の副作用）
 - **アイテム事前生成機構の完成**：定数ベース事前生成（2 ステータス × 3 段階 = 9 パターン）× フロア重み選択方式を採用。`scripts/item_generator.gd` 新設・事前生成セット 9 ファイル（計 75 エントリ）を `assets/master/items/generated/` に配置
-- **Config Editor 機能拡張**：Effect カテゴリ新設（+11 定数）・Item カテゴリ新設（+9 定数）・トップレベル「アイテム」タブ新設（1 行 1 タイプ形式の横断表）・`string` 型（OptionButton / LineEdit）編集サポート追加
+- **Config Editor 機能拡張**：Effect カテゴリ新設（+11 定数）・Item カテゴリ新設（+11 定数：bonus 比率 3・フロア基準 tier 3・距離重み 3・tier policy 1・初期ポーション個数 2）・トップレベル「アイテム」タブ新設（1 行 1 タイプ形式の横断表）・`string` 型（OptionButton / LineEdit）編集サポート追加
 - **画像サイズ設計是正**：`Projectile.SPRITE_REF_SIZE` / `DiveEffect.RADIUS` を GRID_SIZE 比率化（解像度追従）。`PROJECTILE_SPEED` を SkillExecutor → Effect カテゴリへ移動
 - **Legacy コード大量削除**（合計約 1,300 行以上）：
   - Legacy LLM AI コード 5 クラス（BaseAI / EnemyAI / LLMClient / DungeonGenerator / GoblinAI）+ dead method
@@ -62,11 +62,8 @@
    - アイテム事前生成機構の動作（フロアごとの出現傾向・命名テイスト）
    - Config Editor Effect カテゴリの編集で操作感が変わるか
    - 解像度を変えた際の UI 追従（飛翔体・降下エフェクト）
-2. **「無」段階の導入**（`docs/history.md` 2026-04-19「無」段階導入の項参照）：
-   - low / mid / high → none / low / mid / high の 4 段階化
-   - 初期装備を tier="none" で生成セットに統合 → `dungeon_handcrafted.json` のベイク初期装備を廃止
-3. **Phase 14 バランス調整**（CLAUDE.md「Phase 14 バランス調整の事前情報」参照）
-4. **残りの棚卸し候補**（CLAUDE.md「要調査・要整理項目」参照）：
+2. **Phase 14 バランス調整**（CLAUDE.md「Phase 14 バランス調整の事前情報」参照）
+3. **残りの棚卸し候補**（CLAUDE.md「要調査・要整理項目」参照）：
    - `PlayerController._spawn_heal_effect` のデッドコード判定
    - `hero.json` の扱い整理
    - `BUST_SRC_*` の比率化
@@ -761,7 +758,13 @@ rank値: C=0, B=1, A=2, S=3
 - Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / SkillExecutor / **Effect** / **Item** / Unknown（未分類検出用）
 - タブ順は陣営・階層順（上位概念 → 下位概念）：リーダー層（PartyLeader → NpcLeaderAI → EnemyLeaderAI）→ 個体層（UnitAI）→ 実処理層（SkillExecutor）→ 視覚演出（Effect）→ アイテム生成方針（Item）
 - **Effect カテゴリ**（2026-04-19〜）：視覚演出・操作感・視認性に影響する定数。エフェクトクラス（BuffEffect / WhirlpoolEffect 等）や操作系（TURN_DELAY / AUTO_CANCEL_FLASH / SLIDING_STEP_DUR / OUTLINE_WIDTH_* / TARGETED_MODULATE_STRENGTH / *_ROT_SPEED_DEG など）。バランスではなくフィーリング調整用
-- **Item カテゴリ**（2026-04-19〜）：アイテム事前生成セットの選択方針を制御する 9 定数。`ITEM_TIER_LOW/MID/HIGH_RATIO`（段階値の比率）・`FLOOR_X_Y_BASE_TIER`（フロア基準段階・OptionButton で "low"/"mid"/"high" 選択）・`FLOOR_BASE/NEIGHBOR/FAR_WEIGHT`（距離別の出現重み）・`ITEM_TIER_POLICY`（OptionButton で "max"/"min"/"avg" 選択）。個別アイテムの編集はフェーズ2 のトップレベル「アイテム」タブで扱う想定
+- **Item カテゴリ**（2026-04-19〜）：アイテム事前生成セットの選択方針と初期装備パラメータを制御する 11 定数。
+  - bonus 比率 3 個：`ITEM_BONUS_LOW/MID/HIGH_RATIO`（各 bonus 段階の補正値比率・対 `_max`）
+  - フロア基準 tier 3 個：`FLOOR_X_Y_BASE_TIER`（SpinBox・`0=none, 1=low, 2=mid, 3=high`）
+  - 距離別重み 3 個：`FLOOR_BASE/NEIGHBOR/FAR_WEIGHT`
+  - tier 導出 policy：`ITEM_TIER_POLICY`（OptionButton で "max"/"min"/"avg" 選択）
+  - 初期ポーション個数 2 個：`INITIAL_POTION_HEAL_COUNT` / `INITIAL_POTION_ENERGY_COUNT`（全キャラ共通・再起動で反映）
+  - 個別アイテムの編集はトップレベル「アイテム」タブで扱う（`base_stats` のルール編集）
 
 タブ順は `config_editor.gd` の `TABS` 配列で定義。追加したい場合は配列末尾に追記する。
 
@@ -970,9 +973,13 @@ rank値: C=0, B=1, A=2, S=3
 }
 ```
 
-- **総当たり 9 パターン**：各装備タイプは 2 ステータスを低・中・高の 3 段階で組み合わせた 9 パターンを網羅（単一ステータスの盾のみ 3 パターン）
-- **tier 判定**：`ITEM_TIER_POLICY="max"` の場合、2 ステータスの高い方を採用（power中 × block高 → 高段階）
-- **段階値の計算**：`_max × ITEM_TIER_{LOW|MID|HIGH}_RATIO`（デフォルト 0.33 / 0.67 / 1.0）
+- **総当たり 9 パターン + tier 0 の 1 パターン**：各装備タイプは 2 ステータスを low/mid/high の 3 bonus 段階で組み合わせた 9 パターン ＋ 初期装備用の tier=0（none）エントリ 1 個。盾のみ単一ステータスで 3 + 1 パターン
+- **bonus / tier の概念分離**（2026-04-19〜）：
+  - **bonus 段階**（stats 内の各値の強さ）：`none / low / mid / high`（no_bonus / low_bonus / mid_bonus / high_bonus の略）
+  - **tier**（装備全体の格付け・整数）：`0=none`, `1=low`, `2=mid`, `3=high`
+- **tier 判定**：`ITEM_TIER_POLICY="max"` の場合、2 ステータスの bonus 段階の高い方を採用（power 中 × block 高 → tier 3）
+- **bonus 値の計算**：`_max × ITEM_BONUS_{LOW|MID|HIGH}_RATIO`（デフォルト 0.33 / 0.67 / 1.0）
+- **tier 0（none）は初期装備専用**：ドロップには出現しない（`ItemGenerator.generate()` の重み計算で除外）。`ItemGenerator.generate_initial(item_type)` 経由で取得
 - **ランダム補正なし**：同じ名前の装備は常に同じ stats（プレイヤーが「鋭利な剣」を見つけたら値も固定）
 - `category` フィールドは JSON に持たない（power と block の値から計算で判定可能・特殊ステータス追加時の柔軟性確保）
 
@@ -984,8 +991,9 @@ rank値: C=0, B=1, A=2, S=3
 - **命名制約の根拠**：キャラ画像生成プロンプトで決まる形状（片手剣／両手弓／軽装服 等）。両手剣・サーベル・タワーシールド等 NG。カタカナ表記を避ける（漢字語彙で統一）
 
 **ランタイム選択ロジック**（`scripts/item_generator.gd`）:
-- `ItemGenerator.generate(item_type, floor_index)` が事前生成セット全エントリから重み付き選択
-- 重み = 「各フロア帯の基準段階（FLOOR_X_Y_BASE_TIER）からの距離」で計算（基準=FLOOR_BASE_WEIGHT / 隣接=FLOOR_NEIGHBOR_WEIGHT / 遠隔=FLOOR_FAR_WEIGHT）
+- `ItemGenerator.generate(item_type, floor_index)` が tier≥1 の全エントリから重み付き選択（ドロップ用）
+- `ItemGenerator.generate_initial(item_type)` が tier=0 エントリを返す（初期装備用・ポーションは `generate_consumable` に委譲）
+- 重み = 「各フロア帯の基準 tier（`FLOOR_X_Y_BASE_TIER`・整数）からの距離」で計算（基準=`FLOOR_BASE_WEIGHT` / 隣接=`FLOOR_NEIGHBOR_WEIGHT` / 遠隔=`FLOOR_FAR_WEIGHT`）
 - フロア境界（1 / 2）では隣接する 2 帯の重みを合算して滑らかな遷移を実現
 
 **マスター JSON との関係**：
@@ -995,8 +1003,14 @@ rank値: C=0, B=1, A=2, S=3
 
 ### 装備の生成タイミングと強さ
 - 敵配置時点ではアイテム種別のみ確定（`dungeon_handcrafted.json` の `enemy_party.items` は `item_type` 文字列リスト）
-- 部屋制圧時に ItemGenerator が呼び出されて具体値を生成
-- フロア深度に応じて低/中/高段階の出現比率が変わる（序盤は低段階中心・終盤は高段階中心）
+- 部屋制圧時に `ItemGenerator.generate(item_type, floor_index)` が呼び出されて具体値を生成
+- フロア深度に応じて tier 1〜3（low/mid/high）の出現比率が変わる（序盤は低 tier 中心・終盤は高 tier 中心）
+- tier 0（none）はドロップには出ない（初期装備専用）
+
+### 初期装備
+- `game_map.gd` の `_dbg_items` 辞書（クラス別の `item_type` 文字列リスト）と NPC 側の `npc_parties_multi.members[].items` が SoT
+- 主人公・NPC 共通で `ItemGenerator.generate_initial(item_type)` が tier=0 エントリを返す
+- 初期ポーションは `GlobalConstants.INITIAL_POTION_HEAL_COUNT` / `INITIAL_POTION_ENERGY_COUNT` の個数ぶん全キャラ一律に付与（Config Editor Item カテゴリで調整可能）
 
 ## アイテムシステム
 
@@ -1416,15 +1430,15 @@ rank値: C=0, B=1, A=2, S=3
   - 最終採用方式：**定数ベース事前生成（総当たり 9 パターン）× フロア重み選択**
   - 各装備 9 パターン（盾は 3）を `assets/master/items/generated/*.json` に事前定義（計 75 エントリ）
   - `scripts/item_generator.gd` がフロアに応じた重み付き選択を実装
-  - Config Editor「Item」カテゴリで 9 定数（tier 比率・フロア基準段階・距離重み・tier 判定方針）を調整可能
+  - Config Editor「Item」カテゴリで 11 定数（bonus 比率・フロア基準 tier・距離重み・tier policy・初期ポーション個数）を調整可能
   - `effect` キー名の不整合（`restore_mp`/`restore_sp` 旧キー）も同時に一掃完了
 - ✅ **Config Editor のアイテムタブ**：2026-04-19 に完了。ただし当初設計した「`generated/*.json` の個別エントリ編集 UI」から「タイプ別のルール（`base_stats`）編集 UI」に設計変更。個別アイテムは Claude Code が手動生成する運用（命名の整合性を保つため）。詳細は [docs/history.md](docs/history.md) 参照
-- **「無」段階の導入（次タスク候補）**：
-  - 現在の 3 段階（low / mid / high）に「無」（補正値 0）を追加して 4 段階化
-  - 「最大 2 補正」仕様が自然に表現される（残りスロットは「無」＝ 0）
-  - 初期装備 = 全ステータス「無」の装備として生成セットに統合（現在の `dungeon_handcrafted.json` のベイク初期装備を廃止）
-  - tier="none" のアイテムはドロップに出ない（初期装備専用）。フロア出現重みから tier="none" を除外（または `FLOOR_NONE_WEIGHT = 0` で明示）
-  - 定数追加・ItemGenerator 選択ロジック改修・個別データ再生成が必要
+- ✅ **「無」段階の導入**：2026-04-19 に完了。詳細は [docs/history.md](docs/history.md) 参照
+  - 3 段階（low / mid / high）→ 4 段階（none / low / mid / high）に拡張。tier=0（none）エントリを各装備 9 タイプに 1 個ずつ追加（計 +9 エントリ）
+  - 主人公初期装備（`game_map.gd:_dbg_items`）・NPC 初期装備（`dungeon_handcrafted.json:npc_parties_multi`）を `item_type` 文字列リスト化し、`ItemGenerator.generate_initial()` で統合生成
+  - `dungeon_handcrafted.json:player_party.members[].items` は死にコードだったため物理削除
+  - 初期ポーション個数（ヒール 5・エナジー 5）を Config Editor 化（`INITIAL_POTION_HEAL_COUNT` / `INITIAL_POTION_ENERGY_COUNT`）
+  - **bonus / tier 概念分離**：`ITEM_TIER_*_RATIO` → `ITEM_BONUS_*_RATIO` リネーム。`FLOOR_X_Y_BASE_TIER` を String（"low/mid/high"）→ int（0〜3）に型変更
 - **NPC フロア遷移判定のための戦況判断拡張（検討）**：`NPC_HP_THRESHOLD` / `NPC_ENERGY_THRESHOLD` 廃止により、現在は HpStatus のパーティー平均HP率で判定している。ただし元の「最低HP率」ベースや「エネルギー率」ベースの判定は NPC 行動として意味があるため、戦況判断（`_evaluate_combat_situation`）の副情報として最低HP指標・エネルギー指標を追加することを検討。別系統の判定を走らせず、戦況判断に一元化する設計方針を維持する。
 
 ### Phase 14 バランス調整の事前情報

@@ -248,12 +248,34 @@ func _setup_npc(spawn_list: Array) -> void:
 		var items             := info.get("items", []) as Array
 		var image_set_override: String = info.get("image_set", "") as String
 		var member            := _spawn_npc_member(class_id, pos, image_set_override)
-		# 初期装備を付与する
-		if member.character_data != null and not items.is_empty():
-			member.character_data.apply_initial_items(items)
+		# 初期装備を付与する（item_type 文字列リスト形式のみ受け付ける）
+		# ポーションは JSON に書かず、全 NPC 一律に定数個数を付与する
+		if member.character_data != null:
+			var built := _build_npc_initial_items(items)
+			if not built.is_empty():
+				member.character_data.apply_initial_items(built)
 		# クラス依存の battle_formation / combat を確定する
 		_apply_attack_preset_to_member(member)
 		_members.append(member)
+
+
+## NPC の初期装備を組み立てる
+## equipment_types: 装備 item_type の文字列配列
+## 末尾に初期ポーション（GlobalConstants.INITIAL_POTION_HEAL_COUNT / ENERGY_COUNT）を付加
+func _build_npc_initial_items(equipment_types: Array) -> Array:
+	var items: Array = []
+	for t_v: Variant in equipment_types:
+		var itype := str(t_v)
+		if itype.is_empty():
+			continue
+		var item := ItemGenerator.generate_initial(itype)
+		if not item.is_empty():
+			items.append(item)
+	for _i in range(GlobalConstants.INITIAL_POTION_HEAL_COUNT):
+		items.append(ItemGenerator.generate_initial("potion_heal"))
+	for _i in range(GlobalConstants.INITIAL_POTION_ENERGY_COUNT):
+		items.append(ItemGenerator.generate_initial("potion_energy"))
+	return items
 
 
 func _spawn_enemy_member(char_id: String, grid_pos: Vector2i) -> Character:
