@@ -28,6 +28,21 @@
 - **UI バグ修正**：装備補正値の表示で stats 辞書を固定キーでフィルタしていた 3 箇所を全キー反復方式に変更（block_right_front 等の欠落を解消）。ステータス画面の 3 防御強度行を常時表示に
 - **定数タブ**：Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / SkillExecutor / Effect / Item の 8 タブ構成（約 57 個の定数）
 
+##### 午後以降の追加作業
+- **「無（none）」段階の導入**：3 段階 → 4 段階（none/low/mid/high）に拡張。tier=0 エントリを各装備 9 タイプに追加（計 +9 エントリ）
+- **bonus / tier 概念分離**：`ITEM_TIER_*_RATIO` → `ITEM_BONUS_*_RATIO`、`FLOOR_X_Y_BASE_TIER` を String → int 型変更、`generated/*.json` の tier も整数化
+- **初期装備の統合生成**：`_dbg_items` / `dungeon_handcrafted.json` を `item_type` 文字列リスト化し、`ItemGenerator.generate_initial()` で実体化。player_party の死にコード装備を物理削除
+- **初期ポーション個数を Config Editor 化**：`INITIAL_POTION_HEAL_COUNT` / `INITIAL_POTION_ENERGY_COUNT` 追加
+- **ItemGenerator 戻り値に tier 追加**（実装漏れ修正）
+- **戦力計算への装備 tier 反映**：戦力式を `(rank_sum + party_tier_sum × ITEM_TIER_STRENGTH_WEIGHT) × HP率` に拡張。`ITEM_TIER_STRENGTH_WEIGHT`（デフォルト 0.33）追加・DebugWindow に内訳表示
+- **戦力計算・戦況判断の統合 (`_evaluate_strategic_status()`)**：旧 `_evaluate_party_strength*` / `_evaluate_combat_situation` を 1 関数に統合。3 集合（full_party / nearby_allied / nearby_enemy）× 1 度ずつ統計算出
+- **距離ベース連合**：エリアベース `target_areas` 判定を廃止し、マンハッタン `COALITION_RADIUS_TILES` マス以内（デフォルト 8・Komuro 調整で 6）に変更
+- **敵の非対称設計**：enemy は自軍戦力 = full_party のみ（協力しない世界観）。味方は nearby_allied（連合）
+- **バグ修正**：`PartyLeader.setup()` の `_all_members` 未伝播・NpcLeaderAI tier キー欠落・freed member アクセスクラッシュ
+- **DebugWindow 3 点表示**：`PB F(R+T)s C(R+T)s E(R+T)s` 形式。プレイヤー R:45 違和感を解消
+- **旧キー完全削除**：`my_rank_sum` / `enemy_rank_sum` 等は後方互換なしで置換
+- **FLOOR_RANK の Config Editor 化**：`const FLOOR_RANK: Dictionary` 削除 → `FLOOR_0_RANK_THRESHOLD`〜`FLOOR_4_RANK_THRESHOLD` の 5 個と `FLOOR_RETREAT_RATIO` に分解。NpcLeaderAI カテゴリが実体化（0 個 → 6 定数）。値は据え置き（次セッションで実プレイ調整）
+
 #### 2026-04-18（前日の成果）
 - **SkillExecutor 抽出完了**：10 種スキル（heal / melee / ranged / flame_circle / water_stun / buff / rush / whirlwind / headshot / sliding）の Player/AI 計算を統一
 - **MP/SP を `energy` に統合**：内部データは単一フィールド、UI はクラスに応じて MP/SP 表示を切替
