@@ -21,6 +21,21 @@ const CLASS_EQUIP_TYPES: Dictionary = {
 ## 自動装備・ポーション受け渡しの実行間隔（秒）
 const AUTO_ITEM_INTERVAL: float = 2.0
 
+## フロア基準値定数の個数（FLOOR_0〜FLOOR_4 の 5 個）
+const FLOOR_THRESHOLD_COUNT: int = 5
+
+
+## フロアインデックス → フロア基準ランク和（GlobalConstants の外出し定数を参照）
+## 範囲外（< 0 or >= FLOOR_THRESHOLD_COUNT）は 0 を返す
+func _get_floor_threshold(floor_index: int) -> int:
+	match floor_index:
+		0: return GlobalConstants.FLOOR_0_RANK_THRESHOLD
+		1: return GlobalConstants.FLOOR_1_RANK_THRESHOLD
+		2: return GlobalConstants.FLOOR_2_RANK_THRESHOLD
+		3: return GlobalConstants.FLOOR_3_RANK_THRESHOLD
+		4: return GlobalConstants.FLOOR_4_RANK_THRESHOLD
+	return 0
+
 # --------------------------------------------------------------------------
 # 合流承諾判定スコア定数（調整しやすいよう定数化）
 # --------------------------------------------------------------------------
@@ -125,15 +140,15 @@ func _get_target_floor() -> int:
 		return current_floor
 
 	# --- 2. 戦力値で適正フロアを決定 ---
-	var floor_count: int = GlobalConstants.FLOOR_RANK.size()
+	var floor_count: int = FLOOR_THRESHOLD_COUNT
 	var appropriate_floor := current_floor
 	if current_floor + 1 < floor_count:
-		var next_rank := GlobalConstants.FLOOR_RANK.get(current_floor + 1, 9999) as int
+		var next_rank := _get_floor_threshold(current_floor + 1)
 		if strength >= float(next_rank):
 			appropriate_floor = current_floor + 1
 	if appropriate_floor == current_floor and current_floor > 0:
-		var this_rank := GlobalConstants.FLOOR_RANK.get(current_floor, 0) as int
-		if strength < float(this_rank) / 2.0:
+		var this_rank := _get_floor_threshold(current_floor)
+		if strength < float(this_rank) * GlobalConstants.FLOOR_RETREAT_RATIO:
 			appropriate_floor = current_floor - 1
 
 	# --- 3. HP 充足率チェック（統合関数の full_party_hp_ratio を参照） ---
@@ -148,8 +163,8 @@ func _get_target_floor() -> int:
 	# --- 5. デバッグログ（初回 or 目標フロア変化時） ---
 	if _prev_target_floor != target_floor:
 		var leader_name := _get_leader_name()
-		var next_rank  := GlobalConstants.FLOOR_RANK.get(current_floor + 1, 9999) as int
-		var half_rank  := floori(float(GlobalConstants.FLOOR_RANK.get(current_floor, 0) as int) / 2.0)
+		var next_rank  := _get_floor_threshold(current_floor + 1)
+		var half_rank  := floori(float(_get_floor_threshold(current_floor)) * GlobalConstants.FLOOR_RETREAT_RATIO)
 		var score_part := "戦力%.1f（次F%d基準%d / 退避%d）" % [
 			strength, current_floor + 1, next_rank, half_rank]
 		var hp_part := "HP充足率%.0f%%%s" % [hp_ratio * 100.0, "×" if hp_fail else "○"]

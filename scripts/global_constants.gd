@@ -50,13 +50,21 @@ var ATTACK_TYPE_MULT_MAGIC:  float = 0.2
 ## 集約後の辞書（Character / PlayerController / UnitAI から参照）
 var ATTACK_TYPE_MULT: Dictionary = {}
 
-## フロア難易度ランク（フロアインデックス → ランク和の基準値）
-## NPC が同フロアに留まるか上下するかの判断に使用
-## rank_sum = 全メンバーの RANK_VALUES（C=3, B=4, A=5, S=6）の合計
-## 各フロアの敵パーティー構成を参照して設定（F0: goblin中心, F1: B混成, F2: A混成, F3: 暗黒系A）
-## F0→F1: rank_sum≥8（2人BまたはC3+1）/ F1→F2: rank_sum≥13（B3+でも進めない壁）
-## F2→F3: rank_sum≥18（A3+以上が必要）/ F3→F4: rank_sum≥24（事実上不達・ボスフロア）
-const FLOOR_RANK: Dictionary = {0: 0, 1: 8, 2: 13, 3: 18, 4: 24}
+## フロア難易度ランク（各フロアの基準ランク和。NPC の下層降下判定で使用）
+## NPC の戦力（rank_sum + tier_sum × ITEM_TIER_STRENGTH_WEIGHT × HP率）がこの値以上になると
+## 対応するフロアに進む。装備 tier 戦力反映後は同じ基準値でも降下しやすくなる可能性あり
+## 設計当初の値（純粋 rank_sum ベース）：F1=8 / F2=13 / F3=18 / F4=24
+## [ConfigEditor 対象・NpcLeaderAI カテゴリ]
+var FLOOR_0_RANK_THRESHOLD: int = 0
+var FLOOR_1_RANK_THRESHOLD: int = 8
+var FLOOR_2_RANK_THRESHOLD: int = 13
+var FLOOR_3_RANK_THRESHOLD: int = 18
+var FLOOR_4_RANK_THRESHOLD: int = 24
+
+## 退避閾値比率：現フロアの基準ランク和の何倍未満で 1 階上に退避するか
+## 0.5 = 半分未満で退避（設計当初のハードコード値）
+## [ConfigEditor 対象・NpcLeaderAI カテゴリ]
+var FLOOR_RETREAT_RATIO: float = 0.5
 
 ## アイテム取得範囲（item_pickup=passive 設定時の取得判定距離・マンハッタン距離）
 const ITEM_PICKUP_RANGE: int = 2
@@ -446,6 +454,13 @@ const CONFIG_KEYS: Array[String] = [
 	"HP_STATUS_LOW",
 	"ITEM_TIER_STRENGTH_WEIGHT",
 	"COALITION_RADIUS_TILES",
+	# NpcLeaderAI タブ
+	"FLOOR_0_RANK_THRESHOLD",
+	"FLOOR_1_RANK_THRESHOLD",
+	"FLOOR_2_RANK_THRESHOLD",
+	"FLOOR_3_RANK_THRESHOLD",
+	"FLOOR_4_RANK_THRESHOLD",
+	"FLOOR_RETREAT_RATIO",
 	# EnemyLeaderAI タブ
 	"PARTY_FLEE_ALIVE_RATIO",
 	# UnitAI タブ

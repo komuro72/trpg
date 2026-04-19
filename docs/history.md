@@ -3,6 +3,38 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-19（FLOOR_RANK / FLOOR_RETREAT_RATIO の Config Editor 化）
+
+### 背景・目的
+装備 tier 戦力反映（本日実装）により、NPC の下層降下判定で参照する `FLOOR_RANK` の感覚が変わっている可能性がある。従来は純粋 rank_sum ベース（`{0:0, 1:8, 2:13, 3:18, 4:24}`）だが、tier 寄与が加算されて同じ基準値でも降下しやすくなっているはず。実プレイで調整可能にするため Config Editor に外出しする。
+
+あわせて、ハードコードだった「退避閾値」`FLOOR_RANK[current] / 2.0` の `/2.0` 部分も定数化する。
+
+### 実装変更
+- **`const FLOOR_RANK: Dictionary` 削除**：Dictionary は Config Editor 非対応のため、5 個の `var` 定数に分解
+- **新規定数（NpcLeaderAI カテゴリ・計 6 個）**：
+  - `FLOOR_0_RANK_THRESHOLD` = 0
+  - `FLOOR_1_RANK_THRESHOLD` = 8
+  - `FLOOR_2_RANK_THRESHOLD` = 13
+  - `FLOOR_3_RANK_THRESHOLD` = 18
+  - `FLOOR_4_RANK_THRESHOLD` = 24
+  - `FLOOR_RETREAT_RATIO` = 0.5（現フロア基準の半分未満で退避）
+- **npc_leader_ai.gd**：
+  - `_get_floor_threshold(floor_index) -> int` ヘルパ新設
+  - `_get_target_floor()` の基準値参照を全て `_get_floor_threshold()` 経由に変更
+  - `/ 2.0` ハードコードを `* GlobalConstants.FLOOR_RETREAT_RATIO` に置換
+- **Config Editor NpcLeaderAI タブ**：以前は定数 0 個のプレースホルダーだったが、6 定数で実体化
+
+### 値は据え置き
+本タスクは Config Editor 化のみ。**値は従来と完全に同じ**で挙動変化なし。実プレイベースの調整は次セッションで行う。
+
+### Komuro への動作確認依頼
+- F4 > NpcLeaderAI カテゴリに 6 定数が表示される
+- DebugWindow で NPC の `mv=stairs_down(Fx)` 表示が従来通り動作する
+- 下層降下挙動が変化なし（値据え置きのため）
+
+---
+
 ## 2026-04-19（戦力計算と戦況判断の統合・距離ベース連合・_all_members 伝播バグ修正）
 
 ### 背景

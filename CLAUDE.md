@@ -58,12 +58,17 @@
 - `assets/master/stats/*.json` — クラス・属性ステータス定義
 
 ### 次セッションで検討するタスク（優先順）
-1. **実プレイでのフィードバック収集**：2026-04-19 の大規模変更後の体感を確認。特に以下：
+1. **フロア基準値（`FLOOR_*_RANK_THRESHOLD` / `FLOOR_RETREAT_RATIO`）の実プレイ調整**：
+   - 装備 tier 戦力反映（2026-04-19）により同じ基準値でも降下しやすくなっているはず
+   - DebugWindow の `F(R+T)s` 表示で NPC の戦力推移を観察
+   - F1〜F4 の基準値を実プレイベースで調整
+2. **実プレイでのフィードバック収集**：2026-04-19 の大規模変更後の体感を確認。特に以下：
    - アイテム事前生成機構の動作（フロアごとの出現傾向・命名テイスト）
    - Config Editor Effect カテゴリの編集で操作感が変わるか
    - 解像度を変えた際の UI 追従（飛翔体・降下エフェクト）
-2. **Phase 14 バランス調整**（CLAUDE.md「Phase 14 バランス調整の事前情報」参照）
-3. **残りの棚卸し候補**（CLAUDE.md「要調査・要整理項目」参照）：
+   - 戦力計算の距離ベース連合（`COALITION_RADIUS_TILES`）の体感
+3. **Phase 14 バランス調整**（CLAUDE.md「Phase 14 バランス調整の事前情報」参照）
+4. **残りの棚卸し候補**（CLAUDE.md「要調査・要整理項目」参照）：
    - `PlayerController._spawn_heal_effect` のデッドコード判定
    - `hero.json` の扱い整理
    - `BUST_SRC_*` の比率化
@@ -740,7 +745,7 @@ rank値: C=0, B=1, A=2, S=3
 ### ファイル構成
 - `assets/master/config/constants.json` … ユーザー編集中の値（シンプル key:value）
 - `assets/master/config/constants_default.json` … デフォルト値＋メタ情報（value / type / category / min / max / step / description）
-- 現在 **約 48 個**の定数を外出し済み。Character（17）/ PartyLeader（11）/ EnemyLeaderAI（1）/ UnitAI（7）/ SkillExecutor（1）/ Effect（11）の各タブに配置。NpcLeaderAI タブは定数 0 個（将来の NPC 固有定数追加用プレースホルダー）。未登録の定数が見つかった場合は運用ルール 1〜5 に従って追加する
+- 定数は Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / SkillExecutor / Effect / Item の各タブに配置。NpcLeaderAI タブは 6 定数（`FLOOR_0_RANK_THRESHOLD`〜`FLOOR_4_RANK_THRESHOLD` と `FLOOR_RETREAT_RATIO`）。未登録の定数が見つかった場合は運用ルール 1〜5 に従って追加する
 
 ### カテゴリ分類の原則
 新しい定数をどのカテゴリに所属させるかは、**ゲーム挙動・バランスへの影響の有無**で判断する：
