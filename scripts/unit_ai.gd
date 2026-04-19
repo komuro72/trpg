@@ -1795,8 +1795,12 @@ func _generate_heal_queue() -> Array:
 
 ## バフ行動キューを返す。special_skill 指示に従って判定する。
 ## バフを付与すべき状況でなければ空配列
+##
+## 防御バフは V スロット特殊攻撃のため敵（dark_priest 等）は発動しない（仕様）
 func _generate_buff_queue() -> Array:
 	if _member == null or _member.character_data == null:
+		return []
+	if not _member.is_friendly:
 		return []
 	if _member.character_data.buff_cost <= 0:
 		return []
@@ -1843,8 +1847,13 @@ func _should_use_special_skill() -> bool:
 
 ## 特殊攻撃（Vスロット）のキューを生成する。使うべきでない状況なら空配列を返す
 ## クラスの攻撃タイプに応じて、通常攻撃の代わりに特殊攻撃を使用する
+##
+## 敵（is_friendly=false）は Vスロット特殊攻撃を発動しない（仕様）。
+## dark-lord の炎陣は _update_dark_lord_behavior() のキュー外動作のため本関数の対象外
 func _generate_special_attack_queue(target: Character) -> Array:
 	if _member == null or _member.character_data == null:
+		return []
+	if not _member.is_friendly:
 		return []
 	if not _should_use_special_skill():
 		return []
@@ -2104,13 +2113,7 @@ func _generate_potion_queue() -> Array:
 ## インベントリからポーション種別を検索して返す（なければ null）
 ## kind: "hp" / "energy"（旧 "mp" / "sp" は "energy" として統合）
 func _find_potion_in_inventory(cd: CharacterData, kind: String) -> Variant:
-	# 後方互換: "mp" / "sp" が渡された場合は "energy" に正規化
-	if kind == "mp" or kind == "sp":
-		kind = "energy"
 	var effect_key := "restore_" + kind  ## "restore_hp" / "restore_energy"
-	var legacy_keys: Array[String] = []
-	if kind == "energy":
-		legacy_keys = ["restore_mp", "restore_sp"]  # 旧保存データ対応
 	for item_v: Variant in cd.inventory:
 		var item := item_v as Dictionary
 		if item == null:
@@ -2124,9 +2127,6 @@ func _find_potion_in_inventory(cd: CharacterData, kind: String) -> Variant:
 		var effect := item.get("effect", {}) as Dictionary
 		if effect.has(effect_key) and int(effect[effect_key]) > 0:
 			return item
-		for lk: String in legacy_keys:
-			if effect.has(lk) and int(effect[lk]) > 0:
-				return item
 	return null
 
 

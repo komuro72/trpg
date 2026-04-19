@@ -9,8 +9,7 @@ extends Node2D
 
 const EFFECT_IMAGE_PATH := "res://assets/images/effects/whirlpool.png"
 
-## 回転速度（rad/s）
-const ROT_SPEED: float = PI * 1.5  # 270°/秒
+## 回転速度は GlobalConstants.WHIRLPOOL_ROT_SPEED_DEG（度/秒）を参照
 
 ## フォールバック描画用の色
 const VORTEX_COLOR: Color = Color(0.3, 0.8, 1.0, 0.6)
@@ -36,7 +35,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	rotation += ROT_SPEED * delta
+	rotation += deg_to_rad(GlobalConstants.WHIRLPOOL_ROT_SPEED_DEG) * delta
 	if not _use_sprite:
 		queue_redraw()
 

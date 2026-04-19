@@ -278,8 +278,8 @@
     "value": 300.0
   },
   "PROJECTILE_SPEED": {
-    "category": "SkillExecutor",
-    "description": "飛翔体（矢・火弾・水弾・雷弾・水魔法）の移動速度（px/秒）。当たり判定は発射時点で確定しているため演出速度にのみ影響",
+    "category": "Effect",
+    "description": "飛翔体（矢・火弾・水弾・雷弾・水魔法）の移動速度（px/秒）。ダメージ判定は攻撃の瞬間に確定しており、本値は演出速度のみに影響",
     "max": 5000.0,
     "min": 100.0,
     "step": 100.0,
@@ -294,5 +294,177 @@
     "step": 0.5,
     "type": "float",
     "value": 3.0
+  },
+  "TURN_DELAY": {
+    "category": "Effect",
+    "description": "向き変更の tween 時間（秒）。キーを押してから実際に向きが変わるまでの遅延・操作感に直結",
+    "max": 1.0,
+    "min": 0.0,
+    "step": 0.05,
+    "type": "float",
+    "value": 0.15
+  },
+  "AUTO_CANCEL_FLASH": {
+    "category": "Effect",
+    "description": "ターゲット自動キャンセル時のフラッシュ長（秒）。ターゲットが射程外に出て自動キャンセルされた瞬間の視覚フィードバック",
+    "max": 1.0,
+    "min": 0.0,
+    "step": 0.05,
+    "type": "float",
+    "value": 0.25
+  },
+  "SLIDING_STEP_DUR": {
+    "category": "Effect",
+    "description": "スライディング 1 歩の演出秒数（game_speed で除算）。斥候 V スキルの体感速度",
+    "max": 0.5,
+    "min": 0.02,
+    "step": 0.02,
+    "type": "float",
+    "value": 0.12
+  },
+  "OUTLINE_WIDTH_FOCUSED": {
+    "category": "Effect",
+    "description": "フォーカス中ターゲットのアウトライン太さ（screen px）。現在選んでいる対象の視認性",
+    "max": 10.0,
+    "min": 0.5,
+    "step": 0.5,
+    "type": "float",
+    "value": 2.5
+  },
+  "OUTLINE_WIDTH_UNFOCUSED": {
+    "category": "Effect",
+    "description": "非フォーカスのターゲット候補アウトライン太さ（screen px）",
+    "max": 10.0,
+    "min": 0.5,
+    "step": 0.5,
+    "type": "float",
+    "value": 1.0
+  },
+  "TARGETED_MODULATE_STRENGTH": {
+    "category": "Effect",
+    "description": "ターゲット選択時の発光強度倍率（白光らせ係数）。1.0 = 通常色、1.5 = オーバーブライト",
+    "max": 3.0,
+    "min": 1.0,
+    "step": 0.1,
+    "type": "float",
+    "value": 1.5
+  },
+  "BUFF_EFFECT_ROT_SPEED_DEG": {
+    "category": "Effect",
+    "description": "防御バフバリア（緑六角形）の回転速度（度/秒）",
+    "max": 720.0,
+    "min": 0.0,
+    "step": 10.0,
+    "type": "float",
+    "value": 60.0
+  },
+  "WHIRLPOOL_ROT_SPEED_DEG": {
+    "category": "Effect",
+    "description": "無力化水魔法スタン時の渦の回転速度（度/秒）",
+    "max": 720.0,
+    "min": 0.0,
+    "step": 10.0,
+    "type": "float",
+    "value": 270.0
+  },
+  "PROJECTILE_SIZE_RATIO": {
+    "category": "Effect",
+    "description": "飛翔体の表示サイズ（GRID_SIZE 比）。速度とともに視認性に影響する演出パラメータ",
+    "max": 1.0,
+    "min": 0.3,
+    "step": 0.05,
+    "type": "float",
+    "value": 0.67
+  },
+  "DIVE_EFFECT_RADIUS_RATIO": {
+    "category": "Effect",
+    "description": "降下攻撃エフェクトの半径（GRID_SIZE 比）",
+    "max": 0.5,
+    "min": 0.1,
+    "step": 0.05,
+    "type": "float",
+    "value": 0.2
+  },
+  "ITEM_TIER_LOW_RATIO": {
+    "category": "Item",
+    "description": "アイテム段階「低」のステータス比率（対 _max）。例: power_max=30 × 0.33 = 10",
+    "max": 1.0,
+    "min": 0.0,
+    "step": 0.01,
+    "type": "float",
+    "value": 0.33
+  },
+  "ITEM_TIER_MID_RATIO": {
+    "category": "Item",
+    "description": "アイテム段階「中」のステータス比率（対 _max）",
+    "max": 1.0,
+    "min": 0.0,
+    "step": 0.01,
+    "type": "float",
+    "value": 0.67
+  },
+  "ITEM_TIER_HIGH_RATIO": {
+    "category": "Item",
+    "description": "アイテム段階「高」のステータス比率（対 _max）",
+    "max": 1.0,
+    "min": 0.0,
+    "step": 0.01,
+    "type": "float",
+    "value": 1.0
+  },
+  "FLOOR_0_1_BASE_TIER": {
+    "category": "Item",
+    "choices": ["low", "mid", "high"],
+    "description": "フロア 0〜1 の基準段階（最もよく出る段階）",
+    "type": "string",
+    "value": "low"
+  },
+  "FLOOR_1_2_BASE_TIER": {
+    "category": "Item",
+    "choices": ["low", "mid", "high"],
+    "description": "フロア 1〜2 の基準段階",
+    "type": "string",
+    "value": "mid"
+  },
+  "FLOOR_2_3_BASE_TIER": {
+    "category": "Item",
+    "choices": ["low", "mid", "high"],
+    "description": "フロア 2〜3 の基準段階",
+    "type": "string",
+    "value": "high"
+  },
+  "FLOOR_BASE_WEIGHT": {
+    "category": "Item",
+    "description": "基準段階の出現重み",
+    "max": 100,
+    "min": 0,
+    "step": 1,
+    "type": "int",
+    "value": 5
+  },
+  "FLOOR_NEIGHBOR_WEIGHT": {
+    "category": "Item",
+    "description": "基準 ±1 段階の出現重み",
+    "max": 100,
+    "min": 0,
+    "step": 1,
+    "type": "int",
+    "value": 2
+  },
+  "FLOOR_FAR_WEIGHT": {
+    "category": "Item",
+    "description": "基準 ±2 段階以上離れた段階の出現重み（0 なら出ない）",
+    "max": 100,
+    "min": 0,
+    "step": 1,
+    "type": "int",
+    "value": 0
+  },
+  "ITEM_TIER_POLICY": {
+    "category": "Item",
+    "choices": ["max", "min", "avg"],
+    "description": "2 ステータスからアイテム段階を判定する方法（max=高い方・min=低い方・avg=平均）",
+    "type": "string",
+    "value": "max"
   }
 }

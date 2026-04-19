@@ -1,13 +1,7 @@
 {
   "id": "dark-knight",
   "name": "ダークナイト",
-  "hp": 55,
-  "power": 14,
-  "skill": 18,
-  "physical_resistance": 12,
-  "magic_resistance": 4,
   "is_flying": false,
-  "rank": "A",
   "instant_death_immune": true,
   "chase_range": 10,
   "territory_range": 18,

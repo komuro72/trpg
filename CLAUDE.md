@@ -9,27 +9,70 @@
 ### 現在のフェーズ
 - Phase 13（パーティーシステム刷新）完了
 - Phase 14（Steam 配布準備）未着手
-- 現状は「リファクタリング・定数整理・設計明示化」の段階（2026-04-18 時点）
+- 現状は「リファクタリング・定数整理・設計明示化・legacy 一掃」の段階（2026-04-19 時点）
 
-### 最近の大きな変更（2026-04-18）
+### 最近の大きな変更
+
+#### 2026-04-19（本日の成果）
+- **バグ修正**：敵の V スロット特殊攻撃が誤発動する問題・戦闘メッセージで敵表示名が「斧戦士」等のクラス日本語名になる問題を修正（Phase B の `class_id = stat_type` 設定の副作用）
+- **アイテム事前生成機構の完成**：定数ベース事前生成（2 ステータス × 3 段階 = 9 パターン）× フロア重み選択方式を採用。`scripts/item_generator.gd` 新設・事前生成セット 9 ファイル（計 75 エントリ）を `assets/master/items/generated/` に配置
+- **Config Editor 機能拡張**：Effect カテゴリ新設（+11 定数）・Item カテゴリ新設（+9 定数）・トップレベル「アイテム」タブ新設（1 行 1 タイプ形式の横断表）・`string` 型（OptionButton / LineEdit）編集サポート追加
+- **画像サイズ設計是正**：`Projectile.SPRITE_REF_SIZE` / `DiveEffect.RADIUS` を GRID_SIZE 比率化（解像度追従）。`PROJECTILE_SPEED` を SkillExecutor → Effect カテゴリへ移動
+- **Legacy コード大量削除**（合計約 1,300 行以上）：
+  - Legacy LLM AI コード 5 クラス（BaseAI / EnemyAI / LLMClient / DungeonGenerator / GoblinAI）+ dead method
+  - 個別敵 JSON の legacy 6 フィールド × 16 ファイル
+  - アイテムマスター JSON の `{stat}_min` / `depth_scale`
+  - effect キー legacy フォールバック（`restore_mp/sp` × 5 ファイル）+ dead accessor 3 個
+  - GlobalConstants dead constants・`_crop_single_tile` stale 関数
+  - CLAUDE.md の LLM 参考仕様 3 セクション
+- **UI バグ修正**：装備補正値の表示で stats 辞書を固定キーでフィルタしていた 3 箇所を全キー反復方式に変更（block_right_front 等の欠落を解消）。ステータス画面の 3 防御強度行を常時表示に
+- **定数タブ**：Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / SkillExecutor / Effect / Item の 8 タブ構成（約 57 個の定数）
+
+#### 2026-04-18（前日の成果）
 - **SkillExecutor 抽出完了**：10 種スキル（heal / melee / ranged / flame_circle / water_stun / buff / rush / whirlwind / headshot / sliding）の Player/AI 計算を統一
 - **MP/SP を `energy` に統合**：内部データは単一フィールド、UI はクラスに応じて MP/SP 表示を切替
-- **ポーション刷新**：ヒールポーション（旧 HP ポーション）/ エナジーポーション（旧 MP・SP ポーション統合）
-- **定数タブの大再編**：Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / SkillExecutor の 6 タブ構成（約 38 個の定数）
-- **複数のハードコード問題を修正**：heal_mult 未適用 / water_stun の duration ハードコード / AI magician-water の水弾未判定 / water_stun の二重ダメージ等
+- **ポーション刷新**：ヒールポーション / エナジーポーション（MP/SP ポーション統合）
 
 ### 参照順序の推奨
-1. CLAUDE.md「アーキテクチャ方針」「パーティーシステムのアーキテクチャ」「AI と実処理の責務分離方針」
+1. CLAUDE.md「アーキテクチャ方針」「設計原則」「パーティーシステムのアーキテクチャ」「AI と実処理の責務分離方針」
 2. CLAUDE.md「要調査・要整理項目」で未完了タスクを把握
-3. `docs/` 配下の `investigation_*.md` で詳細な背景情報を参照
-4. 実装前に `docs/spec.md` で仕様詳細を確認
+3. `docs/history.md` の 2026-04-19 エントリ群で本日の経緯
+4. `docs/` 配下の `investigation_*.md` で詳細な背景情報
+5. 実装前に `docs/spec.md` で仕様詳細を確認
 
 ### コードベースの主要ファイル
-- `scripts/skill_executor.gd` — スキル計算の集約（2026-04-18 新設）
+- `scripts/skill_executor.gd` — スキル計算の集約（Player/AI 共通ロジック）
+- `scripts/item_generator.gd` — アイテム事前生成セットからのフロア重み選択（2026-04-19 新設）
+- `scripts/config_editor.gd` — F4 で開く定数・データエディタ（2026-04-19 にアイテムタブ追加）
 - `scripts/unit_ai.gd` — AI 個体行動（種族別にサブクラス継承）
 - `scripts/player_controller.gd` — プレイヤー操作
 - `scripts/character.gd` — キャラクター実体（状態変化・HP 管理）
 - `scripts/party_manager.gd` — パーティー管理（全 `party_type` で共通）
+
+### データ配置
+- `assets/master/items/*.json` — 各アイテムタイプの**ルール**（base_stats.{stat}_max）。Config Editor で編集
+- `assets/master/items/generated/*.json` — **個別アイテム**（事前生成セット・75 エントリ）。Claude Code が生成セットを手動作成／再生成する
+- `assets/master/config/constants.json` / `constants_default.json` — Config Editor の定数値とメタ情報
+- `assets/master/enemies/*.json` — 個別敵の固有項目のみ（legacy 6 フィールドは 2026-04-19 に削除）
+- `assets/master/classes/*.json` — 味方 7 + 敵固有 5 クラス定義
+- `assets/master/stats/*.json` — クラス・属性ステータス定義
+
+### 次セッションで検討するタスク（優先順）
+1. **実プレイでのフィードバック収集**：2026-04-19 の大規模変更後の体感を確認。特に以下：
+   - アイテム事前生成機構の動作（フロアごとの出現傾向・命名テイスト）
+   - Config Editor Effect カテゴリの編集で操作感が変わるか
+   - 解像度を変えた際の UI 追従（飛翔体・降下エフェクト）
+2. **「無」段階の導入**（`docs/history.md` 2026-04-19「無」段階導入の項参照）：
+   - low / mid / high → none / low / mid / high の 4 段階化
+   - 初期装備を tier="none" で生成セットに統合 → `dungeon_handcrafted.json` のベイク初期装備を廃止
+3. **Phase 14 バランス調整**（CLAUDE.md「Phase 14 バランス調整の事前情報」参照）
+4. **残りの棚卸し候補**（CLAUDE.md「要調査・要整理項目」参照）：
+   - `PlayerController._spawn_heal_effect` のデッドコード判定
+   - `hero.json` の扱い整理
+   - `BUST_SRC_*` の比率化
+   - エフェクト線幅系の GRID_SIZE 連動検討
+   - dark-lord のワープ・炎陣を SkillExecutor 経由へ
+   - エフェクト生成の一系統化
 
 ## ジャンル・コンセプト
 - 半リアルタイム進行（ターン制なし）。`world_time_running` フラグで AI タイマーを制御
@@ -107,9 +150,12 @@ assets/images/tiles/
 - 高解像度画像（1024x1024）は左上1/4を切り出して1セルに表示（_crop_single_tile）
 
 ## 使用アセットとライセンス
+> **「アセット」の定義**：ここに掲載する対象は「ネット取得素材」「サードパーティ製シェーダー」など、Komuro 管理範囲外の外部成果物に限る。プロシージャル描画クラス（HitEffect / HealEffect / BuffEffect 等）や自作シェーダー（outline.gdshader）は自作コードなので対象外。
+
 | アセット | 用途 | ライセンス | 帰属表示 |
 |---------|------|-----------|---------|
-| Kenney Particle Pack | ヒットエフェクト（hit_01〜06.png） | CC0（パブリックドメイン） | 不要 |
+| ~~Kenney Particle Pack~~ | ~~ヒットエフェクト（hit_01〜06.png）~~ | ~~CC0（パブリックドメイン）~~ | ~~不要~~ |
+| ※上記は当初採用 → 2026 年中にプロシージャル描画の `HitEffect` に完全移行済み（画像は未使用） | | | |
 | Kenney RPG Audio | slash / axe / dagger / arrow_shoot / room_enter / item_get | CC0（パブリックドメイン） | 不要 |
 | Kenney Impact Sounds | hit_physical / hit_magic / take_damage / stairs | CC0（パブリックドメイン） | 不要 |
 | Kenney Sci-fi Sounds | magic_shoot / flame_shoot / death | CC0（パブリックドメイン） | 不要 |
@@ -130,7 +176,7 @@ assets/images/tiles/
 - assets/master/enemies/：敵個体ごとのマスターデータ（JSON、16 種）
   - **個体固有項目のみ**: `id` / `name` / `is_undead` / `is_flying` / `instant_death_immune` / `chase_range` / `territory_range` / `behavior_description` / `projectile_type` / `sprites`
   - クラス項目（`attack_type` / `pre_delay` / `post_delay` 等）は個別 JSON には持たない。クラス JSON から起動時に注入する
-  - `hp` / `power` / `skill` 等の直書きステータスは legacy（`apply_enemy_stats()` で上書きされる）
+  - **数値ステータス（`hp` / `power` / `skill` / `physical_resistance` / `magic_resistance` / `rank`）は個別 JSON に持たない**（2026-04-19 物理削除済み）。`apply_enemy_stats()` が `enemy_list.json` の stat_type / rank / stat_bonus と `class_stats.json` / `enemy_class_stats.json` から算出する
 - assets/master/enemies/enemies_list.json：読み込む敵ファイルのパス一覧
 - assets/master/stats/class_stats.json：人間クラスのステータス定義
 - assets/master/stats/enemy_class_stats.json：敵固有クラスのステータス定義
@@ -258,6 +304,11 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
   - 悪い例：「○○がヒールポーションを使った（HP+30）」
 - 数値は原則として表示しない（ダメージ段階「小/中/大/特大」等の表現を使う）
 - アイテム名は統一表記を使う：ヒールポーション / エナジーポーション（旧 MPポーション / SPポーションは energy 統合により「エナジーポーション」に一本化）
+- **表示名の規則**（`Character._battle_name`）：
+  - 味方（player / npc）：`character_data.character_name`（個別名。例：「ヘレン」）
+  - 敵：`character_data.character_name`（個別敵 JSON の `name` = 種族名。例：「ホブゴブリン」「ゴブリン」）
+  - どちらも同じ `character_name` フィールドを参照する（`CharacterData.load_from_json` が JSON の `name` から取り込む）
+  - 敵にクラス日本語名（「斧戦士」等）は使わない（内部的な `class_id = stat_type` はあくまで挙動制御用。プレイヤー視点では種族名で統一）
 
 ### UI 用語の分離方針
 プレイヤー向け UI と開発者向けコード・デバッグ表示で用語を意図的に分離している：
@@ -266,6 +317,8 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
   - バトルメッセージ（キャラクター特定時）：同じくクラス種別で「MP を回復した」/「SP を回復した」に切替
   - アイテム名：「ヒール」「エナジー」のカタカナ
   - **アイテム効果の表記**：固定で「**MP/SP回復**」と両併記（ポーションを他メンバーに渡すこともあるため、閲覧中キャラのクラスで決め打ちしない）
+  - **装備補正値の表記**（同じ原則）：アイテムが持つ全 stats キーを閲覧中キャラのクラスに関係なく表示する。例：archer が「守りの剣」を所持していても `[威力+10, 右手防御+20]` と両方表示する。渡し先で有効な補正値が見えなくなるのを防ぐ
+  - **OrderWindow ステータス画面の防御強度 3 行**（右手／左手／両手）：常に全 3 行表示（キャラ素値・装備補正ともに 0 でも表示）。理由は同上
 - **内部データ**：`energy` / `max_energy` / `restore_energy` / `heal_cost` / `v_slot_cost` 等の英語表記で統一（開発者向け）
 - **デバッグ表示**（DebugWindow / Config Editor 等）：`energy` 表記のまま（プレイヤーには見えない）
 - **「エネルギー」というカタカナ表記はプレイヤー UI では使わない**（`エナジー` はアイテム名のみ使用）
@@ -295,6 +348,45 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 - キャラクターにPlayerController / AIControllerを差し替え可能な設計
 - Partyクラスを最初から用意し、将来の複数パーティー連携に備える
 - 仕様書はClaude Codeが作成・更新、人間が確認する運用
+
+## 設計原則（2026-04-19 確立）
+本日の大規模 legacy 一掃・データ構造整理を通じて確立された設計原則。今後の作業で迷ったときはここに立ち返る。
+
+### コード衛生管理
+- **「使っていないものは残さない」**：使われていない関数・定数・フィールドは物理削除する。コメントアウトや「将来のため」で残さない（残すなら理由と復活条件を明記）
+- **段階的削除の流れ**：(1) 参照調査（grep で確認）→ (2) 分類（ブロッカー / 相互参照 / コメント言及 / dead）→ (3) レビュー → (4) 物理削除 → (5) docs 更新
+- **legacy 互換フォールバック**：アセット側がクリーンならコード側も一掃する。アセット側で使われていない旧キーを「念のため」でコード側に残すのはアンチパターン
+
+### データ管理（Source of Truth の一元化）
+- **同じ情報を 2 箇所に持たない**：例：敵のステータスは `enemy_list.json` + class_stats から算出し、個別敵 JSON には持たせない
+- **ルール / 個別データの分離**：ルール（全体方針）は Config Editor 可能に。個別データは Claude Code が生成。例：アイテムの base_stats（ルール）vs generated/*.json（個別データ）
+- **JSON のキー保全**：編集時は `orig.duplicate(true)` で複製し、編集対象フィールドのみ上書き。他フィールドと登場順を保全
+
+### 定数管理（Config Editor のカテゴリ分類）
+- **ゲーム挙動・バランスに影響** → 担当クラス別カテゴリ（Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / SkillExecutor）
+- **視覚演出・フィーリング調整** → Effect カテゴリ（ゲーム挙動に影響しない）
+- **アイテム生成ルール** → Item カテゴリ
+- 判断に迷うケース：ダメージ判定が演出と独立している値（PROJECTILE_SPEED 等）は Effect
+
+### アイテム生成
+- **事前生成方式**：名前と補正値を一対一で固定する。同じ名前の装備は常に同じ stats（プレイヤーの記憶を助ける）
+- **定数ベース総当たり**：2 ステータス × 3 段階 = 9 パターンを網羅（盾は 3 パターン）
+- **フロア重み選択**：各フロアに基準段階を定め、距離重みで選択。境界フロアは隣接 2 帯の重みを合算
+- **ルール変更時は手動再生成**：Config Editor でルール（base_stats）を変えても、個別データ（generated/\*.json）は自動更新しない。命名の整合性を保つため Claude Code に再生成を依頼する
+
+### 画像サイズ（解像度追従）
+- **GRID_SIZE は viewport から動的計算**：解像度が変わっても視野範囲（縦 11 タイル）は固定・GRID_SIZE が比例
+- **画像元サイズを直書きで持たない**：(1) `tex.get_size()` で動的取得するか、(2) GRID_SIZE 比率として定義する
+- アンチパターン：`SPRITE_REF_SIZE = 64.0`（固定 px）→ 高解像度で相対的に小さくなる。代わりに `GRID_SIZE × RATIO` を使う
+
+### 命名制約
+- **根拠はキャラ画像生成プロンプト**：武器・防具の命名（片手剣・両手弓・軽装服 等）は画像で決まる形状に合わせる。両手剣・サーベル・タワーシールド等は形状差異 NG
+- **日本語・ダークファンタジー寄り**：漢字語彙で統一（カタカナ表記を避ける）。「ローブ」→「法衣」等
+- **画像生成プロンプト変更時は命名も見直す**：将来プロンプトが変わる場合の依存関係を明記
+
+### UI の表示原則
+- **アイテム関連表示は閲覧キャラのクラスで絞らない**：他メンバーに渡す操作があるため、アイテムの全 stats / effect を常に表示する
+- **stats 辞書は全キー反復**：固定キーリストでフィルタせず、将来の新ステータス追加に自動対応する
 
 ## パーティーシステムのアーキテクチャ
 
@@ -463,6 +555,13 @@ game_map
 - `slots.V.duration`：効果の持続秒数。無力化水魔法=スタン秒数、防御バフ=バフ秒数、炎陣=燃焼秒数（クラスごとに用途は異なるが、キーは統一）
 - `slots.V.tick_interval`：継続ダメージ攻撃のダメージ判定間隔（秒）。現状は炎陣（magician-fire）のみで使用
 - その他の用途固有パラメータは `slots.V` 直下の固有キーで表現（将来拡張）
+
+#### 敵の V スロット発動方針
+- **敵（`is_friendly=false`）は V スロット特殊攻撃を発動しない**。プレイヤー側の戦力分化を保つための設計判断
+- 例：hobgoblin（`stat_type="fighter-axe"`）は振り回しを使わず、dark_priest（`stat_type="healer"`）は防御バフを使わない
+- 実装：`UnitAI._generate_special_attack_queue()` と `_generate_buff_queue()` の冒頭で `_member.is_friendly == false` なら空配列を返す
+- **例外**：dark-lord の炎陣は `_update_dark_lord_behavior()` によるキュー外処理のため、上記の抑止対象外（ボス専用演出として維持）
+- ヒーラーの Z 行動（回復）や通常攻撃（Z スロット）は敵も使用可能
 
 ### 魔法使い（水）の仕様
 - クラスID：`magician-water`
@@ -638,21 +737,31 @@ rank値: C=0, B=1, A=2, S=3
 ### ファイル構成
 - `assets/master/config/constants.json` … ユーザー編集中の値（シンプル key:value）
 - `assets/master/config/constants_default.json` … デフォルト値＋メタ情報（value / type / category / min / max / step / description）
-- 現在 **約 38 個**の定数を外出し済み。Character（17）/ PartyLeader（11）/ EnemyLeaderAI（1）/ UnitAI（7）/ SkillExecutor（2）の各タブに配置。NpcLeaderAI タブは定数 0 個（将来の NPC 固有定数追加用プレースホルダー）。未登録の定数が見つかった場合は運用ルール 1〜5 に従って追加する
+- 現在 **約 48 個**の定数を外出し済み。Character（17）/ PartyLeader（11）/ EnemyLeaderAI（1）/ UnitAI（7）/ SkillExecutor（1）/ Effect（11）の各タブに配置。NpcLeaderAI タブは定数 0 個（将来の NPC 固有定数追加用プレースホルダー）。未登録の定数が見つかった場合は運用ルール 1〜5 に従って追加する
+
+### カテゴリ分類の原則
+新しい定数をどのカテゴリに所属させるかは、**ゲーム挙動・バランスへの影響の有無**で判断する：
+
+- **Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / SkillExecutor** → ゲーム挙動・バランスに影響する定数（HP 閾値・戦況判定比率・攻撃倍率・クリティカル率など）。担当クラスに応じて振り分け
+- **Effect** → 視覚演出・フィーリング調整用の定数（ゲーム挙動に影響しない）。エフェクトの時間・サイズ・回転速度、操作感（TURN_DELAY 等）、飛翔体の表示速度・サイズなど。調整してもゲームバランスは変わらない
+
+判断に迷うケース：**ダメージ判定が演出と独立しているもの**（例：PROJECTILE_SPEED は飛翔体が到着するより先に命中判定が確定しているため演出専用）は Effect。反対に、判定そのものに影響する値（例：CRITICAL_RATE_DIVISOR）は SkillExecutor 等の該当カテゴリ。
 
 ### トップレベルタブ
 - **定数** — `constants.json` / `constants_default.json` を編集
 - **味方クラス** — `assets/master/classes/` の人間系 7 ファイルを横断表で編集
 - **敵クラス** — `assets/master/classes/` の敵固有 5 ファイル（zombie / wolf / salamander / harpy / dark-lord）を横断表で編集（味方クラスタブと同構造・同描画ロジックを流用）
-- **敵一覧** — `enemy_list.json`（16 敵の stat_type / rank / stat_bonus）と個別敵 JSON の非 legacy フィールド（is_undead / is_flying / instant_death_immune / behavior_description / chase_range / territory_range）を一括編集
+- **敵一覧** — `enemy_list.json`（16 敵の stat_type / rank / stat_bonus）と個別敵 JSON のフィールド（name / is_undead / is_flying / instant_death_immune / behavior_description / chase_range / territory_range / projectile_type）を一括編集
 - **ステータス** — `assets/master/stats/class_stats.json` / `attribute_stats.json` を編集（2サブタブ：クラスステータス・属性補正）
-- **アイテム** — プレースホルダー
+- **アイテム** — `assets/master/items/*.json` の `base_stats`（各アイテムタイプの補正ステータスルール）を編集。**1 行 1 タイプ形式**の横断表（9 行・敵一覧タブと同じ UI パターン）。各行は「タイプ名 / スロット 1〜4（OptionButton + max）/ 参考情報（category と allowed_classes）」で構成。保存完了後に「個別アイテム（generated/\*.json）は自動更新されない・Claude Code に再生成依頼」の告知ダイアログを表示
 
 ### 「定数」タブのカテゴリ
-コード上のクラス名で分類：
+コード上のクラス名・用途で分類：
 
-- Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / SkillExecutor / Unknown（未分類検出用）
-- タブ順は陣営・階層順（上位概念 → 下位概念）：リーダー層（PartyLeader → NpcLeaderAI → EnemyLeaderAI）→ 個体層（UnitAI）→ 実処理層（SkillExecutor）
+- Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / SkillExecutor / **Effect** / **Item** / Unknown（未分類検出用）
+- タブ順は陣営・階層順（上位概念 → 下位概念）：リーダー層（PartyLeader → NpcLeaderAI → EnemyLeaderAI）→ 個体層（UnitAI）→ 実処理層（SkillExecutor）→ 視覚演出（Effect）→ アイテム生成方針（Item）
+- **Effect カテゴリ**（2026-04-19〜）：視覚演出・操作感・視認性に影響する定数。エフェクトクラス（BuffEffect / WhirlpoolEffect 等）や操作系（TURN_DELAY / AUTO_CANCEL_FLASH / SLIDING_STEP_DUR / OUTLINE_WIDTH_* / TARGETED_MODULATE_STRENGTH / *_ROT_SPEED_DEG など）。バランスではなくフィーリング調整用
+- **Item カテゴリ**（2026-04-19〜）：アイテム事前生成セットの選択方針を制御する 9 定数。`ITEM_TIER_LOW/MID/HIGH_RATIO`（段階値の比率）・`FLOOR_X_Y_BASE_TIER`（フロア基準段階・OptionButton で "low"/"mid"/"high" 選択）・`FLOOR_BASE/NEIGHBOR/FAR_WEIGHT`（距離別の出現重み）・`ITEM_TIER_POLICY`（OptionButton で "max"/"min"/"avg" 選択）。個別アイテムの編集はフェーズ2 のトップレベル「アイテム」タブで扱う想定
 
 タブ順は `config_editor.gd` の `TABS` 配列で定義。追加したい場合は配列末尾に追記する。
 
@@ -661,13 +770,19 @@ rank値: C=0, B=1, A=2, S=3
 - **敵クラス**：5 敵固有クラス（zombie / wolf / salamander / harpy / dark-lord）を横に並べた横断表。味方クラスタブと同構造・同描画関数（`_build_class_tab_common` / `_build_class_grid`）を流用し、対象クラス ID 配列だけ差し替え
 
 ### 「敵一覧」タブ
-- 行 = 16 敵、列 = 敵ID（固定ラベル）/ rank / stat_type / is_undead / is_flying / instant_death_immune / behavior_description / chase_range / territory_range / stat_bonus × 6 枠
-- **rank / stat_type / stat_bonus キー**は `OptionButton`（ドロップダウン）、**bool 3 フィールド**は `CheckBox`、**文字列・数値**は `LineEdit`
+- 行 = 16 敵、列 = 敵ID（固定ラベル）/ **name** / rank / stat_type / is_undead / is_flying / instant_death_immune / behavior_description / chase_range / territory_range / **projectile_type** / stat_bonus × 6 枠
+- **rank / stat_type / projectile_type / stat_bonus キー**は `OptionButton`（ドロップダウン）、**bool 3 フィールド**は `CheckBox`、**文字列・数値**（name / behavior_description / chase_range / territory_range）は `LineEdit`
+- **name**：個別敵 JSON の `name` フィールド。プレイヤー向けの表示名（戦闘メッセージ・UI 等）。基本的に種族名の日本語表記（例：「ゴブリン」「ホブゴブリン」）。`Character._battle_name()` が参照する source of truth
+- **projectile_type**：`""`（空文字列）= attack_type から自動判定、`"thunder_bullet"` = 雷弾（demon のみ）。UI 上は空文字列を "(自動)" と表示する（`PROJECTILE_TYPE_AUTO_LABEL`）。新しい弾種を追加した場合は `ENEMY_PROJECTILE_CHOICES` 配列に追記する
 - stat_bonus は 6 枠（`ENEMY_STAT_BONUS_SLOTS`）。各枠はキー OptionButton ＋ 値 LineEdit の横並び。`---` 選択時は値編集欄を無効化
 - 起動時に既存 stat_bonus を 6 枠の先頭から展開。保存時に `---` 以外の枠を辞書化して書き戻し
-- **保存は 2 つのファイル系統に分かれる**：`enemy_list.json`（rank / stat_type / stat_bonus 用）と個別敵 JSON 16 ファイル（その他）。dirty なファイルのみ書き戻し
+- **保存は 2 つのファイル系統に分かれる**：`enemy_list.json`（rank / stat_type / stat_bonus 用）と個別敵 JSON 16 ファイル（name / projectile_type / bool 3 / behavior_description / chase_range / territory_range）。dirty なファイルのみ書き戻し
 - 個別敵 JSON への書き戻しは **元 JSON のフィールド有無を尊重**：元にあったフィールドは更新、元になかったフィールドはデフォルト値から変化した場合のみ追加（legacy フィールドの構造を壊さない）
 - 新ステータス・新敵の追加は Config Editor の守備範囲外（コード変更を伴うため）
+- **意図的に「敵一覧」タブで編集対象外としているフィールド**（個別敵 JSON にあるが表示しない）：
+  - `id` — 識別子（Label として既に表示）
+  - `sprites` — 画像パスの辞書構造。専用のアセット管理が必要で Config Editor の守備範囲外
+- **2026-04-19 に物理削除した legacy フィールド**（個別敵 JSON から全 16 ファイル削除済み・コード側の読み込みも `CharacterData.load_from_json` から削除済み）：`hp` / `power` / `skill` / `physical_resistance` / `magic_resistance` / `rank`。これらは `apply_enemy_stats()` が `enemy_list.json` と `class_stats.json` / `enemy_class_stats.json` から毎回算出する仕組みのため、個別 JSON に持つ必要がなかった
 - ネストされた `slots.Z.*` / `slots.V.*` は `Z_*` / `V_*` に平坦化して行に表示（保存時に元の階層へ戻す）。`slots.X` / `slots.C` は表示せず、保存時にそのまま維持
 - パラメータのグループ分け（`CLASS_PARAM_GROUPS` 配列）：基本 / リソース / 特性 / Zスロット / Vスロット / その他
 - 各セルは LineEdit（文字列入力）。保存時に元 JSON の値の型（int / float / bool / string）に合わせて変換。変換失敗時は保存を中止しエラー表示
@@ -686,7 +801,7 @@ rank値: C=0, B=1, A=2, S=3
 
 ### 定数追加時の運用ルール（「定数」タブ）
 1. `GlobalConstants.gd` に `const`/`var` を追加するときは、`constants_default.json` にも同時に追加する
-2. `category` フィールドは既存6タブ（Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / SkillExecutor）のいずれかを指定
+2. `category` フィールドは既存8タブ（Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / SkillExecutor / Effect / Item）のいずれかを指定
 3. 上記7タブに属さない場合は `config_editor.gd` の `TABS` 配列にタブを追加することを検討
 4. カテゴリ未定義・不明な値の定数は Unknown タブに自動振り分け（起動時に push_warning で警告）
 5. 定期的に Claude Code に「外出しされていない定数」の棚卸し指示を出す
@@ -698,9 +813,30 @@ rank値: C=0, B=1, A=2, S=3
 3. Config Editor で編集した結果は `assets/master/classes/*.json` に直接書き戻されるので、そのまま git commit すれば差分管理できる
 
 ### 「ステータス」編集時の運用ルール
-1. Config Editor は**既存ステータスの値編集のみ**。新ステータス追加はコード変更（CharacterData / 生成ロジック等）を伴うので別タスクで実施
+1. Config Editor は**既存ステータスの値編集のみ**。新ステータス追加はコード変更（CharacterData / 生成ロジック等)を伴うので別タスクで実施
 2. クラスステータスは「base / rank」を 2 つの LineEdit 横並びで編集。属性補正は 1 LineEdit / セル
 3. `class_stats.json` のクラス順・ステータス順、`attribute_stats.json` のカテゴリ順・ステータス順は元 JSON のキー順を保持（`sort_keys=false`）
+
+### 「アイテム」タブ（2026-04-19〜）
+- **目的**：各アイテムタイプが**どのステータスをどの範囲で補正するか**のルール（base_stats）を編集する。個別アイテム（`generated/*.json`）は編集対象外
+- **UI 形式**：**1 行 1 タイプの横断表**（敵一覧タブと同じパターン）。9 行（sword / axe / dagger / bow / staff / armor_plate / armor_cloth / armor_robe / shield）。消耗品（potion_heal / potion_energy）は対象外
+- **各行の列構成**：
+  - タイプ名（Label）
+  - スロット × 4 枠：それぞれ OptionButton（`---` または 13 ステータス）＋ max の LineEdit（`---` 選択時は無効化）
+  - 参考情報（Label・編集不可）：`category / allowed_classes` を小さく表示
+- **2026-04-19 に legacy 削除**：`{stat}_min` / `depth_scale` は現行生成仕様（`_max × tier_ratio`）で未参照のため物理削除。旧 UI にあった depth_scale 列と min 列は撤去済み
+- **スロット 4 枠は仕様上の上限**、通常は 2〜3 までの運用を想定
+  - 理由：登録数 N に対し、生成される組み合わせは `C(N, 2) × 9` パターン（N=2 で 9, N=3 で 27, N=4 で 54）
+  - 同時補正数は**最大 2**（個別アイテム生成ロジック側の仕様・今回のスコープ外）
+- **保存時の動作**：
+  - dirty なサブタブのみ書き戻し（`assets/master/items/{item_type}.json` の `base_stats` を更新）
+  - 他フィールド（`item_type` / `category` / `allowed_classes` / `depth_scale` / `effect` / `image` / `name`）は `orig.duplicate(true)` で保全
+  - 保存成功時のみ「Claude Code に再生成を依頼」の告知ダイアログを表示
+- **個別アイテムは自動更新しない**：命名の整合性を保つため、ルール変更時に `generated/*.json` の自動再生成はしない。Komuro が Claude Code に明示的に再生成を依頼する運用
+- **定数 Item カテゴリとの役割分担**：
+  - 定数タブ > Item カテゴリ（既実装・9 定数）：全体の生成方針（tier 比率・フロア基準段階・重み等）
+  - トップレベル「アイテム」タブ（本タスク）：タイプ別のルール（base_stats）
+  - 個別データ（generated/\*.json）：ルールから Claude Code が手動生成
 
 ### ConfigEditor 対象の `var` 化
 - 対象の定数は `const` ではなく `var` で宣言する必要がある（Autoload 起動時に `_load_constants()` が外部 JSON から値を代入するため）
@@ -820,18 +956,47 @@ rank値: C=0, B=1, A=2, S=3
 - 空白のパラメータは補正対象外
 - 補正対象の各パラメータは独立してランダムに決定する（0〜上限値の連続値）
 
-### 装備の名前生成
-- 補正値を決定した後、その特徴を反映した名前をClaude Codeがマップ生成時に付ける
-- 命名の基準：
-  - 威力が防御強度の2倍以上 → 攻撃系の名前（例：「鋭利な剣」「業物」）
-  - 防御強度が威力の2倍以上 → 防御系の名前（例：「守りの剣」「頑丈な剣」）
-  - それ以外 → バランス系の名前（例：「均整の剣」「騎士の剣」）
-  - 防具は物理耐性と魔法耐性の比率で同様に命名
-- 名前と補正値は両方プレイヤーに表示する
+### 装備の名前生成（定数ベース事前生成方式・2026-04-19〜）
+**方針**：名前と補正値を一対一で固定する事前生成セット方式。ランタイムでは乱数生成せず、事前定義された候補から重み付き選択する。
+
+**事前生成セットのデータ構造**（`assets/master/items/generated/{item_type}.json`）:
+```json
+{
+  "sword": [
+    { "name": "兵士の剣", "stats": { "power": 10, "block_right_front": 10 }, "tier": "low" },
+    { "name": "断罪の魔剣", "stats": { "power": 30, "block_right_front": 10 }, "tier": "high" },
+    ...
+  ]
+}
+```
+
+- **総当たり 9 パターン**：各装備タイプは 2 ステータスを低・中・高の 3 段階で組み合わせた 9 パターンを網羅（単一ステータスの盾のみ 3 パターン）
+- **tier 判定**：`ITEM_TIER_POLICY="max"` の場合、2 ステータスの高い方を採用（power中 × block高 → 高段階）
+- **段階値の計算**：`_max × ITEM_TIER_{LOW|MID|HIGH}_RATIO`（デフォルト 0.33 / 0.67 / 1.0）
+- **ランダム補正なし**：同じ名前の装備は常に同じ stats（プレイヤーが「鋭利な剣」を見つけたら値も固定）
+- `category` フィールドは JSON に持たない（power と block の値から計算で判定可能・特殊ステータス追加時の柔軟性確保）
+
+**命名の基準**（CLAUDE.md 初期仕様を維持）:
+- 威力が防御強度の 2 倍以上 → 攻撃系（「鋭利な剣」「業物」）
+- 防御強度が威力の 2 倍以上 → 防御系（「守りの剣」「頑丈な剣」）
+- それ以外 → バランス系（「均整の剣」「騎士の剣」）
+- 防具は物理耐性と魔法耐性の比率で同様に命名
+- **命名制約の根拠**：キャラ画像生成プロンプトで決まる形状（片手剣／両手弓／軽装服 等）。両手剣・サーベル・タワーシールド等 NG。カタカナ表記を避ける（漢字語彙で統一）
+
+**ランタイム選択ロジック**（`scripts/item_generator.gd`）:
+- `ItemGenerator.generate(item_type, floor_index)` が事前生成セット全エントリから重み付き選択
+- 重み = 「各フロア帯の基準段階（FLOOR_X_Y_BASE_TIER）からの距離」で計算（基準=FLOOR_BASE_WEIGHT / 隣接=FLOOR_NEIGHBOR_WEIGHT / 遠隔=FLOOR_FAR_WEIGHT）
+- フロア境界（1 / 2）では隣接する 2 帯の重みを合算して滑らかな遷移を実現
+
+**マスター JSON との関係**：
+- `assets/master/items/*.json` の `base_stats.{stat}_max` のみを段階値計算の参考に使う（ランタイムは非参照・Claude Code が生成セット作成時に参照）
+- ~~`base_stats.{stat}_min`~~ と ~~`depth_scale`~~ は **2026-04-19 に物理削除済み**（ランタイム非参照のため legacy 扱い）
+- 将来、特殊ステータス（skill / critical_rate 等）を追加する場合は `stats` 辞書に任意キーを追加できる（ItemGenerator は辞書ごとコピー）
 
 ### 装備の生成タイミングと強さ
-- 敵配置時に装備を生成・確定する
-- 敵パーティーの強さ（フロア深度・敵ランク）に応じて補正値の期待値が上がる
+- 敵配置時点ではアイテム種別のみ確定（`dungeon_handcrafted.json` の `enemy_party.items` は `item_type` 文字列リスト）
+- 部屋制圧時に ItemGenerator が呼び出されて具体値を生成
+- フロア深度に応じて低/中/高段階の出現比率が変わる（序盤は低段階中心・終盤は高段階中心）
 
 ## アイテムシステム
 
@@ -1202,68 +1367,6 @@ rank値: C=0, B=1, A=2, S=3
 ### 方向と防御
 - 攻撃方向によるダメージ倍率は廃止。方向は防御判定の可否にのみ影響する（詳細は「命中・被ダメージ計算」節を参照）
 
-### LLMへ渡すデータ構造（参考仕様・未使用）
-> **注意**: Phase 2-3 でルールベースAIに移行済み。以下は当初設計の参考仕様として残す。
-
-```json
-{
-  "party": {
-    "members": [
-      {
-        "id": "goblin_1",
-        "position": {"x": 10, "y": 5},
-        "facing": "left",
-        "hp": 30,
-        "condition": "healthy",
-        "status": "ready"
-      }
-    ]
-  },
-  "visible_characters": [
-    {
-      "type": "player",
-      "position": {"x": 5, "y": 3},
-      "facing": "right",
-      "hp": 80,
-      "condition": "healthy"
-    }
-  ],
-  "current_actions": { },
-  "remaining_queue": [ ]
-}
-```
-
-### LLMの返答形式（参考仕様・未使用）
-> **注意**: Phase 2-3 でルールベースAIに移行済み。以下は当初設計の参考仕様として残す。
-
-- パーティー単位で行動シーケンスを返す
-- 移動は絶対座標ではなく目標キャラクターへの相対位置で指定
-```json
-{
-  "actions": [
-    {
-      "id": "goblin_1",
-      "sequence": [
-        { "action": "move", "target": "player", "relative_position": "right_side" },
-        { "action": "attack", "target": "player", "attack_type": "physical" },
-        { "action": "move", "target": "player", "relative_position": "up_side" }
-      ]
-    }
-  ]
-}
-```
-- relative_positionの種類：down_side／up_side／left_side／right_side／adjacent
-
-### LLM呼び出し方針（参考仕様・未使用）
-> **注意**: Phase 2-3 でルールベースAIに移行済み。以下は当初設計の参考仕様として残す。
-
-- LLMは非同期で常に動かし続ける
-- キューが残り少なくなったタイミングでリクエスト送信
-- 返ってきたシーケンスは既存キューと実行中アクションを即座に置き換えて開始する（追加方式ではなく置き換え方式）
-- moveアクションの目標座標は毎タイル移動後に再計算してターゲットを追従する
-- 攻撃を受けたなど状況が大きく変わった場合は強制再生成（`notify_situation_changed()`、現在は未接続）
-- LLMには現在の状況に加えて実行中・キュー残りのアクションも渡す
-
 ## リポジトリ
 - GitHub: https://github.com/komuro72/trpg
 - ブランチ: master
@@ -1309,8 +1412,19 @@ rank値: C=0, B=1, A=2, S=3
   - [x] NpcLeaderAI の撤退ロジック追加（CombatSituation.CRITICAL 時に FLEE に切り替え。SAFE 復帰で EXPLORE に戻る）
   - [x] special_skill 指示のAI接続（strong_enemy / disadvantage 等の条件判定。PowerBalance / HpStatus で判定。_generate_special_attack_queue で発動）
 - NpcLeaderAI のアイテム収集方針の動的切り替え：目標フロアに到達している場合（余裕がある状態）、item_pickup を "passive"（近くなら拾う）から "aggressive"（積極的に拾う）に切り替える。装備強化のために能動的にアイテムを回収する行動
-- **アイテムのランダム生成機構**：フロア深度に応じた補正値のランダム生成が未実装。`assets/master/items/*.json` のマスターデータ（`base_stats` の `_min`/`_max` ペア、`depth_scale`）は用意済みだがランタイムから参照されていない。実装時には下記「effect キー名の不整合」も合わせて対応
-- **Config Editor のアイテムタブ**：アイテムランダム生成機構の実装とセットで実装予定（単独実装ではゲーム反映が確認できないため保留）
+- ✅ **アイテムのランダム生成機構**：2026-04-19 に完了（詳細は [docs/history.md](docs/history.md) 参照）
+  - 最終採用方式：**定数ベース事前生成（総当たり 9 パターン）× フロア重み選択**
+  - 各装備 9 パターン（盾は 3）を `assets/master/items/generated/*.json` に事前定義（計 75 エントリ）
+  - `scripts/item_generator.gd` がフロアに応じた重み付き選択を実装
+  - Config Editor「Item」カテゴリで 9 定数（tier 比率・フロア基準段階・距離重み・tier 判定方針）を調整可能
+  - `effect` キー名の不整合（`restore_mp`/`restore_sp` 旧キー）も同時に一掃完了
+- ✅ **Config Editor のアイテムタブ**：2026-04-19 に完了。ただし当初設計した「`generated/*.json` の個別エントリ編集 UI」から「タイプ別のルール（`base_stats`）編集 UI」に設計変更。個別アイテムは Claude Code が手動生成する運用（命名の整合性を保つため）。詳細は [docs/history.md](docs/history.md) 参照
+- **「無」段階の導入（次タスク候補）**：
+  - 現在の 3 段階（low / mid / high）に「無」（補正値 0）を追加して 4 段階化
+  - 「最大 2 補正」仕様が自然に表現される（残りスロットは「無」＝ 0）
+  - 初期装備 = 全ステータス「無」の装備として生成セットに統合（現在の `dungeon_handcrafted.json` のベイク初期装備を廃止）
+  - tier="none" のアイテムはドロップに出ない（初期装備専用）。フロア出現重みから tier="none" を除外（または `FLOOR_NONE_WEIGHT = 0` で明示）
+  - 定数追加・ItemGenerator 選択ロジック改修・個別データ再生成が必要
 - **NPC フロア遷移判定のための戦況判断拡張（検討）**：`NPC_HP_THRESHOLD` / `NPC_ENERGY_THRESHOLD` 廃止により、現在は HpStatus のパーティー平均HP率で判定している。ただし元の「最低HP率」ベースや「エネルギー率」ベースの判定は NPC 行動として意味があるため、戦況判断（`_evaluate_combat_situation`）の副情報として最低HP指標・エネルギー指標を追加することを検討。別系統の判定を走らせず、戦況判断に一元化する設計方針を維持する。
 
 ### Phase 14 バランス調整の事前情報
@@ -1343,14 +1457,28 @@ rank値: C=0, B=1, A=2, S=3
 ## 要調査・要整理項目
 バグ可能性・構造整理・命名整理など、実装ではなく調査系のタスク：
 
-- **legacy フィールドの棚卸し**：
-  - 個別敵 JSON の `hp` / `power` / `skill` / `physical_resistance` / `magic_resistance` / `rank`（`apply_enemy_stats` で上書きされる legacy）
+- **legacy フィールドの棚卸し**（継続運用）：
+  - ✅ 個別敵 JSON の `hp` / `power` / `skill` / `physical_resistance` / `magic_resistance` / `rank` → 2026-04-19 に物理削除完了（`CharacterData.load_from_json` の読み出しも同時削除）
+  - 次の棚卸し候補：
+    - **hero.json の扱い整理**：現行コードでは `CharacterGenerator.generate_character` が使われ、`load_from_json(hero.json)` 経由では読まれない。主人公の初期データとしてどう位置付けるか（完全に削除するか、`CharacterGenerator` のテンプレートにするか等）の方針決定
+    - `assets/master/classes/*.json` に潜むかもしれない使われていない定義
+    - クラス JSON / ステータス JSON / 個別敵 JSON の未参照キーがないか横断調査
   - 他にも潜んでいる可能性あり。定期的に Claude Code に全体棚卸しを依頼する運用
 - **敵ヒーラー（dark_priest）の回復が機能しているか動作確認**：2026-04-18 の energy 統合で `apply_enemy_stats` が `max_energy = stats.energy` を設定するようになったため、dark_priest も通常の魔法クラス同様に回復・バフが撃てるはず。実機で確認したら本項目は削除
 - **「敵クラス」vs「種族」の概念整理**：Excel 仕様書では「敵クラス」、コード／AI 実装では「種族」（GoblinLeaderAI 等）と呼んでいる。現状は動作に問題ないが用語の使い分けがあいまいで将来混乱の元になる可能性。整理したい
 - **ファイル名のハイフン／アンダースコア統一**：個別敵 JSON は `dark_lord.json` 等アンダースコア、クラス JSON は `dark-lord.json` 等ハイフン。統一するなら個別敵 JSON をハイフンに寄せる。ファイル名変更はコード側の参照も書き換えが必要
 - **`enemy_list.json` と `enemies_list.json` の紛らわしい命名**：役割が全く違う（前者はステータスタイプ参照マップ、後者は敵ファイルパス一覧）のにファイル名が酷似。片方リネーム候補
 - **Config Editor やツール類での設定変更の git 反映方針**：JSON ファイル・画像素材などバイナリファイルの、自動 commit/push の是非を含めた運用ルール検討が必要
+- ✅ **画像サイズ設計是正**：2026-04-19 に完了。詳細は [docs/history.md](docs/history.md) 参照
+  - A1: `Projectile.SPRITE_REF_SIZE = 64.0` → `GlobalConstants.PROJECTILE_SIZE_RATIO = 0.67`（GRID_SIZE 比率・Config Editor Effect カテゴリ）
+  - D1: `SPRITE_SOURCE_WIDTH` / `SPRITE_SOURCE_HEIGHT` dead constants を削除（未使用だった）
+  - D2: `_crop_single_tile` 関数削除（実装が no-op で存在意義なし。呼び出し側で直接 tex を渡す）。git 履歴：2026-04-11 の Phase 13-6 コミット（f9162ff）で 1/4 切り出し → no-op に変更されていた
+  - D3: `DiveEffect.RADIUS = 18.0` → `GlobalConstants.DIVE_EFFECT_RADIUS_RATIO = 0.2`（GRID_SIZE 比率・Config Editor Effect カテゴリ）
+  - PROJECTILE_SPEED を SkillExecutor → Effect カテゴリに移動（演出専用と判明したため）
+  - **設計原則の確立**：GlobalConstants は「画像元サイズと GRID_SIZE の関係を直書きで持たない」方針。必要な値は (1) `tex.get_size()` で動的取得、または (2) GRID_SIZE 比率として定義する
+- **BUST_SRC_* の比率化（次回棚卸し候補・優先度低）**：`message_window.gd` の `BUST_SRC_X/Y/W/H = 256/0/512/512` は現状 1024x1024 前提で書かれており、`tex_size.x >= 1024` のガード付きで動作している。将来 2048x2048 のアセットを追加する場合に備えて比率（0.25 / 0 / 0.5 / 0.5）× tex_size に書き直すのが安全だが、現状問題なく動作するため優先度低
+- **エフェクトの線幅系の GRID_SIZE 連動検討（次回棚卸し候補・優先度低）**：`HitEffect.RING_WIDTH = 2.5` / `HealEffect.RING_WIDTH = 2.5` / `BuffEffect.LINE_WIDTH = 2.0` などの「線の太さ px」が固定値で、4K 等の高解像度ディスプレイで相対的に細くなる。視覚的問題は小さいが気になる場合は GRID_SIZE 比率化を検討
+- **Config Editor 全タブの表示フィールド棚卸し（定期運用）**：各タブ（定数 / 味方クラス / 敵クラス / 敵一覧 / ステータス）の表示対象が元データの全フィールドを網羅しているか、意図的に除外しているフィールドに理由付けがあるかを定期的に確認する。Config Editor の重要な役割の一つは「定数・データの重複や不足をチェックできるようにする」こと。Config Editor から不可視のフィールドは設定ミス・仕様変更の影響が見えにくくなる。2026-04-19 に「敵一覧」タブの棚卸しを実施（name / projectile_type を追加）。味方クラス・敵クラス・ステータス各タブは次回以降
 - **Player 側と AI 側の計算ロジック統一（SkillExecutor 抽出）** — ✅ 完了（2026-04-18）
   全 10 種類の特殊行動を `SkillExecutor` クラス（`scripts/skill_executor.gd`）に集約済み。詳細は CLAUDE.md「AI と実処理の責務分離方針」→「実処理の共通化（完了）」セクションを参照。今後の新スキル追加時は SkillExecutor に `execute_*()` を実装し、Player / AI の両方から呼ぶこと。
   残課題：
@@ -1358,14 +1486,10 @@ rank値: C=0, B=1, A=2, S=3
 
 - **エフェクト生成の一系統化**：視覚エフェクトの生成が「Character 経由」と「SkillExecutor 内で直接 `.new()`」の 2 系統混在。詳細は CLAUDE.md「AI と実処理の責務分離方針」→「エフェクト生成の方針（段階移行中）」セクションおよび `docs/investigation_skill_executor_constants.md` を参照。ゲーム動作には影響なし・別タスクで段階的に対応
 
-- **Legacy LLM AI コードの棚卸し削除**：LLM 駆動 AI 時代の遺産として、以下の未使用コード約 1221 行がコードベースに残存：
-  - `BaseAI`（547 行）
-  - `EnemyAI`（401 行）
-  - `LLMClient`（109 行）
-  - `DungeonGenerator`（119 行）
-  - `GoblinAI`（45 行）
-
-  完全未使用なので削除してもゲーム動作に影響なし。ただし削除前に本当に参照がないか確認が必要。作業量 S（30〜60 分）。詳細は `docs/investigation_class_structure.md` 参照
+- ✅ **Legacy LLM AI コードの棚卸し削除**：2026-04-19 に完了。以下 5 クラス（約 1,221 行）と関連 dead code を物理削除：
+  - `BaseAI`（547 行）/ `EnemyAI`（401 行）/ `LLMClient`（109 行）/ `DungeonGenerator`（119 行）/ `GoblinAI`（45 行）
+  - 併せて `CharacterData.create_hero()` / `create_goblin()` dead method も削除
+  - 詳細は [docs/history.md](docs/history.md) の 2026-04-19 エントリを参照
 
 - **`PlayerController._spawn_heal_effect` の実態確認**：`docs/investigation_skill_executor_constants.md` の調査で、このメソッドがどこからも呼ばれていない可能性が指摘されている。SkillExecutor 移行後の残骸の可能性。参照調査して本当に未使用ならデッドコードとして削除
 

@@ -5,7 +5,7 @@ extends Node2D
 ## 空色→白のフラッシュ円が上から落下して消えるアニメーション
 
 const DURATION := 0.4   # 秒
-const RADIUS   := 18.0  # px
+## 半径は GlobalConstants.GRID_SIZE × GlobalConstants.DIVE_EFFECT_RADIUS_RATIO で動的計算
 
 var _timer: float = 0.0
 
@@ -23,11 +23,12 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	var t       := _timer / DURATION            # 0.0 → 1.0
-	var alpha   := 1.0 - t                      # フェードアウト
-	var radius  := RADIUS * (0.5 + t * 0.5)    # 徐々に拡大
-	var offset_y := -RADIUS * (1.0 - t)        # 上から落下
-	var col     := Color(0.4, 0.8, 1.0, alpha).lerp(Color(1.0, 1.0, 1.0, alpha), t)
+	var t        := _timer / DURATION            # 0.0 → 1.0
+	var alpha    := 1.0 - t                      # フェードアウト
+	var base_r   := float(GlobalConstants.GRID_SIZE) * GlobalConstants.DIVE_EFFECT_RADIUS_RATIO
+	var radius   := base_r * (0.5 + t * 0.5)    # 徐々に拡大
+	var offset_y := -base_r * (1.0 - t)         # 上から落下
+	var col      := Color(0.4, 0.8, 1.0, alpha).lerp(Color(1.0, 1.0, 1.0, alpha), t)
 	draw_circle(Vector2(0.0, offset_y), radius, col)
 	# 斜め線2本（羽ばたきイメージ）
 	var line_alpha := alpha * 0.7

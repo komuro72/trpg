@@ -31,24 +31,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "sword",
-                  "category": "weapon",
-                  "item_name": "錆びた片手剣",
-                  "stats": {
-                    "power": 1,
-                    "block_right_front": 0
-                  }
-                },
-                {
-                  "item_type": "potion_heal",
-                  "category": "consumable",
-                  "item_name": "ヒールポーション",
-                  "effect": {
-                    "restore_hp": 30
-                  },
-                  "quantity": 1
-                }
+                "sword",
+                "potion_heal"
               ]
             }
           },
@@ -77,24 +61,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "頑丈な鎧",
-                  "stats": {
-                    "physical_resistance": 2,
-                    "magic_resistance": 2
-                  }
-                },
-                {
-                  "item_type": "staff",
-                  "category": "weapon",
-                  "item_name": "歪な杖",
-                  "stats": {
-                    "power": 2,
-                    "block_front": 1
-                  }
-                }
+                "armor_plate",
+                "staff"
               ]
             }
           },
@@ -123,24 +91,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "旅人の服",
-                  "stats": {
-                    "physical_resistance": 0,
-                    "magic_resistance": 1
-                  }
-                },
-                {
-                  "item_type": "sword",
-                  "category": "weapon",
-                  "item_name": "鋭い片手剣",
-                  "stats": {
-                    "power": 1,
-                    "block_right_front": 0
-                  }
-                }
+                "armor_cloth",
+                "sword"
               ]
             }
           },
@@ -169,24 +121,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 1
-                },
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "守りの服",
-                  "stats": {
-                    "physical_resistance": 0,
-                    "magic_resistance": 0
-                  }
-                }
+                "potion_energy",
+                "armor_cloth"
               ]
             }
           },
@@ -215,24 +151,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "古びたローブ",
-                  "stats": {
-                    "physical_resistance": 2,
-                    "magic_resistance": 2
-                  }
-                },
-                {
-                  "item_type": "sword",
-                  "category": "weapon",
-                  "item_name": "刻銘の片手剣",
-                  "stats": {
-                    "power": 1,
-                    "block_right_front": 1
-                  }
-                }
+                "armor_robe",
+                "sword"
               ]
             }
           },
@@ -261,15 +181,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 1
-                }
+                "potion_energy"
               ]
             }
           },
@@ -298,15 +210,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "bow",
-                  "category": "weapon",
-                  "item_name": "歪な弓",
-                  "stats": {
-                    "power": 1,
-                    "block_front": 0
-                  }
-                }
+                "bow"
               ]
             }
           },
@@ -335,24 +239,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 1
-                },
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "擦り切れた服",
-                  "stats": {
-                    "physical_resistance": 1,
-                    "magic_resistance": 1
-                  }
-                }
+                "potion_energy",
+                "armor_cloth"
               ]
             }
           },
@@ -381,24 +269,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "旅人のローブ",
-                  "stats": {
-                    "physical_resistance": 1,
-                    "magic_resistance": 1
-                  }
-                },
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "守りのローブ",
-                  "stats": {
-                    "physical_resistance": 0,
-                    "magic_resistance": 2
-                  }
-                }
+                "armor_robe",
+                "armor_robe"
               ]
             }
           },
@@ -2078,15 +1950,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_heal",
-                  "category": "consumable",
-                  "item_name": "ヒールポーション",
-                  "effect": {
-                    "restore_hp": 30
-                  },
-                  "quantity": 1
-                }
+                "potion_heal"
               ]
             }
           },
@@ -2115,15 +1979,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "sword",
-                  "category": "weapon",
-                  "item_name": "鋭い片手剣",
-                  "stats": {
-                    "power": 1,
-                    "block_right_front": 0
-                  }
-                }
+                "sword"
               ]
             }
           },
@@ -2152,24 +2008,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "staff",
-                  "category": "weapon",
-                  "item_name": "鋭い杖",
-                  "stats": {
-                    "power": 2,
-                    "block_front": 0
-                  }
-                },
-                {
-                  "item_type": "dagger",
-                  "category": "weapon",
-                  "item_name": "鋭い短剣",
-                  "stats": {
-                    "power": 1,
-                    "block_right_front": 0
-                  }
-                }
+                "staff",
+                "dagger"
               ]
             }
           },
@@ -2198,15 +2038,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "頑丈な服",
-                  "stats": {
-                    "physical_resistance": 2,
-                    "magic_resistance": 2
-                  }
-                }
+                "armor_cloth"
               ]
             }
           },
@@ -2252,15 +2084,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "staff",
-                  "category": "weapon",
-                  "item_name": "古びた杖",
-                  "stats": {
-                    "power": 2,
-                    "block_front": 0
-                  }
-                }
+                "staff"
               ]
             }
           },
@@ -2289,24 +2113,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 1
-                },
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "古びたローブ",
-                  "stats": {
-                    "physical_resistance": 2,
-                    "magic_resistance": 1
-                  }
-                }
+                "potion_energy",
+                "armor_robe"
               ]
             }
           },
@@ -2335,24 +2143,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 1
-                },
-                {
-                  "item_type": "sword",
-                  "category": "weapon",
-                  "item_name": "歪な片手剣",
-                  "stats": {
-                    "power": 1,
-                    "block_right_front": 0
-                  }
-                }
+                "potion_energy",
+                "sword"
               ]
             }
           },
@@ -2381,24 +2173,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "staff",
-                  "category": "weapon",
-                  "item_name": "錆びた杖",
-                  "stats": {
-                    "power": 2,
-                    "block_front": 1
-                  }
-                },
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "旅人の鎧",
-                  "stats": {
-                    "physical_resistance": 0,
-                    "magic_resistance": 2
-                  }
-                }
+                "staff",
+                "armor_plate"
               ]
             }
           },
@@ -2427,15 +2203,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 1
-                }
+                "potion_energy"
               ]
             }
           },
@@ -2464,15 +2232,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_heal",
-                  "category": "consumable",
-                  "item_name": "ヒールポーション",
-                  "effect": {
-                    "restore_hp": 30
-                  },
-                  "quantity": 2
-                }
+                "potion_heal"
               ]
             }
           }
@@ -2727,24 +2487,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 2
-                },
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "頑丈な鎧",
-                  "stats": {
-                    "physical_resistance": 1,
-                    "magic_resistance": 2
-                  }
-                }
+                "potion_energy",
+                "armor_plate"
               ]
             }
           },
@@ -2793,15 +2537,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "守りのローブ",
-                  "stats": {
-                    "physical_resistance": 3,
-                    "magic_resistance": 2
-                  }
-                }
+                "armor_robe"
               ]
             }
           },
@@ -2835,24 +2571,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_heal",
-                  "category": "consumable",
-                  "item_name": "ヒールポーション",
-                  "effect": {
-                    "restore_hp": 30
-                  },
-                  "quantity": 2
-                },
-                {
-                  "item_type": "bow",
-                  "category": "weapon",
-                  "item_name": "歪な弓",
-                  "stats": {
-                    "power": 3,
-                    "block_front": 0
-                  }
-                }
+                "potion_heal",
+                "bow"
               ]
             }
           },
@@ -2892,15 +2612,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 2
-                }
+                "potion_energy"
               ]
             }
           },
@@ -2934,24 +2646,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 2
-                },
-                {
-                  "item_type": "dagger",
-                  "category": "weapon",
-                  "item_name": "歪な短剣",
-                  "stats": {
-                    "power": 4,
-                    "block_right_front": 1
-                  }
-                }
+                "potion_energy",
+                "dagger"
               ]
             }
           },
@@ -2985,24 +2681,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "staff",
-                  "category": "weapon",
-                  "item_name": "古びた杖",
-                  "stats": {
-                    "power": 4,
-                    "block_front": 1
-                  }
-                },
-                {
-                  "item_type": "sword",
-                  "category": "weapon",
-                  "item_name": "古びた片手剣",
-                  "stats": {
-                    "power": 1,
-                    "block_right_front": 0
-                  }
-                }
+                "staff",
+                "sword"
               ]
             }
           },
@@ -3031,24 +2711,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "擦り切れたローブ",
-                  "stats": {
-                    "physical_resistance": 1,
-                    "magic_resistance": 2
-                  }
-                },
-                {
-                  "item_type": "dagger",
-                  "category": "weapon",
-                  "item_name": "古びた短剣",
-                  "stats": {
-                    "power": 3,
-                    "block_right_front": 2
-                  }
-                }
+                "armor_robe",
+                "dagger"
               ]
             }
           },
@@ -3077,15 +2741,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_heal",
-                  "category": "consumable",
-                  "item_name": "ヒールポーション",
-                  "effect": {
-                    "restore_hp": 30
-                  },
-                  "quantity": 2
-                }
+                "potion_heal"
               ]
             }
           },
@@ -3114,15 +2770,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "sword",
-                  "category": "weapon",
-                  "item_name": "錆びた片手剣",
-                  "stats": {
-                    "power": 4,
-                    "block_right_front": 1
-                  }
-                }
+                "sword"
               ]
             }
           },
@@ -3156,15 +2804,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "守りのローブ",
-                  "stats": {
-                    "physical_resistance": 2,
-                    "magic_resistance": 1
-                  }
-                }
+                "armor_robe"
               ]
             }
           },
@@ -3193,24 +2833,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_heal",
-                  "category": "consumable",
-                  "item_name": "ヒールポーション",
-                  "effect": {
-                    "restore_hp": 30
-                  },
-                  "quantity": 2
-                },
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "守りの鎧",
-                  "stats": {
-                    "physical_resistance": 0,
-                    "magic_resistance": 0
-                  }
-                }
+                "potion_heal",
+                "armor_plate"
               ]
             }
           },
@@ -3239,15 +2863,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "axe",
-                  "category": "weapon",
-                  "item_name": "古びた斧",
-                  "stats": {
-                    "power": 3,
-                    "block_right_front": 0
-                  }
-                }
+                "axe"
               ]
             }
           },
@@ -3281,15 +2897,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "staff",
-                  "category": "weapon",
-                  "item_name": "錆びた杖",
-                  "stats": {
-                    "power": 2,
-                    "block_front": 0
-                  }
-                }
+                "staff"
               ]
             }
           },
@@ -3323,15 +2931,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 1
-                }
+                "potion_energy"
               ]
             }
           },
@@ -3377,24 +2977,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "sword",
-                  "category": "weapon",
-                  "item_name": "歪な片手剣",
-                  "stats": {
-                    "power": 3,
-                    "block_right_front": 0
-                  }
-                },
-                {
-                  "item_type": "bow",
-                  "category": "weapon",
-                  "item_name": "鋭い弓",
-                  "stats": {
-                    "power": 4,
-                    "block_front": 2
-                  }
-                }
+                "sword",
+                "bow"
               ]
             }
           },
@@ -3423,15 +3007,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "守りの鎧",
-                  "stats": {
-                    "physical_resistance": 2,
-                    "magic_resistance": 4
-                  }
-                }
+                "armor_plate"
               ]
             }
           },
@@ -3465,15 +3041,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_heal",
-                  "category": "consumable",
-                  "item_name": "ヒールポーション",
-                  "effect": {
-                    "restore_hp": 30
-                  },
-                  "quantity": 2
-                }
+                "potion_heal"
               ]
             }
           }
@@ -3764,24 +3332,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "axe",
-                  "category": "weapon",
-                  "item_name": "歪な斧",
-                  "stats": {
-                    "power": 3,
-                    "block_right_front": 0
-                  }
-                },
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 1
-                }
+                "axe",
+                "potion_energy"
               ]
             }
           },
@@ -3844,15 +3396,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "旅人のローブ",
-                  "stats": {
-                    "physical_resistance": 0,
-                    "magic_resistance": 1
-                  }
-                }
+                "armor_robe"
               ]
             }
           },
@@ -3886,24 +3430,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 2
-                },
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 2
-                }
+                "potion_energy",
+                "potion_energy"
               ]
             }
           },
@@ -3970,15 +3498,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "守りの鎧",
-                  "stats": {
-                    "physical_resistance": 5,
-                    "magic_resistance": 2
-                  }
-                }
+                "armor_plate"
               ]
             }
           },
@@ -4012,24 +3532,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "bow",
-                  "category": "weapon",
-                  "item_name": "刻銘の弓",
-                  "stats": {
-                    "power": 2,
-                    "block_front": 2
-                  }
-                },
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "古びた鎧",
-                  "stats": {
-                    "physical_resistance": 1,
-                    "magic_resistance": 3
-                  }
-                }
+                "bow",
+                "armor_plate"
               ]
             }
           },
@@ -4068,15 +3572,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "sword",
-                  "category": "weapon",
-                  "item_name": "刻銘の片手剣",
-                  "stats": {
-                    "power": 6,
-                    "block_right_front": 3
-                  }
-                }
+                "sword"
               ]
             }
           },
@@ -4115,24 +3611,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "守りの鎧",
-                  "stats": {
-                    "physical_resistance": 6,
-                    "magic_resistance": 4
-                  }
-                },
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 2
-                }
+                "armor_plate",
+                "potion_energy"
               ]
             }
           },
@@ -4171,15 +3651,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "axe",
-                  "category": "weapon",
-                  "item_name": "歪な斧",
-                  "stats": {
-                    "power": 1,
-                    "block_right_front": 3
-                  }
-                }
+                "axe"
               ]
             }
           },
@@ -4231,15 +3703,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "旅人の服",
-                  "stats": {
-                    "physical_resistance": 4,
-                    "magic_resistance": 5
-                  }
-                }
+                "armor_cloth"
               ]
             }
           },
@@ -4278,15 +3742,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "守りの服",
-                  "stats": {
-                    "physical_resistance": 1,
-                    "magic_resistance": 0
-                  }
-                }
+                "armor_cloth"
               ]
             }
           },
@@ -4329,24 +3785,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "bow",
-                  "category": "weapon",
-                  "item_name": "錆びた弓",
-                  "stats": {
-                    "power": 6,
-                    "block_front": 0
-                  }
-                },
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "擦り切れた服",
-                  "stats": {
-                    "physical_resistance": 3,
-                    "magic_resistance": 2
-                  }
-                }
+                "bow",
+                "armor_cloth"
               ]
             }
           },
@@ -4385,24 +3825,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "古びたローブ",
-                  "stats": {
-                    "physical_resistance": 2,
-                    "magic_resistance": 6
-                  }
-                },
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "頑丈な服",
-                  "stats": {
-                    "physical_resistance": 3,
-                    "magic_resistance": 0
-                  }
-                }
+                "armor_robe",
+                "armor_cloth"
               ]
             }
           },
@@ -4436,15 +3860,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "古びた服",
-                  "stats": {
-                    "physical_resistance": 6,
-                    "magic_resistance": 3
-                  }
-                }
+                "armor_cloth"
               ]
             }
           },
@@ -4495,24 +3911,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "staff",
-                  "category": "weapon",
-                  "item_name": "鋭い杖",
-                  "stats": {
-                    "power": 6,
-                    "block_front": 0
-                  }
-                },
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "古びた服",
-                  "stats": {
-                    "physical_resistance": 5,
-                    "magic_resistance": 2
-                  }
-                }
+                "staff",
+                "armor_cloth"
               ]
             }
           },
@@ -4563,24 +3963,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "axe",
-                  "category": "weapon",
-                  "item_name": "歪な斧",
-                  "stats": {
-                    "power": 5,
-                    "block_right_front": 3
-                  }
-                },
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "頑丈な鎧",
-                  "stats": {
-                    "physical_resistance": 3,
-                    "magic_resistance": 3
-                  }
-                }
+                "axe",
+                "armor_plate"
               ]
             }
           },
@@ -4614,15 +3998,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 1
-                }
+                "potion_energy"
               ]
             }
           },
@@ -4656,24 +4032,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 2
-                },
-                {
-                  "item_type": "bow",
-                  "category": "weapon",
-                  "item_name": "鋭い弓",
-                  "stats": {
-                    "power": 2,
-                    "block_front": 3
-                  }
-                }
+                "potion_energy",
+                "bow"
               ]
             }
           }
@@ -4956,15 +4316,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 1
-                }
+                "potion_energy"
               ]
             }
           },
@@ -5041,15 +4393,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "axe",
-                  "category": "weapon",
-                  "item_name": "錆びた斧",
-                  "stats": {
-                    "power": 4,
-                    "block_right_front": 2
-                  }
-                }
+                "axe"
               ]
             }
           },
@@ -5088,24 +4432,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "旅人のローブ",
-                  "stats": {
-                    "physical_resistance": 7,
-                    "magic_resistance": 0
-                  }
-                },
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "守りの鎧",
-                  "stats": {
-                    "physical_resistance": 1,
-                    "magic_resistance": 8
-                  }
-                }
+                "armor_robe",
+                "armor_plate"
               ]
             }
           },
@@ -5155,24 +4483,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "守りのローブ",
-                  "stats": {
-                    "physical_resistance": 0,
-                    "magic_resistance": 6
-                  }
-                },
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "頑丈な鎧",
-                  "stats": {
-                    "physical_resistance": 7,
-                    "magic_resistance": 5
-                  }
-                }
+                "armor_robe",
+                "armor_plate"
               ]
             }
           },
@@ -5233,24 +4545,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "axe",
-                  "category": "weapon",
-                  "item_name": "錆びた斧",
-                  "stats": {
-                    "power": 5,
-                    "block_right_front": 1
-                  }
-                },
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 1
-                }
+                "axe",
+                "potion_energy"
               ]
             }
           },
@@ -5294,15 +4590,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "axe",
-                  "category": "weapon",
-                  "item_name": "歪な斧",
-                  "stats": {
-                    "power": 1,
-                    "block_right_front": 3
-                  }
-                }
+                "axe"
               ]
             }
           },
@@ -5341,24 +4629,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 1
-                },
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 2
-                }
+                "potion_energy",
+                "potion_energy"
               ]
             }
           },
@@ -5397,15 +4669,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "旅人のローブ",
-                  "stats": {
-                    "physical_resistance": 4,
-                    "magic_resistance": 7
-                  }
-                }
+                "armor_robe"
               ]
             }
           },
@@ -5449,24 +4713,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "古びた鎧",
-                  "stats": {
-                    "physical_resistance": 5,
-                    "magic_resistance": 6
-                  }
-                },
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "頑丈な服",
-                  "stats": {
-                    "physical_resistance": 2,
-                    "magic_resistance": 8
-                  }
-                }
+                "armor_plate",
+                "armor_cloth"
               ]
             }
           },
@@ -5505,24 +4753,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_heal",
-                  "category": "consumable",
-                  "item_name": "ヒールポーション",
-                  "effect": {
-                    "restore_hp": 30
-                  },
-                  "quantity": 2
-                },
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "守りの鎧",
-                  "stats": {
-                    "physical_resistance": 0,
-                    "magic_resistance": 1
-                  }
-                }
+                "potion_heal",
+                "armor_plate"
               ]
             }
           },
@@ -5561,15 +4793,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "古びた服",
-                  "stats": {
-                    "physical_resistance": 0,
-                    "magic_resistance": 0
-                  }
-                }
+                "armor_cloth"
               ]
             }
           },
@@ -5613,15 +4837,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "bow",
-                  "category": "weapon",
-                  "item_name": "刻銘の弓",
-                  "stats": {
-                    "power": 5,
-                    "block_front": 4
-                  }
-                }
+                "bow"
               ]
             }
           },
@@ -5660,15 +4876,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_heal",
-                  "category": "consumable",
-                  "item_name": "ヒールポーション",
-                  "effect": {
-                    "restore_hp": 30
-                  },
-                  "quantity": 2
-                }
+                "potion_heal"
               ]
             }
           },
@@ -5729,24 +4937,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "staff",
-                  "category": "weapon",
-                  "item_name": "刻銘の杖",
-                  "stats": {
-                    "power": 7,
-                    "block_front": 3
-                  }
-                },
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "旅人の鎧",
-                  "stats": {
-                    "physical_resistance": 3,
-                    "magic_resistance": 0
-                  }
-                }
+                "staff",
+                "armor_plate"
               ]
             }
           },
@@ -5807,24 +4999,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "擦り切れた鎧",
-                  "stats": {
-                    "physical_resistance": 1,
-                    "magic_resistance": 3
-                  }
-                },
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "守りの服",
-                  "stats": {
-                    "physical_resistance": 1,
-                    "magic_resistance": 7
-                  }
-                }
+                "armor_plate",
+                "armor_cloth"
               ]
             }
           },
@@ -5868,24 +5044,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "擦り切れたローブ",
-                  "stats": {
-                    "physical_resistance": 0,
-                    "magic_resistance": 7
-                  }
-                },
-                {
-                  "item_type": "dagger",
-                  "category": "weapon",
-                  "item_name": "古びた短剣",
-                  "stats": {
-                    "power": 5,
-                    "block_right_front": 4
-                  }
-                }
+                "armor_robe",
+                "dagger"
               ]
             }
           },
@@ -5924,24 +5084,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "旅人のローブ",
-                  "stats": {
-                    "physical_resistance": 1,
-                    "magic_resistance": 3
-                  }
-                },
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "頑丈な鎧",
-                  "stats": {
-                    "physical_resistance": 0,
-                    "magic_resistance": 3
-                  }
-                }
+                "armor_robe",
+                "armor_plate"
               ]
             }
           }
@@ -6224,15 +5368,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "古びた服",
-                  "stats": {
-                    "physical_resistance": 2,
-                    "magic_resistance": 1
-                  }
-                }
+                "armor_cloth"
               ]
             }
           },
@@ -6309,24 +5445,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_heal",
-                  "category": "consumable",
-                  "item_name": "ヒールポーション",
-                  "effect": {
-                    "restore_hp": 30
-                  },
-                  "quantity": 1
-                },
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "旅人の服",
-                  "stats": {
-                    "physical_resistance": 4,
-                    "magic_resistance": 4
-                  }
-                }
+                "potion_heal",
+                "armor_cloth"
               ]
             }
           },
@@ -6370,24 +5490,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "sword",
-                  "category": "weapon",
-                  "item_name": "古びた片手剣",
-                  "stats": {
-                    "power": 2,
-                    "block_right_front": 5
-                  }
-                },
-                {
-                  "item_type": "axe",
-                  "category": "weapon",
-                  "item_name": "錆びた斧",
-                  "stats": {
-                    "power": 5,
-                    "block_right_front": 0
-                  }
-                }
+                "sword",
+                "axe"
               ]
             }
           },
@@ -6454,24 +5558,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 2
-                },
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 2
-                }
+                "potion_energy",
+                "potion_energy"
               ]
             }
           },
@@ -6515,15 +5603,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "axe",
-                  "category": "weapon",
-                  "item_name": "錆びた斧",
-                  "stats": {
-                    "power": 3,
-                    "block_right_front": 3
-                  }
-                }
+                "axe"
               ]
             }
           },
@@ -6562,24 +5642,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "旅人の服",
-                  "stats": {
-                    "physical_resistance": 7,
-                    "magic_resistance": 1
-                  }
-                },
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 1
-                }
+                "armor_cloth",
+                "potion_energy"
               ]
             }
           },
@@ -6623,15 +5687,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "頑丈なローブ",
-                  "stats": {
-                    "physical_resistance": 3,
-                    "magic_resistance": 3
-                  }
-                }
+                "armor_robe"
               ]
             }
           },
@@ -6675,24 +5731,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "axe",
-                  "category": "weapon",
-                  "item_name": "歪な斧",
-                  "stats": {
-                    "power": 3,
-                    "block_right_front": 0
-                  }
-                },
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "旅人のローブ",
-                  "stats": {
-                    "physical_resistance": 6,
-                    "magic_resistance": 7
-                  }
-                }
+                "axe",
+                "armor_robe"
               ]
             }
           },
@@ -6736,15 +5776,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "頑丈なローブ",
-                  "stats": {
-                    "physical_resistance": 8,
-                    "magic_resistance": 10
-                  }
-                }
+                "armor_robe"
               ]
             }
           },
@@ -6788,15 +5820,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_heal",
-                  "category": "consumable",
-                  "item_name": "ヒールポーション",
-                  "effect": {
-                    "restore_hp": 30
-                  },
-                  "quantity": 1
-                }
+                "potion_heal"
               ]
             }
           },
@@ -6835,24 +5859,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "守りの服",
-                  "stats": {
-                    "physical_resistance": 7,
-                    "magic_resistance": 10
-                  }
-                },
-                {
-                  "item_type": "potion_heal",
-                  "category": "consumable",
-                  "item_name": "ヒールポーション",
-                  "effect": {
-                    "restore_hp": 30
-                  },
-                  "quantity": 1
-                }
+                "armor_cloth",
+                "potion_heal"
               ]
             }
           },
@@ -6908,15 +5916,7 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "dagger",
-                  "category": "weapon",
-                  "item_name": "刻銘の短剣",
-                  "stats": {
-                    "power": 10,
-                    "block_right_front": 3
-                  }
-                }
+                "dagger"
               ]
             }
           },
@@ -6955,24 +5955,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "守りのローブ",
-                  "stats": {
-                    "physical_resistance": 9,
-                    "magic_resistance": 4
-                  }
-                },
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "守りのローブ",
-                  "stats": {
-                    "physical_resistance": 7,
-                    "magic_resistance": 10
-                  }
-                }
+                "armor_robe",
+                "armor_robe"
               ]
             }
           },
@@ -7011,24 +5995,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "staff",
-                  "category": "weapon",
-                  "item_name": "錆びた杖",
-                  "stats": {
-                    "power": 10,
-                    "block_front": 0
-                  }
-                },
-                {
-                  "item_type": "armor_robe",
-                  "category": "armor",
-                  "item_name": "古びたローブ",
-                  "stats": {
-                    "physical_resistance": 8,
-                    "magic_resistance": 10
-                  }
-                }
+                "staff",
+                "armor_robe"
               ]
             }
           },
@@ -7072,33 +6040,9 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "sword",
-                  "category": "weapon",
-                  "item_name": "魔王の大剣",
-                  "stats": {
-                    "power": 28,
-                    "block_right_front": 20
-                  }
-                },
-                {
-                  "item_type": "armor_plate",
-                  "category": "armor",
-                  "item_name": "深淵の鎧",
-                  "stats": {
-                    "physical_resistance": 28,
-                    "magic_resistance": 14
-                  }
-                },
-                {
-                  "item_type": "potion_heal",
-                  "category": "consumable",
-                  "item_name": "ヒールポーション",
-                  "effect": {
-                    "restore_hp": 30
-                  },
-                  "quantity": 3
-                }
+                "sword",
+                "armor_plate",
+                "potion_heal"
               ]
             }
           },
@@ -7142,24 +6086,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "potion_energy",
-                  "category": "consumable",
-                  "item_name": "エナジーポーション",
-                  "effect": {
-                    "restore_energy": 20
-                  },
-                  "quantity": 2
-                },
-                {
-                  "item_type": "axe",
-                  "category": "weapon",
-                  "item_name": "刻銘の斧",
-                  "stats": {
-                    "power": 8,
-                    "block_right_front": 2
-                  }
-                }
+                "potion_energy",
+                "axe"
               ]
             }
           },
@@ -7198,24 +6126,8 @@
                 }
               ],
               "items": [
-                {
-                  "item_type": "dagger",
-                  "category": "weapon",
-                  "item_name": "錆びた短剣",
-                  "stats": {
-                    "power": 4,
-                    "block_right_front": 1
-                  }
-                },
-                {
-                  "item_type": "armor_cloth",
-                  "category": "armor",
-                  "item_name": "古びた服",
-                  "stats": {
-                    "physical_resistance": 7,
-                    "magic_resistance": 7
-                  }
-                }
+                "dagger",
+                "armor_cloth"
               ]
             }
           }

@@ -1,13 +1,7 @@
 {
   "id": "zombie",
   "name": "ゾンビ",
-  "hp": 35,
-  "power": 6,
-  "skill": 5,
-  "physical_resistance": 10,
-  "magic_resistance": 2,
   "is_flying": false,
-  "rank": "C",
   "chase_range": 10,
   "territory_range": 50,
   "behavior_description": "死者が蘇った不死の怪物。低速だが止まらない。近くの人間に向かって直進する。絶対に逃げない。",

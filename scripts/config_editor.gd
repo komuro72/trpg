@@ -30,6 +30,8 @@ const TABS: Array[String] = [
 	"EnemyLeaderAI",
 	"UnitAI",
 	"SkillExecutor",
+	"Effect",
+	"Item",
 ]
 ## TABS に含まれないカテゴリの定数を集める予備タブ
 const UNKNOWN_TAB: String = "Unknown"
@@ -166,15 +168,60 @@ const ENEMY_STAT_BONUS_CHOICES: Array[String] = [
 ## 1 敵あたりの stat_bonus 枠数（将来変更しやすいよう定数化）
 const ENEMY_STAT_BONUS_SLOTS: int = 6
 
+## projectile_type ドロップダウン選択肢
+## "(自動)" = 内部的に空文字列（attack_type から自動判定）
+## 新しい飛翔体種別を追加した場合はこの配列に追記する
+const PROJECTILE_TYPE_AUTO_LABEL: String = "(自動)"
+const ENEMY_PROJECTILE_CHOICES: Array[String] = [
+	PROJECTILE_TYPE_AUTO_LABEL,
+	"thunder_bullet",
+]
+
 ## 敵一覧タブの列幅
 const ENEMY_ID_COL_W:          int = 130
+const ENEMY_NAME_COL_W:        int = 100
 const ENEMY_RANK_COL_W:        int = 60
 const ENEMY_STAT_TYPE_COL_W:   int = 135
 const ENEMY_CHECK_COL_W:       int = 40
 const ENEMY_BEHAVIOR_COL_W:    int = 260
 const ENEMY_RANGE_COL_W:       int = 55
+const ENEMY_PROJECTILE_COL_W:  int = 130
 const ENEMY_BONUS_KEY_W:       int = 135
 const ENEMY_BONUS_VAL_W:       int = 40
+
+# ============================================================================
+# アイテムタブ（トップレベル「アイテム」）の定数
+# ============================================================================
+
+## 編集対象 9 アイテムタイプ（武器5・防具3・盾1）。消耗品は対象外
+const ITEM_TYPE_IDS: Array[String] = [
+	"sword", "axe", "dagger", "bow", "staff",
+	"armor_plate", "armor_cloth", "armor_robe", "shield",
+]
+
+## アイテムマスター JSON のディレクトリ
+const ITEM_BASE_DIR: String = "res://assets/master/items/"
+
+## 各アイテムタイプあたりの補正ステータススロット数（仕様上の上限・通常は 2〜3）
+## 登録数 N に対し生成される組み合わせは C(N, 2) × 9 パターンとなる
+const ITEM_BASE_SLOTS: int = 4
+
+## スロットの OptionButton 選択肢（--- = 未設定）。CharacterData が持つ全ステータス
+const ITEM_STAT_CHOICES: Array[String] = [
+	"---",
+	"power", "skill",
+	"block_right_front", "block_left_front", "block_front",
+	"physical_resistance", "magic_resistance",
+	"defense_accuracy", "leadership", "obedience",
+	"move_speed", "vitality", "energy",
+]
+
+## アイテムタブのセル幅（1 行 1 種形式）
+## 2026-04-19: depth_scale / {stat}_min を legacy 削除したため、min 列も撤去
+const ITEM_TYPE_COL_W:   int = 100
+const ITEM_SLOT_KEY_W:   int = 150
+const ITEM_SLOT_MAX_W:   int = 60
+const ITEM_INFO_COL_W:   int = 220   # 右端の category / allowed_classes 小表示用
 
 var _root_panel:        PanelContainer = null
 var _top_tab_container: TabContainer   = null  ## トップレベル：定数/味方クラス/敵/ステータス/アイテム
@@ -227,6 +274,16 @@ var _enemy_indiv_dirty: Dictionary = {}  ## enemy_id → bool
 ##   "{eid}|bonus_N_val" → LineEdit（N=0..5）
 var _enemy_row_widgets: Dictionary = {}
 var _enemy_cell_styles: Dictionary = {}  ## LineEdit 用ハイライトスタイル参照
+
+## アイテムタブのデータ記憶（トップレベル「アイテム」）
+## item_type → 元の JSON Dict 全体（他フィールド温存用）
+var _item_base_data:   Dictionary = {}
+## item_type → bool（そのアイテムタイプのルールに未保存変更があるか）
+var _item_base_dirty:  Dictionary = {}
+## ウィジェット参照："{item_type}|slot_{N}|{key|min|max}" → Control
+var _item_widgets:     Dictionary = {}
+## LineEdit ハイライト用 StyleBoxFlat 参照
+var _item_cell_styles: Dictionary = {}
 ## 各タブ名 → そのタブ内の VBox（ここに行を add）
 var _tab_rows: Dictionary = {}
 ## 各タブ名 → プレースホルダーラベル（空タブ用。定数があれば hide）
@@ -900,6 +957,7 @@ func _build_enemy_list_header(parent: VBoxContainer) -> void:
 
 	var cols: Array = [
 		["敵ID",          ENEMY_ID_COL_W],
+		["name",          ENEMY_NAME_COL_W],
 		["rank",          ENEMY_RANK_COL_W],
 		["stat_type",     ENEMY_STAT_TYPE_COL_W],
 		["undead",        ENEMY_CHECK_COL_W],
@@ -908,6 +966,7 @@ func _build_enemy_list_header(parent: VBoxContainer) -> void:
 		["behavior",      ENEMY_BEHAVIOR_COL_W],
 		["chase",         ENEMY_RANGE_COL_W],
 		["territory",     ENEMY_RANGE_COL_W],
+		["projectile",    ENEMY_PROJECTILE_COL_W],
 	]
 	for entry: Variant in cols:
 		var arr := entry as Array
@@ -949,6 +1008,10 @@ func _build_enemy_list_row(parent: VBoxContainer, eid: String) -> void:
 	var list_entry: Dictionary = (_enemy_list_data.get(eid, {}) as Dictionary)
 	var indiv: Dictionary = (_enemy_indiv_data.get(eid, {}) as Dictionary)
 
+	# name LineEdit（個別敵 JSON の "name"。プレイヤー向け表示名＝種族名）
+	_add_enemy_lineedit(row, eid, "name",
+		str(indiv.get("name", "")), ENEMY_NAME_COL_W)
+
 	# rank OptionButton
 	var rank_btn := _make_option_button(ENEMY_RANK_CHOICES,
 		str(list_entry.get("rank", "C")), ENEMY_RANK_COL_W)
@@ -980,6 +1043,10 @@ func _build_enemy_list_row(parent: VBoxContainer, eid: String) -> void:
 	# territory_range LineEdit
 	_add_enemy_lineedit(row, eid, "territory_range",
 		_stringify_class_value(indiv.get("territory_range", 50)), ENEMY_RANGE_COL_W)
+
+	# projectile_type OptionButton（demon の thunder_bullet 等）
+	_add_enemy_projectile_option(row, eid,
+		str(indiv.get("projectile_type", "")))
 
 	# stat_bonus 6 枠（既存値を先頭から展開）
 	var stat_bonus: Dictionary = (list_entry.get("stat_bonus", {}) as Dictionary)
@@ -1046,6 +1113,36 @@ func _add_enemy_lineedit(parent: HBoxContainer, eid: String, field: String,
 	_enemy_cell_styles[wk] = sb
 
 
+## projectile_type 用の OptionButton を追加する
+## 空文字列（"" = attack_type から自動判定）は "(自動)" ラベルで表示
+func _add_enemy_projectile_option(parent: HBoxContainer, eid: String,
+		current_value: String) -> void:
+	var wrapper := PanelContainer.new()
+	wrapper.custom_minimum_size = Vector2(ENEMY_PROJECTILE_COL_W, 0)
+	var sb := _make_cell_style()
+	wrapper.add_theme_stylebox_override("panel", sb)
+	parent.add_child(wrapper)
+
+	var btn := _make_option_button(ENEMY_PROJECTILE_CHOICES,
+		_proj_value_to_choice(current_value), ENEMY_PROJECTILE_COL_W)
+	wrapper.add_child(btn)
+	btn.item_selected.connect(_on_enemy_projectile_changed.bind(eid))
+
+	var wk := "%s|projectile_type" % eid
+	_enemy_row_widgets[wk] = btn
+	_enemy_cell_styles[wk] = sb
+
+
+## 選択肢文字列 → 保存値に変換（"(自動)" → ""）
+func _proj_choice_to_value(choice: String) -> String:
+	return "" if choice == PROJECTILE_TYPE_AUTO_LABEL else choice
+
+
+## 保存値 → 選択肢文字列に変換（"" → "(自動)"）
+func _proj_value_to_choice(val: String) -> String:
+	return PROJECTILE_TYPE_AUTO_LABEL if val.is_empty() else val
+
+
 func _add_enemy_bonus_slot(parent: HBoxContainer, eid: String, slot_idx: int,
 		key: String, value: int) -> void:
 	var pair := HBoxContainer.new()
@@ -1094,6 +1191,20 @@ func _on_enemy_indiv_field_changed(pressed: bool, eid: String, field: String) ->
 		sb.bg_color = HIGHLIGHT_BG_COLOR if pressed != orig_val else Color(0.12, 0.12, 0.16)
 	_enemy_indiv_dirty[eid] = _enemy_indiv_has_any_diff(eid)
 	# タブインジケータ（タブ名末尾 ●）を再評価
+	_update_enemy_list_tab_indicator()
+
+
+## 個別敵 JSON 系の OptionButton 変更（projectile_type）
+func _on_enemy_projectile_changed(_idx: int, eid: String) -> void:
+	var wk := "%s|projectile_type" % eid
+	var sb := _enemy_cell_styles.get(wk) as StyleBoxFlat
+	if sb != null:
+		var indiv: Dictionary = (_enemy_indiv_data.get(eid, {}) as Dictionary)
+		var orig_val := str(indiv.get("projectile_type", ""))
+		var btn := _enemy_row_widgets.get(wk) as OptionButton
+		var cur_val := "" if btn == null else _proj_choice_to_value(btn.get_item_text(btn.selected))
+		sb.bg_color = HIGHLIGHT_BG_COLOR if cur_val != orig_val else Color(0.12, 0.12, 0.16)
+	_enemy_indiv_dirty[eid] = _enemy_indiv_has_any_diff(eid)
 	_update_enemy_list_tab_indicator()
 
 
@@ -1205,11 +1316,17 @@ func _reset_enemy_list_tab() -> void:
 				# set_pressed_no_signal で toggled を発火させずに戻す
 				cb.set_pressed_no_signal(bool(indiv.get(f, false)))
 
-		# 文字列 / 数値 3 フィールド（LineEdit。text 代入では text_changed は発火しない）
-		for f: String in ["behavior_description", "chase_range", "territory_range"]:
+		# 文字列 / 数値フィールド（LineEdit。text 代入では text_changed は発火しない）
+		for f: String in ["name", "behavior_description", "chase_range", "territory_range"]:
 			var le := _enemy_row_widgets.get("%s|%s" % [eid, f]) as LineEdit
 			if le != null:
 				le.text = _enemy_indiv_orig_text(eid, f)
+
+		# projectile_type OptionButton
+		var pbtn := _enemy_row_widgets.get("%s|projectile_type" % eid) as OptionButton
+		if pbtn != null:
+			_select_option_by_text(pbtn,
+				_proj_value_to_choice(str(indiv.get("projectile_type", ""))))
 
 		# stat_bonus 6 スロット
 		var stat_bonus: Dictionary = (list_entry.get("stat_bonus", {}) as Dictionary)
@@ -1243,6 +1360,8 @@ func _reset_enemy_list_tab() -> void:
 ## 個別敵 JSON の元テキスト値（LineEdit 用に文字列化）
 func _enemy_indiv_orig_text(eid: String, field: String) -> String:
 	var indiv: Dictionary = (_enemy_indiv_data.get(eid, {}) as Dictionary)
+	if field == "name":
+		return str(indiv.get(field, ""))
 	if field == "behavior_description":
 		return str(indiv.get(field, ""))
 	if field == "chase_range":
@@ -1262,12 +1381,19 @@ func _enemy_indiv_has_any_diff(eid: String) -> bool:
 			continue
 		if cb.button_pressed != bool(indiv.get(f, false)):
 			return true
-	# 文字列 / 数値
-	for f: String in ["behavior_description", "chase_range", "territory_range"]:
+	# 文字列 / 数値（LineEdit）
+	for f: String in ["name", "behavior_description", "chase_range", "territory_range"]:
 		var le := _enemy_row_widgets.get("%s|%s" % [eid, f]) as LineEdit
 		if le == null:
 			continue
 		if le.text != _enemy_indiv_orig_text(eid, f):
+			return true
+	# projectile_type（OptionButton）
+	var pbtn := _enemy_row_widgets.get("%s|projectile_type" % eid) as OptionButton
+	if pbtn != null:
+		var cur_proj := _proj_choice_to_value(pbtn.get_item_text(pbtn.selected))
+		var orig_proj := str(indiv.get("projectile_type", ""))
+		if cur_proj != orig_proj:
 			return true
 	return false
 
@@ -1411,7 +1537,16 @@ func _apply_enemy_indiv_edits(eid: String) -> Variant:
 		if cur_val == false and not orig_had:
 			continue  # デフォルト値で元にも無かった → 追加しない
 		out[f] = cur_val
-	# 文字列
+	# name（文字列。全 16 ファイルで存在するので orig_had は常に true の想定だが
+	# 安全のため「元に無くて空」のケースだけスキップする）
+	var name_le := _enemy_row_widgets.get("%s|name" % eid) as LineEdit
+	if name_le != null:
+		var orig_name := str(orig.get("name", ""))
+		if name_le.text != orig_name:
+			out["name"] = name_le.text
+		elif not orig.has("name") and name_le.text.is_empty():
+			pass
+	# behavior_description（文字列）
 	var beh_le := _enemy_row_widgets.get("%s|behavior_description" % eid) as LineEdit
 	if beh_le != null:
 		var orig_beh := str(orig.get("behavior_description", ""))
@@ -1419,6 +1554,15 @@ func _apply_enemy_indiv_edits(eid: String) -> Variant:
 			out["behavior_description"] = beh_le.text
 		elif not orig.has("behavior_description") and beh_le.text.is_empty():
 			pass  # デフォルトかつ元に無かった → 追加しない
+	# projectile_type（OptionButton。"" = 自動。デフォルトかつ元に無ければ追加しない）
+	var pbtn := _enemy_row_widgets.get("%s|projectile_type" % eid) as OptionButton
+	if pbtn != null:
+		var cur_proj := _proj_choice_to_value(pbtn.get_item_text(pbtn.selected))
+		var orig_proj := str(orig.get("projectile_type", ""))
+		if cur_proj != orig_proj:
+			out["projectile_type"] = cur_proj
+		elif not orig.has("projectile_type") and cur_proj.is_empty():
+			pass
 	# int 2 フィールド
 	for f: String in ["chase_range", "territory_range"]:
 		var le := _enemy_row_widgets.get("%s|%s" % [eid, f]) as LineEdit
@@ -2049,10 +2193,323 @@ func _apply_attr_stats_edits(orig: Dictionary) -> Variant:
 	return out
 
 
-## 「アイテム」トップタブ：プレースホルダー
+## 「アイテム」トップタブ：各アイテムタイプの base_stats（補正ルール）を編集する
+## 1 行 1 タイプ形式・全 9 タイプを横断表で表示
+## 個別アイテム（generated/*.json）は対象外・Claude Code が手動生成する運用
 func _build_top_tab_item(parent: TabContainer) -> void:
-	_add_placeholder_tab(parent, TOP_TAB_ITEM,
-		"アイテムマスターの縦1列テーブルが入る予定です")
+	var outer := VBoxContainer.new()
+	outer.name = TOP_TAB_ITEM
+	outer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	outer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(outer)
+	parent.set_tab_title(parent.get_tab_count() - 1, TOP_TAB_ITEM)
+
+	# 説明ラベル
+	var desc := Label.new()
+	desc.text = "各アイテムタイプの補正ステータス（base_stats）を編集します。" \
+		+ "保存後、個別アイテム（generated/*.json）は自動更新されません。" \
+		+ "Claude Code に「アイテム生成ルールに従って generated/*.json を再生成」と依頼してください。"
+	desc.add_theme_font_size_override("font_size", 11)
+	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	outer.add_child(desc)
+
+	_load_item_base_files()
+
+	# 横スクロールコンテナに横断表を入れる
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	outer.add_child(scroll)
+
+	var vbox := VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(vbox)
+
+	_build_item_list_header(vbox)
+	for iid: String in ITEM_TYPE_IDS:
+		_build_item_list_row(vbox, iid)
+
+
+## 全 9 アイテム JSON を読み込む（起動時・リセット時に呼ぶ）
+func _load_item_base_files() -> void:
+	_item_base_data.clear()
+	_item_base_dirty.clear()
+	for iid: String in ITEM_TYPE_IDS:
+		var path := ITEM_BASE_DIR + iid + ".json"
+		var parsed: Variant = _read_json_file(path)
+		if parsed is Dictionary:
+			_item_base_data[iid] = parsed as Dictionary
+			_item_base_dirty[iid] = false
+
+
+## ヘッダー行（全 9 タイプ共通の列ラベル）
+func _build_item_list_header(parent: VBoxContainer) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	parent.add_child(row)
+	_add_item_hdr(row, "タイプ",       ITEM_TYPE_COL_W)
+	for i: int in range(ITEM_BASE_SLOTS):
+		_add_item_hdr(row, "stat%d" % (i + 1), ITEM_SLOT_KEY_W)
+		_add_item_hdr(row, "max",              ITEM_SLOT_MAX_W)
+	_add_item_hdr(row, "備考（参考）", ITEM_INFO_COL_W)
+
+
+## 1 アイテムタイプ用の行を構築（タイプ名 + 4 スロット + 参考情報）
+func _build_item_list_row(parent: VBoxContainer, item_type: String) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	parent.add_child(row)
+
+	var data: Dictionary = _item_base_data.get(item_type, {}) as Dictionary
+
+	# タイプ名（固定ラベル）
+	var name_lbl := Label.new()
+	name_lbl.text = item_type
+	name_lbl.custom_minimum_size = Vector2(ITEM_TYPE_COL_W, 0)
+	name_lbl.add_theme_font_size_override("font_size", 11)
+	name_lbl.clip_text = true
+	row.add_child(name_lbl)
+
+	# 既存 base_stats を 4 スロットに展開
+	var base_stats: Dictionary = data.get("base_stats", {}) as Dictionary
+	var expanded := _expand_base_stats_to_slots(base_stats)
+	for i: int in range(ITEM_BASE_SLOTS):
+		var slot_data: Dictionary = expanded[i] if i < expanded.size() else {
+			"key": "---", "max": 0,
+		}
+		_add_item_slot_cells(row, item_type, i,
+			str(slot_data.get("key", "---")),
+			int(slot_data.get("max", 0)))
+
+	# 右端の参考情報（編集不可・category / allowed_classes）
+	var cat := str(data.get("category", ""))
+	var allowed: Array = data.get("allowed_classes", []) as Array
+	var allowed_str := ", ".join(allowed) if not allowed.is_empty() else "-"
+	var info_lbl := Label.new()
+	info_lbl.text = "%s / %s" % [cat, allowed_str]
+	info_lbl.custom_minimum_size = Vector2(ITEM_INFO_COL_W, 0)
+	info_lbl.add_theme_font_size_override("font_size", 10)
+	info_lbl.add_theme_color_override("font_color", Color(0.65, 0.65, 0.72))
+	info_lbl.clip_text = true
+	row.add_child(info_lbl)
+
+
+## base_stats 辞書を 4 スロット用の Array に展開する
+## `{stat}_max` のみを対象とする。元 JSON のキー順を尊重
+## （`_min` / `depth_scale` は 2026-04-19 に legacy 削除済み）
+func _expand_base_stats_to_slots(base_stats: Dictionary) -> Array:
+	var ordered: Array = []
+	for raw_k: Variant in base_stats.keys():
+		var k := str(raw_k)
+		if not k.ends_with("_max"):
+			continue
+		var stat := k.substr(0, k.length() - 4)
+		ordered.append({
+			"key": stat,
+			"max": int(base_stats.get(k, 0)),
+		})
+	return ordered
+
+
+## 1 スロット分のセル（OptionButton + max LineEdit）を行に追加する
+## `_min` / `depth_scale` は 2026-04-19 に legacy 削除済みのため max のみ
+func _add_item_slot_cells(parent: HBoxContainer, item_type: String, slot_idx: int,
+		key: String, max_val: int) -> void:
+	# 選択肢リストにない stat は "---" 扱い（想定外のデータ耐性）
+	var eff_key := key if ITEM_STAT_CHOICES.has(key) else "---"
+
+	# key OptionButton
+	var key_btn := _make_option_button(ITEM_STAT_CHOICES, eff_key, ITEM_SLOT_KEY_W)
+	key_btn.item_selected.connect(_on_item_slot_key_changed.bind(item_type, slot_idx))
+	parent.add_child(key_btn)
+	_item_widgets["%s|slot_%d|key" % [item_type, slot_idx]] = key_btn
+
+	# max LineEdit
+	var max_le := LineEdit.new()
+	max_le.custom_minimum_size = Vector2(ITEM_SLOT_MAX_W, 0)
+	max_le.add_theme_font_size_override("font_size", 11)
+	max_le.text = "" if eff_key == "---" else str(max_val)
+	max_le.editable = (eff_key != "---")
+	var max_sb := _make_cell_style()
+	max_le.add_theme_stylebox_override("normal", max_sb)
+	max_le.add_theme_stylebox_override("focus", max_sb)
+	parent.add_child(max_le)
+	max_le.text_changed.connect(_on_item_slot_max_changed.bind(item_type, slot_idx))
+	_item_widgets["%s|slot_%d|max" % [item_type, slot_idx]] = max_le
+	_item_cell_styles["%s|slot_%d|max" % [item_type, slot_idx]] = max_sb
+
+
+func _add_item_hdr(parent: HBoxContainer, text: String, width: int) -> void:
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.custom_minimum_size = Vector2(width, 0)
+	lbl.add_theme_font_size_override("font_size", 11)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
+	parent.add_child(lbl)
+
+
+# ----------------------------------------------------------------------------
+# アイテムタブのハンドラ・dirty 判定
+# ----------------------------------------------------------------------------
+
+## key OptionButton 変更：max の editable / text 初期化を更新
+func _on_item_slot_key_changed(idx: int, item_type: String, slot_idx: int) -> void:
+	var key_btn := _item_widgets.get("%s|slot_%d|key" % [item_type, slot_idx]) as OptionButton
+	var max_le := _item_widgets.get("%s|slot_%d|max" % [item_type, slot_idx]) as LineEdit
+	if key_btn == null or max_le == null:
+		return
+	var key := key_btn.get_item_text(idx)
+	if key == "---":
+		max_le.text = ""
+		max_le.editable = false
+	else:
+		max_le.editable = true
+		if max_le.text.is_empty():
+			max_le.text = "0"
+	_item_base_dirty[item_type] = _item_has_diff(item_type)
+	_update_item_tab_indicator()
+
+
+## max LineEdit 変更
+func _on_item_slot_max_changed(new_text: String, item_type: String, slot_idx: int) -> void:
+	var wk := "%s|slot_%d|max" % [item_type, slot_idx]
+	var sb := _item_cell_styles.get(wk) as StyleBoxFlat
+	if sb != null:
+		sb.bg_color = HIGHLIGHT_BG_COLOR if new_text != str(_item_slot_orig_max(item_type, slot_idx)) \
+			else Color(0.12, 0.12, 0.16)
+	_item_base_dirty[item_type] = _item_has_diff(item_type)
+	_update_item_tab_indicator()
+
+
+## スロットの元 max 値を返す（UI の現在の key に対応する _max を元 JSON から引く）
+## 元データにそのキーがなければ 0
+func _item_slot_orig_max(item_type: String, slot_idx: int) -> int:
+	var key_btn := _item_widgets.get("%s|slot_%d|key" % [item_type, slot_idx]) as OptionButton
+	if key_btn == null:
+		return 0
+	var key := key_btn.get_item_text(key_btn.selected)
+	if key == "---":
+		return 0
+	var data: Dictionary = _item_base_data.get(item_type, {}) as Dictionary
+	var base_stats: Dictionary = data.get("base_stats", {}) as Dictionary
+	return int(base_stats.get(key + "_max", 0))
+
+
+## 現在の UI 状態から new_base_stats を組み立てる
+## スロット UI 順で "---" 以外を辞書化（同じ key は先勝ち）
+func _build_item_base_stats_from_slots(item_type: String) -> Dictionary:
+	var out: Dictionary = {}
+	for i: int in range(ITEM_BASE_SLOTS):
+		var key_btn := _item_widgets.get("%s|slot_%d|key" % [item_type, i]) as OptionButton
+		var max_le := _item_widgets.get("%s|slot_%d|max" % [item_type, i]) as LineEdit
+		if key_btn == null or max_le == null:
+			continue
+		var key := key_btn.get_item_text(key_btn.selected)
+		if key == "---":
+			continue
+		var max_key := key + "_max"
+		if out.has(max_key):
+			continue  # 重複キーは先勝ち（同じ stat を複数スロットに設定した場合）
+		var max_v: int = max_le.text.to_int() if max_le.text.is_valid_int() else 0
+		out[max_key] = max_v
+	return out
+
+
+## アイテムタイプに差分があるかを判定（base_stats のみ・depth_scale は legacy 削除済み）
+func _item_has_diff(item_type: String) -> bool:
+	var data: Dictionary = _item_base_data.get(item_type, {}) as Dictionary
+	var orig_base: Dictionary = data.get("base_stats", {}) as Dictionary
+	var cur_base := _build_item_base_stats_from_slots(item_type)
+	if cur_base.size() != orig_base.size():
+		return true
+	for k: Variant in orig_base.keys():
+		if not cur_base.has(k):
+			return true
+		if int(cur_base[k]) != int(orig_base[k]):
+			return true
+	return false
+
+
+## タブ名末尾 ● インジケータ更新（いずれかのサブタブに差分があれば付与）
+func _update_item_tab_indicator() -> void:
+	if _top_tab_container == null:
+		return
+	var idx := _find_top_tab_index(TOP_TAB_ITEM)
+	if idx < 0:
+		return
+	var has_change := false
+	for iid: String in ITEM_TYPE_IDS:
+		if bool(_item_base_dirty.get(iid, false)):
+			has_change = true
+			break
+	var title: String = TOP_TAB_ITEM + " ●" if has_change else TOP_TAB_ITEM
+	_top_tab_container.set_tab_title(idx, title)
+
+
+# ----------------------------------------------------------------------------
+# アイテムタブの保存
+# ----------------------------------------------------------------------------
+
+## dirty な全アイテムタイプの JSON を書き戻す。完了後、再生成依頼ダイアログを表示
+func _save_item_base_stats_tab() -> Dictionary:
+	var result := {"saved": [], "errors": []}
+	for iid: String in ITEM_TYPE_IDS:
+		if not bool(_item_base_dirty.get(iid, false)):
+			continue
+		var new_data := _apply_item_edits(iid)
+		if new_data.is_empty():
+			(result["errors"] as Array).append("%s.json: 変換失敗" % iid)
+			continue
+		var path := ITEM_BASE_DIR + iid + ".json"
+		var f := FileAccess.open(path, FileAccess.WRITE)
+		if f == null:
+			(result["errors"] as Array).append(
+				"%s.json: 書き込み失敗 err=%d" % [iid, FileAccess.get_open_error()])
+			continue
+		f.store_string(JSON.stringify(new_data, "  ", false))
+		f.close()
+		_item_base_data[iid] = new_data
+		_item_base_dirty[iid] = false
+		(result["saved"] as Array).append(iid + ".json")
+	# ハイライト解除
+	_clear_item_cell_highlights()
+	_update_item_tab_indicator()
+	return result
+
+
+## 1 アイテムタイプの UI 状態を反映した新 Dictionary を返す
+## 他フィールド（item_type / category / allowed_classes / effect / image / name）は
+## 元 JSON からそのまま複製する（`depth_scale` は 2026-04-19 に legacy 削除済みのため扱わない）
+func _apply_item_edits(item_type: String) -> Dictionary:
+	var orig: Dictionary = _item_base_data.get(item_type, {}) as Dictionary
+	var out := orig.duplicate(true) as Dictionary
+	out["base_stats"] = _build_item_base_stats_from_slots(item_type)
+	return out
+
+
+## LineEdit セル群のハイライトを全解除
+func _clear_item_cell_highlights() -> void:
+	for raw_key: Variant in _item_cell_styles.keys():
+		var sb := _item_cell_styles[raw_key] as StyleBoxFlat
+		if sb != null:
+			sb.bg_color = Color(0.12, 0.12, 0.16)
+
+
+## 保存完了後に表示する再生成依頼ダイアログ
+func _show_item_regeneration_notice() -> void:
+	var dlg := AcceptDialog.new()
+	dlg.dialog_text = "アイテム生成ルールが変更されました。\n\n" \
+		+ "個別アイテムデータ（assets/master/items/generated/*.json）は\n" \
+		+ "まだ古いルールで生成されたままです。\n\n" \
+		+ "Claude Code に以下を依頼してください：\n" \
+		+ "「Config Editor で変更したアイテム生成ルールに従って、\n" \
+		+ " generated/*.json を再生成してください」"
+	dlg.title = "ルール変更"
+	get_tree().root.add_child(dlg)
+	dlg.popup_centered()
+	dlg.confirmed.connect(func() -> void: dlg.queue_free())
+	dlg.canceled.connect(func() -> void: dlg.queue_free())
 
 
 ## プレースホルダー用のタブを追加する（中身はラベルのみ）
@@ -2181,6 +2638,8 @@ func _build_row(key: String) -> void:
 			editor = _make_numeric_editor(key, meta, type_name == "int")
 		"color":
 			editor = _make_color_editor(key)
+		"string":
+			editor = _make_string_editor(key, meta)
 		_:
 			editor = Label.new()
 			(editor as Label).text = "(未対応の型: %s)" % type_name
@@ -2216,6 +2675,31 @@ func _make_numeric_editor(key: String, meta: Dictionary, is_int: bool) -> SpinBo
 	sb.value     = float(GlobalConstants.get(key))
 	sb.value_changed.connect(_on_numeric_changed.bind(key, is_int))
 	return sb
+
+
+## 文字列定数用の編集ウィジェットを生成する
+## meta.choices（Array）があれば OptionButton、なければ LineEdit
+func _make_string_editor(key: String, meta: Dictionary) -> Control:
+	var choices_v: Variant = meta.get("choices")
+	if choices_v is Array and (choices_v as Array).size() > 0:
+		var btn := OptionButton.new()
+		btn.add_theme_font_size_override("font_size", 12)
+		var current := str(GlobalConstants.get(key))
+		var sel_idx := 0
+		for i: int in range((choices_v as Array).size()):
+			var c := str((choices_v as Array)[i])
+			btn.add_item(c, i)
+			if c == current:
+				sel_idx = i
+		btn.select(sel_idx)
+		btn.item_selected.connect(_on_string_choice_changed.bind(key, choices_v as Array))
+		return btn
+	# 選択肢なし → LineEdit
+	var le := LineEdit.new()
+	le.text = str(GlobalConstants.get(key))
+	le.add_theme_font_size_override("font_size", 12)
+	le.text_changed.connect(_on_string_text_changed.bind(key))
+	return le
 
 
 func _make_color_editor(key: String) -> ColorPickerButton:
@@ -2263,6 +2747,20 @@ func _on_color_changed(color: Color, key: String) -> void:
 	_update_row_highlight(key)
 
 
+## 選択肢付き文字列定数の OptionButton 変更ハンドラ
+func _on_string_choice_changed(idx: int, key: String, choices: Array) -> void:
+	if idx < 0 or idx >= choices.size():
+		return
+	GlobalConstants.set(key, str(choices[idx]))
+	_update_row_highlight(key)
+
+
+## 自由入力の文字列定数の LineEdit 変更ハンドラ（現状未使用だが将来拡張用）
+func _on_string_text_changed(new_text: String, key: String) -> void:
+	GlobalConstants.set(key, new_text)
+	_update_row_highlight(key)
+
+
 # ============================================================================
 # ボタン
 # ============================================================================
@@ -2291,7 +2789,9 @@ func _on_top_tab_changed(_idx: int) -> void:
 	var is_enemy_class := top == TOP_TAB_ENEMY_CLASS
 	var is_enemy_list := top == TOP_TAB_ENEMY_LIST
 	var is_stats := top == TOP_TAB_STATS
-	_btn_save.disabled = not (is_constants or is_ally or is_enemy_class or is_enemy_list or is_stats)
+	var is_item := top == TOP_TAB_ITEM
+	_btn_save.disabled = not (is_constants or is_ally or is_enemy_class \
+		or is_enemy_list or is_stats or is_item)
 	# リセット / デフォルト化は定数タブ専用機能だが、どのタブからでも押せるようにする
 	# （ボタンを見て「押せる」と認識できる状態にしておく方が UX として分かりやすい）
 	_btn_reset.disabled = false
@@ -2339,6 +2839,19 @@ func _on_save_pressed() -> void:
 					_set_status("変更なし（保存対象の差分がありません）", Color(0.8, 0.8, 0.6))
 				else:
 					_set_status("保存しました: %s" % ", ".join(saved), Color(0.55, 1.0, 0.55))
+			else:
+				_set_status("エラー: %s" % " / ".join(errors), Color(1.0, 0.5, 0.5))
+		TOP_TAB_ITEM:
+			var result := _save_item_base_stats_tab()
+			var saved: Array = result.get("saved", [])
+			var errors: Array = result.get("errors", [])
+			if errors.is_empty():
+				if saved.is_empty():
+					_set_status("変更なし（保存対象の差分がありません）", Color(0.8, 0.8, 0.6))
+				else:
+					_set_status("保存しました: %s" % ", ".join(saved), Color(0.55, 1.0, 0.55))
+					# 保存成功時のみ再生成依頼ダイアログを表示
+					_show_item_regeneration_notice()
 			else:
 				_set_status("エラー: %s" % " / ".join(errors), Color(1.0, 0.5, 0.5))
 		_:
@@ -2483,6 +2996,15 @@ func _refresh_all() -> void:
 			(editor as SpinBox).value = float(GlobalConstants.get(key))
 		elif editor is ColorPickerButton:
 			(editor as ColorPickerButton).color = GlobalConstants.get(key) as Color
+		elif editor is OptionButton:
+			var cur := str(GlobalConstants.get(key))
+			var ob := editor as OptionButton
+			for i: int in range(ob.item_count):
+				if ob.get_item_text(i) == cur:
+					ob.select(i)
+					break
+		elif editor is LineEdit:
+			(editor as LineEdit).text = str(GlobalConstants.get(key))
 		# デフォルト値ラベル
 		var default_val: Variant = GlobalConstants.get_default_value(key)
 		var disp := w.get("default_display") as Control

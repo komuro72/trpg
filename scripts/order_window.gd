@@ -690,19 +690,16 @@ func _get_stat_rows(ch: Character) -> Dictionary:
 	if cd.attack_type != "heal":
 		var skill_label := "魔法技量" if _is_magic_cls else "物理技量"
 		left.append({"label": skill_label, "type": "num", "base": cd.skill, "bonus": 0})
-	# 防御強度（保有または装備補正がある場合のみ）
-	var brf_bonus := cd.get_weapon_block_right_bonus()
-	if cd.block_right_front > 0 or brf_bonus > 0:
-		left.append({"label": "右手防御強度", "type": "num",
-			"base": cd.block_right_front, "bonus": brf_bonus})
-	var blf_bonus := cd.get_shield_block_left_bonus()
-	if cd.block_left_front > 0 or blf_bonus > 0:
-		left.append({"label": "左手防御強度", "type": "num",
-			"base": cd.block_left_front, "bonus": blf_bonus})
-	var bf_bonus := cd.get_weapon_block_front_bonus()
-	if cd.block_front > 0 or bf_bonus > 0:
-		left.append({"label": "両手防御強度", "type": "num",
-			"base": cd.block_front, "bonus": bf_bonus})
+	# 防御強度（3 方向すべて常に表示）
+	# 理由: アイテムを他メンバーに渡す操作があるため、閲覧中キャラのクラスで
+	# 行の有無を決めると、渡し先で有効な補正値が見えなくなる。
+	# 装備不可のキャラでも inventory にある装備の補正値を確認できるようにする
+	left.append({"label": "右手防御強度", "type": "num",
+		"base": cd.block_right_front, "bonus": cd.get_weapon_block_right_bonus()})
+	left.append({"label": "左手防御強度", "type": "num",
+		"base": cd.block_left_front, "bonus": cd.get_shield_block_left_bonus()})
+	left.append({"label": "両手防御強度", "type": "num",
+		"base": cd.block_front, "bonus": cd.get_weapon_block_front_bonus()})
 
 	# ── 右列 ──────────────────────────────────────────────────────────────────
 	var phys_equip := cd.get_total_physical_resistance_score() - cd.physical_resistance
@@ -1223,13 +1220,16 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 			var ename: String = equip.get("item_name", "？") as String
 			var estats: Dictionary = equip.get("stats", {}) as Dictionary
 			var eparts: Array = []
-			for k: String in ["power", "skill",
-					"defense_strength", "physical_resistance", "magic_resistance"]:
-				if estats.has(k):
-					var v: int = int(estats[k])
-					if v != 0:
-						var jp: String = GlobalConstants.STAT_NAME_JP.get(k, k) as String
-						eparts.append("%s+%d" % [jp, v])
+			# stats の全キーを反復（将来の新ステータスにも自動対応）
+			# アイテムを他メンバーに渡す操作があるため、閲覧中キャラのクラスで
+			# 表示キーを絞らない
+			for k_v: Variant in estats.keys():
+				var k := k_v as String
+				var v: int = int(estats[k])
+				if v == 0:
+					continue
+				var jp: String = GlobalConstants.STAT_NAME_JP.get(k, k) as String
+				eparts.append("%s+%d" % [jp, v])
 			var estat_str := "" if eparts.is_empty() else " [%s]" % ", ".join(eparts)
 			_control.draw_string(_font, Vector2(ex + eq_icon_sz + 3.0, ey + stat_h * 0.75),
 				ename + estat_str,
@@ -1287,13 +1287,16 @@ func _draw_status_section(px: float, y_start: float, panel_w: float, pad: float,
 				_control.draw_rect(inv_icon_rect, Color(0.35, 0.35, 0.50, 0.60))
 			var iname: String = item_d.get("item_name", "???") as String
 			var stats_d: Dictionary = item_d.get("stats", {}) as Dictionary
-			# 主要補正値の要約（power/skill/physical_resistance 等）
+			# 主要補正値の要約（stats の全キーを反復・将来の新ステータスにも自動対応）
+			# アイテムを他メンバーに渡す操作があるため、閲覧中キャラのクラスで絞らない
 			var stat_strs: Array = []
-			for k: String in ["power", "skill", "defense_strength",
-					"physical_resistance", "magic_resistance"]:
-				if stats_d.has(k) and int(stats_d[k]) != 0:
-					var jp: String = GlobalConstants.STAT_NAME_JP.get(k, k) as String
-					stat_strs.append("%s+%d" % [jp, int(stats_d[k])])
+			for k_v: Variant in stats_d.keys():
+				var k := k_v as String
+				var v: int = int(stats_d[k])
+				if v == 0:
+					continue
+				var jp: String = GlobalConstants.STAT_NAME_JP.get(k, k) as String
+				stat_strs.append("%s+%d" % [jp, v])
 			# 消耗品は effect を日本語表記で表示（ch のクラス種別で MP/SP 切替）
 			var effect_d: Dictionary = item_d.get("effect", {}) as Dictionary
 			for ek: String in effect_d:
@@ -1334,8 +1337,6 @@ static func _effect_label(key: String) -> String:
 	match key:
 		"restore_hp":     return "HP回復"
 		"restore_energy": return "MP/SP回復"
-		"restore_mp":     return "MP/SP回復"  # legacy
-		"restore_sp":     return "MP/SP回復"  # legacy
 	return key
 
 
@@ -1582,13 +1583,14 @@ func _draw_item_list_overlay(ox: float, main_py: float, ow: float,
 			# 主要補正値サマリ（日本語表記）
 			var stats_d: Dictionary = item.get("stats", {}) as Dictionary
 			var parts: Array = []
-			for k: String in ["power", "skill",
-					"physical_resistance", "magic_resistance", "defense_strength"]:
-				if stats_d.has(k):
-					var v: int = int(stats_d[k])
-					if v != 0:
-						var jp: String = GlobalConstants.STAT_NAME_JP.get(k, k) as String
-						parts.append("%s+%d" % [jp, v])
+			# stats の全キーを反復（他メンバーへの受け渡し前提で全補正を表示）
+			for k_v: Variant in stats_d.keys():
+				var k := k_v as String
+				var v: int = int(stats_d[k])
+				if v == 0:
+					continue
+				var jp: String = GlobalConstants.STAT_NAME_JP.get(k, k) as String
+				parts.append("%s+%d" % [jp, v])
 			var effect_d: Dictionary = item.get("effect", {}) as Dictionary
 			for ek: String in effect_d:
 				var ev: int = int(effect_d[ek])

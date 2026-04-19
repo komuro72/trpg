@@ -1,0 +1,13 @@
+{
+  "axe": [
+    { "name": "兵士の斧",       "stats": { "power": 10, "block_right_front": 10 }, "tier": "low"  },
+    { "name": "守りの斧",       "stats": { "power": 10, "block_right_front": 20 }, "tier": "mid"  },
+    { "name": "守護の戦斧",     "stats": { "power": 10, "block_right_front": 30 }, "tier": "high" },
+    { "name": "荒削りの斧",     "stats": { "power": 20, "block_right_front": 10 }, "tier": "mid"  },
+    { "name": "武人の斧",       "stats": { "power": 20, "block_right_front": 20 }, "tier": "mid"  },
+    { "name": "重装の斧",       "stats": { "power": 20, "block_right_front": 30 }, "tier": "high" },
+    { "name": "鮮血の戦斧",     "stats": { "power": 30, "block_right_front": 10 }, "tier": "high" },
+    { "name": "粉砕の鉄斧",     "stats": { "power": 30, "block_right_front": 20 }, "tier": "high" },
+    { "name": "剛勇の戦斧",     "stats": { "power": 30, "block_right_front": 30 }, "tier": "high" }
+  ]
+}

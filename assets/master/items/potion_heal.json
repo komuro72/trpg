@@ -6,6 +6,5 @@
 	"effect": {
 		"restore_hp": 30
 	},
-	"depth_scale": 0.3,
 	"image": "assets/images/items/potion_heal.png"
 }

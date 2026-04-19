@@ -10,8 +10,7 @@ extends Node2D
 const LINE_COLOR:  Color = Color(0.2, 0.9, 0.4, 0.80)
 ## 枠線幅
 const LINE_WIDTH:  float = 2.0
-## 回転速度（rad/s）: PI/3 = 60°/秒
-const ROT_SPEED:   float = PI / 3.0
+## 回転速度は GlobalConstants.BUFF_EFFECT_ROT_SPEED_DEG（度/秒）を参照
 
 
 func _ready() -> void:
@@ -19,7 +18,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	rotation += ROT_SPEED * delta
+	rotation += deg_to_rad(GlobalConstants.BUFF_EFFECT_ROT_SPEED_DEG) * delta
 	queue_redraw()
 
 

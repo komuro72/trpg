@@ -1,0 +1,13 @@
+{
+  "armor_plate": [
+    { "name": "兵士の鎧",       "stats": { "physical_resistance": 10, "magic_resistance": 5  }, "tier": "low"  },
+    { "name": "堅守の革鎧",     "stats": { "physical_resistance": 10, "magic_resistance": 10 }, "tier": "mid"  },
+    { "name": "魔除けの鎧",     "stats": { "physical_resistance": 10, "magic_resistance": 15 }, "tier": "high" },
+    { "name": "武者の鎧",       "stats": { "physical_resistance": 20, "magic_resistance": 5  }, "tier": "mid"  },
+    { "name": "騎士の鎧",       "stats": { "physical_resistance": 20, "magic_resistance": 10 }, "tier": "mid"  },
+    { "name": "賢武の鎧",       "stats": { "physical_resistance": 20, "magic_resistance": 15 }, "tier": "high" },
+    { "name": "鉄壁の鎧",       "stats": { "physical_resistance": 30, "magic_resistance": 5  }, "tier": "high" },
+    { "name": "重装の鎧",       "stats": { "physical_resistance": 30, "magic_resistance": 10 }, "tier": "high" },
+    { "name": "不撓の鎧",       "stats": { "physical_resistance": 30, "magic_resistance": 15 }, "tier": "high" }
+  ]
+}

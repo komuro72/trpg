@@ -1,0 +1,13 @@
+{
+  "bow": [
+    { "name": "狩人の弓",       "stats": { "power": 10, "block_front": 10 }, "tier": "low"  },
+    { "name": "守りの弓",       "stats": { "power": 10, "block_front": 20 }, "tier": "mid"  },
+    { "name": "護りの長弓",     "stats": { "power": 10, "block_front": 30 }, "tier": "high" },
+    { "name": "速射の弓",       "stats": { "power": 20, "block_front": 10 }, "tier": "mid"  },
+    { "name": "射手の弓",       "stats": { "power": 20, "block_front": 20 }, "tier": "mid"  },
+    { "name": "鉄壁の長弓",     "stats": { "power": 20, "block_front": 30 }, "tier": "high" },
+    { "name": "貫きの魔弓",     "stats": { "power": 30, "block_front": 10 }, "tier": "high" },
+    { "name": "歴戦の長弓",     "stats": { "power": 30, "block_front": 20 }, "tier": "high" },
+    { "name": "均整の長弓",     "stats": { "power": 30, "block_front": 30 }, "tier": "high" }
+  ]
+}

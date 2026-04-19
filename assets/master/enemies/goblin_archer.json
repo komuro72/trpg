@@ -1,13 +1,7 @@
 {
   "id": "goblin-archer",
   "name": "ゴブリンアーチャー",
-  "hp": 18,
-  "power": 6,
-  "skill": 15,
-  "physical_resistance": 2,
-  "magic_resistance": 2,
   "is_flying": false,
-  "rank": "C",
   "chase_range": 10,
   "territory_range": 50,
   "behavior_description": "弓を持つゴブリン。後方から遠距離攻撃する。敵が近づきすぎると後退して射程を確保する。",

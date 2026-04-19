@@ -7,12 +7,8 @@
 		"healer"
 	],
 	"base_stats": {
-		"power_min": 0,
 		"power_max": 30,
-		"block_front_min": 0,
 		"block_front_max": 30,
-		"range_bonus_min": 0,
 		"range_bonus_max": 1
-	},
-	"depth_scale": 0.6
+	}
 }

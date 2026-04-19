@@ -410,14 +410,9 @@ func _get_equipped_for_type(cd: CharacterData, itype: String) -> Dictionary:
 
 
 ## キャラクターのインベントリからポーションを検索する
-## kind: "hp" / "energy"（旧 "mp" / "sp" は "energy" に正規化）
+## kind: "hp" / "energy"
 func _find_potion_in_cd(cd: CharacterData, kind: String) -> Variant:
-	if kind == "mp" or kind == "sp":
-		kind = "energy"
 	var key := "restore_" + kind
-	var legacy_keys: Array[String] = []
-	if kind == "energy":
-		legacy_keys = ["restore_mp", "restore_sp"]
 	for item_var: Variant in cd.inventory:
 		var it := item_var as Dictionary
 		if it == null:
@@ -425,9 +420,6 @@ func _find_potion_in_cd(cd: CharacterData, kind: String) -> Variant:
 		var eff := it.get("effect", {}) as Dictionary
 		if (eff.get(key, 0) as int) > 0:
 			return it
-		for lk: String in legacy_keys:
-			if (eff.get(lk, 0) as int) > 0:
-				return it
 	return null
 
 

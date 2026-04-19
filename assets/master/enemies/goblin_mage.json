@@ -1,13 +1,7 @@
 {
   "id": "goblin-mage",
   "name": "ゴブリンメイジ",
-  "hp": 15,
-  "power": 9,
-  "skill": 12,
-  "physical_resistance": 2,
-  "magic_resistance": 5,
   "is_flying": false,
-  "rank": "C",
   "chase_range": 10,
   "territory_range": 50,
   "behavior_description": "魔法を操るゴブリン。遠距離から魔法弾を放つ。MPが尽きると攻撃できなくなる。臆病でHPが減ると逃げる。",

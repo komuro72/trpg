@@ -1,0 +1,13 @@
+{
+  "sword": [
+    { "name": "兵士の剣",       "stats": { "power": 10, "block_right_front": 10 }, "tier": "low"  },
+    { "name": "守りの剣",       "stats": { "power": 10, "block_right_front": 20 }, "tier": "mid"  },
+    { "name": "城壁の守護剣",   "stats": { "power": 10, "block_right_front": 30 }, "tier": "high" },
+    { "name": "鋭利な剣",       "stats": { "power": 20, "block_right_front": 10 }, "tier": "mid"  },
+    { "name": "騎士の剣",       "stats": { "power": 20, "block_right_front": 20 }, "tier": "mid"  },
+    { "name": "堅守の剣",       "stats": { "power": 20, "block_right_front": 30 }, "tier": "high" },
+    { "name": "断罪の魔剣",     "stats": { "power": 30, "block_right_front": 10 }, "tier": "high" },
+    { "name": "歴戦の業物",     "stats": { "power": 30, "block_right_front": 20 }, "tier": "high" },
+    { "name": "均整の剣",       "stats": { "power": 30, "block_right_front": 30 }, "tier": "high" }
+  ]
+}

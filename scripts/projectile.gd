@@ -12,6 +12,21 @@ const _FIRE_BULLET_PATH    := "res://assets/images/effects/fire_bullet.png"
 const _WATER_BULLET_PATH   := "res://assets/images/effects/water_bullet.png"
 const _THUNDER_BULLET_PATH := "res://assets/images/effects/thunder_bullet.png"
 
+## スプライト表示サイズは GlobalConstants.GRID_SIZE × GlobalConstants.PROJECTILE_SIZE_RATIO で動的計算
+## （解像度非依存・高解像度ディスプレイでは比例して大きくなる）
+
+## 画像の向き補正（下向き素材を右向きを基準に補正する角度）
+const SPRITE_ROTATION_OFFSET: float = PI / 2.0
+
+## フォールバック描画時の半径（px。画像がない場合の円描画）
+const FALLBACK_RADIUS: float = 5.0
+
+## フォールバック描画色（画像がない場合の弾種別色）
+const FALLBACK_COLOR_THUNDER: Color = Color(0.8, 0.4, 1.0)   # 紫（雷）
+const FALLBACK_COLOR_WATER:   Color = Color(0.3, 0.7, 1.0)   # 水色
+const FALLBACK_COLOR_FIRE:    Color = Color(1.0, 0.4, 0.0)   # オレンジ（火）
+const FALLBACK_COLOR_ARROW:   Color = Color(1.0, 0.8, 0.0)   # 黄色（矢）
+
 var _dest:           Vector2
 var _will_hit:       bool
 var _target:         Character
@@ -72,13 +87,14 @@ func _setup_sprite() -> void:
 
 	_sprite = Sprite2D.new()
 	_sprite.texture = tex
-	# 画像サイズを飛翔体として適切なサイズ（64px）にスケール
+	# 表示サイズを GRID_SIZE × PROJECTILE_SIZE_RATIO にスケール（解像度追従）
 	var img_size := maxf(float(tex.get_width()), float(tex.get_height()))
 	if img_size > 0.0:
-		var scale_val := 64.0 / img_size
+		var target_size := float(GlobalConstants.GRID_SIZE) * GlobalConstants.PROJECTILE_SIZE_RATIO
+		var scale_val := target_size / img_size
 		_sprite.scale = Vector2(scale_val, scale_val)
-	# 下向き（↓）が正方向の画像なので -PI/2 オフセットで右向きを基準に補正
-	_sprite.rotation = atan2(_direction.y, _direction.x) + PI / 2.0
+	# 下向き（↓）が正方向の画像なので +PI/2 オフセットで右向きを基準に補正
+	_sprite.rotation = atan2(_direction.y, _direction.x) + SPRITE_ROTATION_OFFSET
 	add_child(_sprite)
 
 
@@ -118,11 +134,11 @@ func _draw() -> void:
 	# 弾種別のフォールバック色
 	var col: Color
 	if _proj_type == "thunder_bullet":
-		col = Color(0.8, 0.4, 1.0)  # 紫（雷）
+		col = FALLBACK_COLOR_THUNDER
 	elif _is_water:
-		col = Color(0.3, 0.7, 1.0)  # 水色
+		col = FALLBACK_COLOR_WATER
 	elif _is_magic:
-		col = Color(1.0, 0.4, 0.0)  # オレンジ（火）
+		col = FALLBACK_COLOR_FIRE
 	else:
-		col = Color(1.0, 0.8, 0.0)  # 黄色（矢）
-	draw_circle(Vector2.ZERO, 5.0, col)
+		col = FALLBACK_COLOR_ARROW
+	draw_circle(Vector2.ZERO, FALLBACK_RADIUS, col)

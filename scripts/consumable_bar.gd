@@ -387,8 +387,6 @@ func _build_detail_lines(entry: Dictionary) -> Array[String]:
 	var EFFECT_LABELS: Dictionary = {
 		"restore_hp":     "HP回復",
 		"restore_energy": "MP/SP回復",
-		"restore_mp":     "MP/SP回復",  # legacy
-		"restore_sp":     "MP/SP回復",  # legacy
 	}
 	for key_v: Variant in effect.keys():
 		var key := key_v as String
@@ -499,8 +497,7 @@ func _is_consumable_usable(item: Dictionary) -> bool:
 	if _character == null or not is_instance_valid(_character):
 		return true
 	var effect: Dictionary = item.get("effect", {}) as Dictionary
-	var restore_energy := int(effect.get("restore_energy",
-		effect.get("restore_mp", effect.get("restore_sp", 0))))
+	var restore_energy := int(effect.get("restore_energy", 0))
 	if restore_energy > 0 and _character.max_energy == 0:
 		return false
 	return true

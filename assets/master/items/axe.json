@@ -5,10 +5,7 @@
 		"fighter-axe"
 	],
 	"base_stats": {
-		"power_min": 0,
 		"power_max": 30,
-		"block_right_front_min": 0,
 		"block_right_front_max": 30
-	},
-	"depth_scale": 0.6
+	}
 }

@@ -1,13 +1,7 @@
 {
   "id": "dark-priest",
   "name": "ダークプリースト",
-  "hp": 20,
-  "power": 10,
-  "skill": 12,
-  "physical_resistance": 3,
-  "magic_resistance": 10,
   "is_flying": false,
-  "rank": "B",
   "instant_death_immune": true,
   "chase_range": 6,
   "territory_range": 10,

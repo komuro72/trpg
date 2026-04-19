@@ -164,19 +164,9 @@ static func load_from_json(path: String) -> CharacterData:
 	var data := CharacterData.new()
 	data.character_id         = d.get("id", "")
 	data.character_name       = d.get("name", "")
-	data.max_hp               = int(d.get("hp", 1))
-	# max_energy はクラスの energy 値から apply_enemy_stats / generate() で設定するため
-	# ここでは JSON から読まない（mp / max_sp フィールドは廃止済み）
-	# power: 新 "power" キーを優先。旧キー "attack_power"/"magic_power" にフォールバック
-	var raw_power: int = int(d.get("power", -1))
-	if raw_power < 0:
-		var ap: int = int(d.get("attack_power", d.get("attack", -1)))
-		var mp: int = int(d.get("magic_power", -1))
-		raw_power = maxi(ap, mp) if ap >= 0 or mp >= 0 else 1
-		if raw_power < 0:
-			raw_power = 1
-	data.power                = raw_power
-	data.skill                = int(d.get("skill", d.get("accuracy", 0)))
+	# 数値ステータス（max_hp / power / skill / physical_resistance / magic_resistance / rank）は
+	# 個別敵 JSON からは読まない。敵は apply_enemy_stats() が stat_type / rank / stat_bonus から
+	# 算出して上書きする。味方は CharacterGenerator.generate_character() で生成する。
 	# defense_accuracy: 旧形式 float（0.0〜1.0）は ×100 で変換。新形式 int（0〜100）はそのまま
 	var da_raw: Variant = d.get("defense_accuracy", null)
 	if da_raw == null:
@@ -199,11 +189,8 @@ static func load_from_json(path: String) -> CharacterData:
 	data.behavior_description = d.get("behavior_description", "")
 	data.pre_delay            = float(d.get("pre_delay", 0.3))
 	data.post_delay           = float(d.get("post_delay", 0.5))
-	data.rank                    = d.get("rank", "C")
 	data.leadership              = int(d.get("leadership", 5))
 	data.obedience               = float(d.get("obedience", 0.5))
-	data.physical_resistance     = int(d.get("physical_resistance", 0))
-	data.magic_resistance        = int(d.get("magic_resistance",    0))
 
 	# クラス情報（Phase 6-0〜）
 	data.class_id = d.get("class_id", "")
@@ -282,35 +269,7 @@ func get_weapon_range_bonus() -> int:
 
 ## 装備中の武器から威力補正を返す（物理・魔法共用）
 func get_weapon_power_bonus() -> int:
-	var stats := equipped_weapon.get("stats", {}) as Dictionary
-	var v: int = int(stats.get("power", -1))
-	if v < 0:
-		# 旧キー互換（attack_power / magic_power の大きい方）
-		var ap: int = int(stats.get("attack_power", 0))
-		var mp: int = int(stats.get("magic_power",  0))
-		v = maxi(ap, mp)
-	return v
-
-
-## 装備中の武器から技量補正を返す
-func get_weapon_skill_bonus() -> int:
-	var stats := equipped_weapon.get("stats", {}) as Dictionary
-	var v: int = int(stats.get("skill", -1))
-	if v < 0:
-		# 旧キー互換（accuracy は float だったので ×10 に変換）
-		var acc: float = float(stats.get("accuracy", 0.0))
-		v = int(acc * 10.0)
-	return v
-
-
-## 装備中の武器から防御強度を返す（旧 block_power キー互換）
-func get_weapon_block_power() -> int:
-	return int((equipped_weapon.get("stats", {}) as Dictionary).get("block_power", 0))
-
-
-## 装備中の盾から防御強度を返す（旧 block_power キー互換）
-func get_shield_block_power() -> int:
-	return int((equipped_shield.get("stats", {}) as Dictionary).get("block_power", 0))
+	return int((equipped_weapon.get("stats", {}) as Dictionary).get("power", 0))
 
 
 ## 装備中の武器から右手防御強度補正を返す（剣・斧・短剣。正面・右側面で有効）
@@ -379,13 +338,3 @@ func get_v_pre_delay() -> float:
 ## 特殊攻撃（スロット V）の post_delay を返す
 func get_v_post_delay() -> float:
 	return v_post_delay if v_post_delay > 0.0 else post_delay
-
-
-## ヒーロー用データをJSONから生成する
-static func create_hero() -> CharacterData:
-	return load_from_json("res://assets/master/characters/hero.json")
-
-
-## ゴブリン用データをJSONから生成する
-static func create_goblin() -> CharacterData:
-	return load_from_json("res://assets/master/enemies/goblin.json")

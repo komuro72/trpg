@@ -1,0 +1,13 @@
+{
+  "armor_robe": [
+    { "name": "修行者の法衣",   "stats": { "physical_resistance": 5,  "magic_resistance": 10 }, "tier": "low"  },
+    { "name": "魔術師の法衣",   "stats": { "physical_resistance": 5,  "magic_resistance": 20 }, "tier": "mid"  },
+    { "name": "秘儀の外套",     "stats": { "physical_resistance": 5,  "magic_resistance": 30 }, "tier": "high" },
+    { "name": "旅装の法衣",     "stats": { "physical_resistance": 10, "magic_resistance": 10 }, "tier": "mid"  },
+    { "name": "賢者の法衣",     "stats": { "physical_resistance": 10, "magic_resistance": 20 }, "tier": "mid"  },
+    { "name": "神秘の法衣",     "stats": { "physical_resistance": 10, "magic_resistance": 30 }, "tier": "high" },
+    { "name": "護りの法衣",     "stats": { "physical_resistance": 15, "magic_resistance": 10 }, "tier": "high" },
+    { "name": "魔除けの法衣",   "stats": { "physical_resistance": 15, "magic_resistance": 20 }, "tier": "high" },
+    { "name": "大賢者の法衣",   "stats": { "physical_resistance": 15, "magic_resistance": 30 }, "tier": "high" }
+  ]
+}

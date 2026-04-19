@@ -25,10 +25,6 @@ var game_speed: float = 1.0
 ## 影響しないもの: テキスト表示・ヒット/バフエフェクト・Projectile
 var world_time_running: bool = false
 
-## スプライト素材のソース解像度（差し替え時もここを変えるだけでスケールが追従する）
-const SPRITE_SOURCE_WIDTH: int = 512
-const SPRITE_SOURCE_HEIGHT: int = 1024
-
 ## クラスIDから日本語名への変換テーブル
 const CLASS_NAME_JP: Dictionary = {
 	"fighter-sword":   "剣士",
@@ -102,16 +98,16 @@ const TILE_STAIRS_DOWN: int = 4
 const TILE_STAIRS_UP:   int = 5
 
 ## アイテム補正キーの日本語名
+## アイテム一覧 / 装備スロット行 / ステータス装備差分で使用（OrderWindow）
 const STAT_NAME_JP: Dictionary = {
 	"power":               "威力",
 	"skill":               "技量",
 	"physical_resistance": "物理耐性",
 	"magic_resistance":    "魔法耐性",
-	"defense_strength":    "防御強度",
-	## 旧キー互換（セーブデータ等の後方互換用）
-	"attack_power":        "威力",
-	"magic_power":         "威力",
-	"accuracy":            "技量",
+	"block_right_front":   "右手防御",
+	"block_left_front":    "左手防御",
+	"block_front":         "両手防御",
+	"range_bonus":         "射程",
 }
 
 
@@ -252,12 +248,101 @@ var HP_STATUS_LOW:     float = 0.25
 ## 例：CRITICAL_RATE_DIVISOR=300 なら skill 30 → 10% のクリ率。数値を下げるとクリ率上昇
 ## [ConfigEditor 対象]
 var CRITICAL_RATE_DIVISOR: float = 300.0
-## 飛翔体（矢・火弾・水弾・雷弾）の移動速度（px/秒）。移動中の回避は不可のため演出速度のみに影響
-## [ConfigEditor 対象]
-var PROJECTILE_SPEED: float = 2000.0
 ## エネルギー（MP/SP）の自動回復速度（/秒）。各スキルの cost と直接連動するため慎重に調整
 ## [ConfigEditor 対象]
 var ENERGY_RECOVERY_RATE: float = 3.0
+
+## ------------------------------------------------------------
+## Effect 関連（2026-04-19〜）
+## ------------------------------------------------------------
+## 向き変更ディレイ（秒）。キーを押してから実際に向きが変わるまでの tween 時間
+## [ConfigEditor 対象]
+var TURN_DELAY: float = 0.15
+## ターゲット自動キャンセル時のフラッシュ長（秒）。ターゲットが射程外に出て自動キャンセルされた瞬間の視覚フィードバック
+## [ConfigEditor 対象]
+var AUTO_CANCEL_FLASH: float = 0.25
+## スライディング 1 歩の演出秒数（game_speed で除算して使用）。斥候の V 特殊攻撃の体感速度
+## [ConfigEditor 対象]
+var SLIDING_STEP_DUR: float = 0.12
+## フォーカス中ターゲットのアウトライン太さ（screen px）。ターゲット選択中に現在選んでいる対象
+## [ConfigEditor 対象]
+var OUTLINE_WIDTH_FOCUSED: float = 2.5
+## 非フォーカスのターゲット候補アウトライン太さ（screen px）。選択可能な候補の示唆
+## [ConfigEditor 対象]
+var OUTLINE_WIDTH_UNFOCUSED: float = 1.0
+## ターゲット選択時の発光強度倍率（Character._update_modulate 内 Color(s, s, s, 1.0) の s）
+## [ConfigEditor 対象]
+var TARGETED_MODULATE_STRENGTH: float = 1.5
+## 防御バフバリア（BuffEffect）の回転速度（度/秒）
+## [ConfigEditor 対象]
+var BUFF_EFFECT_ROT_SPEED_DEG: float = 60.0
+## 無力化水魔法スタン時の渦（WhirlpoolEffect）の回転速度（度/秒）
+## [ConfigEditor 対象]
+var WHIRLPOOL_ROT_SPEED_DEG: float = 270.0
+
+## 飛翔体（矢・火弾・水弾・雷弾）の移動速度（px/秒）。
+## ダメージ判定は攻撃の瞬間に確定しており、本値は演出速度のみに影響する
+## [ConfigEditor 対象]
+var PROJECTILE_SPEED: float = 2000.0
+
+## 飛翔体の表示サイズ（GRID_SIZE 比）。解像度非依存（高解像度でも GRID_SIZE に比例して大きくなる）
+## 実効表示サイズ = GRID_SIZE × PROJECTILE_SIZE_RATIO（1920x1080 時 GRID_SIZE≈98 → 約 65px = 旧 64px 相当）
+## [ConfigEditor 対象]
+var PROJECTILE_SIZE_RATIO: float = 0.67
+
+## 降下攻撃エフェクト（DiveEffect）の半径（GRID_SIZE 比）
+## 実効半径 = GRID_SIZE × DIVE_EFFECT_RADIUS_RATIO（1920x1080 時 GRID_SIZE≈98 → 約 19.6px = 旧 18px 相当）
+## [ConfigEditor 対象]
+var DIVE_EFFECT_RADIUS_RATIO: float = 0.2
+
+## スタン時のスプライト脈動周波数（Hz）。CONDITION_PULSE_HZ とは別概念（スタン専用）
+## 値は一致しているが仕様上独立。将来別値にしたくなった時のために分離
+## [GlobalConstants 集約のみ・UI 非公開]
+var STUN_PULSE_HZ: float = 3.0
+
+## ------------------------------------------------------------
+## Item 関連（2026-04-19〜・定数ベース事前生成方式）
+## ------------------------------------------------------------
+## 各アイテムタイプは 2 ステータスを低・中・高の 3 段階で組み合わせた
+## 9 パターン（単一ステータスの盾のみ 3 パターン）を事前生成し、
+## フロア出現時に「基準段階＋距離重み」でランダム選択する。
+## 詳細は docs/history.md の 2026-04-19 エントリおよび
+## CLAUDE.md「装備の名前生成」節を参照。
+
+## 低段階の比率（対 _max）。例: power_max=30 × 0.33 = 9.9 → 10
+## [ConfigEditor 対象]
+var ITEM_TIER_LOW_RATIO:  float = 0.33
+## 中段階の比率（対 _max）。例: power_max=30 × 0.67 = 20.1 → 20
+## [ConfigEditor 対象]
+var ITEM_TIER_MID_RATIO:  float = 0.67
+## 高段階の比率（対 _max）。例: power_max=30 × 1.0 = 30
+## [ConfigEditor 対象]
+var ITEM_TIER_HIGH_RATIO: float = 1.0
+
+## フロア 0〜1 の基準段階（"low" / "mid" / "high"）
+## [ConfigEditor 対象]
+var FLOOR_0_1_BASE_TIER: String = "low"
+## フロア 1〜2 の基準段階
+## [ConfigEditor 対象]
+var FLOOR_1_2_BASE_TIER: String = "mid"
+## フロア 2〜3 の基準段階
+## [ConfigEditor 対象]
+var FLOOR_2_3_BASE_TIER: String = "high"
+
+## 基準段階の出現重み。各フロアで最もよく出る段階の重み
+## [ConfigEditor 対象]
+var FLOOR_BASE_WEIGHT:     int = 5
+## 基準 ±1 段階（隣接）の出現重み
+## [ConfigEditor 対象]
+var FLOOR_NEIGHBOR_WEIGHT: int = 2
+## 基準 ±2 段階以上離れた段階の出現重み。0 なら「出ない」
+## [ConfigEditor 対象]
+var FLOOR_FAR_WEIGHT:      int = 0
+
+## アイテム段階判定方法（"max" / "min" / "avg"）
+## "max": 2 ステータスの高い方を採用（power中 × block高 → 高段階）
+## [ConfigEditor 対象]
+var ITEM_TIER_POLICY: String = "max"
 
 ## ダメージ段階の閾値（battle メッセージの「小/中/大/特大ダメージ」判定に使用）
 const DAMAGE_LEVEL_SMALL:  int = 5   ## 小ダメージの上限（これ以下）
@@ -349,9 +434,31 @@ const CONFIG_KEYS: Array[String] = [
 	"POTION_SP_MP_AUTOUSE_THRESHOLD",
 	# SkillExecutor タブ
 	"CRITICAL_RATE_DIVISOR",
-	"PROJECTILE_SPEED",
 	# Character タブ（追加）
 	"ENERGY_RECOVERY_RATE",
+	# Effect タブ（2026-04-19〜）
+	"TURN_DELAY",
+	"AUTO_CANCEL_FLASH",
+	"SLIDING_STEP_DUR",
+	"OUTLINE_WIDTH_FOCUSED",
+	"OUTLINE_WIDTH_UNFOCUSED",
+	"TARGETED_MODULATE_STRENGTH",
+	"BUFF_EFFECT_ROT_SPEED_DEG",
+	"WHIRLPOOL_ROT_SPEED_DEG",
+	"PROJECTILE_SPEED",
+	"PROJECTILE_SIZE_RATIO",
+	"DIVE_EFFECT_RADIUS_RATIO",
+	# Item タブ（2026-04-19〜・定数ベース事前生成方式）
+	"ITEM_TIER_LOW_RATIO",
+	"ITEM_TIER_MID_RATIO",
+	"ITEM_TIER_HIGH_RATIO",
+	"FLOOR_0_1_BASE_TIER",
+	"FLOOR_1_2_BASE_TIER",
+	"FLOOR_2_3_BASE_TIER",
+	"FLOOR_BASE_WEIGHT",
+	"FLOOR_NEIGHBOR_WEIGHT",
+	"FLOOR_FAR_WEIGHT",
+	"ITEM_TIER_POLICY",
 ]
 
 ## 最後のセーブ／書き込み結果（ConfigEditor がエラー表示に使う）
@@ -432,6 +539,10 @@ func _apply_value(key: String, raw: Variant) -> void:
 				var b: float = float(arr[2]) if arr.size() >= 3 else 0.0
 				var a: float = float(arr[3]) if arr.size() >= 4 else 1.0
 				set(key, Color(r, g, b, a))
+		"string":
+			# 選択肢（choices）付き文字列は OptionButton で編集する（config_editor.gd）
+			# 選択肢なしは LineEdit（将来拡張）
+			set(key, str(raw))
 		_:
 			push_warning("[GlobalConstants] 未対応の型: " + type_name + " key=" + key)
 

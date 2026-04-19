@@ -1246,6 +1246,10 @@ func _on_character_died(character: Character) -> void:
 
 
 ## 敵パーティー全滅シグナルを受け取り、アイテムを部屋の床に散らばらせる（部屋制圧方式）
+## items の各要素は以下のいずれかの形式：
+##   - String（新形式・item_type のみ）→ ItemGenerator で stats 付きアイテムに展開
+##   - Dictionary with "item_type" only（新形式）→ 同上
+##   - Dictionary with full stats（旧形式・後方互換）→ そのまま使用
 func _on_enemy_party_wiped(items: Array, room_id: String, floor_idx: int) -> void:
 	# 最終フロア（フロア4, インデックス4）での全滅チェック → ゲームクリア
 	var last_floor_index: int = _all_map_data.size() - 1
@@ -1282,7 +1286,10 @@ func _on_enemy_party_wiped(items: Array, room_id: String, floor_idx: int) -> voi
 	for item_v: Variant in items:
 		if placed >= candidates.size():
 			break
-		floor_dict[candidates[placed]] = item_v as Dictionary
+		var item_dict := _normalize_drop_item(item_v, floor_idx)
+		if item_dict.is_empty():
+			continue
+		floor_dict[candidates[placed]] = item_dict
 		placed += 1
 	if placed > 0:
 		queue_redraw()
@@ -1297,6 +1304,26 @@ func _on_enemy_party_wiped(items: Array, room_id: String, floor_idx: int) -> voi
 			SoundManager.play(SoundManager.ITEM_GET)
 			if message_window != null:
 				message_window.show_message("アイテムが部屋に散らばった！（%d個）" % placed)
+
+
+## ドロップアイテムを Dictionary 形式に正規化する
+## - String（新形式）→ ItemGenerator で stats 付きアイテムに展開
+## - Dictionary with only "item_type"（新形式）→ 同上
+## - Dictionary with stats / effect（旧形式・後方互換）→ そのまま使用
+## フロア深度はアイテム段階の選択に使われる
+func _normalize_drop_item(raw: Variant, floor_idx: int) -> Dictionary:
+	if raw is String:
+		return ItemGenerator.generate(raw as String, floor_idx)
+	if raw is Dictionary:
+		var d := raw as Dictionary
+		# 具体値ベイク済み（旧形式）→ そのまま
+		if d.has("stats") or d.has("effect"):
+			return d
+		# item_type のみの新形式 → ItemGenerator で展開
+		var itype := str(d.get("item_type", ""))
+		if not itype.is_empty():
+			return ItemGenerator.generate(itype, floor_idx)
+	return {}
 
 
 ## ゲームクリア処理
@@ -2275,7 +2302,7 @@ func _load_tile_textures() -> void:
 		if ResourceLoader.exists(path):
 			var tex := load(path) as Texture2D
 			if tex != null:
-				_tile_textures[tile_type] = _crop_single_tile(tex)
+				_tile_textures[tile_type] = tex
 	# corridor.png がない場合は floor.png にフォールバック
 	if not _tile_textures.has(MapData.TileType.CORRIDOR) \
 			and _tile_textures.has(MapData.TileType.FLOOR):
@@ -2283,22 +2310,9 @@ func _load_tile_textures() -> void:
 	# 安全部屋用の床テクスチャ（safe_floor.png）
 	var safe_path := base + "safe_floor.png"
 	if ResourceLoader.exists(safe_path):
-		var stex := load(safe_path) as Texture2D
-		if stex != null:
-			_safe_floor_tex = _crop_single_tile(stex)
-		else:
-			_safe_floor_tex = null
+		_safe_floor_tex = load(safe_path) as Texture2D
 	else:
 		_safe_floor_tex = null
-
-
-## タイル画像の左上1/4を切り出して使用する
-## 高解像度画像（1024x1024）をそのままセルに縮小するとパターンが細かくなりすぎるため、
-## 1/4領域を切り出すことで1セルに対して適切な密度で表示する
-## 512px以下の画像はそのまま返す
-func _crop_single_tile(tex: Texture2D) -> Texture2D:
-	# 画像全体を1タイルとして使用する
-	return tex
 
 
 func _draw() -> void:

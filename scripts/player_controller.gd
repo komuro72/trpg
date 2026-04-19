@@ -43,7 +43,7 @@ signal switch_char_requested(new_char: Character)
 ## 【旧方式との違い】タイマーによる移動間隔制御を廃止し、アニメーション完了を
 ## 次移動の gate として使う先行入力バッファ方式に変更（Phase 9-1）
 const MOVE_INTERVAL: float = 0.30
-const TURN_DELAY:     float = 0.15   ## 向き変更ディレイ（秒）
+## TURN_DELAY は GlobalConstants.TURN_DELAY（Config Editor 対象）を参照
 const CLASS_JSON_DIR := "res://assets/master/classes/"
 
 ## 前方コーン判定しきい値（cos 45° ≈ 0.707）
@@ -127,7 +127,7 @@ var _post_delay_remaining: float = 0.0
 
 ## TARGETING 突入時にターゲットなしで自動解除するタイマー（射程オーバーレイを一瞬見せる）
 var _auto_cancel_remaining: float = 0.0
-const AUTO_CANCEL_FLASH: float = 0.25  # 秒
+## AUTO_CANCEL_FLASH は GlobalConstants.AUTO_CANCEL_FLASH（Config Editor 対象）を参照
 
 ## _input() で検出したターゲット循環方向（+1=次・-1=前・0=なし）
 ## is_action_just_pressed をポーリングするより確実にボタン1回を捕捉できる
@@ -614,11 +614,11 @@ func _start_targeting() -> void:
 	# 射程内の全対象をグレー細アウトラインで下地表示
 	for t: Character in _valid_targets:
 		if is_instance_valid(t):
-			t.set_outline(Color(0.65, 0.65, 0.65), 1.0)
+			t.set_outline(Color(0.65, 0.65, 0.65), GlobalConstants.OUTLINE_WIDTH_UNFOCUSED)
 	_update_cursor()
 	# 対象なしなら射程オーバーレイを一瞬見せてから自動キャンセル
 	if _valid_targets.is_empty():
-		_auto_cancel_remaining = AUTO_CANCEL_FLASH
+		_auto_cancel_remaining = GlobalConstants.AUTO_CANCEL_FLASH
 	else:
 		_auto_cancel_remaining = 0.0
 
@@ -813,7 +813,7 @@ func _update_cursor() -> void:
 	for t: Character in _valid_targets:
 		if is_instance_valid(t):
 			t.is_targeted = false
-			t.set_outline(Color(0.65, 0.65, 0.65), 1.0)  # 非フォーカス：グレー細
+			t.set_outline(Color(0.65, 0.65, 0.65), GlobalConstants.OUTLINE_WIDTH_UNFOCUSED)
 	if _cursor == null:
 		return
 	if _valid_targets.is_empty():
@@ -823,7 +823,7 @@ func _update_cursor() -> void:
 		var tgt := _valid_targets[_target_index]
 		_cursor.position = tgt.position
 		tgt.is_targeted  = true
-		tgt.set_outline(Color.WHITE, 2.5)  # フォーカス中：白太
+		tgt.set_outline(Color.WHITE, GlobalConstants.OUTLINE_WIDTH_FOCUSED)
 
 
 ## 有効なターゲットを返す（heal/buff_defense は距離→HP昇順、それ以外は前方コーン優先）
@@ -1079,7 +1079,7 @@ func _execute_v_instant(action: String) -> void:
 ## SkillExecutor で着地位置算出・SE・メッセージを処理。移動アニメーション・
 ## 無敵フラグは Player 側固有なのでここで扱う。
 func _execute_sliding() -> void:
-	var step_dur := 0.12 / GlobalConstants.game_speed
+	var step_dur := GlobalConstants.SLIDING_STEP_DUR / GlobalConstants.game_speed
 	character.is_sliding = true
 	is_blocked = true
 	var landing_pos := SkillExecutor.execute_sliding(character, _slot_v, map_data, blocking_characters)
@@ -1159,7 +1159,7 @@ func _try_move(dir: Vector2i) -> void:
 			# 向きが異なる → まず回転だけ行い移動しない
 			# 回転完了時にキーが押し続けられていれば _pending_move_dir から移動を再試行する
 			_is_turning = true
-			_turn_timer = TURN_DELAY / GlobalConstants.game_speed
+			_turn_timer = GlobalConstants.TURN_DELAY / GlobalConstants.game_speed
 			_pending_move_dir = dir
 			character.start_turn_animation(target_facing, _turn_timer, new_pos - character.grid_pos)
 			return
@@ -1681,10 +1681,9 @@ func _use_item_from_ui(item: Dictionary) -> void:
 	if character == null or character.character_data == null:
 		return
 	var effect := item.get("effect", {}) as Dictionary
-	# 効果キーは restore_hp / restore_energy（旧 restore_mp / restore_sp は段階移行中の互換）
+	# 効果キーは restore_hp / restore_energy
 	var restore_hp := int(effect.get("restore_hp", 0))
-	var restore_energy := int(effect.get("restore_energy",
-		effect.get("restore_mp", effect.get("restore_sp", 0))))
+	var restore_energy := int(effect.get("restore_energy", 0))
 	if restore_hp == 0 and restore_energy == 0:
 		return
 
@@ -1809,8 +1808,7 @@ func _build_effect_lines(item: Dictionary) -> Array[String]:
 	var lines: Array[String] = []
 	var eff: Dictionary = item.get("effect", {}) as Dictionary
 	var hp: int = int(eff.get("restore_hp", 0))
-	var energy: int = int(eff.get("restore_energy",
-		eff.get("restore_mp", eff.get("restore_sp", 0))))
+	var energy: int = int(eff.get("restore_energy", 0))
 	if hp > 0: lines.append("HP回復 %d" % hp)
 	if energy > 0: lines.append("MP/SP回復 %d" % energy)
 	return lines
@@ -1906,8 +1904,7 @@ func _is_consumable_usable_by_char(item: Dictionary) -> bool:
 	if character == null or character.character_data == null:
 		return true
 	var effect := item.get("effect", {}) as Dictionary
-	var restore_energy := int(effect.get("restore_energy",
-		effect.get("restore_mp", effect.get("restore_sp", 0))))
+	var restore_energy := int(effect.get("restore_energy", 0))
 	if restore_energy > 0 and character.max_energy == 0:
 		return false
 	return true

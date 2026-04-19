@@ -1,13 +1,7 @@
 {
   "id": "hobgoblin",
   "name": "ホブゴブリン",
-  "hp": 45,
-  "power": 12,
-  "skill": 14,
-  "physical_resistance": 8,
-  "magic_resistance": 3,
   "is_flying": false,
-  "rank": "A",
   "instant_death_immune": true,
   "chase_range": 6,
   "territory_range": 8,

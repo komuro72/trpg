@@ -1,0 +1,7 @@
+{
+  "shield": [
+    { "name": "木の盾",         "stats": { "block_left_front": 10 }, "tier": "low"  },
+    { "name": "鋼の盾",         "stats": { "block_left_front": 20 }, "tier": "mid"  },
+    { "name": "守護の鉄盾",     "stats": { "block_left_front": 30 }, "tier": "high" }
+  ]
+}

@@ -1,13 +1,7 @@
 {
   "id": "dark-mage",
   "name": "ダークメイジ",
-  "hp": 22,
-  "power": 12,
-  "skill": 15,
-  "physical_resistance": 2,
-  "magic_resistance": 10,
   "is_flying": false,
-  "rank": "B",
   "instant_death_immune": true,
   "chase_range": 6,
   "territory_range": 10,

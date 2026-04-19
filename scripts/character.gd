@@ -140,7 +140,7 @@ var is_targeting_mode: bool = false:
 	set(value):
 		is_targeting_mode = value
 		_update_ready_sprite()
-## AI攻撃モーション中フラグ（EnemyAI が ATTACKING_PRE/POST で制御）
+## AI攻撃モーション中フラグ（UnitAI が ATTACKING_PRE/POST で制御）
 var is_attacking: bool = false:
 	set(value):
 		is_attacking = value
@@ -236,13 +236,14 @@ func _update_modulate() -> void:
 
 	# ターゲットとして選択中：白く輝かせる
 	if is_targeted:
-		_sprite.modulate = Color(1.5, 1.5, 1.5, 1.0)
+		var s: float = GlobalConstants.TARGETED_MODULATE_STRENGTH
+		_sprite.modulate = Color(s, s, s, 1.0)
 		return
 
 	# スタン中：シアン点滅
 	if is_stunned:
 		var t2 := Time.get_ticks_msec() / 1000.0
-		var pulse := (sin(t2 * TAU * 3.0) + 1.0) * 0.5
+		var pulse := (sin(t2 * TAU * GlobalConstants.STUN_PULSE_HZ) + 1.0) * 0.5
 		_sprite.modulate = Color.WHITE.lerp(Color(0.3, 0.9, 1.0), 0.5 + pulse * 0.5)
 		return
 
@@ -694,13 +695,11 @@ func heal(amount: int) -> void:
 
 ## 消耗品を使用する（Phase 10-3〜）
 ## item: inventory 内の辞書（category == "consumable"）
-## 効果キー：restore_hp / restore_energy（旧 restore_mp / restore_sp は廃止）
+## 効果キー：restore_hp / restore_energy
 func use_consumable(item: Dictionary) -> void:
 	var effect: Dictionary = item.get("effect", {}) as Dictionary
 	var restore_hp_val: int = int(effect.get("restore_hp", 0))
-	# 互換のため restore_mp / restore_sp も受ける（古い保存データ等）
-	var restore_energy_val: int = int(effect.get("restore_energy",
-		effect.get("restore_mp", effect.get("restore_sp", 0))))
+	var restore_energy_val: int = int(effect.get("restore_energy", 0))
 	var char_name := character_data.character_name if character_data != null else str(name)
 	if restore_hp_val > 0:
 		heal(restore_hp_val)  # heal() 内で効果音を再生
@@ -943,21 +942,15 @@ static func _damage_label(dmg: int) -> String:
 
 
 ## バトルメッセージ用のキャラクター表示名を返す
-## 友好キャラクター（is_friendly=true）はキャラクター名、敵はクラス日本語名を使用
+## 味方（player/npc）は個別名（例：「ヘレン」）、敵は個別敵 JSON の name（種族名、例：「ホブゴブリン」）
+## どちらも character_data.character_name を参照する（`load_from_json` で JSON の "name" から取り込み済み）
+## 空の場合は character_id にフォールバック
 static func _battle_name(ch: Character) -> String:
 	if ch == null or not is_instance_valid(ch) or ch.character_data == null:
 		return "不明"
-	if ch.is_friendly:
-		if not ch.character_data.character_name.is_empty():
-			return ch.character_data.character_name
-	else:
-		var class_jp: String = GlobalConstants.CLASS_NAME_JP.get(
-				ch.character_data.class_id, "") as String
-		if not class_jp.is_empty():
-			return class_jp
-	# fallback: どちらでもなければキャラ名
-	return ch.character_data.character_name if not ch.character_data.character_name.is_empty() \
-			else ch.character_data.character_id
+	if not ch.character_data.character_name.is_empty():
+		return ch.character_data.character_name
+	return ch.character_data.character_id
 
 
 ## 攻撃動詞フレーズを返す（mode: "normal"=し, "negative"=したが, "critical"=クリ用）

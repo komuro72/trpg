@@ -1,13 +1,7 @@
 {
   "id": "goblin",
   "name": "ゴブリン",
-  "hp": 30,
-  "power": 5,
-  "skill": 10,
-  "physical_resistance": 3,
-  "magic_resistance": 2,
   "is_flying": false,
-  "rank": "C",
   "chase_range": 10,
   "territory_range": 50,
   "behavior_description": "集団で行動する。臆病な性格で強いと思った相手からはすぐ逃げる。",

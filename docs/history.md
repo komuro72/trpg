@@ -3,6 +3,870 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-19（Config Editor「アイテム」タブ実装）
+
+### 背景
+CLAUDE.md 要調査項目「Config Editor のアイテムタブ」の実装。アイテム事前生成機構（同日実装）に続くフェーズ2 として、トップレベル「アイテム」タブを追加する。
+
+### 設計変更の経緯
+
+当初は「**個別アイテム（`generated/*.json`）の編集 UI**」として味方クラス・敵クラスタブと同じ横断表形式で実装する想定だった。
+
+しかし Komuro との議論で以下の問題が浮上：
+1. 個別アイテムは **Claude Code が命名と値を対で生成**する（事前生成方式の核）
+2. Config Editor で値だけ編集すると、命名との対応が崩れる（「兵士の剣」の power が変わっても名前は据え置き）
+3. 命名の整合性を保つには、ルール変更時に Claude Code が一貫した命名セットを再生成する必要がある
+
+**結論**：アイテムタブは「**アイテムタイプごとの生成ルール**（`base_stats`）を編集する UI」にする。
+
+### 役割分担（確定）
+
+| レイヤー | 対象 | 編集方法 |
+|---|---|---|
+| 方針（全体） | 定数タブ > Item カテゴリ（9 定数） | Config Editor |
+| ルール（タイプ別） | `assets/master/items/*.json` の `base_stats` | **本タスクで追加：アイテムタブ** |
+| 個別データ | `assets/master/items/generated/*.json` | Claude Code が手動生成（Config Editor 対象外） |
+
+### 実装仕様
+
+#### UI 構造（[scripts/config_editor.gd](scripts/config_editor.gd)）
+- トップタブ「アイテム」内に 9 サブタブ（武器 5 + 防具 3 + 盾 1・消耗品は対象外）
+- 各サブタブ冒頭に対応 JSON の参考情報（category / depth_scale / allowed_classes）を表示
+- 補正ステータススロット × **4 枠**（仕様上の上限・通常は 2〜3 の運用）
+  - OptionButton: `---` + 13 ステータス（power / skill / block_* / *_resistance / defense_accuracy / leadership / obedience / move_speed / vitality / energy）
+  - min LineEdit（`---` 時は無効化）
+  - max LineEdit（同上）
+
+#### スロット 4 枠の運用注意
+- 登録数 N に対して個別アイテム生成時の組み合わせは `C(N, 2) × 9` パターン
+  - N=2: 9 パターン
+  - N=3: 27 パターン
+  - N=4: 54 パターン（通常運用では避ける）
+- 同時補正数は**最大 2**（個別アイテム生成ロジック側の仕様）
+
+#### 新規定数（定数追加なし・ハードコード）
+```gdscript
+const ITEM_TYPE_IDS: Array[String] = [9 タイプ]
+const ITEM_BASE_DIR: String = "res://assets/master/items/"
+const ITEM_BASE_SLOTS: int = 4
+const ITEM_STAT_CHOICES: Array[String] = ["---", 13 ステータス]
+const ITEM_SLOT_KEY_W: int = 180 / MIN_W / MAX_W: 70
+```
+
+#### データ記憶変数
+- `_item_base_data: Dictionary` — item_type → 元 JSON Dict 全体（他フィールド保全用）
+- `_item_base_dirty: Dictionary` — item_type → bool
+- `_item_widgets: Dictionary` — `"{item_type}|slot_{N}|{key|min|max}"` → Control
+- `_item_cell_styles: Dictionary` — LineEdit ハイライト用 StyleBoxFlat
+
+#### 新規関数（10 個）
+- `_build_top_tab_item` / `_load_item_base_files` / `_build_item_sub_tab` / `_build_item_slot_row` / `_add_item_hdr` / `_expand_base_stats_to_slots`
+- ハンドラ: `_on_item_slot_key_changed` / `_on_item_slot_val_changed`
+- dirty 判定: `_item_has_diff` / `_item_slot_orig_val` / `_build_item_base_stats_from_slots`
+- タブインジケータ: `_update_item_tab_indicator`
+- 保存: `_save_item_base_stats_tab` / `_apply_item_edits` / `_clear_item_cell_highlights`
+- 告知: `_show_item_regeneration_notice`
+
+#### 起動時の展開ロジック
+- 各アイテム JSON の `base_stats`（フラットキー `{stat}_min` / `{stat}_max`）を 4 スロットに展開
+- 同じ stat の `_min` と `_max` をペアとして扱い、元 JSON のキー登場順を尊重
+- 余った枠は `---`（無選択）
+
+#### 保存時の動作
+- dirty なサブタブのみ書き戻し（他タイプは触らない）
+- 他フィールド保全: `orig.duplicate(true)` で複製 → `base_stats` のみ UI から再構築して上書き
+- **保存成功時のみ再生成依頼ダイアログ**を表示：
+  > ルールが変更されました。
+  >
+  > 個別アイテムデータ（assets/master/items/generated/*.json）は
+  > まだ古いルールで生成されたままです。
+  >
+  > Claude Code に「generated/*.json を再生成」を依頼してください。
+
+#### 保存ディスパッチ
+- `_on_top_tab_changed`：TOP_TAB_ITEM でも「保存」ボタン有効化
+- `_on_save_pressed`：TOP_TAB_ITEM ケース追加。保存成功時に `_show_item_regeneration_notice()` 呼び出し
+
+### スコープ外・次タスク候補
+- **「無」段階の導入**：3 段階（low/mid/high）→ 4 段階（none を追加）への仕様変更。初期装備を tier="none" で統合し、`dungeon_handcrafted.json` のベイク初期装備を廃止する方針（別タスク）
+- **消耗品の編集 UI**：potion_heal / potion_energy は装備の base_stats とは性格が違う（effect 辞書）。別タスクで検討
+- **自動再生成機能**：ルール変更時に `generated/*.json` を自動書き換え → 命名の整合性を壊すため意図的に実装しない（Claude Code への手動再生成依頼フローを採用）
+
+### Komuro への動作確認依頼
+- F4 → トップレベル「アイテム」タブが表示される
+- 9 サブタブ（sword / axe / dagger / bow / staff / armor_plate / armor_cloth / armor_robe / shield）がある
+- 各サブタブで既存の `base_stats` が 4 スロットに正しく展開される（例：sword なら power / block_right_front の 2 スロット、残り 2 スロットは `---`）
+- OptionButton でステータス選択・min/max LineEdit で値編集が可能
+- `---` 選択時に min/max 欄が無効化される
+- 変更後、タブ末尾に `●` インジケータが付く
+- 「保存」ボタンで `assets/master/items/*.json` が更新される
+- 保存成功時に再生成依頼ダイアログが表示される
+- 他フィールド（item_type / category / allowed_classes / depth_scale / effect / image / name）は保存後も保持される
+- 保存後、個別データ（generated/*.json）は**自動更新されない**ことを確認
+
+### 更新ドキュメント
+- CLAUDE.md トップレベルタブ説明（「アイテム」行をプレースホルダーから機能説明に更新）
+- CLAUDE.md に「『アイテム』タブ（2026-04-19〜）」セクションを新設（目的・サブタブ構造・スロット運用・保存動作・役割分担を記述）
+- CLAUDE.md 要調査項目「Config Editor のアイテムタブ」を ✅ 完了に変更。代わりに「無」段階導入タスクを次タスク候補として追加
+
+### UI 形式の変更（同日・初回実装直後）
+
+#### 変更理由
+初回実装は「タイプごとのサブタブ方式」（9 サブタブ）で完成したが、以下の問題が判明：
+- 横方向にスペースが大きく余っている（画面幅の 1/3 程度しか使っていない）
+- タイプ間の比較がしにくい
+- サブタブ切替の操作が煩雑
+
+敵一覧タブと同じ「1 行 1 種」形式に変更することで、全 9 アイテムタイプを 1 画面で一覧できる・敵一覧タブと UI パターンが一貫する・タイプ間の比較がしやすくなる。
+
+#### 変更内容
+- **サブタブ方式を撤廃**（9 サブタブ削除）
+- **1 つの横断表**（9 行）にすべてを表示
+- 列構成：タイプ名 / depth_scale / stat1〜4 （OptionButton + min + max）/ 参考情報（category / allowed_classes）
+- `ScrollContainer` で横スクロール対応
+- **depth_scale を編集対象に昇格**（当初はヘッダーの参考情報として表示していたが、編集可能な列に変更）
+
+#### 実装詳細
+- `_build_top_tab_item` を単一 ScrollContainer + VBox + ヘッダー行 + 9 データ行に書き換え
+- `_build_item_sub_tab` → `_build_item_list_row` に置換
+- `_build_item_slot_row` → `_add_item_slot_cells`（親 HBox に add）に変更
+- `_add_item_depth_field` / `_on_item_depth_changed` を新設
+- `_item_has_diff` / `_apply_item_edits` に depth_scale 比較・書き戻しロジック追加
+- セル幅調整：`ITEM_TYPE_COL_W = 100` / `ITEM_DEPTH_COL_W = 70` / `ITEM_SLOT_KEY_W = 130` / `ITEM_SLOT_MIN_W = 55` / `ITEM_SLOT_MAX_W = 55` / `ITEM_INFO_COL_W = 220`
+
+#### CLAUDE.md 追記
+- トップレベルタブ「アイテム」の説明を「1 行 1 タイプ形式」に更新
+- 「『アイテム』タブ」セクションを「UI 形式：1 行 1 タイプの横断表」に書き換え・列構成を詳述
+
+### アイテムマスター JSON の legacy フィールド削除（同日・UI 変更後）
+
+#### 削除対象
+アイテムタブ UI の変更完了後、以下の legacy フィールドが**現行のアイテム生成仕様で未参照**であることを再確認し、物理削除した：
+- `base_stats.{stat}_min`（武器・防具・盾 9 ファイル・計 19 フィールド）
+- `depth_scale`（全 11 ファイル・消耗品含む）
+
+#### 事前確認結果
+**ランタイム参照箇所：ゼロ**
+- `scripts/item_generator.gd` は `_max × tier_ratio` のみ使用（`_min` / `depth_scale` 非参照）
+- `scripts/item_generator.gd` コメントに「depth_scale は使用しない（設計判断）」と明示済み
+- `scripts/config_editor.gd` のみで UI 表示用に参照されていた（今回 UI 側も同時撤去）
+- `ITEM_DEPTH_SCALE_*` のような定数は**存在しない**
+
+#### 実装
+
+**JSON 削除**（Python スクリプトで一括処理）：
+- 11 ファイル（sword / axe / dagger / bow / staff / armor_plate / armor_cloth / armor_robe / shield / potion_heal / potion_energy）
+- 計 30 フィールド削除（19 `_min` + 11 `depth_scale`）
+- キー順は OrderedDict で保持・2-space インデント
+
+**UI 更新**（`scripts/config_editor.gd`）：
+- `ITEM_DEPTH_COL_W` / `ITEM_SLOT_MIN_W` 定数を削除
+- depth_scale 列および `_add_item_depth_field` / `_on_item_depth_changed` 関数を削除
+- 各スロットから `min LineEdit` を削除（`max LineEdit` のみに）
+- `_expand_base_stats_to_slots`: `_max` キーのみを対象に簡素化
+- `_build_item_base_stats_from_slots`: `_max` のみ書き出し
+- `_item_slot_orig_val` → `_item_slot_orig_max` にリネーム・簡素化
+- `_on_item_slot_val_changed` → `_on_item_slot_max_changed`
+- `_item_has_diff`: depth_scale 差分チェックを削除
+- `_apply_item_edits`: depth_scale 書き戻しを削除
+
+#### 削除後の列構成（10 列）
+`タイプ | stat1 | max1 | stat2 | max2 | stat3 | max3 | stat4 | max4 | 備考`
+
+旧 15 列 → 10 列。さらにスッキリ。
+
+#### 安全性の根拠
+1. ランタイム未参照（grep で確認済み）
+2. CLAUDE.md 「アイテム事前生成機構」セクションにも「ランタイム未参照」と明記されていた状態
+3. 今日の「legacy 一掃」タスク群（個別敵 JSON legacy・LLM AI コード・effect キー互換 等）と一貫した方針
+4. 将来の「無」段階導入（次タスク）時に備えて、UI / データ構造をシンプルに保つ
+
+#### 今日の legacy 一掃の総括（2026-04-19 のまとめ）
+本日は以下の legacy 一掃が連続して完了：
+1. 個別敵 JSON の 6 フィールド（hp / power / skill / physical_resistance / magic_resistance / rank）× 16 ファイル
+2. Legacy LLM AI コード 5 クラス（BaseAI / EnemyAI / LLMClient / DungeonGenerator / GoblinAI）約 1,221 行 + dead method
+3. CLAUDE.md の LLM 参考仕様 3 セクション
+4. GlobalConstants の dead constants（SPRITE_SOURCE_WIDTH/HEIGHT）
+5. `_crop_single_tile` 関数（no-op 化されていた stale 関数）
+6. effect キー legacy フォールバック（restore_mp/sp × 5 ファイル）+ dead accessor 3 個
+7. **アイテムマスター JSON の `{stat}_min` / `depth_scale`（本エントリ）**
+
+---
+
+## 2026-04-19（アイテム事前生成機構の実装と legacy キー一掃）
+
+### 背景
+`assets/master/items/*.json` のマスターデータ（`base_stats._min/_max` / `depth_scale`）は用意されていたがランタイム未参照だった。「アイテムのランダム生成機構」の実装と、調査過程で判明した「effect キー名の不整合」（コード側の legacy フォールバック）を合わせて解消する。
+
+### 方針の変遷
+本実装は 1 日の議論を通じて 3 段階で方針転換した：
+
+1. **当初案：ランタイム生成方式**（`base_stats._min/_max` で乱数生成 + 名前プール）
+   - 却下理由：CLAUDE.md 854-859「補正値を決定した後、その特徴を反映した名前を付ける」仕様に合致しない。名前と補正値の結びつきが緩くなる（「鋭利な剣」の stats が毎プレイ違う）
+
+2. **第 2 案：事前生成セット方式**（Claude Code が手作業で (名前, 補正値, depth_range) のトリプルを定義）
+   - 一部実装（sword / axe / dagger の 45 エントリ作成）
+   - 部分的に却下：Komuro が生成ロジックに関与できない／値と名前の対応が暗黙的
+
+3. **最終案：定数ベース事前生成（総当たり方式）** ← 採用
+   - 2 ステータスを低・中・高の 3 段階で組み合わせた 9 パターンを網羅（盾のみ 3 パターン）
+   - 段階値は `_max × ITEM_TIER_{LOW|MID|HIGH}_RATIO` で定数駆動計算
+   - フロア出現重みも定数駆動（`FLOOR_X_Y_BASE_TIER` と距離別 weight）
+   - **決定的な論点**：Komuro が Config Editor から生成ロジックに関与できる設計であること
+
+### 実装
+
+#### 段階 A: legacy キー一掃（先行完了）
+コード側の legacy 互換コードを全削除。アセットは既にクリーンだったためコード側のみの作業：
+- `character.gd:703` / `consumable_bar.gd:390,502` / `player_controller.gd:1686,1812,1907` / `npc_leader_ai.gd:420` / `unit_ai.gd:2121` の `restore_mp`/`restore_sp` フォールバック削除
+- `character_data.gd:275-278` の `get_weapon_power_bonus` 内 `attack_power`/`magic_power` フォールバック削除
+- `order_window.gd:1337-1338` の `_effect_label` legacy エントリ削除
+- `global_constants.gd:107-110` の `STAT_NAME_JP` legacy エントリ削除
+- dead accessor 3 個削除：`get_weapon_skill_bonus()` / `get_weapon_block_power()` / `get_shield_block_power()`
+
+#### 段階 B: Config Editor「Item」カテゴリ新設
+- `scripts/config_editor.gd` の `TABS` 配列末尾に `"Item"` 追加
+- **`"string"` 型サポートを新規追加**：`meta.choices`（Array）があれば `OptionButton`、なければ `LineEdit`。将来の他文字列定数にも応用可
+- ハンドラ：`_on_string_choice_changed` / `_on_string_text_changed`
+- `_refresh_all` で OptionButton / LineEdit の値反映にも対応
+
+#### 段階 C: 9 定数を GlobalConstants に追加
+| 定数 | 型 | デフォルト | 用途 |
+|---|---|---|---|
+| `ITEM_TIER_LOW_RATIO` | float | 0.33 | 段階「低」の比率（対 _max） |
+| `ITEM_TIER_MID_RATIO` | float | 0.67 | 段階「中」の比率 |
+| `ITEM_TIER_HIGH_RATIO` | float | 1.0 | 段階「高」の比率 |
+| `FLOOR_0_1_BASE_TIER` | string (enum) | "low" | フロア 0〜1 の基準段階 |
+| `FLOOR_1_2_BASE_TIER` | string (enum) | "mid" | フロア 1〜2 の基準段階 |
+| `FLOOR_2_3_BASE_TIER` | string (enum) | "high" | フロア 2〜3 の基準段階 |
+| `FLOOR_BASE_WEIGHT` | int | 5 | 基準段階の重み |
+| `FLOOR_NEIGHBOR_WEIGHT` | int | 2 | 基準 ±1 段階の重み |
+| `FLOOR_FAR_WEIGHT` | int | 0 | 基準 ±2 以上離れた段階の重み |
+| `ITEM_TIER_POLICY` | string (enum) | "max" | 段階判定方針（max/min/avg） |
+
+`constants_default.json` に `category: "Item"` 付きで登録。`CONFIG_KEYS` にも追加。
+
+#### 段階 D: 事前生成セット 9 ファイル作成（計 75 エントリ）
+`assets/master/items/generated/` 新設ディレクトリに以下の JSON を配置：
+- `sword.json` / `axe.json` / `dagger.json`：power + block_right_front（各 9 個）
+- `bow.json` / `staff.json`：power + block_front（各 9 個）
+- `armor_plate.json` / `armor_cloth.json` / `armor_robe.json`：physical_resistance + magic_resistance（各 9 個）
+- `shield.json`：block_left_front のみ（3 個）
+
+**JSON 構造**（`category` フィールドは持たない・stats 辞書のキーは任意で柔軟）：
+```json
+{ "name": "兵士の剣", "stats": { "power": 10, "block_right_front": 10 }, "tier": "low" }
+```
+
+**命名制約**：
+- 日本語・ダークファンタジー寄り
+- カタカナ表記を避ける（漢字語彙で統一）
+- **グラフィック制約の根拠はキャラ画像生成プロンプト**（両手剣・サーベル・ロングボウ・タワーシールド等の形状差異 NG）
+- 将来的にキャラ画像プロンプトが変更される場合、命名も見直しが必要
+
+#### 段階 E: ItemGenerator 実装
+新規ファイル `scripts/item_generator.gd`（約 170 行・static class）：
+- `generate(item_type, floor_index) -> Dictionary`：装備を生成（消耗品は `generate_consumable()` に分岐）
+- `generate_consumable(item_type) -> Dictionary`：ポーション（depth_scale 非使用・設計判断）
+- `_weighted_pick`：全エントリの重みを計算して累積選択
+- `_bands_for_floor`：フロアが所属する基準段階帯のリストを返す（境界フロアでは隣接 2 帯の重みを合算して滑らかな遷移）
+- `_entries_cache` / `_master_cache`：JSON 読み込みをキャッシュ
+
+#### 段階 F: dungeon_handcrafted.json の簡素化と呼び出し接続
+- Python スクリプトで 136 個のドロップアイテムを `{ item_type, category, item_name, stats }` → `"sword"` 等の文字列に簡素化
+- `game_map._on_enemy_party_wiped()` 内に `_normalize_drop_item(raw, floor_idx)` を新設
+  - String → `ItemGenerator.generate()`
+  - Dictionary with only `item_type` → 同上
+  - Dictionary with `stats` / `effect` → そのまま（後方互換）
+- 部屋制圧時にフロア深度に応じた具体値が生成される流れを実現
+- 主人公・NPC の初期装備はベイク維持（タスク指示通り。弱い固定値で済むため生成不要）
+
+### 主要な設計判断
+
+#### `category` フィールドを JSON に持たない
+- 冗長：power と block の値から attack/defense/balanced は計算判定可能
+- 将来柔軟性：特殊ステータス（skill / critical_rate 等）追加時、固定 category では表現できなくなる
+
+#### `ITEM_TIER_POLICY = "max"` を選択理由
+- 2 ステータスの高い方を採用
+- 9 パターンの tier 分布：low × 1 / mid × 3 / high × 5
+- 終盤フロア（基準=high）で多様性が増す設計（5 種類の high 装備から選ばれる）
+
+#### ランダム補正なし（同じ名前 = 同じ stats）
+- プレイヤーが「鋭利な剣 = power 20 / block 10」と覚えやすい
+- 将来 `VARIANCE` 定数を追加して微小なブレを入れられる余地は残す（現状は 0 相当）
+
+#### ポーションは depth_scale 非使用
+- 在庫管理問題の回避：フロアごとにポーションの効果が変わると、溜め込み戦略と噛み合わない
+- `ItemGenerator.generate_consumable` はマスター JSON の effect をそのまま固定値で返す
+
+#### range_bonus を今回含めなかった
+- CLAUDE.md 819・873 行で「射程補正は将来実装予定」＝仕様未確定
+- bow / staff も sword / axe と同じ 2 ステータス構造で生成
+- 仕様確定時に別タスクで対応
+
+#### フロア帯の重複（floor 1, 2）の扱い
+- `FLOOR_0_1 / FLOOR_1_2 / FLOOR_2_3` の定義域は境界フロアで重複
+- 実装：重複するフロア（1 と 2）では隣接 2 帯の重みを**合算**する
+- 結果：フロア 1 は { low:7, mid:7, high:2 }、フロア 2 は { low:2, mid:7, high:7 }。滑らかな遷移
+
+### ドキュメント更新
+- CLAUDE.md「装備の名前生成」セクションを事前生成方式に書き換え（ランタイム選択ロジック・マスター JSON と生成セットの役割分担・命名制約の根拠）
+- CLAUDE.md Config Editor カテゴリ説明に Item カテゴリを追加（8 タブ構成）
+- CLAUDE.md 要調査項目のアイテム機構を ✅ 完了記録に更新。アイテムタブ（フェーズ2）は「ルール（Item カテゴリ）vs 個別データ（トップレベルタブ）」の役割分担を明記
+
+### 将来の拡張性（記録）
+- **VARIANCE**（ランダム補正幅）定数を将来追加可能：現状 0 相当、プレイフィードバック次第で定数追加
+- **特殊ステータス追加**：`stats` 辞書は任意キー対応のため、skill / critical_rate 等の追加は JSON 更新のみで対応可
+- **ITEM_TIER_POLICY の切り替え**："min"（低い方採用）や "avg"（平均）への切り替えもプレイ感で判断可能
+- **画像サイズ設計是正と同世代の方針**：定数を外出しし、Komuro が Config Editor から調整できることを優先する思想
+
+### Komuro への動作確認依頼
+- **Config Editor F4 → Item タブ**：9 定数が表示され、float / int / string(OptionButton) それぞれ編集可能
+- **フロア 0〜3 の戦闘・制圧**：敵パーティー全滅時にアイテムが床に散布される
+- **段階分布**：フロア 0 では「兵士の剣」等の low 段階中心、フロア 3 では「断罪の魔剣」「均整の剣」等の high 段階中心
+- **一対一対応**：「兵士の剣」は常に power=10 / block=10
+- **定数変更**：`FLOOR_0_1_BASE_TIER` を "high" に変えて再起動すると、フロア 0 で高段階装備が出るようになる
+- **起動時**：コンソールに JSON パースエラー / class_name 解決エラーがない
+
+### 残作業（フェーズ2 として分離）
+- Config Editor トップレベル「アイテム」タブ（個別エントリ編集 UI）
+- 味方クラス / 敵クラスタブと同じ横断表形式で、生成セット JSON を直接編集できるようにする
+- 定数 Item カテゴリ（方針）とトップレベル「アイテム」タブ（個別データ）の役割分担
+
+### 追加バグ修正（同日・動作確認後の指摘）
+
+#### 症状
+守りの剣（stats: power=10, block_right_front=20）を sword 装備不可クラスが拾った際、OrderWindow の所持アイテム一覧では `[威力+10]` のみ表示され、`右手防御+20` が欠落していた。アイテムウィンドウ（ConsumableBar、X ボタンで開く）では正しく `[威力+10, 右手防御+20]` の両方が表示されていた。
+
+#### 原因
+OrderWindow の装備補正値表示 3 箇所（装備スロット行 / 所持アイテム一覧 / アイテム選択サブメニュー）が、stats 辞書を**固定キーリストでフィルタ**していた：
+```gdscript
+for k: String in ["power", "skill", "defense_strength",
+        "physical_resistance", "magic_resistance"]:
+```
+この配列に `block_right_front` / `block_left_front` / `block_front` / `range_bonus` が含まれておらず、これらのキーを持つアイテムの補正値が非表示だった。
+
+併せて発見した副次的バグ：OrderWindow ステータス表示の「右手/左手/両手防御強度」3 行も「キャラ素値 > 0 または装備補正 > 0」の条件で表示を絞っており、装備不可クラスで該当装備を持っているケースで情報が欠落していた。
+
+#### 修正
+**[scripts/order_window.gd](scripts/order_window.gd)**:
+- 3 箇所のフィルタを **`stats` 辞書の全キーを反復**する方式に変更（将来の新ステータス追加にも自動対応）
+- ステータス表示の 3 防御強度行の条件分岐を撤廃し、**常に全 3 行を表示**
+- コメントで「アイテムを他メンバーに渡す操作があるため、閲覧中キャラのクラスで表示キーを絞らない」理由を明記
+
+**[scripts/global_constants.gd](scripts/global_constants.gd)** `STAT_NAME_JP`:
+- `block_right_front: "右手防御"` / `block_left_front: "左手防御"` / `block_front: "両手防御"` / `range_bonus: "射程"` を追加
+- 未使用の legacy key `defense_strength` を削除
+
+#### 設計原則として明文化
+既に `consumable_bar.gd` / `player_controller.gd` の item detail 表示で採用されていた原則「**アイテムを他メンバーに渡す操作があるため、閲覧中キャラのクラスで表示キーを絞らない**」を、OrderWindow の関連箇所にも適用・統一した。
+
+過去の類似論点：ポーション表示で「MP/SP 回復」と両併記する設計（CLAUDE.md 268 行目）と同じ原則系譜。
+
+#### 動作確認結果
+守りの剣（power=10, block_right_front=20）を archer / magician 等の sword 非装備クラスが所持時：
+- 修正前: `🗡 守りの剣 [威力+10]`
+- 修正後: `🗡 守りの剣 [威力+10, 右手防御+20]` ✓
+
+---
+
+## 2026-04-19（画像サイズ設計是正）
+
+### 背景
+エフェクト定数棚卸しの追加調査で、「画像元サイズと GRID_SIZE の関係がコード内に直書き定数として散在している」ケースを発見。棚卸しの結果：
+- A1: `Projectile.SPRITE_REF_SIZE = 64.0`（固定 px で解像度追従しない）
+- D1: `SPRITE_SOURCE_WIDTH = 512` / `SPRITE_SOURCE_HEIGHT = 1024`（未使用の dead constants）
+- D2: `_crop_single_tile` 関数（コメントは「1/4 切り出し」だが実装は `return tex` の no-op）
+- D3: `DiveEffect.RADIUS = 18.0`（固定 px で解像度追従しない）
+
+CLAUDE.md 設計方針「GRID_SIZE は起動時に動的計算・高解像度ディスプレイで自動追従」との一貫性を保つため、これら 4 項目を一括是正した。
+
+### 実装
+
+#### A1: 飛翔体サイズの GRID_SIZE 比率化
+- `GlobalConstants.PROJECTILE_SIZE_RATIO: float = 0.67` を Effect セクションに追加
+- `scripts/projectile.gd` から `SPRITE_REF_SIZE` 定数を削除
+- スケール計算: `SPRITE_REF_SIZE / img_size` → `(GlobalConstants.GRID_SIZE × GlobalConstants.PROJECTILE_SIZE_RATIO) / img_size`
+- 現状の 1920x1080 での見た目（約 65px）を維持。4K（GRID_SIZE≈196）では約 131px に比例拡大される
+
+#### D1: dead constants 削除
+- `scripts/global_constants.gd` から `const SPRITE_SOURCE_WIDTH = 512` / `const SPRITE_SOURCE_HEIGHT = 1024` を削除
+- どこからも参照されていなかった完全な dead code
+- `docs/spec.md` の 72-75 行目（Phase 1-2 セクション内の歴史的記述）は取り消し線＋削除注記で残す（当時は縦長 1:2 比率 512x1024 スプライト素材だった事実の保全）
+
+#### D2: `_crop_single_tile` 関数削除
+- `scripts/game_map.gd` から関数と呼び出し 2 箇所を削除（呼び出し側で直接 `load(path) as Texture2D` を使う）
+- コメント「1024x1024 の 1/4 切り出し」を説明する doc 文も削除（実装されていなかった内容を残す意義がないため）
+- **git 履歴調査結果**：
+  - 初期実装（2026-04-02, commit `1fe203b`「タイル画像フォーマット導入」）で「1/4 切り出し」として実装された
+  - その後 2026-04-11 の commit `f9162ff`（Phase 13-6 AI 行動指示システム実装）で `return tex` の no-op に変更されていた
+  - コミットメッセージには明示的な記載がなく、Phase 13-6 のバンドル変更として埋もれていた
+  - 結果、コメントと実装が 8 日間乖離した状態だった
+
+#### D3: 降下エフェクトの GRID_SIZE 比率化
+- `GlobalConstants.DIVE_EFFECT_RADIUS_RATIO: float = 0.2` を Effect セクションに追加
+- `scripts/dive_effect.gd` から `const RADIUS = 18.0` を削除
+- `_draw()` 内で `base_r = GRID_SIZE × DIVE_EFFECT_RADIUS_RATIO` を計算して使用
+- 現状の 1920x1080 での見た目（約 19.6px）を維持。4K では約 39.2px に比例拡大
+
+#### PROJECTILE_SPEED のカテゴリ移動（SkillExecutor → Effect）
+- ダメージ判定は攻撃の瞬間に確定しており、飛翔体の移動速度は「演出速度」にのみ影響するため、バランス調整カテゴリ（SkillExecutor）ではなく演出カテゴリ（Effect）に所属すべきと判断
+- `constants_default.json` の category フィールドを "SkillExecutor" → "Effect" に変更
+- `GlobalConstants` 内の定義位置も新規 2 項目と隣接する Effect セクション末尾に移動
+- `CONFIG_KEYS` 配列も Effect タブの末尾に再配置
+
+### カテゴリ分類原則の明確化（新規）
+本タスクを通じて、定数カテゴリ分類の原則を統一した。CLAUDE.md 「定数管理」セクションに明記：
+
+- **Character / PartyLeader / NpcLeaderAI / EnemyLeaderAI / UnitAI / SkillExecutor** → ゲーム挙動・バランスに影響する定数。担当クラスに応じて振り分け
+- **Effect** → 視覚演出・フィーリング調整用の定数（ゲーム挙動に影響しない）
+
+判断に迷うケースの指針：**ダメージ判定が演出と独立している値**（PROJECTILE_SPEED 等、飛翔体到着前に命中判定が確定しているもの）は Effect。判定そのものに影響する値（CRITICAL_RATE_DIVISOR 等）はバランスカテゴリ。
+
+### GlobalConstants 設計原則の明確化（新規）
+「画像元サイズと GRID_SIZE の関係を直書きで持たない」方針を確立：
+1. 画像の物理サイズが必要な処理（スケール計算等）は `tex.get_size()` で動的取得する
+2. 「表示したいサイズ」は GRID_SIZE 比率（`GRID_SIZE × RATIO`）として定義する
+3. 画像のソースサイズ（512・1024 等）を定数として持つのはアンチパターン
+
+この原則により、高解像度ディスプレイでも自動的に追従し、アセット差し替え時のコード変更が不要になる。
+
+### 定数タブの状態（2026-04-19 実装後）
+- 総数：約 46 → **約 48**（+2: PROJECTILE_SIZE_RATIO / DIVE_EFFECT_RADIUS_RATIO）
+- SkillExecutor：2 → **1**（PROJECTILE_SPEED が Effect へ移動し、CRITICAL_RATE_DIVISOR のみ残る）
+- Effect：8 → **11**（+3: PROJECTILE_SPEED 移動 / PROJECTILE_SIZE_RATIO 新規 / DIVE_EFFECT_RADIUS_RATIO 新規）
+
+### 今回スコープ外（記録）
+以下は CLAUDE.md「要調査・要整理項目」に次回棚卸し候補として記録済み：
+- **C1: BUST_SRC_* の比率化**（優先度低）— `message_window.gd` の `BUST_SRC_X/Y/W/H = 256/0/512/512` は 1024x1024 前提。現状ガード付きで動作しているが、将来 2048x2048 アセット追加時に備えて比率化が望ましい
+- **D4: エフェクトの線幅系**（優先度低）— `HitEffect.RING_WIDTH = 2.5` 等の「線の太さ px」が固定値で、4K 等で相対的に細くなる。視覚的問題は小さい
+
+### Komuro への動作確認依頼
+- **1920x1080**：飛翔体・降下エフェクトの見た目が従来と変わらないこと
+- **解像度変更テスト（任意）**：`project.godot` を一時的に 3840x2160 等に変更して、飛翔体・降下エフェクトが比例して大きくなることを確認
+- **タイル描画**：`draw_texture_rect` によるタイル表示が従来と同じ見た目（`_crop_single_tile` 削除の副作用がないこと）
+- **Config Editor F4**：
+  - Effect カテゴリに `PROJECTILE_SPEED` / `PROJECTILE_SIZE_RATIO` / `DIVE_EFFECT_RADIUS_RATIO` が表示され調整可能
+  - SkillExecutor カテゴリから `PROJECTILE_SPEED` が消え、`CRITICAL_RATE_DIVISOR` のみ残る
+- **起動時**：コンソールに `class_name 解決エラー` / `preload 失敗` / JSON パース失敗がないこと
+
+---
+
+## 2026-04-19（エフェクト定数の棚卸しと Effect カテゴリ新設）
+
+### 背景
+2026-04-18 の定数タブ大再編で約 38 個の定数が Config Editor 対象となったが、エフェクト関連は `PROJECTILE_SPEED` のみで、他のエフェクトクラス内部の直書き定数・操作感定数が未外出しだった。Config Editor の役割「データの重複・不足をチェック」と一貫性を保つため、エフェクト関連定数を棚卸しし、Effect カテゴリを新設した。
+
+### 事前確認結果
+
+#### 確認1: WhirlpoolEffect の画像使用状況
+`assets/images/effects/whirlpool.png`（1.85 MB）が実在し、実ランタイムは `_use_sprite = true` 経路で Sprite2D 表示。プロシージャル `draw_polyline` は画像非存在時のフォールバックのみ。棚卸し報告内で「プロシージャル描画クラス」と表現したのは不正確だったが、定数の棚卸し自体は網羅済み（VORTEX_COLOR も「フォールバック描画用」と記述済み）。CLAUDE.md 144 行目「渦: whirlpool.png」は正しい。
+
+#### 確認2: HitEffect の画像使用状況
+`hit_0*.png` は `assets/` 配下に不在、コード内にも `hit_01〜06` / `kenney` 参照なし。HitEffect は 100% プロシージャル。CLAUDE.md 112 行目の「Kenney Particle Pack（hit_01〜06.png）」記述は実装と乖離していたため、本タスクで修正（取り消し線＋移行注記）。
+
+### 「アセット」の定義の明文化
+CLAUDE.md「使用アセットとライセンス」セクション冒頭に定義を追加：
+> 「アセット」の掲載対象は**ネット取得素材・サードパーティ製シェーダー**など Komuro 管理範囲外の外部成果物に限る。プロシージャル描画クラスや自作シェーダー（outline.gdshader）は自作コードなので対象外。
+
+これにより「棚卸しの管理範囲」と「アセット表の範囲」が明確化された。
+
+### A 分類（Config Editor 対象・Effect カテゴリ 8 項目）
+
+| # | 定数名 | 現行値 | 単位 | 用途 |
+|---|---|---|---|---|
+| 1 | `TURN_DELAY` | 0.15 | 秒 | 向き変更 tween 時間（操作感） |
+| 2 | `AUTO_CANCEL_FLASH` | 0.25 | 秒 | ターゲット自動キャンセル時フラッシュ |
+| 3 | `SLIDING_STEP_DUR` | 0.12 | 秒 | スライディング 1 歩の演出秒数 |
+| 4 | `OUTLINE_WIDTH_FOCUSED` | 2.5 | screen px | フォーカス中ターゲットのアウトライン太さ |
+| 5 | `OUTLINE_WIDTH_UNFOCUSED` | 1.0 | screen px | 非フォーカス候補のアウトライン太さ |
+| 6 | `TARGETED_MODULATE_STRENGTH` | 1.5 | 倍率 | ターゲット選択時の発光強度 |
+| 7 | `BUFF_EFFECT_ROT_SPEED_DEG` | 60.0 | 度/秒 | バフバリア（緑六角形）の回転速度 |
+| 8 | `WHIRLPOOL_ROT_SPEED_DEG` | 270.0 | 度/秒 | 無力化水魔法スタン渦の回転速度 |
+
+すべて `GlobalConstants` に `var` として追加し、`CONFIG_KEYS` 末尾に追加、`constants_default.json` に `category: "Effect"` のメタ情報付きで定義。
+
+### B 分類（GlobalConstants 集約・UI 非公開）
+
+- `STUN_PULSE_HZ: float = 3.0` — スタン時のスプライト脈動周波数（`character.gd:245` の直書き 3.0 を置換）
+  - `CONDITION_PULSE_HZ = 3.0` と値は同じだが仕様上独立（HP 状態点滅とスタン点滅は別概念）。将来別値にしたくなった時のために分離
+  - UI 非公開（`CONFIG_KEYS` に入れない・`constants_default.json` に入れない）
+
+他の B 候補（各エフェクトクラスの LINE_WIDTH / RING_COUNT / RING_WIDTH / REFERENCE_DAMAGE / MIN_SCALE 等）は **GlobalConstants に集約しない**方針とした。理由：
+- 各エフェクトクラスにのみローカルで意味を持つ値
+- 他クラスから参照されない
+- GlobalConstants に持ち込むと逆に見通しが悪くなる
+- 各クラス内で `const` として名前付け済みなので可読性は確保されている
+
+### Projectile を棚卸し対象に含めた経緯
+当初の棚卸し報告では Projectile は「画像アセット使用」として対象外にしていたが、事前確認のレビューで「Projectile も管理範囲内」として戻された。B 分類（ローカル const 化）で対応：
+- `SPRITE_REF_SIZE = 64.0`（+ TODO コメント：将来 GRID_SIZE から導出すべき）
+- `SPRITE_ROTATION_OFFSET = PI / 2.0`
+- `FALLBACK_RADIUS = 5.0`
+- `FALLBACK_COLOR_THUNDER / WATER / FIRE / ARROW`
+
+これらは Projectile クラス内にのみ意味を持つため GlobalConstants に持ち込まない。
+
+### 演出色を GlobalConstants に集約しない方針
+Komuro からの指示で、エフェクト色（渦のシアン・バフの緑・炎の橙・Projectile フォールバック色等）は**各クラス内の `const COLOR_*` として残す**。理由：
+- 「画風統一」を意図した決め打ち値
+- GlobalConstants に持ち込んで ColorPicker UI 対応にするとアクシデンタルな変更で画風が崩れる
+- 同じ色が複数クラスで使われない（クラス単位で独立）
+
+HP 状態色（`CONDITION_COLOR_*`）は既に ColorPicker 対応しているが、それは「HP 状態の 4 段階は多くの UI で共有される」ため。エフェクト色とは性質が異なる。
+
+### 「本来参照すべき値から独立している定数」の記録（次タスク向け）
+Komuro からの指摘で `Projectile.SPRITE_REF_SIZE = 64.0` は「本来 GRID_SIZE から動的に導出すべき値が独立定数になっている」ケース。今タスクのスコープでは設計是正を行わず、TODO コメントを残した：
+```
+## スプライト基準サイズ（飛翔体として適切なサイズ）
+## TODO: 将来は GlobalConstants.GRID_SIZE から動的に導出すべき（現状は独立した直書き定数）
+const SPRITE_REF_SIZE: float = 64.0
+```
+
+他のエフェクトクラスでは `gs * 0.55` 等「GRID_SIZE に対する比率」として書かれている箇所は設計として正しい方向。次タスク「画像サイズ設計是正」で、直書きになっている値を洗い出して GRID_SIZE 比率に置き換える。CLAUDE.md「要調査・要整理項目」に追記済み。
+
+### スコープ外（記録）
+- `outline.gdshader` のユニフォーム値（D 分類・シェーダー側管理）
+- Kenney 等のネット取得素材（アセット表に記載）
+- 削除候補（E 分類）：0 項目（明確な dead は無し）
+
+### 実装ファイル
+
+#### `scripts/global_constants.gd`
+- 新規 var 9 個（A 分類 8 + `STUN_PULSE_HZ`）を「Effect 関連」セクションに追加
+- `CONFIG_KEYS` 末尾に A 分類 8 項目を追加
+
+#### `scripts/buff_effect.gd`
+- `const ROT_SPEED = PI / 3.0` を削除し、`_process()` 内で `deg_to_rad(GlobalConstants.BUFF_EFFECT_ROT_SPEED_DEG)` を参照
+- コメント更新
+
+#### `scripts/whirlpool_effect.gd`
+- `const ROT_SPEED = PI * 1.5` を削除し、`_process()` 内で `deg_to_rad(GlobalConstants.WHIRLPOOL_ROT_SPEED_DEG)` を参照
+- コメント更新
+
+#### `scripts/character.gd`
+- `Color(1.5, 1.5, 1.5, 1.0)` → `GlobalConstants.TARGETED_MODULATE_STRENGTH` を使った動的色
+- `sin(t2 * TAU * 3.0)` → `sin(t2 * TAU * GlobalConstants.STUN_PULSE_HZ)`
+
+#### `scripts/player_controller.gd`
+- `const TURN_DELAY` 削除 → `GlobalConstants.TURN_DELAY` 参照
+- `const AUTO_CANCEL_FLASH` 削除 → `GlobalConstants.AUTO_CANCEL_FLASH` 参照
+- sliding step_dur 直書き `0.12` → `GlobalConstants.SLIDING_STEP_DUR`
+- `set_outline(..., 1.0)` × 2 箇所 → `GlobalConstants.OUTLINE_WIDTH_UNFOCUSED`
+- `set_outline(..., 2.5)` → `GlobalConstants.OUTLINE_WIDTH_FOCUSED`
+
+#### `scripts/projectile.gd`
+- 直書き `64.0` / `PI / 2.0` / `5.0` / 4 色を名前付き `const` に昇格
+- `SPRITE_REF_SIZE` に TODO コメント追加
+
+#### `scripts/config_editor.gd`
+- `TABS` 配列末尾に `"Effect"` を追加
+
+#### `assets/master/config/constants_default.json`
+- A 分類 8 項目を `category: "Effect"` で追加（min / max / step / description）
+
+### CLAUDE.md 更新
+- 「使用アセットとライセンス」にアセット定義を追加。Kenney Particle Pack の行を取り消し線＋移行注記
+- 「セッション開始時のガイド」（18 行目）の定数タブ構成を「6 タブ → 7 タブ」「約 38 個 → 約 46 個」に更新
+- 「定数」タブのカテゴリ説明に Effect カテゴリを追加
+- 定数追加時の運用ルールを「6 タブ → 7 タブ」に更新
+- 「要調査・要整理項目」に「画像サイズ設計是正（次タスク候補）」を追加
+
+### Komuro への動作確認依頼
+- **Config Editor (F4)**：定数タブに「Effect」カテゴリが表示される
+- **操作感系 6 項目の調整**：ツマミで値を変更 → 保存 → 再起動 → 以下が変わることを確認
+  - 向き変更の遅延（TURN_DELAY）
+  - ターゲット自動キャンセル時のフラッシュ長（AUTO_CANCEL_FLASH）
+  - スライディング速度（SLIDING_STEP_DUR）
+  - アウトライン太さ（OUTLINE_WIDTH_FOCUSED / UNFOCUSED）
+  - ターゲット発光の強度（TARGETED_MODULATE_STRENGTH）
+- **視認性系 2 項目**：バリア回転速度（BUFF_EFFECT_ROT_SPEED_DEG）・スタン渦回転速度（WHIRLPOOL_ROT_SPEED_DEG）
+- **デフォルト値に戻す**：元の挙動に戻る
+- **Projectile の動作**：飛翔体が従来通り表示・移動する（64px スケール・回転補正が変わっていないこと）
+
+---
+
+## 2026-04-19（Legacy LLM AI コードと dead code の物理削除）
+
+### 背景
+Phase 2-3 でルールベース AI に移行した際、LLM 駆動 AI 時代の 5 クラス（約 1,221 行）がコードベースに残存していた。`docs/investigation_class_structure.md` の調査で「完全未使用」と判定されていたが、未削除のまま Config Editor や CLAUDE.md 内の棚卸し項目として追跡されていた。「今使っていないものは残さない」方針で物理削除する。併せて、概念的に同世代（Phase 1-2 時代）の dead code である `CharacterData.create_hero()` / `create_goblin()` も削除する。
+
+### 削除したファイル（5 ファイル × .gd + .uid = 10 ファイル）
+- `scripts/base_ai.gd` + `.uid`（547 行・BaseAI クラス）
+- `scripts/enemy_ai.gd` + `.uid`（401 行・EnemyAI クラス・LLM 駆動敵 AI）
+- `scripts/llm_client.gd` + `.uid`（109 行・LLMClient クラス・LLM API 呼び出し）
+- `scripts/dungeon_generator.gd` + `.uid`（119 行・DungeonGenerator クラス・LLM によるマップ生成）
+- `scripts/goblin_ai.gd` + `.uid`（45 行・GoblinAI クラス・BaseAI サブクラス）
+
+### 削除した dead code
+- `CharacterData.create_hero()`（`load_from_json("res://assets/master/characters/hero.json")` ラッパ）
+- `CharacterData.create_goblin()`（`load_from_json("res://assets/master/enemies/goblin.json")` ラッパ）
+- どちらも Phase 1-2 時代の名残。現行コードからは一切呼ばれていない
+
+### 参照調査結果
+
+#### A. ブロッカー（削除すると壊れる）: **0 件**
+- `project.godot` の Autoload 登録: なし
+- `.tscn` の script アタッチ: なし
+- 5 ファイル外からの `preload` / `load` / `extends` / 型注釈: なし
+- `create_hero` / `create_goblin` の呼び出し: なし（定義のみ孤立）
+- `character.gd:143` に `EnemyAI` コメントがあったが実行時非依存
+
+#### B. 削除対象同士の相互参照: 3 箇所（一緒に消えるので安全）
+- `enemy_ai.gd` の `LLMClient` 参照（3 行）
+- `dungeon_generator.gd` の `LLMClient` 参照（3 行）
+- `goblin_ai.gd` の `extends BaseAI`
+
+#### C. ドキュメント言及（削除時に更新済み）
+- `CLAUDE.md` 1384 行目の削除タスクを ✅ 完了記録に変更
+- `docs/investigation_class_structure.md` の Legacy セクションを「削除済み」に更新（ファイル一覧を取り消し線で残し、日付を明記）
+- `docs/spec.md` は「現行仕様として誤読される箇所」のみ更新、「Phase 2-3 当時の仕様」として明示されている歴史的記述はそのまま残す（分類サマリーは下記）
+
+#### D. その他
+- `.godot/global_script_class_cache.cfg` / `.godot/editor/*.cfg` にキャッシュが残っていたが、Godot エディタ起動時に自動再スキャン・再構築されるため手動介入不要（commit 対象外）
+
+### docs/spec.md 分類サマリー
+
+約 20 箇所の参照のうち、**更新した 9 箇所 / 残した 11 箇所**：
+
+#### 更新した箇所（「現行仕様」として誤読される可能性あり）
+1. Line 514-524「AIアーキテクチャ仕様」配下のファイル構成：legacy 2 ファイルを削除し、削除済みの注記を追加
+2. Line 669-670「旧クラスとの対応」表：`BaseAI` / `GoblinAI` の「状態」列を「残存」→「**2026-04-19 に物理削除済み**」
+3. Line 684 Phase 3 ファイル構成の `dungeon_generator.gd` / `llm_client.gd` 行：「将来削除対象」→「2026-04-19 に物理削除済み」
+4. Line 688 同上
+5. Line 694「### DungeonGenerator」節見出し：「将来削除対象」→「2026-04-19 に物理削除済み」
+6. Line 741「### LLMClient の変更点」節見出し：同上
+7. Line 1036 `is_attacking` setter コメント：`EnemyAI` → `UnitAI`
+8. Line 1129 DebugWindow セクション：`BaseAI.get_debug_info()` → `UnitAI.get_debug_info()`
+9. Line 1144 同上・返却形式の表題と Strategy 列挙値のクラス名を `UnitAI` に更新
+
+#### 残した箇所（「Phase 2-3 当時の仕様」として明示されており歴史的記述として正しい）
+- Line 319-320, 341-344, 347-352, 402-403, 421, 430, 462-463, 474, 505: Phase 2-2 / Phase 2-3 セクション内部の実装詳細（当時の仕様として正しい）
+- Line 511 パーティーシステム移行の冒頭記述
+- Line 584, 612, 644-647, 676: UnitAI / 後方互換セクションの「旧 BaseAI と比較」する記述（移行の文脈で有用な比較情報）
+- Line 936, 973, 990: Phase 4/5 セクションの過去の変更ファイルリスト
+- Line 1399: 2026-04 パーティーリファクタリング総括の記述
+- Line 2093-2094: `attack` → `attack_power` リネーム記録（歴史的事実）
+- Line 3701, 3754, 4664: 過去のリファクタリング時に「レガシー・未使用のため触らず」と明記した記録
+
+### 実装した変更
+
+#### 削除
+- 5 ファイル × 2 (.gd + .gd.uid) = 10 ファイル
+- `CharacterData.create_hero()` / `create_goblin()` 静的メソッド（9 行）
+
+#### 更新
+- `scripts/character.gd:143`：コメント `EnemyAI` → `UnitAI`
+- `CLAUDE.md`：1384-1391 行目のタスクを ✅ 完了記録に変更。1367 行目の「次の棚卸し候補」から `hero.json` を dead code 合流から分離して独立候補化
+- `docs/investigation_class_structure.md`：ファイル一覧テーブル・推奨しないもの・Legacy セクションの 3 箇所を「削除済み」に更新
+- `docs/spec.md`：上記 9 箇所を更新
+- `docs/history.md`：本エントリを追加
+
+### 安全判断の根拠
+1. Autoload 登録ゼロ（`project.godot` クリーン）→ 起動時強制ロードなし
+2. シーンファイル script アタッチゼロ（`.tscn` クリーン）
+3. 5 クラス外からの依存ゼロ（preload / load / extends / 型注釈なし）
+4. 相互参照はすべて削除対象同士（B 分類 3 件が一緒に消える）
+5. `create_hero` / `create_goblin` は完全孤立（定義のみ・呼び出しなし）
+6. `--check-only` で削除後に新規警告・エラーなし
+
+### Komuro への動作確認依頼
+以下のチェックリストで実機確認してください：
+- **ゲーム起動**：タイトル画面が正常に表示される。コンソールに `class_name 解決エラー` / `preload 失敗` / `script not found` が**ない**こと
+- **ニューゲーム開始**：タイトル → ニューゲーム → 名前入力 → フロア 0 の流れが動作する
+- **フロア 0 戦闘**：近接（剣士）・遠距離（弓）・回復（ヒーラー）の各行動が正常に動作する（V スロット含む）
+- **フロア遷移**：階段でフロア 0 → 1 → 2 への遷移が動作する
+- **Config Editor（F4）**：正常に開き、「定数」「味方クラス」「敵クラス」「敵一覧」「ステータス」の全タブがエラーなく表示される
+- **`godot --headless --check-only`**：新規の warning / error が発生しないこと（既存の Variant 推論警告は許容）
+- **エディタ再起動**：Godot エディタを一度閉じて開き直したとき、削除した `base_ai.gd` 等に関する「スクリプトが見つからない」警告が**出ない**こと（`.godot/global_script_class_cache.cfg` が自動再構築される）
+
+### 追加作業（同日・Komuro 動作確認後）：CLAUDE.md の LLM 参考仕様セクション削除
+コード削除と整合性を保つため、CLAUDE.md 本体に残っていた「参考仕様・未使用」とマークされた 3 セクション（約 60 行）を削除した：
+- 「LLMへ渡すデータ構造（参考仕様・未使用）」（状況 JSON サンプル）
+- 「LLMの返答形式（参考仕様・未使用）」（アクションシーケンス JSON サンプル・relative_position 種類）
+- 「LLM呼び出し方針（参考仕様・未使用）」（非同期呼び出し・キュー置換方式・強制再生成トリガー等）
+
+削除位置：「### 方向と防御」節の直後、「## リポジトリ」節の直前。削除後、両節が空行 1 つを挟んで自然に繋がることを確認済み。
+
+歴史的経緯の保全：削除した 3 セクションの設計方針は [docs/spec.md](spec.md) の Phase 2-3 セクション（337-349 行目付近・当時の LLMClient / DungeonGenerator 実装記録）および本 2026-04-19 エントリ冒頭の背景記述でカバーされているため、別途サマリーを追記する必要なしと判断。CLAUDE.md 内に残る唯一の LLM 参照は「要調査・要整理項目」の ✅ 完了記録のみ（正当な履歴記述）。
+
+---
+
+## 2026-04-19（個別敵 JSON の legacy フィールド物理削除）
+
+### 背景
+Config Editor「敵一覧」タブへの name / projectile_type 追加（同日）の際、棚卸しで「legacy 扱いで実質未使用」のフィールドが個別敵 JSON に残っていることを確認。`apply_enemy_stats()` が `enemy_list.json` + `class_stats.json` / `enemy_class_stats.json` から毎回ステータスを再算出する設計のため、個別敵 JSON の数値ステータスは保持しておく意味がない。
+「今使っていないものは残さない」方針で物理削除する。
+
+### 削除対象（6 フィールド × 16 ファイル = 計 96 エントリ）
+`hp` / `power` / `skill` / `physical_resistance` / `magic_resistance` / `rank`
+
+### 事前調査（参照分類）
+- **A. 実行時ステータスアクセス**（`character.hp` 等の runtime フィールド）：影響なし。個別敵 JSON を読まない
+- **B. `CharacterData.load_from_json` 内の 6 行の `d.get("hp" / ...)`** ：削除対象。JSON から legacy 値を読んでいたが、直後の `apply_enemy_stats()` が必ず上書きするため死に読み。`CharacterData` の default 値（max_hp=1 / power=1 / skill=0 / rank="C" / physical_resistance=0 / magic_resistance=0）が安全側のため、削除しても敵生成経路では一切表面化しない
+- **C. `apply_enemy_stats` 内の参照**：`entry.get("rank")` は `enemy_list.json` 側、`stats.get("power" / ...)` は `_calc_stats()` 戻り値。どちらも個別敵 JSON 非経由。影響なし
+- **D. その他**：`config_editor.gd` は個別敵 JSON からこれらのキーを読まない（rank は `enemy_list.json` の `list_entry` 経由）。`enemy_ai.gd`（legacy LLM AI）は `enemy.hp`（runtime）参照のみ
+
+### 「こっそり使っている」箇所の有無確認
+**なし**。`party_manager._spawn_enemy_member()`（敵生成の唯一のライブパス）は `load_from_json()` → `apply_enemy_graphics()` → `apply_enemy_stats()` の順で、legacy 値を参照する処理が間に挟まらない。`CharacterData.load_from_json()` の他の呼び出し元（`create_hero()` / `create_goblin()`）は dead code で未使用
+
+### 友好キャラ用経路の最終確認
+`CharacterData.load_from_json` を live で呼んでいるのは [party_manager.gd:265](scripts/party_manager.gd:265)（敵生成）のみ。友好キャラは `CharacterGenerator.generate_character(class_id)` で生成するため load_from_json 経路を通らない。削除による友好キャラへの影響なし
+
+### 実装
+#### 個別敵 JSON（16 ファイル）
+Python スクリプトで一括処理：
+- `goblin.json` / `goblin_archer.json` / `goblin_mage.json` / `hobgoblin.json`
+- `zombie.json` / `wolf.json` / `harpy.json` / `salamander.json`
+- `dark_knight.json` / `dark_mage.json` / `dark_priest.json` / `dark_lord.json`
+- `skeleton.json` / `skeleton_archer.json` / `lich.json` / `demon.json`
+
+全 16 ファイルから上記 6 フィールドを削除。キー順は `OrderedDict` で元順保持。2-space インデント。
+
+#### `scripts/character_data.gd`
+`load_from_json()` から以下の読み出しコードを削除（約 15 行）：
+- `data.max_hp = int(d.get("hp", 1))` 行
+- `data.power` の読み出しチェーン（新 "power" → 旧 "attack_power"/"attack"/"magic_power" フォールバック・約 7 行）
+- `data.skill = int(d.get("skill", d.get("accuracy", 0)))` 行
+- `data.rank = d.get("rank", "C")` 行
+- `data.physical_resistance = int(d.get("physical_resistance", 0))` 行
+- `data.magic_resistance = int(d.get("magic_resistance", 0))` 行
+
+代わりに「数値ステータスは個別敵 JSON からは読まない。敵は `apply_enemy_stats()` が算出、味方は `CharacterGenerator.generate_character()` で生成する」旨のコメントを残す
+
+### CLAUDE.md 更新
+- ファイル構成セクション（130 行目付近）：`hp` / `power` / `skill` 等の記述を「2026-04-19 物理削除済み」に書き換え
+- Config Editor「敵一覧」タブの「意図的に編集対象外」注記：legacy フィールド 6 個の記述を削除し、現在の状態（id / sprites のみ除外）に更新
+- 物理削除履歴を注記として追加
+- 「要調査・要整理項目」の legacy 棚卸し項目を「✅ 完了」＋「次の棚卸し候補」リストに更新
+
+### 運用ルールとの整合性
+- 「今使っていないものは残さない」方針に沿って、JSON とコード両方を同時削除
+- `CharacterData` の default 値は安全側（max_hp=1・power=1 等）のため、削除による表面化リスクなし
+- 将来友好キャラ JSON を直接ロードする経路が必要になった場合は、そのとき必要な形で再実装する（既存の default 値が安全なので再実装コストは小さい）
+
+### Komuro への動作確認依頼
+
+以下のチェックリストで実機確認してください：
+
+- **敵ダメージ・HP**：フロア 0〜4 の全敵種（16 種）と戦闘し、ダメージ・HP が削除前と同じ（体感で大きな差がない）こと
+  - 特に削除フィールドが保持していた値が大きい敵：`hobgoblin`（hp=45, power=12, skill=14）/ `dark_knight` / `dark_lord` / `demon`
+  - `apply_enemy_stats` で `enemy_list.json` の rank / stat_bonus から再算出されるため、同じ数値になるはず
+- **敵の特殊挙動**：
+  - ゴブリン系の臆病撤退（HP < 30%）
+  - ウルフの高速移動
+  - サラマンダーの炎攻撃
+  - ハーピーの降下攻撃（飛行）
+  - ダークプリーストの回復
+  - dark-lord のワープ＋炎陣（ボス）
+  - デーモンの雷弾（`projectile_type="thunder_bullet"`）
+  - リッチの火水交互魔法
+  - スケルトン系のアンデッド耐性（ヒーラー回復魔法が特効）
+- **Config Editor**：
+  - F4 で「敵一覧」タブが起動時エラーなく開く
+  - 「敵一覧」の各欄（name / rank / stat_type / 3 つの bool / behavior / chase / territory / projectile / stat_bonus × 6）が正しく表示される
+  - 値を変更→保存→再起動後に反映される
+- **起動時ログ**：コンソールに JSON 関連の warning / error がないこと（`push_warning` / `push_error` は出ないはず）
+
+---
+
+## 2026-04-19（Config Editor「敵一覧」タブへのフィールド追加）
+
+### 背景・動機
+同日のバグ修正（戦闘メッセージの敵表示名が「斧戦士」等のクラス日本語名になっていた）の原因調査で、個別敵 JSON の `name` フィールドが Config Editor から不可視だったことがミス発見を遅らせた要因の一つと判明した。Config Editor の重要な役割の一つである「データの不足・乖離をチェックできるようにする」ことが損なわれていたため、「敵一覧」タブの表示フィールドを棚卸しし、欠落を補う。
+
+### 棚卸し結果（個別敵 JSON・16 ファイル）
+
+#### A. 既に編集可能
+id（Label）/ rank / stat_type / is_undead / is_flying / instant_death_immune / behavior_description / chase_range / territory_range / stat_bonus × 6
+
+#### B. 追加した（本タスク）
+- **`name`**（全 16 ファイル）：プレイヤー向け表示名（戦闘メッセージ・UI）。基本的に種族名の日本語（「ゴブリン」「ホブゴブリン」等）。`Character._battle_name()` が参照する source of truth
+- **`projectile_type`**（demon のみ）：飛翔体の種別切替。`""` = attack_type から自動判定、`"thunder_bullet"` = 雷弾。UI 上は `""` を「(自動)」と表示
+
+#### C. 意図的に除外（docs 化）
+- `id` — 識別子（Label として表示）
+- `hp` / `power` / `skill` / `physical_resistance` / `magic_resistance` — legacy。`apply_enemy_stats()` が stat_type / rank / stat_bonus から毎回算出・上書きするため、ここでの編集値は効果を持たない
+- `rank`（個別 JSON 内）— legacy。`enemy_list.json` が source of truth（そちらで編集可能）
+- `sprites` — 画像パスの辞書構造。専用のアセット管理が必要で Config Editor の守備範囲外
+
+### 実装（`scripts/config_editor.gd`）
+
+#### 定数追加
+- `PROJECTILE_TYPE_AUTO_LABEL: String = "(自動)"` — UI 表示用ラベル
+- `ENEMY_PROJECTILE_CHOICES: Array[String] = ["(自動)", "thunder_bullet"]` — 新弾種追加時はここに追記
+- `ENEMY_NAME_COL_W: int = 100` / `ENEMY_PROJECTILE_COL_W: int = 130` — 列幅
+
+#### 列順
+`敵ID → name → rank → stat_type → undead → flying → 死耐性 → behavior → chase → territory → projectile → stat_bonus × 6`
+
+#### 関数追加
+- `_add_enemy_projectile_option()`：projectile_type 用 OptionButton（PanelContainer 包みでハイライト対応）
+- `_proj_choice_to_value()` / `_proj_value_to_choice()`：表示ラベル `"(自動)"` ↔ 保存値 `""` の双方向変換
+- `_on_enemy_projectile_changed()`：OptionButton 変更ハンドラ（dirty 再評価・セルハイライト更新）
+
+#### 関数修正
+- `_build_enemy_list_row()`：name LineEdit と projectile OptionButton の追加
+- `_build_enemy_list_header()`：列ヘッダーに name / projectile を追加
+- `_enemy_indiv_orig_text()`：name の元値取得を追加
+- `_enemy_indiv_has_any_diff()`：name の LineEdit ループに追加。projectile OptionButton の比較を独立ブロックで追加
+- `_reset_enemy_list_tab()`：name を LineEdit リセットループに追加。projectile_type OptionButton のリセット処理を追加
+- `_apply_enemy_indiv_edits()`：name の書き戻し（元 JSON フィールド有無を尊重）・projectile_type の書き戻し（"(自動)" → "" 変換）を追加
+
+### CLAUDE.md 更新
+- 「敵一覧」タブセクションの列一覧を name / projectile_type を含む形に更新
+- name の意味（Character._battle_name 参照の source of truth）と projectile_type の選択肢・UI ラベル変換を注記
+- **意図的に編集対象外としているフィールド**の一覧（上記 C 分類）を追記。将来の棚卸し時の参考
+- 「要調査・要整理項目」に「Config Editor 全タブの表示フィールド棚卸し（定期運用）」を追加。味方クラス・敵クラス・ステータス各タブは次回以降で実施
+
+### 動作確認観点
+- Config Editor（F4）→「敵一覧」タブで name 列が表示・編集できる
+- 例：goblin の `name` を「テストゴブリン」に変更→保存→再起動→フロア0 のゴブリンと戦ってメッセージに反映される→元に戻す
+- demon の `projectile_type` を「(自動)」↔「thunder_bullet」で切り替えて、雷弾 / 火弾グラフィックの切替を確認
+- セルのハイライト・タブ末尾の ● インジケータ・リセット挙動が既存フィールドと同じく機能する
+
+### 運用ルールとの整合性
+- 「新ステータス・新敵の追加は Config Editor の守備範囲外」（CLAUDE.md）は維持。本タスクは既存フィールドの編集範囲拡張であり、この方針に抵触しない
+- 「元 JSON のフィールド有無を尊重」ルール（legacy フィールドの構造保全）に従って、name / projectile_type ともに元にない＋デフォルト値のままなら追加しない実装
+
+---
+
+## 2026-04-19（バグ修正：敵のVスロット特殊攻撃抑止・戦闘メッセージの敵表示名）
+
+### 問題
+2026-04-17 のデータ構造整理（Phase B 下準備）で `apply_enemy_stats()` が敵の `class_id` を `stat_type`（"fighter-axe" 等）に設定するようになった副作用で、以下の 2 つの問題が発生していた：
+
+1. **敵が V スロット特殊攻撃を発動**：`UnitAI._generate_special_attack_queue()` の `match cd.class_id` が敵にもマッチし、hobgoblin（stat_type="fighter-axe"）が振り回しを、dark_priest（stat_type="healer"）が `_generate_buff_queue()` で防御バフを発動していた。仕様上、敵は V スロット特殊攻撃を使わない想定（dark-lord の炎陣だけはキュー外動作の例外）
+2. **戦闘メッセージで敵がクラス日本語名で表示**：`Character._battle_name()` が敵に対して `CLASS_NAME_JP.get(class_id)` を返していたため、「ホブゴブリン」と表示すべき場面で「斧戦士」と表示されていた。`class_id` が空だった Phase B 以前は `character_name`（=個別敵 JSON の `name`）にフォールバックしていたが、`class_id` 設定後は誤ったルートに入っていた
+
+### 修正
+
+#### `scripts/unit_ai.gd`
+- `_generate_special_attack_queue()` 冒頭に `if not _member.is_friendly: return []` を追加
+- `_generate_buff_queue()` 冒頭にも同じガードを追加
+- コメントに「敵（is_friendly=false）は V スロット特殊攻撃を発動しない。dark-lord の炎陣は `_update_dark_lord_behavior()` のキュー外動作のため対象外」と明記
+
+#### `scripts/character.gd`
+- `_battle_name()` を味方／敵で分岐せず、どちらも `character_data.character_name` を返すよう簡略化
+- 敵の `character_name` は個別敵 JSON の `name`（種族名、例：「ホブゴブリン」）
+- 空の場合のみ `character_id` にフォールバック
+- `CLASS_NAME_JP` の敵向け参照を撤去
+
+#### `CLAUDE.md`
+- 「メッセージ表記方針」に「表示名の規則」小項目を追加（味方＝個別名、敵＝種族名、どちらも `character_name` 参照）
+- 「Vスロット特殊攻撃仕様」に「敵の V スロット発動方針」小項目を追加（dark-lord の炎陣は例外として明記）
+
+### 動作確認観点
+- フロア0（ゴブリンのみ）：「ゴブリンが…」と表示され、V 特殊攻撃は発動しない
+- ホブゴブリン（fighter-axe 系）：振り回しを使わず、通常攻撃のみで戦う
+- dark_priest：バフを使わず、回復（Z スロット）のみを行う
+- フロア4 dark-lord：炎陣とワープが従来通り動作（キュー外実装に非介入）
+- 味方の特殊攻撃：従来通り発動
+- 味方の名前表示：従来通り個別名で表示
+
+---
+
 ## 2026-04-18 の大規模リファクタリング総括
 
 本日のセッションは Phase 13 → 14 の橋渡しとなる「節目」の日。多数の設計整理・計算統一・定数外出し・調査を連続して実施した。以下は全体を俯瞰する総括。個別の詳細は同日付の後続エントリ参照。
