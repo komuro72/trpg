@@ -418,8 +418,15 @@ PartyManager（パーティー管理。全パーティー種別で共通）
 
 ### PartyLeader（意思決定層の基底クラス）
 - パーティー全体の戦略を決定し、各メンバーの UnitAI に指示を伝達する
-- `_evaluate_party_strength()`: パーティーの戦力値を算出する共通メソッド。戦力 = `(rank_sum + party_tier_sum × ITEM_TIER_STRENGTH_WEIGHT) × 平均HP充足率`（ヒールポーション回復量を加味）。`party_tier_sum` は各メンバーの装備中 tier の平均の和。敵は装備を持たないため tier 寄与は 0 となり、従来と同じ挙動
-- `_evaluate_combat_situation()`: 戦況判断の共通ルーチン（リーダーのエリア＋隣接エリアを対象）。全サブクラスで共有する。結果は `_assign_orders()` → `receive_order()` でメンバーに伝達する
+- `_evaluate_strategic_status()`: 統合戦略評価ルーチン。戦力計算と戦況判断を 1 箇所に集約し、3 種類のメンバー集合で 1 度ずつ統計を算出する（重複計算なし）：
+  - **full_party**：自パ全員（下層判定・絶対戦力用）
+  - **nearby_allied**：自パ近接 + 同陣営他パ近接（戦況判断・味方連合）
+  - **nearby_enemy**：近接敵（戦況判断）
+  - 距離フィルタ：自パリーダーからマンハッタン `COALITION_RADIUS_TILES` マス以内（エリアベース `target_areas` 判定は廃止）
+  - 敵の非対称設計：enemy パーティーは自軍戦力 = full_party（協力しない世界観）、味方 (player/npc) は nearby_allied（連合）
+  - 戦力 = `(rank_sum + tier_sum × ITEM_TIER_STRENGTH_WEIGHT) × 平均HP充足率`
+  - HP 率：自パ側は実 HP + ポーション、他パ・敵は condition ラベルから推定（敵ステータス直接参照禁止ルール準拠）
+  - 結果は `_combat_situation` に格納・`_assign_orders()` → `receive_order()` でメンバーに伝達
 - `_evaluate_party_strategy()`: 仮想メソッド。戦略決定（ATTACK / WAIT / FLEE 等）。サブクラスがオーバーライドする
 - `_select_target_for()`: 仮想メソッド。ターゲット選択。サブクラスがオーバーライドする
 - `_assign_orders()`: 戦略に応じてメンバーの UnitAI に `receive_order()` で指示を伝達する（共通ロジック）
@@ -432,7 +439,7 @@ PartyManager（パーティー管理。全パーティー種別で共通）
   - `"attack"` → ATTACK、`"defense"` → WAIT、`"retreat"` → FLEE
 - `_select_target_for()`: `global_orders.target` 設定に従う（nearest / weakest / same_as_leader / support）
 - プレイヤーの指示を覆さない（戦況判断はメンバーAIの条件評価のみに使う）
-- `_evaluate_combat_situation()` の結果を `receive_order()` でメンバーに渡す（AI操作メンバーの特殊攻撃判断等に使用）
+- `_evaluate_strategic_status()` の結果を `receive_order()` でメンバーに渡す（AI操作メンバーの特殊攻撃判断等に使用）
 
 ### PartyLeaderAI（AI自動判断の基底クラス）
 - PartyLeader を継承する。AI がパーティー全体の戦略を自動で判断する
@@ -475,8 +482,7 @@ PartyManager（パーティー管理。全パーティー種別で共通）
 game_map
   └── PartyManager
         ├── PartyLeader（Player または AI）
-        │     ├── _evaluate_party_strength()      ← 戦力評価（共通）
-        │     ├── _evaluate_combat_situation()  ← 戦況判断（共通）
+        │     ├── _evaluate_strategic_status()  ← 統合戦力評価＋戦況判断（共通）
         │     ├── _evaluate_party_strategy()    ← 戦略決定（サブクラス固有）
         │     └── _assign_orders()              ← 指示伝達（共通）
         │           └── UnitAI.receive_order({
@@ -502,7 +508,7 @@ game_map
 | 種族固有AI | `goblin_leader_ai.gd` 等 | ✅ 実装済み。extends EnemyLeaderAI |
 | NpcLeaderAI | `npc_leader_ai.gd` | ✅ 実装済み。extends PartyLeaderAI |
 | PartyLeaderPlayer | `party_leader_player.gd` | ✅ 実装済み。hero_manager に接続済み（party_type="player" で PartyLeaderPlayer を生成） |
-| `_evaluate_combat_situation()` | `party_leader.gd` | ✅ 実装済み。リーダーのエリア＋隣接エリアの敵との戦力比較で CombatSituation を返す |
+| `_evaluate_strategic_status()` | `party_leader.gd` | ✅ 実装済み（2026-04-19）。3 集合（full_party / nearby_allied / nearby_enemy）× 距離フィルタで戦力・戦況を一括算出する統合関数 |
 
 ## ゲームデザイン方針
 - レベルアップなし。装備と仲間の強化が成長の主軸
@@ -1123,19 +1129,21 @@ rank値: C=0, B=1, A=2, S=3
 - 将来：視界内の敵は大まかな状態のみ（healthy／wounded／critical）
 
 ### 戦況判断（CombatSituation）
-- `_evaluate_combat_situation()` が「リーダーのエリア＋隣接エリア」にいる敵との戦力比から判定する
-- 通路にもエリアID（`c{フロア番号}_{連番}`。例：`c1_1`）が付与されており、`部屋 ←→ 通路 ←→ 部屋` が隣接として扱われる
-- これにより部屋の境界付近で戦っても戦況がぶれない
-- 自軍側も同じ「対象エリア」に絞ってランク和・戦力を算出する
-- **同陣営の他パーティー**（`is_friendly` が同じ別パーティー）が対象エリア内にいる場合、その生存メンバーのランク和・戦力も自軍側に加算する
-  - プレイヤー＋未加入NPC連合、敵パーティー同士の合流など
-  - 敵同士でも同じルールなので、敵が密集しているエリアでは敵が強気になり、プレイヤー側が有利な時ほど敵は逃げやすくなる
-- HP充足率（HpStatus）は自パーティーのみで計算（他パーティーのポーション所持は把握不可のため）
-- 戦力比 = 自軍戦力 / 敵戦力（`_evaluate_party_strength_for()` で算出）
-- 戦力式：`(rank_sum + party_tier_sum × ITEM_TIER_STRENGTH_WEIGHT) × 平均HP充足率`（2026-04-19〜）
-  - `party_tier_sum` = 各メンバーの装備中 tier（0〜3）の平均の和
-  - `ITEM_TIER_STRENGTH_WEIGHT` は Config Editor PartyLeader カテゴリで調整可（デフォルト 0.33。装備 1 セット ≒ ランク 1 段階）
-  - 敵は装備を持たないため tier 寄与 0・従来挙動を維持
+- `_evaluate_strategic_status()` が統合的に戦力計算・戦況判断を行う（2026-04-19〜）
+- **距離ベースの連合判定**：自パリーダーから **マンハッタン `COALITION_RADIUS_TILES` マス以内**（デフォルト 8 マス・同フロアのみ）に絞る。エリアベース判定は廃止
+  - 旧設計の「右端にいるとき左部屋の奥まで含む」問題を解消
+- 3 種類のメンバー集合で統計を算出：
+  - `full_party`：自パ全員（下層判定・絶対戦力用）
+  - `nearby_allied`：自パ近接 + 同陣営他パ近接（戦況判断・味方連合）
+  - `nearby_enemy`：近接敵（戦況判断）
+- **敵の非対称設計**：enemy パーティーの自軍戦力は `full_party` のみ（敵は協力しない世界観）。味方（player/npc）は `nearby_allied`（連合）で加算
+- 戦力式：`(rank_sum + tier_sum × ITEM_TIER_STRENGTH_WEIGHT) × 平均HP充足率`
+  - `ITEM_TIER_STRENGTH_WEIGHT`：Config Editor PartyLeader カテゴリ・デフォルト 0.33
+- HP 率計算：
+  - 自パ部分：実 HP + ヒールポーション回復量
+  - 同陣営他パ部分：condition ラベルから推定（他パのポーション所持は把握不可）
+  - 敵部分：condition ラベルから推定（敵ステータス直接参照禁止ルール）
+- HpStatus（自軍 HP 充足率の段階）は**自パーティーのみ**で計算
 
 | 戦況 | 戦力比 | NPC行動への影響 | アイテム拾い |
 |------|--------|----------------|-------------|
@@ -1153,7 +1161,7 @@ rank値: C=0, B=1, A=2, S=3
 
 ### 戦力比（PowerBalance）
 - ランク和のみで比較（HP を含めない純粋な戦力比較）
-- 自軍側ランク和 = 自パーティーのエリア内生存メンバー ＋ **同陣営の他パーティーのエリア内生存メンバー**のランク和（加算）
+- 自軍側ランク和 = `nearby_allied`（自パ近接 + 同陣営他パ近接）の rank_sum。ただし enemy パーティーは `full_party` のみ（非対称設計）
 - 敵がいない場合は OVERWHELMING
 
 | 段階 | 自軍ランク和 / 敵ランク和 |
@@ -1407,7 +1415,7 @@ rank値: C=0, B=1, A=2, S=3
   - 参照してよい情報：ランク、クラス（種族）、condition（状態ラベル）、位置、向き、is_alive、is_flying、is_undead など外見で判断できる情報
   - 理由：ゲーム仕様上、敵のステータスは不可視。将来的に情報制限を導入する前提で設計する
   - HP の推定は状態ラベル（condition: healthy/wounded/injured/critical）経由で行う
-  - 戦力評価は `_evaluate_party_strength_for()` を使う
+  - 戦力評価は `_evaluate_strategic_status()` を使う（返り値辞書の `full_party_*` / `nearby_allied_*` / `nearby_enemy_*` から必要な値を取り出す）
   - 種族固有リーダーAI（GoblinLeaderAI 等）でも同じルールを守ること
   - 自パーティーのメンバーのステータスは直接参照してよい
 
@@ -1427,7 +1435,7 @@ rank値: C=0, B=1, A=2, S=3
 - 大型ボスの即死耐性設計：`instant_death_immune: bool`（ボス級は true）。ヘッドショット無効・無力化水魔法持続短縮。敵 JSON でフラグを設定できる設計にする
 - ログ参照の改善（OrderWindowのログをより使いやすく）：現在は最新50件をそのまま表示するだけ。フィルタリング・検索・スクロール操作の改善を検討
 - パーティーシステムの残作業：
-  - [x] 戦況判断ルーチン（`_evaluate_combat_situation()`）の実装（PartyLeader の共通メソッド。同エリア敵との戦力比較で CombatSituation を返す）
+  - [x] 戦況判断ルーチン（`_evaluate_strategic_status()`）の実装（PartyLeader の統合メソッド。3 集合 × 距離フィルタで戦力・戦況を返す）
   - [x] NpcLeaderAI の撤退ロジック追加（CombatSituation.CRITICAL 時に FLEE に切り替え。SAFE 復帰で EXPLORE に戻る）
   - [x] special_skill 指示のAI接続（strong_enemy / disadvantage 等の条件判定。PowerBalance / HpStatus で判定。_generate_special_attack_queue で発動）
 - NpcLeaderAI のアイテム収集方針の動的切り替え：目標フロアに到達している場合（余裕がある状態）、item_pickup を "passive"（近くなら拾う）から "aggressive"（積極的に拾う）に切り替える。装備強化のために能動的にアイテムを回収する行動

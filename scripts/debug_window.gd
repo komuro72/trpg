@@ -2,10 +2,14 @@
 ## 上半分：現在フロアの全パーティー状態をリアルタイム表示
 ## 下半分：combat/ai ログ（最新50件）
 ##
-## 戦力表示の凡例：`PB(R:my_rank+T:my_tier/E:enemy_rank+t:enemy_tier)`
-##   PB = PowerBalance（優劣ラベル） / R = 自軍 rank_sum / T = 自軍 tier 平均の和
-##   E = 敵 rank_sum / t = 敵 tier 平均の和（通常 0）
-##   戦力 = (rank_sum + tier_sum × ITEM_TIER_STRENGTH_WEIGHT) × HP 充足率
+## 戦力表示の凡例：`PB F(R+T)s C(R+T)s E(R+T)s`
+##   PB = PowerBalance（優劣ラベル・nearby_allied vs nearby_enemy のランク比）
+##   F  = full_party（自パのみ・下層判定用絶対戦力）
+##   C  = nearby_allied（自パ近接 + 同陣営他パ近接・戦況判断の味方連合）
+##   E  = nearby_enemy（近接敵・戦況判断の敵）
+##   各括弧内: R=rank_sum / T=tier 平均の和 / 末尾 s=strength（= (R + T×WEIGHT) × HP率）
+##   敵パーティー視点では F と C は同値（協力しない世界観）
+##   範囲: 自パリーダーからマンハッタン距離 COALITION_RADIUS_TILES マス以内
 
 class_name DebugWindow
 extends CanvasLayer
@@ -400,12 +404,7 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 	var hp_str:     String = _label("on_low_hp",     hint.get("on_low_hp",     "-") as String)
 	var sit_str:    String = _combat_situation_label(hint.get("combat_situation", 0) as int)
 	var pb_str:     String = _power_balance_label(hint.get("power_balance", 0) as int)
-	pb_str += "(R:%d+T:%.1f/E:%d+t:%.1f)" % [
-		hint.get("my_rank_sum", 0) as int,
-		float(hint.get("my_tier_sum", 0.0)),
-		hint.get("enemy_rank_sum", 0) as int,
-		float(hint.get("enemy_tier_sum", 0.0)),
-	]
+	pb_str += " " + _format_strength_breakdown(hint)
 	var hs_str:     String = _hp_status_label(hint.get("hp_status", 0) as int)
 
 	var header: String
@@ -499,12 +498,7 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 		var hint: Dictionary = _hero_manager.get_global_orders_hint()
 		sit_str = _combat_situation_label(hint.get("combat_situation", 0) as int)
 		pb_str = _power_balance_label(hint.get("power_balance", 0) as int)
-		pb_str += "(R:%d+T:%.1f/E:%d+t:%.1f)" % [
-			hint.get("my_rank_sum", 0) as int,
-			float(hint.get("my_tier_sum", 0.0)),
-			hint.get("enemy_rank_sum", 0) as int,
-			float(hint.get("enemy_tier_sum", 0.0)),
-		]
+		pb_str += " " + _format_strength_breakdown(hint)
 		hs_str = _hp_status_label(hint.get("hp_status", 0) as int)
 
 	var header := "[プレイヤー] %s(%s)  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
@@ -736,6 +730,28 @@ func _power_balance_label(pb: int) -> String:
 		int(GlobalConstants.PowerBalance.INFERIOR):      return "劣位"
 		int(GlobalConstants.PowerBalance.DESPERATE):     return "絶望"
 	return "?"
+
+
+## 戦力内訳を 1 行の文字列にフォーマット
+## 形式: F(R+T)s C(R+T)s E(R+T)s
+##   F = full_party / C = nearby_allied / E = nearby_enemy
+##   各括弧内: R=rank_sum / T=tier 平均の和 / 末尾 s=strength
+##   敵パーティー視点では F と C は同値（協力しない世界観）
+func _format_strength_breakdown(hint: Dictionary) -> String:
+	var f_rank: int   = hint.get("full_party_rank_sum",    0) as int
+	var f_tier: float = float(hint.get("full_party_tier_sum",    0.0))
+	var f_str:  float = float(hint.get("full_party_strength",    0.0))
+	var c_rank: int   = hint.get("nearby_allied_rank_sum", 0) as int
+	var c_tier: float = float(hint.get("nearby_allied_tier_sum", 0.0))
+	var c_str:  float = float(hint.get("nearby_allied_strength", 0.0))
+	var e_rank: int   = hint.get("nearby_enemy_rank_sum",  0) as int
+	var e_tier: float = float(hint.get("nearby_enemy_tier_sum",  0.0))
+	var e_str:  float = float(hint.get("nearby_enemy_strength",  0.0))
+	return "F(%d+%.1f)%.1f C(%d+%.1f)%.1f E(%d+%.1f)%.1f" % [
+		f_rank, f_tier, f_str,
+		c_rank, c_tier, c_str,
+		e_rank, e_tier, e_str,
+	]
 
 
 ## HP比率からデバッグ表示用の色を返す

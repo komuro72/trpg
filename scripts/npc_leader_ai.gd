@@ -106,9 +106,10 @@ func _evaluate_party_strategy() -> Strategy:
 
 
 ## 現在の状態に基づく目標フロアを返す（戦力値 + HP 補正）
-## 戦力値 = ランク和 × HP充足率（_evaluate_party_strength()）
-## パーティーHP充足率（ポーション込み・平均）が HP_STATUS_STABLE 未満の場合は適正フロア - 1
+## 戦力値 = 自パのみの strength（装備 tier 込み・HP 充足率込み）
+## full_party の HP 充足率（ポーション込み・平均）が HP_STATUS_STABLE 未満の場合は適正フロア - 1
 ## suppress_floor_navigation = true またはメンバーなしの場合は現在フロアをそのまま返す
+## 値は _combat_situation から参照（_process 1.5 秒タイマーで更新済み）
 func _get_target_floor() -> int:
 	var current_floor := 0
 	for m: Character in _party_members:
@@ -118,8 +119,8 @@ func _get_target_floor() -> int:
 	if suppress_floor_navigation or _party_members.is_empty():
 		return current_floor
 
-	# --- 1. 戦力値（ランク和 × HP充足率） ---
-	var strength := _evaluate_party_strength()
+	# --- 1. 戦力値（自パのみ・装備 tier 込み・HP 充足率込み） ---
+	var strength: float = float(_combat_situation.get("full_party_strength", 0.0))
 	if strength <= 0.0:
 		return current_floor
 
@@ -135,11 +136,8 @@ func _get_target_floor() -> int:
 		if strength < float(this_rank) / 2.0:
 			appropriate_floor = current_floor - 1
 
-	# --- 3. HP 充足率チェック（ポーション込み・パーティー平均） ---
-	# HpStatus 計算と同じ式で raw な ratio を求め、HP_STATUS_STABLE (0.5) 未満なら補正-1
-	# 旧実装の「最低HP率 or MP/SP平均率」ベースから「HP充足率平均」ベースに一本化
-	# （エネルギー率は戦況判断拡張で後日検討）
-	var hp_ratio := _calc_party_hp_ratio()
+	# --- 3. HP 充足率チェック（統合関数の full_party_hp_ratio を参照） ---
+	var hp_ratio: float = float(_combat_situation.get("full_party_hp_ratio", 0.0))
 	var hp_fail: bool = hp_ratio < GlobalConstants.HP_STATUS_STABLE
 
 	# --- 4. 目標フロア決定（HP 充足率が低ければ-1） ---
@@ -166,23 +164,6 @@ func _get_target_floor() -> int:
 	return target_floor
 
 
-## パーティー全体の HP 充足率（ポーション込み・平均）を返す
-## _calc_hp_status_for と同じ計算式（ただし enum バケットではなく生の ratio を返す）
-func _calc_party_hp_ratio() -> float:
-	var total_hp := 0
-	var total_max := 0
-	var total_potion := 0
-	for m: Character in _party_members:
-		if not is_instance_valid(m) or m.hp <= 0:
-			continue
-		total_hp += m.hp
-		total_max += m.max_hp
-		total_potion += _calc_total_potion_hp(m)
-	if total_max <= 0:
-		return 0.0
-	return clampf(float(total_hp + total_potion) / float(total_max), 0.0, 1.0)
-
-
 ## 探索時の移動方針を返す（_get_target_floor() の結果を方針文字列に変換）
 func _get_explore_move_policy() -> String:
 	if suppress_floor_navigation or _party_members.is_empty():
@@ -202,6 +183,10 @@ func _get_explore_move_policy() -> String:
 
 ## NPC パーティーの global_orders ヒントを返す（デバッグウィンドウ表示用）
 ## _global_orders が設定されていない場合は NPC デフォルト値＋現在戦略を合成して返す
+## NPC 固有差分:
+##   - デフォルト方針が「follow / same_as_leader / retreat / passive」（プレイヤー追従前提）
+##   - sp_mp_potion キーを持つ（ベース版は持たない）
+##   - EXPLORE 時に階段移動中なら target_floor キーを追加（_get_target_floor 固有）
 func get_global_orders_hint() -> Dictionary:
 	var hint: Dictionary
 	if not _global_orders.is_empty():
@@ -229,13 +214,22 @@ func get_global_orders_hint() -> Dictionary:
 					hint["target_floor"] = str(_get_target_floor())
 			Strategy.GUARD_ROOM:
 				hint["move"] = "guard_room"
-	# 戦況判断を追加
+	# 戦況判断（_evaluate_strategic_status() の結果を流し込む）
 	var sit: int = _combat_situation.get("situation", int(GlobalConstants.CombatSituation.SAFE)) as int
 	hint["combat_situation"] = sit
 	hint["power_balance"] = _combat_situation.get("power_balance", 0)
-	hint["hp_status"] = _combat_situation.get("hp_status", 0)
-	hint["my_rank_sum"] = _combat_situation.get("my_rank_sum", 0)
-	hint["enemy_rank_sum"] = _combat_situation.get("enemy_rank_sum", 0)
+	hint["hp_status"]     = _combat_situation.get("hp_status", 0)
+	hint["full_party_strength"]    = _combat_situation.get("full_party_strength", 0.0)
+	hint["full_party_rank_sum"]    = _combat_situation.get("full_party_rank_sum", 0)
+	hint["full_party_tier_sum"]    = _combat_situation.get("full_party_tier_sum", 0.0)
+	hint["full_party_hp_ratio"]    = _combat_situation.get("full_party_hp_ratio", 0.0)
+	hint["nearby_allied_strength"] = _combat_situation.get("nearby_allied_strength", 0.0)
+	hint["nearby_allied_rank_sum"] = _combat_situation.get("nearby_allied_rank_sum", 0)
+	hint["nearby_allied_tier_sum"] = _combat_situation.get("nearby_allied_tier_sum", 0.0)
+	hint["nearby_allied_hp_ratio"] = _combat_situation.get("nearby_allied_hp_ratio", 0.0)
+	hint["nearby_enemy_strength"]  = _combat_situation.get("nearby_enemy_strength", 0.0)
+	hint["nearby_enemy_rank_sum"]  = _combat_situation.get("nearby_enemy_rank_sum", 0)
+	hint["nearby_enemy_tier_sum"]  = _combat_situation.get("nearby_enemy_tier_sum", 0.0)
 	return hint
 
 

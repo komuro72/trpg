@@ -214,7 +214,7 @@ func _pulse_color(base: Color) -> Color:
 	var pulse := (sin(t * TAU * CONDITION_PULSE_HZ) + 1.0) * 0.5
 	return base.lerp(dark, pulse)
 
-## 戦況判断（_evaluate_combat_situation）の比率閾値
+## 戦況判断（_evaluate_strategic_status）の戦力比閾値
 ## 自軍戦力 / 敵戦力 の比率で戦況を分類する
 ## [ConfigEditor 対象・すべて]
 var COMBAT_RATIO_OVERWHELMING: float = 2.0  ## 圧倒的優勢
@@ -223,7 +223,7 @@ var COMBAT_RATIO_EVEN:         float = 0.8  ## 互角
 var COMBAT_RATIO_DISADVANTAGE: float = 0.5  ## 劣勢
 ## 0.5 未満 → CRITICAL（危険）
 
-## 戦況の分類値（_evaluate_combat_situation の戻り値 "situation" キー）
+## 戦況の分類値（_evaluate_strategic_status の戻り値 "situation" キー）
 enum CombatSituation { SAFE, OVERWHELMING, ADVANTAGE, EVEN, DISADVANTAGE, CRITICAL }
 
 ## 戦力比の段階（ランク和のみ。HP を含めない純粋な戦力比較）
@@ -246,6 +246,12 @@ var HP_STATUS_LOW:     float = 0.25
 ## 装備 1 セット ≒ ランク 1 段階となる 0.33 が既定
 ## [ConfigEditor 対象]
 var ITEM_TIER_STRENGTH_WEIGHT: float = 0.33
+
+## 近接味方連合・近接敵の最大距離（マンハッタンマス数・自パリーダーからの距離）
+## 戦況判断用の nearby_allied / nearby_enemy 集合に含めるメンバーの範囲を決める
+## エリアベースの target_areas 判定（廃止済み）の代替
+## [ConfigEditor 対象]
+var COALITION_RADIUS_TILES: int = 8
 
 ## ------------------------------------------------------------
 ## SkillExecutor 関連（2026-04-18〜）
@@ -439,6 +445,7 @@ const CONFIG_KEYS: Array[String] = [
 	"HP_STATUS_STABLE",
 	"HP_STATUS_LOW",
 	"ITEM_TIER_STRENGTH_WEIGHT",
+	"COALITION_RADIUS_TILES",
 	# EnemyLeaderAI タブ
 	"PARTY_FLEE_ALIVE_RATIO",
 	# UnitAI タブ

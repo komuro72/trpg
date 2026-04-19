@@ -217,6 +217,15 @@
     "type": "float",
     "value": 0.33
   },
+  "COALITION_RADIUS_TILES": {
+    "category": "PartyLeader",
+    "description": "近接味方連合・近接敵の最大距離（マンハッタンマス数・自パリーダーからの距離）。戦況判断で nearby_allied / nearby_enemy 集合に含めるメンバー範囲",
+    "max": 30,
+    "min": 1,
+    "step": 1,
+    "type": "int",
+    "value": 8
+  },
   "PARTY_FLEE_ALIVE_RATIO": {
     "category": "EnemyLeaderAI",
     "description": "パーティーの生存メンバー率がこの値未満で FLEE 戦略へ切替（ゴブリン・ウルフ系）",

@@ -10,7 +10,7 @@ extends Node
 ##   _evaluate_party_strategy() : パーティー全体の戦略判断
 ##   _select_target_for()       : メンバーごとの攻撃ターゲット選択
 ##   _select_weakest_target()   : 最弱ターゲット選択（複数候補がある場合）
-##   _evaluate_combat_situation(): 戦況判断（自軍と同エリア敵の戦力比較）
+##   _evaluate_strategic_status(): 統合戦略評価（full_party / nearby_allied / nearby_enemy の 3 集合で戦力・戦況を算出）
 ##   _get_opposing_characters() : 対立キャラリストを返す（敵AI=friendly_list、味方AI=enemy_list）
 
 ## パーティー戦略（ATTACK=0, FLEE=1, WAIT=2 は UnitAI.Strategy と int 値一致）
@@ -28,7 +28,7 @@ var _map_data:      MapData
 var _unit_ais:      Dictionary = {}  ## member.name -> UnitAI
 var _party_strategy: Strategy = Strategy.WAIT
 var _prev_strategy:  Strategy = Strategy.WAIT  ## 前回の戦略（変更検出用）
-var _combat_situation: Dictionary = {}  ## 最新の戦況判断結果（_evaluate_combat_situation の戻り値）
+var _combat_situation: Dictionary = {}  ## 最新の戦略評価結果（_evaluate_strategic_status の戻り値）
 var log_enabled:     bool  = true  ## false にするとログ出力を抑制する（一時パーティー用）
 var joined_to_player: bool = false ## true の場合は _player を隊形基準として使用する（合流済み NPC パーティー）
 var _reeval_timer:   float = 0.0
@@ -57,6 +57,10 @@ func setup(members: Array[Character], player: Character, map_data: MapData,
 	_player        = player
 	_map_data      = map_data
 	_initial_count = members.size()
+	# 連合判定で参照する全パーティー合算リスト。
+	# activate() が _link_all_character_lists() より後に呼ばれる NPC 向けに、
+	# setup 引数の all_members を self._all_members に代入して未伝播を防ぐ。
+	_all_members   = all_members
 
 	# メンバーごとに UnitAI を生成してノードツリーに追加（_process が動くようにする）
 	for member: Character in members:
@@ -184,7 +188,7 @@ func _process(delta: float) -> void:
 	_reeval_timer -= delta
 	if _reeval_timer <= 0.0:
 		_reeval_timer = REEVAL_INTERVAL
-		_combat_situation = _evaluate_combat_situation()
+		_combat_situation = _evaluate_strategic_status()
 		_assign_orders()
 
 
@@ -320,7 +324,7 @@ func _assign_orders() -> void:
 ## 状況変化通知（PartyManager から呼ばれる）：即座に再評価してオーダーを発行する
 func notify_situation_changed() -> void:
 	_reeval_timer = 0.0
-	_combat_situation = _evaluate_combat_situation()
+	_combat_situation = _evaluate_strategic_status()
 	_assign_orders()
 	for unit_ai_var: Variant in _unit_ais.values():
 		var unit_ai := unit_ai_var as UnitAI
@@ -427,15 +431,23 @@ func get_global_orders_hint() -> Dictionary:
 				hint = {"move": "guard_room",  "battle_policy": "retreat",  "target": "nearest", "hp_potion": "never", "on_low_hp": "keep_fighting", "item_pickup": "avoid"}
 			_:
 				hint = {"move": "-", "battle_policy": "-", "target": "-", "hp_potion": "-", "on_low_hp": "-", "item_pickup": "-"}
-	# 戦況判断を追加
+	# 戦況判断を追加（_evaluate_strategic_status() の結果を流し込む）
 	var sit: int = _combat_situation.get("situation", int(GlobalConstants.CombatSituation.SAFE)) as int
 	hint["combat_situation"] = sit
 	hint["power_balance"] = _combat_situation.get("power_balance", 0)
-	hint["hp_status"] = _combat_situation.get("hp_status", 0)
-	hint["my_rank_sum"] = _combat_situation.get("my_rank_sum", 0)
-	hint["enemy_rank_sum"] = _combat_situation.get("enemy_rank_sum", 0)
-	hint["my_tier_sum"] = _combat_situation.get("my_tier_sum", 0.0)
-	hint["enemy_tier_sum"] = _combat_situation.get("enemy_tier_sum", 0.0)
+	hint["hp_status"]     = _combat_situation.get("hp_status", 0)
+	# full_party / nearby_allied / nearby_enemy の 3 系統（DebugWindow 表示用）
+	hint["full_party_strength"]    = _combat_situation.get("full_party_strength", 0.0)
+	hint["full_party_rank_sum"]    = _combat_situation.get("full_party_rank_sum", 0)
+	hint["full_party_tier_sum"]    = _combat_situation.get("full_party_tier_sum", 0.0)
+	hint["full_party_hp_ratio"]    = _combat_situation.get("full_party_hp_ratio", 0.0)
+	hint["nearby_allied_strength"] = _combat_situation.get("nearby_allied_strength", 0.0)
+	hint["nearby_allied_rank_sum"] = _combat_situation.get("nearby_allied_rank_sum", 0)
+	hint["nearby_allied_tier_sum"] = _combat_situation.get("nearby_allied_tier_sum", 0.0)
+	hint["nearby_allied_hp_ratio"] = _combat_situation.get("nearby_allied_hp_ratio", 0.0)
+	hint["nearby_enemy_strength"]  = _combat_situation.get("nearby_enemy_strength", 0.0)
+	hint["nearby_enemy_rank_sum"]  = _combat_situation.get("nearby_enemy_rank_sum", 0)
+	hint["nearby_enemy_tier_sum"]  = _combat_situation.get("nearby_enemy_tier_sum", 0.0)
 	return hint
 
 
@@ -618,48 +630,6 @@ func _select_weakest_target(member: Character) -> Character:
 	return _select_target_for(member)
 
 
-## パーティーの戦力値を算出する（ランク和 × HP充足率）
-## HP充足率にはヒールポーションの回復量を加味する
-## 生存メンバーが0人の場合は 0.0 を返す
-## 自パーティーの戦力を評価する（正確なHP%とポーション回復量を使用）
-## 既存の呼び出し箇所を壊さないラッパー
-func _evaluate_party_strength() -> float:
-	return _evaluate_party_strength_for(_party_members, false)
-
-
-## 指定メンバーリストの戦力を評価する
-## 戦力 = (rank_sum + party_tier_sum × ITEM_TIER_STRENGTH_WEIGHT) × 平均HP充足率
-## use_estimated_hp = false: 正確なHP%とポーション回復量を使う（自軍用）
-## use_estimated_hp = true:  状態ラベル（condition）からHP%を推定する（敵用。hp/max_hp を直接参照しない）
-## 敵は装備を持たないため party_tier_sum = 0 となり、従来と同じ挙動になる
-func _evaluate_party_strength_for(members: Array, use_estimated_hp: bool = false) -> float:
-	var rank_sum := 0
-	var tier_sum := 0.0
-	var hp_ratio_sum := 0.0
-	var alive_count := 0
-	for mv: Variant in members:
-		var m := mv as Character
-		if m == null or not is_instance_valid(m) or m.hp <= 0:
-			continue
-		if m.character_data != null:
-			rank_sum += RANK_VALUES.get(m.character_data.rank, 3) as int
-			tier_sum += _character_tier_avg(m)
-		alive_count += 1
-		if use_estimated_hp:
-			hp_ratio_sum += _estimate_hp_ratio_from_condition(m.get_condition())
-		else:
-			var total_max := m.max_hp
-			if total_max <= 0:
-				continue
-			var cur := m.hp + _calc_total_potion_hp(m)
-			hp_ratio_sum += clampf(float(cur) / float(total_max), 0.0, 1.0)
-	if alive_count <= 0:
-		return 0.0
-	var avg_hp_ratio := hp_ratio_sum / float(alive_count)
-	var base := float(rank_sum) + tier_sum * GlobalConstants.ITEM_TIER_STRENGTH_WEIGHT
-	return base * avg_hp_ratio
-
-
 ## キャラクターの装備中 tier の平均を返す（装備なしなら 0.0）
 ## 対象: equipped_weapon / equipped_armor / equipped_shield のうち実装備のみ
 ## 各アイテムに tier フィールドがない場合は 0 扱い（セーブデータ互換・敵は装備を持たない）
@@ -682,17 +652,6 @@ func _character_tier_avg(m: Character) -> float:
 	if equipped_count <= 0:
 		return 0.0
 	return float(total_tier) / float(equipped_count)
-
-
-## 生存メンバーの装備 tier 平均の合計（戦力計算の補助値・DebugWindow 表示用）
-func _calc_tier_sum(members: Array) -> float:
-	var total := 0.0
-	for mv: Variant in members:
-		var m := mv as Character
-		if m == null or not is_instance_valid(m) or m.hp <= 0:
-			continue
-		total += _character_tier_avg(m)
-	return total
 
 
 ## 状態ラベルからHP割合を推定する（敵の戦力を過大評価する安全側に倒す）
@@ -720,150 +679,225 @@ func _calc_total_potion_hp(member: Character) -> int:
 	return total
 
 
-## 戦況判断の共通ルーチン
-## 自パーティーの戦力と、同じエリアにいる敵の戦力を比較して戦況を分類する
-## 結果は _assign_orders() → receive_order() の combat_situation フィールドに含めてメンバーに伝達する
-func _evaluate_combat_situation() -> Dictionary:
-	# 自軍メンバー（プレイヤーの場合は合流済みNPCを含む全員。サブクラスで拡張可）
-	var my_members := _get_my_combat_members()
+## メンバーリストの統計（rank_sum / tier_sum / hp_ratio / strength）を返す
+## use_estimated_hp = false: 実 HP + ポーション回復量
+## use_estimated_hp = true:  状態ラベル（condition）からHP%を推定（敵ステータス直接参照禁止ルール）
+## 戻り値: { "rank_sum": int, "tier_sum": float, "hp_ratio": float, "strength": float, "alive_count": int }
+##   strength = (rank_sum + tier_sum × ITEM_TIER_STRENGTH_WEIGHT) × avg_hp_ratio
+func _calc_stats(members: Array, use_estimated_hp: bool) -> Dictionary:
+	var rank_sum := 0
+	var tier_sum := 0.0
+	var hp_ratio_sum := 0.0
+	var alive_count := 0
+	for mv: Variant in members:
+		var m := mv as Character
+		if m == null or not is_instance_valid(m) or m.hp <= 0:
+			continue
+		if m.character_data != null:
+			rank_sum += RANK_VALUES.get(m.character_data.rank, 3) as int
+			tier_sum += _character_tier_avg(m)
+		alive_count += 1
+		if use_estimated_hp:
+			hp_ratio_sum += _estimate_hp_ratio_from_condition(m.get_condition())
+		else:
+			var total_max := m.max_hp
+			if total_max <= 0:
+				continue
+			var cur := m.hp + _calc_total_potion_hp(m)
+			hp_ratio_sum += clampf(float(cur) / float(total_max), 0.0, 1.0)
+	if alive_count <= 0:
+		return {"rank_sum": 0, "tier_sum": 0.0, "hp_ratio": 0.0, "strength": 0.0, "alive_count": 0}
+	var avg_hp_ratio := hp_ratio_sum / float(alive_count)
+	var base := float(rank_sum) + tier_sum * GlobalConstants.ITEM_TIER_STRENGTH_WEIGHT
+	return {
+		"rank_sum":    rank_sum,
+		"tier_sum":    tier_sum,
+		"hp_ratio":    avg_hp_ratio,
+		"strength":    base * avg_hp_ratio,
+		"alive_count": alive_count,
+	}
 
-	# 自パーティーのリーダー（先頭の生存者）のフロアとエリアを取得
+
+## 自パ（実 HP）と同陣営他パ（推定 HP）を混ぜた統計を返す
+## 自パ部分は apply_initial_items で自分の inventory・max_hp を把握できるためポーション込み実 HP を使用
+## 他パ部分はポーション所持を把握できないので condition ラベルからの推定 HP を使用
+func _calc_stats_mixed(self_members: Array, other_members: Array) -> Dictionary:
+	var self_stats := _calc_stats(self_members, false)
+	var other_stats := _calc_stats(other_members, true)
+	var rank_sum: int = int(self_stats.rank_sum) + int(other_stats.rank_sum)
+	var tier_sum: float = float(self_stats.tier_sum) + float(other_stats.tier_sum)
+	var alive: int = int(self_stats.alive_count) + int(other_stats.alive_count)
+	var avg_hp_ratio: float = 0.0
+	if alive > 0:
+		# HP 率は生存メンバー加重平均（rank_sum 側を重みにしない）
+		avg_hp_ratio = (float(self_stats.hp_ratio) * float(self_stats.alive_count)
+				+ float(other_stats.hp_ratio) * float(other_stats.alive_count)) / float(alive)
+	var base := float(rank_sum) + tier_sum * GlobalConstants.ITEM_TIER_STRENGTH_WEIGHT
+	return {
+		"rank_sum":    rank_sum,
+		"tier_sum":    tier_sum,
+		"hp_ratio":    avg_hp_ratio,
+		"strength":    base * avg_hp_ratio,
+		"alive_count": alive,
+	}
+
+
+## 距離フィルタ（マンハッタン距離・同フロアのみ）
+## center_pos / my_floor: 自パリーダーの位置情報
+## radius: GlobalConstants.COALITION_RADIUS_TILES
+func _within_coalition_radius(c: Character, center_pos: Vector2i, my_floor: int, radius: int) -> bool:
+	if my_floor >= 0 and c.current_floor != my_floor:
+		return false
+	var d := absi(c.grid_pos.x - center_pos.x) + absi(c.grid_pos.y - center_pos.y)
+	return d <= radius
+
+
+## 統合戦略ステータス評価（戦力計算 + 戦況判断）
+## 3 種類のメンバー集合で統計を算出する（エリアベース target_areas 判定は廃止）:
+##   - full_party:     自パ全員（下層判定用・絶対戦力）
+##   - nearby_allied:  自パ近接 + 同陣営他パ近接（戦況判断用・味方連合）
+##   - nearby_enemy:   近接敵（戦況判断用）
+## 距離基準: 自パリーダーのグリッド座標から COALITION_RADIUS_TILES マス以内（マンハッタン）
+## 敵の非対称設計: enemy パーティーの自軍戦力は full_party のみ（協力しない世界観）
+##                味方（player/npc）の自軍戦力は nearby_allied（連合）
+## 結果は _assign_orders() → receive_order() の combat_situation フィールドに含めてメンバーに伝達する
+func _evaluate_strategic_status() -> Dictionary:
+	var radius: int = GlobalConstants.COALITION_RADIUS_TILES
+
+	# 自パリーダー基準点（先頭の生存者）
+	var leader_pos := Vector2i.ZERO
 	var my_floor := -1
-	var my_area := ""
+	var is_enemy_party := false
 	for m: Character in _party_members:
 		if is_instance_valid(m) and m.hp > 0:
+			leader_pos = m.grid_pos
 			my_floor = m.current_floor
-			if _map_data != null:
-				my_area = _map_data.get_area(m.grid_pos)
+			is_enemy_party = not m.is_friendly
 			break
 
-	# 戦況評価対象エリア: リーダーのエリア＋その隣接エリア（部屋境界付近で戦況がぶれないように拡張）
-	# 通路にもエリアIDが付与されているため、部屋←→通路←→部屋 が隣接として扱われる
-	var target_areas: Dictionary = {}
-	if not my_area.is_empty():
-		target_areas[my_area] = true
-		if _map_data != null:
-			for adj: String in _map_data.get_adjacent_areas(my_area):
-				target_areas[adj] = true
+	# ==================== full_party（自パ全員） ====================
+	var full_party: Array[Character] = []
+	for m: Character in _party_members:
+		if is_instance_valid(m) and m.hp > 0:
+			full_party.append(m)
 
-	# 対象エリアにいる敵を収集
-	var area_enemies: Array[Character] = []
-	# 敵 AI → _friendly_list が攻撃対象（プレイヤー・NPC）。自分が敵の場合、_friendly_list が「敵」
-	# 味方 AI → _enemy_list は PartyLeaderPlayer / NpcLeaderAI が保持。PartyLeader には直接ない
-	# → 共通化のため、_get_opposing_characters() 仮想メソッドで取得する
-	var opponents := _get_opposing_characters()
-	for opp: Character in opponents:
-		if not is_instance_valid(opp) or opp.hp <= 0:
-			continue
-		if opp.current_floor != my_floor:
-			continue
-		if _map_data != null:
-			var opp_area := _map_data.get_area(opp.grid_pos)
-			if my_area.is_empty() or not target_areas.has(opp_area):
-				continue
-		area_enemies.append(opp)
-
-	# 自軍も対象エリアに絞る（別フロア・離れた部屋の仲間は戦闘に参加できない）
-	var my_area_members: Array[Character] = []
+	# ==================== nearby_allied（自パ近接 + 同陣営他パ近接） ====================
+	# 自パ側: _get_my_combat_members() を使う（プレイヤーは合流済み NPC を含む）
+	var my_members := _get_my_combat_members()
+	var nearby_allied_self: Array[Character] = []
 	for m: Character in my_members:
 		if not is_instance_valid(m) or m.hp <= 0:
 			continue
-		if my_floor >= 0 and m.current_floor != my_floor:
-			continue
-		if _map_data != null and not my_area.is_empty():
-			if not target_areas.has(_map_data.get_area(m.grid_pos)):
-				continue
-		my_area_members.append(m)
+		if _within_coalition_radius(m, leader_pos, my_floor, radius):
+			nearby_allied_self.append(m)
 
-	# 同陣営の他パーティーのうち対象エリア内にいる生存メンバーを収集（戦力加算用）
-	# is_friendly が同じかつ my_members に含まれないキャラを対象とする
-	# （area_enemies は敵陣営の全キャラを含むため追加収集は不要）
+	# 同陣営他パ: _all_members から my_members を除いた同陣営キャラを半径内で収集
 	var my_faction: bool = true
-	if not my_area_members.is_empty():
-		my_faction = my_area_members[0].is_friendly
-	elif not my_members.is_empty():
+	if not my_members.is_empty():
 		my_faction = my_members[0].is_friendly
-	var ally_area_others: Array[Character] = []
+	elif not _party_members.is_empty():
+		my_faction = _party_members[0].is_friendly
+	var nearby_allied_others: Array[Character] = []
 	for c: Character in _all_members:
 		if not is_instance_valid(c) or c.hp <= 0:
 			continue
 		if c.is_friendly != my_faction:
 			continue
 		if my_members.has(c):
-			continue  # 自パーティー・合流済み同陣営は my_area_members で既にカウント
-		if my_floor >= 0 and c.current_floor != my_floor:
+			continue  # 既に nearby_allied_self でカウント候補
+		if _within_coalition_radius(c, leader_pos, my_floor, radius):
+			nearby_allied_others.append(c)
+
+	# ==================== nearby_enemy（近接敵） ====================
+	var nearby_enemy: Array[Character] = []
+	for opp: Character in _get_opposing_characters():
+		if not is_instance_valid(opp) or opp.hp <= 0:
 			continue
-		if _map_data != null and not my_area.is_empty():
-			if not target_areas.has(_map_data.get_area(c.grid_pos)):
-				continue
-		ally_area_others.append(c)
+		if _within_coalition_radius(opp, leader_pos, my_floor, radius):
+			nearby_enemy.append(opp)
 
-	# --- 自軍の HP 充足率は自パーティーのみで算出（他パーティーのポーションは把握不可） ---
-	var hp_status := _calc_hp_status_for(my_area_members)
+	# ==================== 統計計算（各集合で 1 回ずつ） ====================
+	var full_stats := _calc_stats(full_party, false)
+	var nearby_allied_stats := _calc_stats_mixed(nearby_allied_self, nearby_allied_others)
+	var nearby_enemy_stats := _calc_stats(nearby_enemy, true)
 
-	# 敵がいなければ安全
-	if area_enemies.is_empty():
-		return {
-			"situation": int(GlobalConstants.CombatSituation.SAFE),
-			"power_balance": int(GlobalConstants.PowerBalance.OVERWHELMING),
-			"hp_status": hp_status,
-			"my_rank_sum": _calc_rank_sum(my_area_members) + _calc_rank_sum(ally_area_others),
-			"enemy_rank_sum": 0,
-			"my_tier_sum": _calc_tier_sum(my_area_members) + _calc_tier_sum(ally_area_others),
-			"enemy_tier_sum": 0.0,
-		}
-
-	# 戦力比較（ランク和 × HP充足率）。自軍側は同陣営の他パーティーのエリア内メンバーも加算
-	var my_strength := _evaluate_party_strength_for(my_area_members, false) \
-			+ _evaluate_party_strength_for(ally_area_others, true)
-	var enemy_strength := _evaluate_party_strength_for(area_enemies, true)
-
-	var ratio := 0.0
-	var situation: int
-	if enemy_strength <= 0.0:
-		ratio = 99.0
-		situation = int(GlobalConstants.CombatSituation.SAFE)
+	# ==================== 敵の非対称設計 ====================
+	# 敵パーティー: 自軍戦力 = full_party（協力しない）
+	# 味方（player/npc）: 自軍戦力 = nearby_allied（連合）
+	var my_combat_strength: float
+	var my_combat_rank_sum: int
+	if is_enemy_party:
+		my_combat_strength = float(full_stats.strength)
+		my_combat_rank_sum = int(full_stats.rank_sum)
 	else:
-		ratio = my_strength / enemy_strength
-		if ratio >= GlobalConstants.COMBAT_RATIO_OVERWHELMING:
-			situation = int(GlobalConstants.CombatSituation.OVERWHELMING)
-		elif ratio >= GlobalConstants.COMBAT_RATIO_ADVANTAGE:
-			situation = int(GlobalConstants.CombatSituation.ADVANTAGE)
-		elif ratio >= GlobalConstants.COMBAT_RATIO_EVEN:
-			situation = int(GlobalConstants.CombatSituation.EVEN)
-		elif ratio >= GlobalConstants.COMBAT_RATIO_DISADVANTAGE:
-			situation = int(GlobalConstants.CombatSituation.DISADVANTAGE)
-		else:
-			situation = int(GlobalConstants.CombatSituation.CRITICAL)
+		my_combat_strength = float(nearby_allied_stats.strength)
+		my_combat_rank_sum = int(nearby_allied_stats.rank_sum)
 
-	# --- 戦力比（ランク和のみ、HP を含めない）を算出 ---
-	# 自軍側は同陣営の他パーティーのエリア内メンバーも加算
-	var my_rank_sum := _calc_rank_sum(my_area_members) + _calc_rank_sum(ally_area_others)
-	var enemy_rank_sum := _calc_rank_sum(area_enemies)
+	# ==================== 戦況判断 ====================
+	# HP 充足率は自パーティーのみで算出（他パーティーのポーション所持は把握不可）
+	var hp_status := _calc_hp_status_for(_party_members)
+
+	var situation: int
 	var power_balance: int
-	if enemy_rank_sum <= 0:
+	if nearby_enemy.is_empty():
+		situation = int(GlobalConstants.CombatSituation.SAFE)
 		power_balance = int(GlobalConstants.PowerBalance.OVERWHELMING)
 	else:
-		var rank_ratio := float(my_rank_sum) / float(enemy_rank_sum)
-		if rank_ratio >= GlobalConstants.POWER_BALANCE_OVERWHELMING:
-			power_balance = int(GlobalConstants.PowerBalance.OVERWHELMING)
-		elif rank_ratio >= GlobalConstants.POWER_BALANCE_SUPERIOR:
-			power_balance = int(GlobalConstants.PowerBalance.SUPERIOR)
-		elif rank_ratio >= GlobalConstants.POWER_BALANCE_EVEN:
-			power_balance = int(GlobalConstants.PowerBalance.EVEN)
-		elif rank_ratio >= GlobalConstants.POWER_BALANCE_INFERIOR:
-			power_balance = int(GlobalConstants.PowerBalance.INFERIOR)
+		# 戦力比（strength 比）で situation を分類
+		var enemy_s: float = float(nearby_enemy_stats.strength)
+		if enemy_s <= 0.0:
+			situation = int(GlobalConstants.CombatSituation.SAFE)
 		else:
-			power_balance = int(GlobalConstants.PowerBalance.DESPERATE)
+			var ratio := my_combat_strength / enemy_s
+			if ratio >= GlobalConstants.COMBAT_RATIO_OVERWHELMING:
+				situation = int(GlobalConstants.CombatSituation.OVERWHELMING)
+			elif ratio >= GlobalConstants.COMBAT_RATIO_ADVANTAGE:
+				situation = int(GlobalConstants.CombatSituation.ADVANTAGE)
+			elif ratio >= GlobalConstants.COMBAT_RATIO_EVEN:
+				situation = int(GlobalConstants.CombatSituation.EVEN)
+			elif ratio >= GlobalConstants.COMBAT_RATIO_DISADVANTAGE:
+				situation = int(GlobalConstants.CombatSituation.DISADVANTAGE)
+			else:
+				situation = int(GlobalConstants.CombatSituation.CRITICAL)
+		# 戦力比（ランク和のみ）で power_balance を分類
+		var enemy_rank: int = int(nearby_enemy_stats.rank_sum)
+		if enemy_rank <= 0:
+			power_balance = int(GlobalConstants.PowerBalance.OVERWHELMING)
+		else:
+			var rank_ratio := float(my_combat_rank_sum) / float(enemy_rank)
+			if rank_ratio >= GlobalConstants.POWER_BALANCE_OVERWHELMING:
+				power_balance = int(GlobalConstants.PowerBalance.OVERWHELMING)
+			elif rank_ratio >= GlobalConstants.POWER_BALANCE_SUPERIOR:
+				power_balance = int(GlobalConstants.PowerBalance.SUPERIOR)
+			elif rank_ratio >= GlobalConstants.POWER_BALANCE_EVEN:
+				power_balance = int(GlobalConstants.PowerBalance.EVEN)
+			elif rank_ratio >= GlobalConstants.POWER_BALANCE_INFERIOR:
+				power_balance = int(GlobalConstants.PowerBalance.INFERIOR)
+			else:
+				power_balance = int(GlobalConstants.PowerBalance.DESPERATE)
 
 	return {
-		"situation": situation,
-		"power_balance": power_balance,
-		"hp_status": hp_status,
-		"my_rank_sum": my_rank_sum,
-		"enemy_rank_sum": enemy_rank_sum,
-		"my_tier_sum": _calc_tier_sum(my_area_members) + _calc_tier_sum(ally_area_others),
-		"enemy_tier_sum": _calc_tier_sum(area_enemies),
+		# 戦況判断結果
+		"situation":      situation,
+		"power_balance":  power_balance,
+		"hp_status":      hp_status,
+
+		# full_party（自パ全員・下層判定用・絶対戦力）
+		"full_party_strength":  float(full_stats.strength),
+		"full_party_rank_sum":  int(full_stats.rank_sum),
+		"full_party_tier_sum":  float(full_stats.tier_sum),
+		"full_party_hp_ratio":  float(full_stats.hp_ratio),
+
+		# nearby_allied（自パ近接 + 同陣営他パ近接・連合戦力）
+		"nearby_allied_strength": float(nearby_allied_stats.strength),
+		"nearby_allied_rank_sum": int(nearby_allied_stats.rank_sum),
+		"nearby_allied_tier_sum": float(nearby_allied_stats.tier_sum),
+		"nearby_allied_hp_ratio": float(nearby_allied_stats.hp_ratio),
+
+		# nearby_enemy（近接敵）
+		"nearby_enemy_strength": float(nearby_enemy_stats.strength),
+		"nearby_enemy_rank_sum": int(nearby_enemy_stats.rank_sum),
+		"nearby_enemy_tier_sum": float(nearby_enemy_stats.tier_sum),
 	}
 
 
@@ -881,16 +915,6 @@ func _get_my_combat_members() -> Array[Character]:
 	return result
 
 
-## 生存メンバーのランク和を返す（HP を含めない純粋な戦力比較用）
-func _calc_rank_sum(members: Array) -> int:
-	var total := 0
-	for mv: Variant in members:
-		var m := mv as Character
-		if m == null or not is_instance_valid(m) or m.hp <= 0:
-			continue
-		if m.character_data != null:
-			total += RANK_VALUES.get(m.character_data.rank, 3) as int
-	return total
 
 
 ## 自軍パーティーの HP 充足率の段階を返す

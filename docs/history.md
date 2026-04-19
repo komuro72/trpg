@@ -3,6 +3,90 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-19（戦力計算と戦況判断の統合・距離ベース連合・_all_members 伝播バグ修正）
+
+### 背景
+装備 tier 反映実装後、DebugWindow でプレイヤーの R 値が異常に大きい（R:45）問題が顕在化。調査で以下が判明：
+1. 戦力計算 `_evaluate_party_strength_for()` と戦況判断 `_evaluate_combat_situation()` が重複計算していた
+2. エリアベース判定（`target_areas` = リーダーのエリア + 隣接エリア）が粗く、右端で左部屋の奥まで含む問題
+3. 敵同士の連合加算は世界観（敵は協力しない）と不整合
+4. `_all_members` が NPC / 敵マネージャーのリーダー AI に伝わっていない未伝播バグ（`PartyLeader.setup()` が受け取った `all_members` を `_all_members` に代入していなかった）
+
+### 設計変更
+
+#### 統合関数 `_evaluate_strategic_status()`
+旧 `_evaluate_party_strength()` / `_evaluate_party_strength_for()` / `_evaluate_combat_situation()` を 1 関数に集約。3 集合で統計を 1 度ずつ算出する：
+- `full_party`：自パ全員（下層判定・絶対戦力用）
+- `nearby_allied`：自パ近接 + 同陣営他パ近接（戦況判断・味方連合）
+- `nearby_enemy`：近接敵（戦況判断）
+
+#### 距離ベース連合（エリアベース廃止）
+基準点：自パリーダーのグリッド座標
+範囲：マンハッタン `COALITION_RADIUS_TILES` マス以内（同フロアのみ）
+- 旧 `target_areas = エリア + 隣接エリア` 判定は完全廃止
+- 部屋の隅にいても連合範囲が意図通りに絞られる
+
+#### 敵の非対称設計（世界観整合）
+- enemy パーティー：自軍戦力 = `full_party` のみ（協力しない）
+- 味方（player/npc）：自軍戦力 = `nearby_allied`（連合加算）
+- 相手側は両陣営とも `nearby_enemy`（視点側から見た脅威）
+
+#### HP 率計算の 3 層ルール
+- 自パ部分：実 HP + ポーション回復量（`(sum_hp + sum_potion) / sum_max_hp`）
+- 同陣営他パ部分：condition ラベルから推定（他パのポーション所持は把握不可）
+- 敵部分：condition ラベルから推定（敵ステータス直接参照禁止ルール）
+
+### 実装変更
+
+#### 新規定数
+| 定数名 | デフォルト | カテゴリ | 説明 |
+|---|---|---|---|
+| `COALITION_RADIUS_TILES` | 8 | PartyLeader | 連合・近接敵の最大マンハッタン距離 |
+
+#### party_leader.gd
+- `_evaluate_strategic_status()` 新設（主関数）
+- `_calc_stats()` / `_calc_stats_mixed()` ヘルパ新設
+- `_within_coalition_radius()` 距離判定ヘルパ新設
+- 旧関数削除：`_evaluate_party_strength()` / `_evaluate_party_strength_for()` / `_evaluate_combat_situation()` / `_calc_rank_sum()` / `_calc_tier_sum()`
+- **バグ修正**：`setup()` に `_all_members = all_members` 1 行追加（NPC / 敵のリーダー AI に伝播するよう修正）
+
+#### npc_leader_ai.gd
+- `_calc_party_hp_ratio()` 削除（統合関数の `full_party_hp_ratio` で代替）
+- `_get_target_floor()` を `_combat_situation["full_party_strength"]` / `["full_party_hp_ratio"]` 参照に書き換え
+- `get_global_orders_hint()` は **NPC 固有差分のため残存**（target_floor キー・NPC デフォルト方針）。新しい 3 集合キーを追加
+- **付随バグ修正**：2026-04-18 の tier 実装時に NpcLeaderAI.get_global_orders_hint() の tier キー（`my_tier_sum` / `enemy_tier_sum`）追加が漏れていた。今回の完全置換（`nearby_allied_tier_sum` / `nearby_enemy_tier_sum`）で副次的に修正
+
+#### debug_window.gd
+戦力表示を 3 点フォーマットに拡張：
+```
+PB F(R+T)s C(R+T)s E(R+T)s
+```
+- F = full_party / C = nearby_allied / E = nearby_enemy
+- 各括弧内：R = rank_sum / T = tier 平均の和 / 末尾 s = strength
+- 敵視点では F と C は同値（非対称設計）
+- 凡例はファイル冒頭コメントに記載
+
+### 新旧キー名対応表
+| 旧キー | 新キー |
+|---|---|
+| `my_rank_sum` | `nearby_allied_rank_sum`（味方視点）/ `full_party_rank_sum`（敵視点） |
+| `enemy_rank_sum` | `nearby_enemy_rank_sum` |
+| `my_tier_sum` | `nearby_allied_tier_sum` / `full_party_tier_sum` |
+| `enemy_tier_sum` | `nearby_enemy_tier_sum` |
+
+旧キーは完全削除。後方互換エイリアスは残していない（将来の混乱回避）。
+
+### Komuro への動作確認依頼
+- F1 DebugWindow 戦力表示が `PB F(R+T)s C(R+T)s E(R+T)s` 形式になる
+- プレイヤー行で F と C が自然な値を取る（R:45 バグが解消）
+- 敵パーティー視点で F と C が同値表示される（協力しない世界観の可視化）
+- NPC の階段移動中に `mv=stairs_down(F2)` の target_floor 表示が正しく出る
+- NPC デフォルト指示（follow / same_as_leader / retreat / passive）が初期状態で反映される
+- 散開中のメンバーが距離フィルタで nearby_allied から除外される
+- F4 > PartyLeader カテゴリに `COALITION_RADIUS_TILES` が表示・編集可能
+
+---
+
 ## 2026-04-19（戦力計算への装備 tier 反映）
 
 ### 背景・目的
