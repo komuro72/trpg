@@ -55,10 +55,14 @@ const DEFAULT_SLOT_Z: Dictionary = {
 	"range": 1, "damage_mult": 1.0, "pre_delay": 0.0
 }
 
-## PRE_DELAY: Z 押下後 pre_delay を消化中（時間進行・ターゲット候補を表示）
-## TARGETING: ターゲット選択中（時間停止・d-pad で循環・Z で確定・X/B でキャンセル）
+## PRE_DELAY: Z 押下後 pre_delay を消化中（時間進行・マーカー非表示・LB/RB 無効）
+## PRE_DELAY_RELEASED: pre_delay 完了前に Z を離した（時間進行・操作不能）
+##   Phase 1: 残り pre_delay を時間進行で消化（マーカー非表示）
+##   Phase 2: マーカーを AUTO_CANCEL_FLASH 秒表示してから攻撃発動 or 自動キャンセル
+## TARGETING: pre_delay 完了後、Z を押し続けてターゲット選定中（時間停止・マーカー表示・LB/RB 有効）
+##   Z 解放で即攻撃発動（ターゲットあり）または AUTO_CANCEL_FLASH 後にキャンセル（なし）
 ## POST_DELAY: 攻撃後硬直（時間進行・is_attacking=true）
-enum Mode { NORMAL, PRE_DELAY, TARGETING, POST_DELAY }
+enum Mode { NORMAL, PRE_DELAY, PRE_DELAY_RELEASED, TARGETING, POST_DELAY }
 
 var _mode: Mode = Mode.NORMAL
 var _valid_targets: Array[Character] = []
@@ -179,10 +183,11 @@ func is_targeting() -> bool:
 	return _mode == Mode.TARGETING
 
 
-## PRE_DELAY または TARGETING 中か（射程オーバーレイ表示用）
-## 押下直後から射程を見せるため、pre_delay 消化中も true を返す
+## 攻撃ウィンドアップ中か（射程オーバーレイ表示用）
+## PRE_DELAY / PRE_DELAY_RELEASED / TARGETING のすべてで射程を見せる
 func is_in_attack_windup() -> bool:
-	return _mode == Mode.PRE_DELAY or _mode == Mode.TARGETING
+	return _mode == Mode.PRE_DELAY or _mode == Mode.PRE_DELAY_RELEASED \
+			or _mode == Mode.TARGETING
 
 
 ## ターゲット選択中の有効ターゲットリストを返す（FieldOverlay が参照）
@@ -190,9 +195,11 @@ func get_valid_targets() -> Array[Character]:
 	return _valid_targets
 
 
-## ターゲット選択中（PRE_DELAY/TARGETING）の現在ターゲットを返す。非選択中は null
+## ターゲット選択中（PRE_DELAY/PRE_DELAY_RELEASED/TARGETING）の現在ターゲットを返す
+## 非選択中は null。マーカー表示中は _valid_targets が確定しているため取得可能
 func get_current_target() -> Character:
-	if _mode != Mode.TARGETING and _mode != Mode.PRE_DELAY:
+	if _mode != Mode.TARGETING and _mode != Mode.PRE_DELAY \
+			and _mode != Mode.PRE_DELAY_RELEASED:
 		return null
 	if _valid_targets.is_empty() or _target_index >= _valid_targets.size():
 		return null
@@ -215,8 +222,11 @@ func _input(event: InputEvent) -> void:
 			_cycle_direction = -1
 		return
 
-	# PRE_DELAY / POST_DELAY 中はキャラ切り替えを抑制
-	if _mode == Mode.PRE_DELAY or _mode == Mode.POST_DELAY:
+	# PRE_DELAY / PRE_DELAY_RELEASED / POST_DELAY 中はキャラ切り替え・ターゲット循環を抑制
+	# （PRE_DELAY 中はマーカー非表示でターゲット選択不可、PRE_DELAY_RELEASED は POST_DELAY と
+	#  同様の操作不能ゾーン）
+	if _mode == Mode.PRE_DELAY or _mode == Mode.PRE_DELAY_RELEASED \
+			or _mode == Mode.POST_DELAY:
 		return
 
 	# アイテム UI 中：LB/RBでカーソル循環
@@ -372,6 +382,8 @@ func _process(delta: float) -> void:
 			_process_normal(delta)
 		Mode.PRE_DELAY:
 			_process_pre_delay(delta)
+		Mode.PRE_DELAY_RELEASED:
+			_process_pre_delay_released(delta)
 		Mode.TARGETING:
 			_process_targeting(delta)
 		Mode.POST_DELAY:
@@ -500,29 +512,104 @@ func _process_pre_delay(delta: float) -> void:
 	# 他ボタンによる攻撃キャンセル＋機能切替
 	if _handle_attack_switch_input():
 		return
+
+	# pre_delay 完了前にボタンが解放された → PRE_DELAY_RELEASED へ遷移
+	# （残り pre_delay は _pre_delay_remaining にそのまま引き継ぐ）
+	if not _is_in_attack_hold():
+		_mode = Mode.PRE_DELAY_RELEASED
+		return
+
+	# ホールド中：矢印キー／左スティックで向きのみ変更
+	_try_facing_change_from_input()
+
 	# pre_delay を消化する。射程オーバーレイは game_map._draw 側で表示済み。
-	# ターゲット選択・カーソル・アウトラインは TARGETING モード以降で生成する
+	# ターゲット選択・カーソル・アウトラインは TARGETING モード突入時に生成する（マーカー表示）
 	# タイマーは「ゲーム内秒」で持つ（game_speed 倍速時は実時間が短縮される）
 	_pre_delay_remaining -= delta * GlobalConstants.game_speed
 	if _pre_delay_remaining <= 0.0:
 		_start_targeting()
 
 
+## PRE_DELAY_RELEASED 処理：pre_delay 完了前にボタンが解放された状態
+## Phase 1: 残り pre_delay を時間進行で消化（マーカー非表示・入力受付なし）
+## Phase 2: マーカーを AUTO_CANCEL_FLASH 秒表示（時間進行・入力受付なし）
+## Phase 2 終了で射程内に標的があれば即攻撃、なければ自動キャンセル
+## 「本来マーカーは pre_delay 完了後にしか出ない」という設計原則を維持しつつ、
+## タップ操作の視覚フィードバックとして完了後に短時間マーカーを表示する
+func _process_pre_delay_released(delta: float) -> void:
+	# Phase 1: 残り pre_delay を消化（マーカー未生成）
+	if _pre_delay_remaining > 0.0:
+		_pre_delay_remaining -= delta * GlobalConstants.game_speed
+		if _pre_delay_remaining <= 0.0:
+			_pre_delay_remaining = 0.0
+			# Phase 2 突入：マーカー（カーソル＋アウトライン）を表示し AUTO_CANCEL_FLASH 計測開始
+			_setup_targeting_cursor()
+			_auto_cancel_remaining = GlobalConstants.AUTO_CANCEL_FLASH
+		return
+
+	# Phase 2: マーカー表示中の AUTO_CANCEL_FLASH 計測（毎フレームターゲット再評価）
+	_refresh_targets()
+	_auto_cancel_remaining -= delta
+	if _auto_cancel_remaining <= 0.0:
+		_auto_cancel_remaining = 0.0
+		if not _valid_targets.is_empty():
+			_confirm_target()
+		else:
+			_exit_targeting()
+
+
+## 攻撃ボタン（攻撃中は "attack"、V スロット中は "special_skill"）が押下中か
+func _is_in_attack_hold() -> bool:
+	var attack_action: String = "special_skill" if _using_v_slot else "attack"
+	return Input.is_action_pressed(attack_action)
+
+
+## 矢印キー／左スティックで向きだけ変更する（PRE_DELAY/TARGETING 共通）
+## 射程オーバーレイは game_map._draw が character.facing を参照するので、
+## 向きが変わったら map_node に再描画を要求する
+func _try_facing_change_from_input() -> void:
+	if not is_instance_valid(character):
+		return
+	var dir := _get_input_direction()
+	if dir == Vector2i.ZERO:
+		return
+	var target_facing := _compute_facing_for(dir)
+	if target_facing == character.facing:
+		return
+	character.face_toward(character.grid_pos + dir)
+	if map_node != null:
+		map_node.queue_redraw()
+
+
 func _process_targeting(delta: float) -> void:
 	# 死亡等による対象消失を検出してリフレッシュ
 	_refresh_targets()
 
-	# ターゲットなしで自動キャンセル（射程オーバーレイを一瞬見せてから解除）
-	if _auto_cancel_remaining > 0.0:
+	var holding := _is_in_attack_hold()
+
+	# 解放 = 攻撃発動（射程内に標的あり）または自動キャンセル（標的なし）
+	# ホールド中はタイマーを停止＋リセット（向き変更で標的を探す猶予を与える）
+	# プレイヤーから見えるトリガーは「ボタン押下／解放」のみ。
+	# 「2 回目の押下で確定」は廃止し、押している間は時間進行・離した瞬間に攻撃という
+	# 一発一押下のモデルに統一する
+	if holding:
+		_auto_cancel_remaining = 0.0
+	elif not _valid_targets.is_empty():
+		# 解放 + 射程内に標的あり → 即攻撃
+		_confirm_target()
+		return
+	else:
+		# 解放 + 射程内に標的なし → 自動キャンセルカウントダウン
+		# （射程オーバーレイを AUTO_CANCEL_FLASH 秒見せてから解除）
+		if _auto_cancel_remaining <= 0.0:
+			_auto_cancel_remaining = GlobalConstants.AUTO_CANCEL_FLASH
 		_auto_cancel_remaining -= delta
 		if _auto_cancel_remaining <= 0.0:
 			_auto_cancel_remaining = 0.0
 			_exit_targeting()
 			return
-		# 自動キャンセル待機中は他の入力を一切受け付けない
-		return
 
-	# 他ボタンによる攻撃キャンセル＋機能切替
+	# 他ボタンによる攻撃キャンセル＋機能切替（ホールド中・解放中ともに受け付け）
 	if _handle_attack_switch_input():
 		return
 
@@ -531,25 +618,16 @@ func _process_targeting(delta: float) -> void:
 		_exit_targeting()
 		return
 
-	# Z/A（または V 使用中は special_skill）で確定。候補なしならキャンセル扱い
-	var confirm_pressed := false
-	if _using_v_slot:
-		confirm_pressed = Input.is_action_just_pressed("special_skill")
-	else:
-		confirm_pressed = Input.is_action_just_pressed("attack")
-	if confirm_pressed:
-		if _valid_targets.is_empty():
-			_exit_targeting()
-		else:
-			_confirm_target()
-		return
-
-	# 循環選択
-	# ゲームパッド LB/RB: _input() で捕捉した _cycle_direction を使用（取りこぼし防止）
-	# キーボード: 右/下=次・左/上=前（is_action_just_pressed で同フレーム検出）
+	# LB/RB（_input() で捕捉した _cycle_direction）は専用循環ボタンのため常に有効
 	if _cycle_direction != 0:
 		_cycle_target(_cycle_direction)
 		_cycle_direction = 0
+
+	# 攻撃ボタンを押している間：矢印キー／左スティック／d-pad は向き変更（ターゲット循環は抑止）
+	# 離している間：矢印キーはターゲット循環（既存挙動・標的なし時は実質無効）
+	# 射程変化に伴う _valid_targets の再評価は次フレームの _refresh_targets() が処理する
+	if holding:
+		_try_facing_change_from_input()
 	elif Input.is_action_just_pressed("ui_right") or Input.is_action_just_pressed("ui_down"):
 		_cycle_target(1)
 	elif Input.is_action_just_pressed("ui_left") or Input.is_action_just_pressed("ui_up"):
@@ -601,10 +679,9 @@ func _enter_pre_delay() -> void:
 	_target_index  = 0
 
 
-## PRE_DELAY 消化後に TARGETING モードへ移行する
-func _start_targeting() -> void:
-	_mode = Mode.TARGETING
-	# このタイミングで初めて有効ターゲットを確定し、カーソル・アウトラインを生成する
+## ターゲット候補の確定とカーソル／アウトラインの生成（マーカー表示）
+## TARGETING 突入時、および PRE_DELAY_RELEASED Phase 2 突入時に呼ばれる共通処理
+func _setup_targeting_cursor() -> void:
 	_valid_targets = _get_sorted_targets()
 	_target_index  = 0
 	if _cursor == null and map_node != null:
@@ -616,6 +693,12 @@ func _start_targeting() -> void:
 		if is_instance_valid(t):
 			t.set_outline(Color(0.65, 0.65, 0.65), GlobalConstants.OUTLINE_WIDTH_UNFOCUSED)
 	_update_cursor()
+
+
+## PRE_DELAY 消化後に TARGETING モードへ移行する（ボタン押下中・時間停止）
+func _start_targeting() -> void:
+	_mode = Mode.TARGETING
+	_setup_targeting_cursor()
 	# 対象なしなら射程オーバーレイを一瞬見せてから自動キャンセル
 	if _valid_targets.is_empty():
 		_auto_cancel_remaining = GlobalConstants.AUTO_CANCEL_FLASH
@@ -883,8 +966,10 @@ func _dist_to(target: Character) -> float:
 
 
 ## world_time_running を現在のモード・キャラ状態に応じて更新する
-## 移動中・ガード中・pre_delay 中・post_delay 中・インスタントV実行中 → true
-## ターゲット選択中（TARGETING）・無入力待機 → false
+## 移動中・ガード中・PRE_DELAY 中・PRE_DELAY_RELEASED 中・POST_DELAY 中・
+## インスタントV実行中 → true（時間進行）
+## TARGETING 中 → ボタンホールド中は false（時間停止：ターゲット選定）／解放中は true
+## 無入力待機 → false
 func _update_world_time() -> void:
 	# アイテム UI 中は時間停止
 	if _item_ui_phase != _ItemUIPhase.NONE:
@@ -894,11 +979,13 @@ func _update_world_time() -> void:
 	if _is_turning:
 		GlobalConstants.world_time_running = true
 		return
-	if _mode == Mode.PRE_DELAY or _mode == Mode.POST_DELAY:
+	if _mode == Mode.PRE_DELAY or _mode == Mode.PRE_DELAY_RELEASED \
+			or _mode == Mode.POST_DELAY:
 		GlobalConstants.world_time_running = true
 		return
 	if _mode == Mode.TARGETING:
-		GlobalConstants.world_time_running = false
+		# ホールド中はじっくり狙うため時間停止、解放中（即発火/AUTO_CANCEL 待機）は時間進行
+		GlobalConstants.world_time_running = not _is_in_attack_hold()
 		return
 	# NORMAL モード：キャラの状態で判定
 	# _move_buffer に入力が残っている間は「連続移動中」と判断して暗転させない

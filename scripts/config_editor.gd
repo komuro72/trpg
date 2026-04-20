@@ -233,6 +233,11 @@ var _btn_save:   Button = null
 var _btn_reset:  Button = null
 var _btn_commit: Button = null
 var _btn_close:  Button = null
+## 「隠し項目も表示」チェックボックス。セッション内のみ保持（再起動・open() でリセット）
+var _chk_show_hidden: CheckBox = null
+var _show_hidden: bool = false
+## hidden 項目表示時のアルファ値（薄く表示してグレーアウト気味に）
+const HIDDEN_ROW_ALPHA: float = 0.45
 
 ## 味方クラス（Phase B）: 起動時にクラスJSONをロードし、編集はメモリ上で保持
 ## 保存時にファイルへ書き戻す（変更があったファイルのみ）
@@ -320,6 +325,12 @@ func open() -> void:
 	_prev_world_time_running = GlobalConstants.world_time_running
 	GlobalConstants.world_time_running = false
 	visible = true
+	# 「隠し項目も表示」はセッション内のみ保持。開くたびに OFF へリセット（誤操作防止）
+	_show_hidden = false
+	if _chk_show_hidden != null:
+		# toggled シグナルが再帰しないよう set_pressed_no_signal で同期
+		_chk_show_hidden.set_pressed_no_signal(false)
+	_apply_row_visibility()
 	_refresh_all()
 	_set_status("", Color.WHITE)
 
@@ -452,6 +463,14 @@ func _build_ui() -> void:
 	_btn_commit.pressed.connect(_on_commit_pressed)
 	btn_box.add_child(_btn_commit)
 
+	# 「隠し項目も表示」チェックボックス（保存・リセット・デフォルト化の右隣）
+	# セッション内のみ保持（open() で false にリセット）
+	_chk_show_hidden = CheckBox.new()
+	_chk_show_hidden.text = "隠し項目も表示"
+	_chk_show_hidden.button_pressed = _show_hidden
+	_chk_show_hidden.toggled.connect(_on_show_hidden_toggled)
+	btn_box.add_child(_chk_show_hidden)
+
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_box.add_child(spacer)
@@ -503,6 +522,9 @@ func _build_top_tab_constants(parent: TabContainer) -> void:
 	# 各定数行を所属タブに追加
 	for key: String in GlobalConstants.CONFIG_KEYS:
 		_build_row(key)
+
+	# hidden 項目の可視性を初期適用（_show_hidden=false なので非表示）
+	_apply_row_visibility()
 
 
 ## 「味方クラス」トップタブ：人間系 7 クラス JSON の横断表
@@ -2581,6 +2603,7 @@ func _build_row(key: String) -> void:
 	var type_name: String = meta.get("type", "float") as String
 	var desc: String = meta.get("description", "") as String
 	var category: String = meta.get("category", "") as String
+	var hidden: bool = bool(meta.get("hidden", false))
 
 	# 所属タブを決定。TABS にない or 空文字は Unknown タブに振る
 	var target_tab: String = UNKNOWN_TAB
@@ -2663,7 +2686,52 @@ func _build_row(key: String) -> void:
 		"default_display": default_display,
 		"type": type_name,
 		"tab": target_tab,
+		"hidden": hidden,
 	}
+
+
+## 「隠し項目も表示」チェックボックスのトグルハンドラ
+func _on_show_hidden_toggled(pressed: bool) -> void:
+	_show_hidden = pressed
+	_apply_row_visibility()
+
+
+## hidden フラグと _show_hidden に応じて、各行の visible / modulate を更新する
+## さらに、可視行が 0 のタブはプレースホルダーを表示する
+func _apply_row_visibility() -> void:
+	# 行の可視性とアルファを更新
+	for key: Variant in _row_widgets.keys():
+		var info := _row_widgets[key] as Dictionary
+		if info == null:
+			continue
+		var panel := info.get("panel") as PanelContainer
+		if panel == null:
+			continue
+		var hidden: bool = bool(info.get("hidden", false))
+		if hidden:
+			panel.visible = _show_hidden
+			# 表示時は薄い色でグレーアウト気味（アルファのみ下げる）
+			panel.modulate = Color(1.0, 1.0, 1.0, HIDDEN_ROW_ALPHA)
+		else:
+			panel.visible = true
+			panel.modulate = Color.WHITE
+
+	# 各タブの可視行数を集計し、0 ならプレースホルダー表示
+	var visible_counts: Dictionary = {}
+	for key: Variant in _row_widgets.keys():
+		var info := _row_widgets[key] as Dictionary
+		if info == null:
+			continue
+		var panel := info.get("panel") as PanelContainer
+		if panel == null or not panel.visible:
+			continue
+		var tab: String = str(info.get("tab", ""))
+		visible_counts[tab] = int(visible_counts.get(tab, 0)) + 1
+	for tab_name: Variant in _tab_placeholders.keys():
+		var ph := _tab_placeholders[tab_name] as Label
+		if ph == null:
+			continue
+		ph.visible = (int(visible_counts.get(tab_name, 0)) == 0)
 
 
 func _make_numeric_editor(key: String, meta: Dictionary, is_int: bool) -> SpinBox:

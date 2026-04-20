@@ -9,11 +9,23 @@
 ### 現在のフェーズ
 - Phase 13（パーティーシステム刷新）完了
 - Phase 14（Steam 配布準備）未着手
-- 現状は「リファクタリング・定数整理・設計明示化・legacy 一掃」の段階（2026-04-19 時点）
+- 現状は「リファクタリング・定数整理・設計明示化・legacy 一掃」の段階（2026-04-20 時点）
 
 ### 最近の大きな変更
 
-#### 2026-04-19（本日の成果）
+#### 2026-04-20（本日の成果）
+- **攻撃操作の 1 発 1 押下化**：TARGETING モードの時間停止仕様を再設計。Z/A 押下中は射程表示＋向き変更可、離した瞬間に攻撃発動の一本化モデルへ。4 つの内部ステート（`PRE_DELAY` / `PRE_DELAY_RELEASED` / `TARGETING` / `POST_DELAY`）で状態遷移を整理し、連打（素早く離す）とじっくり狙う（pre_delay 完了後の時間停止）の両立を実現。詳細は「攻撃フロー（一発一押下モデル）」節
+  - 設計過程：(1) 確定の二度押し廃止＋release-to-fire を実装 → (2) ボタン解放を「攻撃ボタンを押している間だけ向き変更」に縛るよう改修 → (3) PRE_DELAY 終了後 TARGETING への引き継ぎでも向き変更を有効化 → (4) ボタン解放時の自動キャンセルタイマー再起動を追加 → (5) TARGETING 時間停止を「ホールド中のみ」に再設計し、PRE_DELAY_RELEASED 状態を新設して連打のテンポ感を回復
+- **Config Editor の hidden フラグ導入**：定数メタデータに `hidden: true` を追加できるようにし、デフォルトでは Config Editor から非表示。下部ボタン列右端に「隠し項目も表示」チェックボックスを追加（セッション内のみ保持・open() ごとにリセット・薄いアルファでグレーアウト気味に表示）。既存の `CONDITION_COLOR_*`（スプライト/ゲージ/テキスト × 4 段階 = 12 個）を hidden 化
+- **freed クラッシュ修正**：`PartyLeader._calc_stats` / `_get_my_combat_members` / `_calc_hp_status_for` の 3 箇所で `as Character` キャストが解放済みオブジェクトでクラッシュする問題を修正（キャスト前 `is_instance_valid(mv)` ガード）
+- **移動関連の包括調査完了**：3 件の調査ドキュメントを作成
+  - [`docs/investigation_turn_cost.md`](docs/investigation_turn_cost.md) — 向き変更コストの現状（プレイヤー TURN_DELAY のみ・AI 即時の非対称性）
+  - [`docs/investigation_movement_constants.md`](docs/investigation_movement_constants.md) — 移動・時間系定数の全洗い出し（38 項目）と game_speed 適用パターンの 4 分類
+  - [`docs/investigation_enemy_class_stats.md`](docs/investigation_enemy_class_stats.md) — 敵クラスステータスの利用状況（10/11 ステータスは正常・move_speed のみ dead）
+  - **重要発見**：(1) `character_data.move_speed` が完全 dead data、(2) `MOVE_INTERVAL` の SoT が PlayerController / UnitAI に分裂（同名・別値・別ファイル）、(3) game_speed 適用パターンが 4 種類混在（pre-scaled / post-scaled / 未適用 / 逆方向バグ）、(4) `enemy_class_stats.json` が Config Editor で編集不可、(5) 16 敵中 11 敵が人間 class_stats を借用
+- **設計原則の追記**：「移動関連の二層構造」を新設。時間系ステータスはベース値（GlobalConstants）× 能力値（character_data）× `BASE × 50 / status` の逆比例補正で管理する方針を明文化
+
+#### 2026-04-19
 - **バグ修正**：敵の V スロット特殊攻撃が誤発動する問題・戦闘メッセージで敵表示名が「斧戦士」等のクラス日本語名になる問題を修正（Phase B の `class_id = stat_type` 設定の副作用）
 - **アイテム事前生成機構の完成**：定数ベース事前生成（2 ステータス × 3 段階 = 9 パターン）× フロア重み選択方式を採用。`scripts/item_generator.gd` 新設・事前生成セット 9 ファイル（計 75 エントリ）を `assets/master/items/generated/` に配置
 - **Config Editor 機能拡張**：Effect カテゴリ新設（+11 定数）・Item カテゴリ新設（+11 定数：bonus 比率 3・フロア基準 tier 3・距離重み 3・tier policy 1・初期ポーション個数 2）・トップレベル「アイテム」タブ新設（1 行 1 タイプ形式の横断表）・`string` 型（OptionButton / LineEdit）編集サポート追加
@@ -51,8 +63,8 @@
 ### 参照順序の推奨
 1. CLAUDE.md「アーキテクチャ方針」「設計原則」「パーティーシステムのアーキテクチャ」「AI と実処理の責務分離方針」
 2. CLAUDE.md「要調査・要整理項目」で未完了タスクを把握
-3. `docs/history.md` の 2026-04-19 エントリ群で本日の経緯
-4. `docs/` 配下の `investigation_*.md` で詳細な背景情報
+3. `docs/history.md` の 2026-04-20 / 2026-04-19 エントリ群で直近の経緯
+4. `docs/` 配下の `investigation_*.md` で詳細な背景情報（特に `investigation_turn_cost.md` / `investigation_movement_constants.md` / `investigation_enemy_class_stats.md` は次セッションの Step 1〜5 で参照）
 5. 実装前に `docs/spec.md` で仕様詳細を確認
 
 ### コードベースの主要ファイル
@@ -73,23 +85,50 @@
 - `assets/master/stats/*.json` — クラス・属性ステータス定義
 
 ### 次セッションで検討するタスク（優先順）
-1. **フロア基準値（`FLOOR_*_RANK_THRESHOLD` / `FLOOR_RETREAT_RATIO`）の実プレイ調整**：
-   - 装備 tier 戦力反映（2026-04-19）により同じ基準値でも降下しやすくなっているはず
-   - DebugWindow の `F(R+T)s` 表示で NPC の戦力推移を観察
-   - F1〜F4 の基準値を実プレイベースで調整
-2. **実プレイでのフィードバック収集**：2026-04-19 の大規模変更後の体感を確認。特に以下：
-   - アイテム事前生成機構の動作（フロアごとの出現傾向・命名テイスト）
-   - Config Editor Effect カテゴリの編集で操作感が変わるか
-   - 解像度を変えた際の UI 追従（飛翔体・降下エフェクト）
-   - 戦力計算の距離ベース連合（`COALITION_RADIUS_TILES`）の体感
-3. **Phase 14 バランス調整**（CLAUDE.md「Phase 14 バランス調整の事前情報」参照）
-4. **残りの棚卸し候補**（CLAUDE.md「要調査・要整理項目」参照）：
-   - `PlayerController._spawn_heal_effect` のデッドコード判定
-   - `hero.json` の扱い整理
-   - `BUST_SRC_*` の比率化
-   - エフェクト線幅系の GRID_SIZE 連動検討
-   - dark-lord のワープ・炎陣を SkillExecutor 経由へ
-   - エフェクト生成の一系統化
+
+「移動関連の二層構造」設計原則の段階的適用が中心。各 Step は独立せず順序依存があるため、上から順に進める。
+
+1. **Step 1-A：`enemy_class_stats` の Config Editor 対応（前提整備）**
+   - 「ステータス」タブに「敵クラスステータス」サブタブを追加
+   - `class_stats` と同構造の base / rank 編集 UI を流用
+   - Step 1-B で move_speed を有効化したときに敵 5 種のベース値を即調整できる状態を作る
+
+2. **Step 1-B：`move_speed` 有効化＋ガード WEIGHT 定数化**
+   - `character_data.move_speed` を live data 化（`Character.get_move_duration()` を新設）
+   - 計算式：`BASE_MOVE_DURATION × 50 / move_speed`（標準能力値 50 を基準とする逆比例補正）
+   - `BASE_MOVE_DURATION = 0.40`（GlobalConstants / Character カテゴリ・新設）
+   - `_convert_move_speed()` 廃止
+   - `PlayerController.MOVE_INTERVAL` / `UnitAI.MOVE_INTERVAL` 廃止（GlobalConstants へ統合）
+   - `Wolf` / `Zombie` の `_get_move_interval()` オーバーライド廃止（`enemy_class_stats.json` の wolf.move_speed=40 / zombie.move_speed=10 が反映されるようになる）
+   - `GUARD_MOVE_DURATION_WEIGHT = 2.0` を定数化（Character カテゴリ）
+   - 下限クランプ 0.10 秒（ハードコード・Config Editor 非公開）
+   - スケール校正は実プレイで実施（Wolf は現状 0.27s → 設計値 0.53s に遅くなる見込み）
+
+3. **Step 2：時間系定数の `GlobalConstants` 化**
+   - `WAIT_DURATION` / `REEVAL_INTERVAL` / `AUTO_ITEM_INTERVAL` / `WARP_INTERVAL` / `FLAME_DURATION` 等を整理
+   - **バグ修正**：Wolf / Zombie の `_get_move_interval()` の game_speed 未適用（Step 1-B で同時解消されるはず）
+   - **バグ修正**：`DarkLordUnitAI._warp_timer -= delta / game_speed` が逆方向（高速設定でボスが遅くなる）
+
+4. **Step 3：`game_speed` 適用パターンの統一**
+   - 現状 4 パターン混在（pre-scaled / post-scaled / 未適用 / 逆方向）
+   - スタン・バフ・エネルギー回復・自動キャンセルの未適用を統一
+   - 「全タイマーは `delta * game_speed` で減算する」を設計原則として明文化
+
+5. **Step 4：向き変更コストの完全対称化**
+   - 全局面で向き変更コストを発生させる（プレイヤーの通常移動のみコストありの非対称を解消）
+   - `BASE_TURN_DURATION` を新設、`move_speed` で同様に補正（`BASE_TURN_DURATION × 50 / move_speed`）
+   - dead code 整理：`character.gd` の `guard_facing` コメント残骸、`get_direction_multiplier` 関数
+   - TURN_DELAY 中の論理 facing 不一致（0.15 秒間旧向きのまま）を修正
+
+6. **Step 5：近接攻撃範囲拡大**
+   - 前方 5 マス化（正面 1 + 左右 1 + 斜め前 2）
+   - 斜め前攻撃後の向きは維持、左右攻撃後は向きを変える（既存挙動を維持）
+   - スプライトの 45° 回転で斜め前を表現するか試す
+
+#### 並行して継続するタスク
+- **フロア基準値（`FLOOR_*_RANK_THRESHOLD` / `FLOOR_RETREAT_RATIO`）の実プレイ調整**：装備 tier 戦力反映（2026-04-19）により同じ基準値でも降下しやすくなっている。DebugWindow の `F(R+T)s` 表示で観察
+- **Phase 14 バランス調整**（CLAUDE.md「Phase 14 バランス調整の事前情報」参照）
+- **残りの棚卸し候補**（CLAUDE.md「要調査・要整理項目」参照）：`PlayerController._spawn_heal_effect` の生死判定 / `hero.json` の整理 / `BUST_SRC_*` の比率化 / エフェクト線幅の GRID_SIZE 連動 / dark-lord のワープ・炎陣を SkillExecutor 経由へ / エフェクト生成の一系統化
 
 ## ジャンル・コンセプト
 - 半リアルタイム進行（ターン制なし）。`world_time_running` フラグで AI タイマーを制御
@@ -265,7 +304,7 @@ assets/images/tiles/
 | 操作 | キーボード | ゲームパッド | 備考 |
 |------|-----------|-------------|------|
 | 移動 | 矢印キー | 左スティック or 十字キー | |
-| 攻撃（短押し：Z/A → PRE_DELAY → TARGETING → Z/A 確定） | Z | A | クラスの攻撃タイプで近接/遠距離を自動切替。ターゲット選択中は時間停止 |
+| 攻撃（一発一押下：Z/A 押下 → 離して攻撃発動） | Z | A | クラスの攻撃タイプで近接/遠距離を自動切替。押している間は時間進行・離した瞬間に発動 |
 | ガード（ホールド） | X | B | ホールド中ガード姿勢。正面攻撃のブロック量3倍・移動速度50%・向き固定 |
 | アイテム選択UI（短押し） | C | X | 所持アイテム一覧を開く（使用/装備/渡す）。UI中は時間停止 |
 | 特殊攻撃 | V | Y | Vスロット特殊攻撃（Phase 12-4で全クラス実装済み） |
@@ -384,6 +423,37 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 - **視覚演出・フィーリング調整** → Effect カテゴリ（ゲーム挙動に影響しない）
 - **アイテム生成ルール** → Item カテゴリ
 - 判断に迷うケース：ダメージ判定が演出と独立している値（PROJECTILE_SPEED 等）は Effect
+
+### Config Editor の hidden フラグ
+- **表示対象**：バランス調整中に触る可能性がある、または挙動を理解するために見えていたほうが良い定数
+- **非表示対象**：一度決めたら触ることがほぼない定数（色定義、アイコンパス、UI レイアウト定数など）
+- 非表示は「隠し項目も表示」チェックボックスで切り替え可能（薄いアルファでグレーアウト気味に表示）
+- チェックボックスはセッション内のみ保持。Config Editor を開く度に OFF にリセットされ、ゲーム再起動時も必ず OFF で起動（誤操作防止）
+- hidden フラグは `assets/master/config/constants_default.json` の各定数メタデータに `"hidden": true` を追加することで設定する。Config Editor からは変更不可
+- 既設定済み：`CONDITION_COLOR_*`（スプライト/ゲージ/テキスト × 4 状態 = 12 個）
+
+### 移動関連の二層構造（時間系ステータス）
+移動・向き変更などの「時間系ステータス」は、**ベース値**（`GlobalConstants`）と**能力値ステータス**（`character_data`）の二層構造で管理する。`power` / `skill` / `hp` などダメージ・耐久系のように直接使用するのではなく、逆比例補正で実効値を算出する。
+
+#### 算出式
+```
+実効値 = BASE × 50 / status
+```
+- 標準能力値 50 のキャラが取る実効値を「BASE」として GlobalConstants で定義
+- 能力値（`move_speed` など）は 0-100 スケール。**高いほど速い**（大きいほど良い・直感的）
+- 標準能力値 50 を基準とした逆比例補正で、能力値が 100 なら実効値半減（2 倍速）、25 なら 2 倍（半速）
+
+#### 対象範囲
+- 1 マス移動の時間：`BASE_MOVE_DURATION`（仮称・Step 1-B で導入予定）
+- 向き変更の時間：`BASE_TURN_DURATION`（仮称・Step 4 で導入予定）
+- どちらも `move_speed` ステータスで補正（`turn_speed` ステータスは新設しない・移動速度に従う）
+
+#### 設計判断
+- **基準値 50 はハードコード**：設計の前提として扱い、Config Editor には出さない
+- **下限クランプはハードコード**：実効値が小さくなりすぎないよう 0.10 秒等で打ち切る。これも調整対象外
+- **適用範囲限定**：時間系ステータスのみ。`power` / `skill` / `hp` / 耐性などは従来どおり直接使用
+- **`energy_recovery` は二層構造化しない**：現状の `ENERGY_RECOVERY_RATE`（全キャラ共通定数）のまま。個体差が必要になったら再検討
+- **装備補正は将来検討**：現状 `move_speed` は装備補正の対象外。重装備で遅くなる等の追加余地あり
 
 ### アイテム生成
 - **事前生成方式**：名前と補正値を一対一で固定する。同じ名前の装備は常に同じ stats（プレイヤーの記憶を助ける）
@@ -1402,14 +1472,42 @@ rank値: C=0, B=1, A=2, S=3
 - 敵は `assets/master/enemies/*.json` の**トップレベル** `pre_delay` / `post_delay`（スロット構造なし）
 - pre_delay / post_delay は `game_speed` の影響を受ける（移動系と同じ。×2.0 で攻撃テンポも2倍）
 
-### 攻撃フロー（PRE_DELAY → TARGETING → POST_DELAY）
-- Z/A **短押し** → PRE_DELAY モードへ（pre_delay 消化中は時間進行・ターゲット候補を表示・**射程オーバーレイも表示**）
-- PRE_DELAY 中は射程が見えるが、ターゲット選択（LB/RB や確定）はできない
-- PRE_DELAY 完了後 TARGETING モードへ自動遷移（時間停止・LB/RB または矢印キーで循環選択）
-- TARGETING 中に Z/A → 射程チェック → 攻撃実行 → POST_DELAY（硬直・時間進行）→ NORMAL
-- TARGETING 中に X/B → ノーコストキャンセル → NORMAL（時間停止に戻る）
-- V スロットのターゲット系（headshot/water_stun/buff_defense）も同フロー（V キーで起動）
-- pre_delay 中にターゲットが射程外に逃げても TARGETING で自動キャンセル（空振りなし）
+### 攻撃フロー（一発一押下モデル：押下 → 離して発動）
+プレイヤーから見える挙動は **「Z/A（V/Y）を押している間は射程表示・離して発動」** の一本化されたモデル。確定の二度押しは廃止。可視状態（マーカーの有無）と内部ステート、時間進行／停止が一致する設計。
+
+#### 内部ステート（4 種）
+1. **PRE_DELAY**（時間進行・**マーカー非表示**・LB/RB 無効・矢印キーは向き変更）
+   - Z/A 押下直後。pre_delay タイマー消化中。射程オーバーレイのみ表示
+2. **PRE_DELAY_RELEASED**（時間進行・操作不能。POST_DELAY と同等）
+   - PRE_DELAY 中に Z/A を離した状態。残り pre_delay を時間進行で消化（マーカー非表示）→ Phase 2 で AUTO_CANCEL_FLASH 秒だけマーカー表示 → 攻撃発動 or 自動キャンセル
+3. **TARGETING**（**時間停止**・**マーカー表示**・LB/RB 有効・矢印キーは向き変更）
+   - PRE_DELAY 完了後、Z/A を押し続けてターゲット選定中。じっくり狙える
+4. **POST_DELAY**（時間進行・操作不能）
+
+#### 状態遷移
+- NORMAL → **押下** → PRE_DELAY
+- PRE_DELAY → **解放**（pre_delay 完了前） → PRE_DELAY_RELEASED
+- PRE_DELAY → **タイマー完了**（押下継続中） → TARGETING
+- PRE_DELAY_RELEASED → 残り pre_delay 完了 → マーカー表示 AUTO_CANCEL_FLASH 秒 → 攻撃発動 / 自動キャンセル
+- TARGETING → **解放** + 標的あり → 即攻撃発動 → POST_DELAY
+- TARGETING → **解放** + 標的なし → AUTO_CANCEL_FLASH 秒後に自動キャンセル
+- TARGETING → X/B（menu_back） → ノーコストキャンセル
+- TARGETING → 他攻撃ボタン（Z 中の V／V 中の Z）→ スロット切替 → 新スロットの PRE_DELAY 突入
+
+#### 設計原則
+- **マーカー（カーソル＋アウトライン）の可視性 = ターゲット選択可能** = 時間停止 という三位一体を可視情報で揃える
+- pre_delay 消化中はマーカー非表示（選択不可）。pre_delay 完了後にマーカーが現れる
+- PRE_DELAY_RELEASED Phase 2 で完了後マーカーを一瞬表示するのは「マーカーは pre_delay 完了後に出る」という設計原則を保ちつつ、タップ操作に視覚フィードバックを与えるため
+- TARGETING の時間停止は「ボタンホールド中のみ」。解放した瞬間（即発火 / AUTO_CANCEL 待機）は時間進行
+
+#### 共通仕様
+- **押下中の矢印キー／左スティック／d-pad**：向きのみ変更（その場で即時回転・移動不可・pre_delay タイマーはリセットしない）。射程オーバーレイは向きに追従してリアルタイム更新。射程変化に応じて選択中ターゲットも次フレームで自動再評価される
+- **LB/RB**：TARGETING（マーカー表示中）でのみターゲット循環。PRE_DELAY / PRE_DELAY_RELEASED では無効
+- **AUTO_CANCEL_FLASH**：射程オーバーレイ＋マーカーを一瞬見せる演出時間。空振り時のキャンセル猶予と、PRE_DELAY_RELEASED Phase 2 のマーカー表示時間に共通使用
+- **空振り判定**：pre_delay 中にターゲットが射程外に逃げた場合、`_confirm_target` 内の `_is_target_in_range` 再チェックで空振りキャンセル（既存）
+- **V スロットのターゲット系**（headshot / water_stun / buff_defense）：同じ PRE_DELAY → TARGETING フローを共有
+
+> **設計の経緯**：旧仕様は「Z/A 押下 → 離す → 確定のため再度 Z/A 押下」の 2 段階で、TARGETING 中は常に時間停止していた。中間案として「TARGETING も時間進行・解放で即発火」を試したが、pre_delay の長い遠距離キャラでじっくり狙う感覚が失われたため、本仕様（TARGETING 中はホールドしている間だけ時間停止）に落ち着いた
 
 ### 方向と防御
 - 攻撃方向によるダメージ倍率は廃止。方向は防御判定の可否にのみ影響する（詳細は「命中・被ダメージ計算」節を参照）
@@ -1473,6 +1571,12 @@ rank値: C=0, B=1, A=2, S=3
   - 初期ポーション個数（ヒール 5・エナジー 5）を Config Editor 化（`INITIAL_POTION_HEAL_COUNT` / `INITIAL_POTION_ENERGY_COUNT`）
   - **bonus / tier 概念分離**：`ITEM_TIER_*_RATIO` → `ITEM_BONUS_*_RATIO` リネーム。`FLOOR_X_Y_BASE_TIER` を String（"low/mid/high"）→ int（0〜3）に型変更
 - **NPC フロア遷移判定のための戦況判断拡張（検討）**：`NPC_HP_THRESHOLD` / `NPC_ENERGY_THRESHOLD` 廃止により、現在は HpStatus のパーティー平均HP率で判定している。ただし元の「最低HP率」ベースや「エネルギー率」ベースの判定は NPC 行動として意味があるため、戦況判断（`_evaluate_combat_situation`）の副情報として最低HP指標・エネルギー指標を追加することを検討。別系統の判定を走らせず、戦況判断に一元化する設計方針を維持する。
+- **完全リアルタイム化の検討**：当初は完全リアルタイム構想だったが操作が追いつかず半リアルタイムに後退した経緯がある。2026-04-20 の操作シンプル化（1 発 1 押下モデル）により障壁が下がったため再検討の余地あり。検討項目：プレイヤー待機中の時間停止廃止 / アイテム UI 中の時間停止扱い / NPC AI の再評価タイミングへの影響 / 学習曲線への配慮 / `game_speed` との関係整理
+- **ポーション自動使用（プレイヤー操作キャラ）**：現状は AI 操作キャラ向けのみ自動使用機構あり。プレイヤー操作キャラにも同等の自動使用を導入（操作中も on_low_hp / sp_mp_potion 指示に従う）
+- **他タブの hidden 候補棚卸し**：本日 Character タブの色定義 12 個を hidden 化したが、他タブ（PartyLeader / NpcLeaderAI / SkillExecutor / Effect / Item 等）にも非表示候補がないか棚卸し
+- **装備品による `move_speed` 補正**：現状 `move_speed` は装備補正の対象外。将来「重装で遅くなる」「素足で速くなる」等の追加余地あり
+- **`stat_bonus` の負値対応**：`enemy_list.json` の `stat_bonus` は加算のみ。敵個別調整で「base から減らしたい」要望が出たら負値許容を検討（現状は class_stats / enemy_class_stats のベース値を直接いじるしかない）
+- **`energy_recovery` の個体差対応**：現状は `ENERGY_RECOVERY_RATE` 全キャラ共通定数。クラス・種族・ランクで個体差を出したくなったら二層構造化（`BASE_ENERGY_RECOVERY × status / 50`）を検討
 
 ### Phase 14 バランス調整の事前情報
 
@@ -1537,6 +1641,13 @@ rank値: C=0, B=1, A=2, S=3
   - `BaseAI`（547 行）/ `EnemyAI`（401 行）/ `LLMClient`（109 行）/ `DungeonGenerator`（119 行）/ `GoblinAI`（45 行）
   - 併せて `CharacterData.create_hero()` / `create_goblin()` dead method も削除
   - 詳細は [docs/history.md](docs/history.md) の 2026-04-19 エントリを参照
+
+- ✅ **向き変更コストの調査**：2026-04-20 完了。詳細は [docs/investigation_turn_cost.md](docs/investigation_turn_cost.md) 参照
+  - 結論：コスト発生はプレイヤー通常移動の TURN_DELAY=0.15s のみ。AI と攻撃中は即時で完全非対称。dead code 2 件（`get_direction_multiplier` / `guard_facing` コメント）を確認
+- ✅ **移動関連定数の棚卸し**：2026-04-20 完了。詳細は [docs/investigation_movement_constants.md](docs/investigation_movement_constants.md) 参照
+  - 重要発見：`character_data.move_speed` 完全 dead data / `MOVE_INTERVAL` の SoT が PlayerController と UnitAI に分裂 / game_speed 適用パターンが 4 種類混在 / Wolf・Zombie の game_speed 未適用バグ / DarkLordUnitAI の warp_timer 逆方向バグ
+- ✅ **敵クラスステータスの利用状況調査**：2026-04-20 完了。詳細は [docs/investigation_enemy_class_stats.md](docs/investigation_enemy_class_stats.md) 参照
+  - 重要発見：11 ステータス中 10 個は正常動作・move_speed のみ dead / 16 敵中 11 敵が人間 class_stats を借用 / `enemy_class_stats.json` が Config Editor で編集不可
 
 - **`PlayerController._spawn_heal_effect` の実態確認**：`docs/investigation_skill_executor_constants.md` の調査で、このメソッドがどこからも呼ばれていない可能性が指摘されている。SkillExecutor 移行後の残骸の可能性。参照調査して本当に未使用ならデッドコードとして削除
 

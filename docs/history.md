@@ -3,6 +3,180 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-20（攻撃操作 1 発 1 押下化・Config Editor hidden フラグ・移動関連調査）
+
+本日のセッションは「操作性改善」と「次の大規模リファクタの前提整備（調査）」の二本立て。
+
+### 1. 攻撃操作の 1 発 1 押下化（TARGETING 時間停止仕様の再設計）
+
+#### 設計過程
+ユーザーからの操作改善要望を 5 段階に分けて反復的に実装した：
+
+1. **Step 1：PRE_DELAY 中の向き変更追加**
+   - 当初仕様：「PRE_DELAY 中に矢印キーで向き変更可」
+   - 実装：`_process_pre_delay` 内に `face_toward()` 即時呼び出しを追加
+   - 即時回転を選択（射程オーバーレイの追従との視覚一致を優先）
+
+2. **Step 2：トリガーをモード判定からボタン押下判定に変更**
+   - ユーザー指摘：「PRE_DELAY 中かどうかはプレイヤーから見えない」
+   - 修正：`Input.is_action_pressed(attack_action)` で押下中のみ向き変更が効くよう変更
+   - これでタップ時には向き変更が起きず、ホールド時のみ効くようになった
+
+3. **Step 3：TARGETING でも同じ仕組みを適用**
+   - ユーザー指摘：「PRE_DELAY 終了後 TARGETING に入ると向きが変えられなくなる」
+   - 修正：TARGETING 中もボタン押下時は矢印キー＝向き変更（循環抑止）に変更
+   - LB/RB は専用循環ボタンとして常時有効を維持
+   - ヘルパー `_is_in_attack_hold()` / `_try_facing_change_from_input()` を抽出
+
+4. **Step 4：自動キャンセルタイマーの再評価機構**
+   - ユーザー指摘：「最初は射程内に敵がいるが、向きを変えて射程外になっても解放後にキャンセルされない」
+   - 修正：`_process_targeting` 冒頭で `_valid_targets` の有無に応じてタイマーを再起動／リセットするロジックに変更
+
+5. **Step 5：1 発 1 押下化（中間案を経て最終仕様へ）**
+   - 中間案：TARGETING 全体で時間進行・解放即発火モデル
+   - ユーザー再指摘：「pre_delay の長い遠距離キャラで『じっくり狙う感覚』が失われた」
+   - 最終仕様：4 ステート構造に再設計
+     - `PRE_DELAY`：時間進行・マーカー非表示・LB/RB 無効・矢印は向き変更
+     - `PRE_DELAY_RELEASED`：pre_delay 完了前に解放したときの遷移先。残 pre_delay 消化（マーカー非表示）→ Phase 2 でマーカーを `AUTO_CANCEL_FLASH` 秒表示 → 攻撃発動 / 自動キャンセル
+     - `TARGETING`：pre_delay 完了後にボタン押下継続中。**時間停止**・マーカー表示・LB/RB 有効
+     - `POST_DELAY`：従来通り
+   - 「マーカー可視性 = ターゲット選択可能 = 時間停止」を可視情報で揃える設計原則を確立
+
+#### 実装変更
+- [scripts/player_controller.gd](../scripts/player_controller.gd)
+  - `enum Mode` に `PRE_DELAY_RELEASED` を追加
+  - `is_in_attack_windup()` / `get_current_target()` を 3 ステート対応に拡張
+  - `_input()` で PRE_DELAY_RELEASED の LB/RB を抑止
+  - `_process_pre_delay()` でボタン解放を検出 → PRE_DELAY_RELEASED へ遷移
+  - 新設 `_process_pre_delay_released()`：Phase 1 残 pre_delay 消化 + Phase 2 マーカーフラッシュ + 発動 / キャンセル
+  - 新設 `_setup_targeting_cursor()`：`_start_targeting()` から抽出（PRE_DELAY_RELEASED Phase 2 で再利用）
+  - `_update_world_time()` を「TARGETING + ホールド中のみ時間停止」のロジックに変更
+  - `_process_targeting()` の release-to-fire ロジック・auto-cancel タイマー追従ロジック
+
+#### Komuro 確認項目
+- 連打時のテンポが現状と変わらないこと
+- pre_delay の長い遠距離キャラで pre_delay 完了後にじっくり狙える感覚
+- 向き変更と LB/RB ターゲット切替の両方が pre_delay 完了後に機能すること
+- pre_delay 中（マーカー非表示）と完了後（マーカー表示）の切り替わりが視認できること
+
+---
+
+### 2. Config Editor の hidden フラグ導入
+
+#### 背景
+Config Editor が色定義など「一度決めたら触らない」項目で埋まっており、バランス調整で頻繁に触る項目が見にくい状態。
+
+#### 仕様
+- 各定数のメタデータに `hidden: bool`（デフォルト false）を追加
+- デフォルトで Config Editor から非表示
+- 「隠し項目も表示」チェックボックスを下部ボタン列右端に追加
+- セッション内のみ保持：`open()` ごとに OFF へリセット、ゲーム再起動時も OFF で起動（誤操作防止）
+- 表示時は薄いアルファ（`HIDDEN_ROW_ALPHA = 0.45`）でグレーアウト気味に
+
+#### 実装変更
+- [assets/master/config/constants_default.json](../assets/master/config/constants_default.json)
+  - 既存の色関連 12 項目（`CONDITION_COLOR_SPRITE/GAUGE/TEXT × HEALTHY/WOUNDED/INJURED/CRITICAL`）に `"hidden": true` を一括追加
+- [scripts/config_editor.gd](../scripts/config_editor.gd)
+  - 状態変数 `_show_hidden: bool = false` / `_chk_show_hidden: CheckBox`
+  - 下部ボタン列に CheckBox 追加
+  - `_build_row()` でメタから `hidden` を読み取り `_row_widgets[key].hidden` に記録
+  - `open()` で `_show_hidden = false` リセット + `set_pressed_no_signal(false)` で UI 同期
+  - 新設 `_on_show_hidden_toggled()` / `_apply_row_visibility()`：全行を走査して `panel.visible` と `panel.modulate.a` を設定。可視行 0 のタブはプレースホルダー表示
+
+#### CLAUDE.md への反映
+- 設計原則「Config Editor の hidden フラグ」セクションを新設
+
+---
+
+### 3. バグ修正：`PartyLeader._calc_hp_status_for` freed クラッシュ
+
+#### エラー
+```
+E PartyLeaderPlayer._calc_hp_status_for: Trying to cast a freed object.
+party_leader.gd:929 @ _calc_hp_status_for()
+party_leader.gd:836 @ _evaluate_strategic_status()
+```
+
+#### 原因
+Godot 4 では freed オブジェクトに対する `as Character` キャストがクラッシュする（`is_instance_valid()` は安全だが `as` 演算子は不可）。`_evaluate_strategic_status()`（2026-04-19 新設）から呼ばれる 3 関数で同じパターンの問題が顕在化。
+
+#### 修正
+[party_leader.gd](../scripts/party_leader.gd) の 3 箇所すべてを「キャスト前に `is_instance_valid(mv)` を確認」のパターンに統一：
+- `_calc_stats()` (line 692〜)
+- `_get_my_combat_members()` (line 909〜)
+- `_calc_hp_status_for()` (line 928〜)
+
+#### 設計上の経緯
+本パターンは Phase 12-18 / 12-19 でも複数箇所で同じ修正をしている既知の問題。`_evaluate_strategic_status()` 経由で新たに 3 箇所が顕在化した形。新設関数では「キャスト前 `is_instance_valid` ガード」を必ず入れるルールが必要。
+
+---
+
+### 4. 移動関連の包括調査（3 件）
+
+次セッション以降の「移動関連の二層構造」設計確定の前提として、現状把握の調査ドキュメントを 3 件作成。
+
+#### 4-1. [docs/investigation_turn_cost.md](investigation_turn_cost.md)
+**向き変更コストの現状調査**
+- 結論：コスト発生はプレイヤー通常移動の `TURN_DELAY=0.15s` のみ
+- 角度依存性なし（90° / 180° で時間差なし。経由ルートだけ視覚的に変わる）
+- 集約状況：Character クラス内の `face_toward()` / `move_to()` / `start_turn_animation()` / `complete_turn()` の 4 つに分散。`set_facing()` 的な汎用ヘルパーなし
+- **非対称性（プレイヤー不利）**：プレイヤー TURN_DELAY 中は論理 facing が古い値のまま 0.15 秒残る → 防御判定で旧向きが使われる窓
+- dead code 2 件：`get_direction_multiplier`（廃止済みの 1.0/1.5/2.0 倍関数）/ `guard_facing` コメント残骸
+- 統一設計案 4 つを提示
+
+#### 4-2. [docs/investigation_movement_constants.md](investigation_movement_constants.md)
+**移動・時間系定数の全洗い出し**
+- 全 38 定数を表形式で網羅（定義場所・値・Config Editor カテゴリ・game_speed 適用パターン）
+- **最重要発見**：`character_data.move_speed` が完全 dead data
+  - `CharacterGenerator._convert_move_speed()` でスコア 0-100 を秒/タイルに変換し格納
+  - しかしコード上どこからも読まれていない（grep で確認）
+  - 実際の移動時間は `MOVE_INTERVAL` 定数のみで決まる：プレイヤー 0.30s / AI 0.40s 固定
+  - ステータス UI に表示される値が実挙動と完全に乖離
+- **構造的問題 6 つ**：
+  - `MOVE_INTERVAL` の SoT 分裂（PlayerController と UnitAI に同名・別値・別ファイルで const 定義）
+  - game_speed 適用パターン 4 種類混在（pre-scaled / post-scaled / 未適用 / 逆方向バグ）
+  - Wolf / Zombie の `_get_move_interval()` オーバーライドが game_speed 未適用（バグ）
+  - `DarkLordUnitAI._warp_timer -= delta / game_speed` が逆方向（高速設定でボスが遅くなる）
+  - REEVAL_INTERVAL が PartyLeader と UnitAI で重複（値は同じ 1.5 秒）
+  - エネルギー回復・スタン・バフ・自動キャンセルが game_speed の影響を受けない
+- 解像度別 Config Editor カテゴリ提案を含む
+
+#### 4-3. [docs/investigation_enemy_class_stats.md](investigation_enemy_class_stats.md)
+**敵クラスステータスの利用状況**
+- 結論：11 ステータス中 10 個は正常動作・`move_speed` のみ dead
+- ロード経路：`PartyManager._spawn_enemy_member()` → `apply_enemy_graphics()` → `apply_enemy_stats()` → `_calc_stats()` で味方と同じ式（base + rank × rank_bonus + 属性補正 + random）
+- **重要発見**：
+  - `enemy_class_stats.json` を使うのは 5 種だけ（zombie / wolf / salamander / harpy / dark-lord）
+  - 16 敵中 11 敵が人間 class_stats を借用（skeleton → fighter-sword 等）
+  - `enemy_class_stats.json` は Config Editor で**完全に編集不可**（「ステータス」タブは class_stats / attribute_stats のみ、「敵クラス」タブはクラス JSON の攻撃定義のみ）
+  - 敵にも属性補正（sex/age/build）・ランダム補正は適用されている（attribute_stats を共有）
+- move_speed 有効化時の影響：Wolf は現状 0.27s → 設計値 0.53s（**遅くなる**）、Zombie はほぼ同じ
+
+---
+
+### 5. CLAUDE.md 更新
+
+- 「最近の大きな変更」に 2026-04-20 セクション追加
+- 「次セッションで検討するタスク」を全面差し替え（Step 1-A 〜 Step 5 の構造化タスクリストへ）
+- 「設計原則」に「移動関連の二層構造（時間系ステータス）」を新設（`実効値 = BASE × 50 / status` の逆比例補正方式）
+- 「設計原則」に「Config Editor の hidden フラグ」を新設
+- 「将来実装項目」に追記：完全リアルタイム化検討 / プレイヤー操作キャラのポーション自動使用 / 他タブの hidden 候補棚卸し / 装備品による move_speed 補正 / stat_bonus の負値対応 / energy_recovery の個体差対応
+- 「要調査・要整理項目」に本日完了 3 件を ✅ 追記
+- 「攻撃フロー（一発一押下モデル）」セクションは PRE_DELAY_RELEASED 4 ステート構造で書き直し済み
+- 「キー操作」表の攻撃行を「一発一押下」表記に更新
+
+---
+
+### 設計確定事項（次セッション以降の前提）
+
+1. **時間系ステータスは二層構造で管理**：`実効値 = BASE × 50 / status`
+2. **時間系ステータス以外（power / skill / hp / 耐性）は従来通り直接使用**
+3. **`turn_speed` ステータスは新設しない**：向き変更コストも `move_speed` で補正
+4. **基準値 50 はハードコード・下限クランプもハードコード**：Config Editor に出さない
+5. **`energy_recovery` は二層構造化しない**：現状の全キャラ共通定数を維持
+
+---
+
 ## 2026-04-19（FLOOR_RANK / FLOOR_RETREAT_RATIO の Config Editor 化）
 
 ### 背景・目的

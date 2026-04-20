@@ -690,8 +690,11 @@ func _calc_stats(members: Array, use_estimated_hp: bool) -> Dictionary:
 	var hp_ratio_sum := 0.0
 	var alive_count := 0
 	for mv: Variant in members:
+		# freed オブジェクトへの as キャストはクラッシュするため、キャスト前に is_instance_valid を確認する
+		if not is_instance_valid(mv):
+			continue
 		var m := mv as Character
-		if m == null or not is_instance_valid(m) or m.hp <= 0:
+		if m == null or m.hp <= 0:
 			continue
 		if m.character_data != null:
 			rank_sum += RANK_VALUES.get(m.character_data.rank, 3) as int
@@ -907,8 +910,11 @@ func _get_my_combat_members() -> Array[Character]:
 		return _party_members
 	var result: Array[Character] = []
 	for mv: Variant in _party_ref.sorted_members():
+		# freed オブジェクトへの as キャストはクラッシュするため、キャスト前に is_instance_valid を確認する
+		if not is_instance_valid(mv):
+			continue
 		var m := mv as Character
-		if m != null and is_instance_valid(m):
+		if m != null:
 			result.append(m)
 	return result
 
@@ -926,8 +932,11 @@ func _calc_hp_status_for(members: Array) -> int:
 	var total_max := 0
 	var total_potion := 0
 	for mv: Variant in members:
+		# freed オブジェクトへの as キャストはクラッシュするため、キャスト前に is_instance_valid を確認する
+		if not is_instance_valid(mv):
+			continue
 		var m := mv as Character
-		if m == null or not is_instance_valid(m) or m.hp <= 0:
+		if m == null or m.hp <= 0:
 			continue
 		total_hp += m.hp
 		total_max += m.max_hp
