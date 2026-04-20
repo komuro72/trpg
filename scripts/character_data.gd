@@ -100,8 +100,9 @@ var behavior_description: String = ""
 ## キャラクターランク（S/A/B/C）。右パネルでのランク色分け表示・ステータス計算に使用
 var rank: String = "C"
 
-## 移動速度（秒/タイル。低いほど速い。標準 0.4。_convert_move_speed() で 0-100 スコアから変換）
-var move_speed: float = 0.4
+## 移動速度（0-100 スコア。高いほど速い。標準 50）
+## Character.get_move_duration() が逆比例式（BASE_MOVE_DURATION × 50 / move_speed）で実効値を算出する
+var move_speed: float = 50.0
 
 ## 攻撃クールタイム（秒）
 ## 味方（クラス持ち）はクラス JSON の slots.Z / slots.V から z_/v_ フィールドに設定される。

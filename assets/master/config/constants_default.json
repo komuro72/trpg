@@ -379,6 +379,24 @@
     "type": "float",
     "value": 3.0
   },
+  "BASE_MOVE_DURATION": {
+    "category": "Character",
+    "description": "1 マス移動のベース時間（秒）。move_speed=50 のキャラがこの値で 1 マス移動する。実効値 = BASE × 50 / move_speed",
+    "max": 2.0,
+    "min": 0.05,
+    "step": 0.05,
+    "type": "float",
+    "value": 0.40
+  },
+  "GUARD_MOVE_DURATION_WEIGHT": {
+    "category": "Character",
+    "description": "ガード中の移動時間倍率。2.0 で移動速度が 50% になる（duration を 2 倍にする）",
+    "max": 4.0,
+    "min": 1.0,
+    "step": 0.1,
+    "type": "float",
+    "value": 2.0
+  },
   "TURN_DELAY": {
     "category": "Effect",
     "description": "向き変更の tween 時間（秒）。キーを押してから実際に向きが変わるまでの遅延・操作感に直結",

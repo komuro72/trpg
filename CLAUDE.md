@@ -24,6 +24,19 @@
   - [`docs/investigation_enemy_class_stats.md`](docs/investigation_enemy_class_stats.md) — 敵クラスステータスの利用状況（10/11 ステータスは正常・move_speed のみ dead）
   - **重要発見**：(1) `character_data.move_speed` が完全 dead data、(2) `MOVE_INTERVAL` の SoT が PlayerController / UnitAI に分裂（同名・別値・別ファイル）、(3) game_speed 適用パターンが 4 種類混在（pre-scaled / post-scaled / 未適用 / 逆方向バグ）、(4) `enemy_class_stats.json` が Config Editor で編集不可、(5) 16 敵中 11 敵が人間 class_stats を借用
 - **設計原則の追記**：「移動関連の二層構造」を新設。時間系ステータスはベース値（GlobalConstants）× 能力値（character_data）× `BASE × 50 / status` の逆比例補正で管理する方針を明文化
+- **Step 1-A 完了：敵ステータスの Config Editor 対応 + タブフラット化**：事前調査でステータス算出ロジックは既に味方・敵で統一済み（`_calc_stats` 共用・attribute_stats.json 共用）と判明し、当初想定より小さい範囲で完了
+  - Config Editor のトップタブをフラット 8 タブ構造に再編：`定数 | 味方クラス | 味方ステータス | 属性補正 | 敵一覧 | 敵クラス | 敵ステータス | アイテム`
+  - 旧「ステータス」タブ内の 2 サブタブ（クラスステータス / 属性補正）を廃止しトップレベルに昇格。属性補正は味方・敵共用ルールなので味方ブロックと敵ブロックの橋渡し位置に独立タブとして配置
+  - 新タブ「敵ステータス」で `enemy_class_stats.json`（敵固有 5 クラス）を編集可能に。leadership / obedience は敵クラス定義に存在しないため表示されない（仕様どおり・敵 AI が参照しないため）
+  - 描画関数 `_build_class_stats_tab(parent, tab_name, source_id, data, class_ids)` を共通化。味方ステータス・敵ステータスは同じグリッドを再利用（source_id="ally"/"enemy" で切り分け）
+- **Step 1-B 完了：`move_speed` 有効化＋ガード WEIGHT 定数化**：移動関連の二層構造を実装開始
+  - `character_data.move_speed` を 0-100 スコア直接格納に変更（従来の事前変換 `_convert_move_speed` 廃止）
+  - `Character.get_move_duration()` 新設：`BASE_MOVE_DURATION × 50 / move_speed`（逆比例補正・ガード中は GUARD_MOVE_DURATION_WEIGHT 倍・下限 0.10 秒ハードコード）
+  - GlobalConstants の Character カテゴリに `BASE_MOVE_DURATION = 0.40` / `GUARD_MOVE_DURATION_WEIGHT = 2.0` 追加（Config Editor で調整可）
+  - `PlayerController.MOVE_INTERVAL = 0.30` / `UnitAI.MOVE_INTERVAL = 0.40`（SoT 分裂状態）を廃止し、`character.get_move_duration()` 呼出に一本化
+  - Wolf / Zombie の `_get_move_interval()` オーバーライド削除。`enemy_class_stats.json` の `wolf.move_speed=40` / `zombie.move_speed=10` が初めてゲーム挙動に反映される
+  - **挙動変化**：Wolf 0.27s → 約 0.50s（遅くなる）、Zombie → 約 2.00s（非常に遅い）、人間キャラも class_stats 値 × attribute_stats 補正が効くようになる。スケール校正は実プレイで実施
+- **Step 1-B 実装後の観察事項**：人間キャラの動作速度低下・死亡率上昇・ガード中歩行アニメ欠落・射程表示中の被弾キャンセルが観察された。次セッションで切り分け調査予定（詳細は「次セッションで検討するタスク」セクションの「最優先：Step 1-B 実装後の挙動調査」参照）
 
 #### 2026-04-19
 - **バグ修正**：敵の V スロット特殊攻撃が誤発動する問題・戦闘メッセージで敵表示名が「斧戦士」等のクラス日本語名になる問題を修正（Phase B の `class_id = stat_type` 設定の副作用）
@@ -88,25 +101,55 @@
 
 「移動関連の二層構造」設計原則の段階的適用が中心。各 Step は独立せず順序依存があるため、上から順に進める。
 
-1. **Step 1-A：`enemy_class_stats` の Config Editor 対応（前提整備）**
-   - 「ステータス」タブに「敵クラスステータス」サブタブを追加
-   - `class_stats` と同構造の base / rank 編集 UI を流用
-   - Step 1-B で move_speed を有効化したときに敵 5 種のベース値を即調整できる状態を作る
+1. ✅ **Step 1-A：`enemy_class_stats` の Config Editor 対応**（2026-04-20 完了・タブのフラット化を含む）
 
-2. **Step 1-B：`move_speed` 有効化＋ガード WEIGHT 定数化**
-   - `character_data.move_speed` を live data 化（`Character.get_move_duration()` を新設）
-   - 計算式：`BASE_MOVE_DURATION × 50 / move_speed`（標準能力値 50 を基準とする逆比例補正）
-   - `BASE_MOVE_DURATION = 0.40`（GlobalConstants / Character カテゴリ・新設）
-   - `_convert_move_speed()` 廃止
-   - `PlayerController.MOVE_INTERVAL` / `UnitAI.MOVE_INTERVAL` 廃止（GlobalConstants へ統合）
-   - `Wolf` / `Zombie` の `_get_move_interval()` オーバーライド廃止（`enemy_class_stats.json` の wolf.move_speed=40 / zombie.move_speed=10 が反映されるようになる）
-   - `GUARD_MOVE_DURATION_WEIGHT = 2.0` を定数化（Character カテゴリ）
-   - 下限クランプ 0.10 秒（ハードコード・Config Editor 非公開）
-   - スケール校正は実プレイで実施（Wolf は現状 0.27s → 設計値 0.53s に遅くなる見込み）
+2. ✅ **Step 1-B：`move_speed` 有効化＋ガード WEIGHT 定数化**（2026-04-20 完了）
+   - `character_data.move_speed` を live data 化（0-100 スコアで直接格納）
+   - `Character.get_move_duration()` を新設：`BASE_MOVE_DURATION × 50 / move_speed`（標準能力値 50 を基準とする逆比例補正・ガード中は GUARD_MOVE_DURATION_WEIGHT 倍・下限 0.10 秒）
+   - `BASE_MOVE_DURATION = 0.40` / `GUARD_MOVE_DURATION_WEIGHT = 2.0` を GlobalConstants Character カテゴリに追加
+   - `_convert_move_speed()` 廃止・`PlayerController.MOVE_INTERVAL` / `UnitAI.MOVE_INTERVAL` 廃止
+   - Wolf / Zombie の `_get_move_interval()` オーバーライド廃止（`enemy_class_stats.json` の move_speed 値が反映される）
+   - スケール校正は実プレイで実施（Wolf は現状 0.27s → 設計値 約 0.50s に遅くなる見込み）
+
+#### 最優先：Step 1-B 実装後の挙動調査
+
+Step 1-B（move_speed 有効化・MOVE_INTERVAL 廃止・ガード WEIGHT 導入）実装後、以下の挙動が観察された。Step 2 に進む前に切り分け調査が必要。Step 1-B 由来のバグか、それ以前の変更由来か、仕様どおりかを確認する。
+
+**観察された挙動**：
+
+1. **人間キャラの動作が遅くなった**（Step 1-B 影響度：高）
+   - 旧式 `_convert_move_speed`: `seconds = max(0.1, 0.8 - score × 0.006)`（score=50 → 0.50s）
+   - 新式 `get_move_duration`: `BASE_MOVE_DURATION × 50 / move_speed`（move_speed=50 → 0.40s）
+   - 単純比較では新式のほうが速いはずなのに遅くなったのは不自然
+   - 調査ポイント：
+     - 旧 score と新 move_speed で保存値自体が異なる可能性
+     - 生成経路の中間変換で move_speed が想定外の値になっている可能性
+     - 実際の move_speed 値を DebugWindow または Config Editor で確認
+
+2. **人間キャラが死にやすくなった**（Step 1-B 影響度：中）
+   - 移動が遅くなった副次効果（敵接近で逃げきれない）の可能性
+   - または独立した別要因
+   - 項目 1 の切り分け結果を踏まえて判断
+
+3. **防御ボタンを押して移動するときアニメーションしない**（Step 1-B 影響度：高）
+   - `GUARD_MOVE_DURATION_WEIGHT = 2.0` によるガード中移動時間の倍化が歩行アニメ（walk1 → top → walk2 → top の 4 枚切替）と連動していない可能性
+   - 旧 `MOVE_INTERVAL` 固定値に依存していたアニメ切替ロジックが `get_move_duration()` の動的値に追従できていない可能性
+   - 調査ポイント：アニメ切替周期の算出が MOVE_INTERVAL 直参照だったか
+
+4. **射程表示中に攻撃を受けるとキャンセルされる**（Step 1-B 影響度：低）
+   - Step 1-B は移動系のみで攻撃フローは未変更
+   - 2026-04-20 の「攻撃操作の 1 発 1 押下化」の残存バグの可能性が高い
+   - 論点：被弾時キャンセルは仕様か否かの確認（CLAUDE.md 未記載）
+     - TARGETING（時間停止中）では被弾しないはず
+     - PRE_DELAY / PRE_DELAY_RELEASED（時間進行中）での被弾時の扱いが未定義
+
+**調査の進め方（提案）**：
+- 項目 1・3 を先に（Step 1-B 直接関連・必要ならロールバック検討）
+- 項目 2 を項目 1 の切り分け後に（副次効果か別要因か）
+- 項目 4 を独立タスクとして（攻撃フロー側の問題）
 
 3. **Step 2：時間系定数の `GlobalConstants` 化**
    - `WAIT_DURATION` / `REEVAL_INTERVAL` / `AUTO_ITEM_INTERVAL` / `WARP_INTERVAL` / `FLAME_DURATION` 等を整理
-   - **バグ修正**：Wolf / Zombie の `_get_move_interval()` の game_speed 未適用（Step 1-B で同時解消されるはず）
    - **バグ修正**：`DarkLordUnitAI._warp_timer -= delta / game_speed` が逆方向（高速設定でボスが遅くなる）
 
 4. **Step 3：`game_speed` 適用パターンの統一**
@@ -444,7 +487,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 - 標準能力値 50 を基準とした逆比例補正で、能力値が 100 なら実効値半減（2 倍速）、25 なら 2 倍（半速）
 
 #### 対象範囲
-- 1 マス移動の時間：`BASE_MOVE_DURATION`（仮称・Step 1-B で導入予定）
+- 1 マス移動の時間：`BASE_MOVE_DURATION`（2026-04-20 導入・Character カテゴリ・`Character.get_move_duration()` で実効値化）
 - 向き変更の時間：`BASE_TURN_DURATION`（仮称・Step 4 で導入予定）
 - どちらも `move_speed` ステータスで補正（`turn_speed` ステータスは新設しない・移動速度に従う）
 
@@ -744,21 +787,31 @@ SkillExecutor（static メソッド群）
 - ランク（A/B/C）はグラフィックとは無関係にランダム割り当て（人間キャラクターは A 上限。S はダークロード等のボス専用）
 - 当面は同一人種の人間のみ
 
-### ステータス決定構造
+### ステータス決定構造（味方・敵で共通）
 ```
 最終値 = class_base + rank × class_rank_bonus + sex_bonus + age_bonus + build_bonus + randi() % (random_max + 1)
 rank値: C=0, B=1, A=2, S=3
 小数を含む場合は加算後に roundi() で整数化
 ```
 
+- **味方・敵ともに同じ算出式を通る**（`CharacterGenerator._calc_stats()` が味方・敵の両方から呼ばれる）
+- `attribute_stats.json`（sex / age / build の補正値と random_max）は**味方・敵で共用**
+- 敵の sex / age / build は**画像フォルダ名から抽出**される（`apply_enemy_graphics()` が `enemy_type_{sex}_{age}_{build}_{id}/` 形式からパース）
+- 味方と敵の違いは以下の **2 点のみ**：
+  1. **ランク決定方法**：味方はランダム（`_random_rank_human()` で A〜C・S は生成しない）／敵は `enemy_list.json` で固定指定（C/B/A/S）
+  2. **stat_bonus の有無**：敵のみ `enemy_list.json` の `stat_bonus` から個別補正（ステータス計算後に加算・100 クランプ）。味方は装備補正で個体差を表現（`equipped_*.stats` → `get_weapon_power_bonus()` 等のゲッター）のため、装備概念のない敵は `stat_bonus` で個体差を作る
+- `character_data.stat_bonus` という**フィールドは存在しない**。敵用 `stat_bonus` は `apply_enemy_stats()` 内のローカル変数で処理後は破棄される。味方の装備補正と名前衝突なし
 - すべての数値ステータス（vitality・energy・power・skill・physical_resistance・magic_resistance・defense_accuracy）は **0〜100 の範囲**に収まるよう設定
 - 数値は設定ファイルで管理（`character_generator.gd` の `CLASS_STAT_BASES` 定数は廃止済み）
 
 ### ステータス設定ファイル
-- **`assets/master/stats/class_stats.json`**：クラスごとの base（ランクC時の基本値）と rank（1段階ごとの加算値）を定義
-  - 対象ステータス: vitality / energy / power / skill / defense_accuracy / physical_resistance / magic_resistance / move_speed / leadership / obedience
-- **`assets/master/stats/attribute_stats.json`**：性別・年齢・体格の補正値と各ステータスの random_max（0〜N の乱数幅）を定義
-- `CharacterGenerator._load_stat_configs()` が初回 `_calc_stats()` 呼び出し時にロードして静的キャッシュに保持
+- **`assets/master/stats/class_stats.json`**：味方 7 クラスの base（ランクC時の基本値）と rank（1段階ごとの加算値）を定義
+  - 対象ステータス: vitality / energy / power / skill / defense_accuracy / physical_resistance / magic_resistance / move_speed / leadership / obedience / block_right_front / block_left_front / block_front
+- **`assets/master/stats/enemy_class_stats.json`**：敵固有 5 クラス（zombie / wolf / salamander / harpy / dark-lord）の base / rank を定義
+  - 対象ステータス: vitality / energy / power / skill / defense_accuracy / physical_resistance / magic_resistance / move_speed / block_right_front / block_left_front / block_front
+  - **leadership / obedience は定義しない**（仕様どおり）。敵 AI はこれらのステータスを参照しないため定義不要。敵の行動ロジックは従順度 100% 相当で動作する
+- **`assets/master/stats/attribute_stats.json`**：性別・年齢・体格の補正値と各ステータスの random_max（0〜N の乱数幅）を定義。**味方・敵で共用**
+- `CharacterGenerator._load_stat_configs()` が初回 `_calc_stats()` 呼び出し時に 3 ファイルをロードして静的キャッシュに保持。`class_stats` と `enemy_class_stats` は `_class_stats_cache` にマージされ、実行時は `stat_type` で一元引き可能
 
 ### vitality / energy の格納先
 - `vitality`（0-100）→ `character_data.max_hp`（`hp` はゲーム開始時に `max_hp` で初期化）
@@ -766,10 +819,19 @@ rank値: C=0, B=1, A=2, S=3
 - UI 表示は `CharacterData.is_magic_class()` で判定し、魔法クラスでは「MP」、非魔法クラスでは「SP」として表示する（内部データは同一）
 - クラスJSON（`assets/master/classes/*.json`）の `"mp"` / `"max_sp"` フィールドは廃止（energy で代替・2026-04-18）
 
-### move_speed の変換
-- 0〜100 スコアで生成し `_convert_move_speed(score)` で秒/タイルに変換して `character_data.move_speed` に格納
-- 変換式: `seconds = max(0.1, 0.8 - score × 0.006)`（要調整）
-  - score=0 → 0.80s/タイル（最遅）、score=50 → 0.50s/タイル、score=100 → 0.20s/タイル
+### move_speed の扱い（2026-04-20 Step 1-B〜）
+- 0〜100 スコアで生成し、`character_data.move_speed` に**直接格納**（従来の事前変換は廃止）
+- 実効値（1 マス移動の秒数）は `Character.get_move_duration()` が逆比例式で算出：
+  ```
+  duration = BASE_MOVE_DURATION × 50 / move_speed
+  is_guarding なら × GUARD_MOVE_DURATION_WEIGHT（既定 2.0 = 50% 速度）
+  下限 0.10 秒（ハードコード）
+  ```
+  - move_speed=25 → 0.80s/タイル（最遅）
+  - move_speed=50 → 0.40s/タイル（標準・BASE_MOVE_DURATION そのもの）
+  - move_speed=100 → 0.20s/タイル（最速）
+- 呼出側は通常 `get_move_duration() / GlobalConstants.game_speed` で実時間に変換する（PlayerController の move_to duration 引数・UnitAI の `_get_move_interval()`）
+- UnitAI 内の `_timer = get_move_duration()` は「ゲーム内秒」のまま（`delta * game_speed` で減算するため）
 
 ### obedience の変換
 - 0〜100 の整数スコアで生成し `/ 100.0` で 0.0〜1.0 に変換して格納
@@ -841,11 +903,14 @@ rank値: C=0, B=1, A=2, S=3
 判断に迷うケース：**ダメージ判定が演出と独立しているもの**（例：PROJECTILE_SPEED は飛翔体が到着するより先に命中判定が確定しているため演出専用）は Effect。反対に、判定そのものに影響する値（例：CRITICAL_RATE_DIVISOR）は SkillExecutor 等の該当カテゴリ。
 
 ### トップレベルタブ
+表示順（フラット 8 タブ）：`定数 | 味方クラス | 味方ステータス | 属性補正 | 敵一覧 | 敵クラス | 敵ステータス | アイテム`。味方系ブロック → 共通ルール（属性補正）→ 敵系ブロック → アイテムの流れ。
 - **定数** — `constants.json` / `constants_default.json` を編集
 - **味方クラス** — `assets/master/classes/` の人間系 7 ファイルを横断表で編集
-- **敵クラス** — `assets/master/classes/` の敵固有 5 ファイル（zombie / wolf / salamander / harpy / dark-lord）を横断表で編集（味方クラスタブと同構造・同描画ロジックを流用）
+- **味方ステータス** — `assets/master/stats/class_stats.json` を編集（味方 7 クラスの base / rank）。タブ名は UI 簡潔化のため「味方ステータス」と短縮表記だが、内部データとしては「味方クラスステータス」を指す
+- **属性補正** — `assets/master/stats/attribute_stats.json` を編集（sex / age / build の補正値と random_max）。**味方・敵で共用のルール**のため、味方系と敵系の橋渡し位置に配置
 - **敵一覧** — `enemy_list.json`（16 敵の stat_type / rank / stat_bonus）と個別敵 JSON のフィールド（name / is_undead / is_flying / instant_death_immune / behavior_description / chase_range / territory_range / projectile_type）を一括編集
-- **ステータス** — `assets/master/stats/class_stats.json` / `attribute_stats.json` を編集（2サブタブ：クラスステータス・属性補正）
+- **敵クラス** — `assets/master/classes/` の敵固有 5 ファイル（zombie / wolf / salamander / harpy / dark-lord）を横断表で編集（味方クラスタブと同構造・同描画ロジックを流用）
+- **敵ステータス** — `assets/master/stats/enemy_class_stats.json` を編集（敵固有 5 クラスの base / rank）。タブ名は UI 簡潔化のため「敵ステータス」と短縮表記だが、内部データとしては「敵クラスステータス」を指す。味方ステータスタブと同じ描画関数（`_build_class_stats_tab`）を流用し、対象 JSON パスと対象クラス ID 配列だけ差し替え。**leadership / obedience は敵クラス定義に存在しないため表示されない**（先頭クラスのキー順を行順として採用するため自然に除外される）
 - **アイテム** — `assets/master/items/*.json` の `base_stats`（各アイテムタイプの補正ステータスルール）を編集。**1 行 1 タイプ形式**の横断表（9 行・敵一覧タブと同じ UI パターン）。各行は「タイプ名 / スロット 1〜4（OptionButton + max）/ 参考情報（category と allowed_classes）」で構成。保存完了後に「個別アイテム（generated/\*.json）は自動更新されない・Claude Code に再生成依頼」の告知ダイアログを表示
 
 ### 「定数」タブのカテゴリ
@@ -911,10 +976,12 @@ rank値: C=0, B=1, A=2, S=3
 2. 追加し忘れた場合は「その他」グループに自動集約されるため、起動時の push_warning で気付ける
 3. Config Editor で編集した結果は `assets/master/classes/*.json` に直接書き戻されるので、そのまま git commit すれば差分管理できる
 
-### 「ステータス」編集時の運用ルール
-1. Config Editor は**既存ステータスの値編集のみ**。新ステータス追加はコード変更（CharacterData / 生成ロジック等)を伴うので別タスクで実施
-2. クラスステータスは「base / rank」を 2 つの LineEdit 横並びで編集。属性補正は 1 LineEdit / セル
-3. `class_stats.json` のクラス順・ステータス順、`attribute_stats.json` のカテゴリ順・ステータス順は元 JSON のキー順を保持（`sort_keys=false`）
+### 「味方ステータス」「敵ステータス」「属性補正」編集時の運用ルール
+1. Config Editor は**既存ステータスの値編集のみ**。新ステータス追加・新クラス追加はコード変更（CharacterData / 生成ロジック等）を伴うので別タスクで実施
+2. クラスステータス（味方ステータス / 敵ステータス）は「base / rank」を 2 つの LineEdit 横並びで編集。属性補正は 1 LineEdit / セル
+3. 3 ファイル（`class_stats.json` / `enemy_class_stats.json` / `attribute_stats.json`）のクラス順・ステータス順は元 JSON のキー順を保持（`sort_keys=false`）
+4. 味方ステータス・敵ステータスは同じ描画関数（`_build_class_stats_tab`）を共有し、対象 JSON パス・対象クラス ID 配列・source_id（"ally" / "enemy"）を引数で切り替え。保存・dirty 判定も source_id でフィルタする（味方を保存しても敵のハイライトは残る）
+5. 敵ステータスタブに leadership / obedience が表示されないのは仕様どおり（敵クラス定義にこれらのキーが存在しないため）。敵 AI はこれらを参照しないため、敵の行動は従順度 100% 相当で動作する
 
 ### 「アイテム」タブ（2026-04-19〜）
 - **目的**：各アイテムタイプが**どのステータスをどの範囲で補正するか**のルール（base_stats）を編集する。個別アイテム（`generated/*.json`）は編集対象外
@@ -1333,7 +1400,7 @@ rank値: C=0, B=1, A=2, S=3
 | 魔法攻撃耐性 | `magic_resistance` | 魔法ダメージ軽減の能力値（整数）。軽減率 = 値/(値+100)。クラスごとに素値を設定＋装備補正 |
 | 防御技量 | `defense_accuracy` | 防御判定の成功しやすさ。キャラ固有の素値（装備による変化なし） |
 | 防御強度 | `block_right_front` / `block_left_front` / `block_front` | 防御成功時に無効化できるダメージ量。クラス固有値（装備補正なし）。方向別に3フィールド。OrderWindowで保有フィールドのみ「右手防御強度」「左手防御強度」「両手防御強度」として表示 |
-| 移動速度 | `move_speed` | 単位：秒/タイル（標準0.4） |
+| 移動速度 | `move_speed` | 0-100 スコア（高いほど速い・標準 50）。実効値は `Character.get_move_duration()` が `BASE_MOVE_DURATION × 50 / move_speed` で算出。Step 1-B（2026-04-20）から live data 化 |
 | 統率力（leadership） | `leadership` | リーダー側。クラス・ランクから算出して確定後不変。当面は値のみ保持 |
 | 従順度（obedience） | `obedience` | 個体側（0.0〜1.0）。クラス・種族・ランクから算出して確定後不変。当面は値のみ保持 |
 | 即死耐性 | `instant_death_immune` | bool。デフォルト false。ボス級は true（ヘッドショット無効・無力化水魔法短縮） |
@@ -1603,7 +1670,7 @@ rank値: C=0, B=1, A=2, S=3
 - **`PROJECTILE_SPEED`**：定数タブ > SkillExecutor カテゴリ（飛翔体演出速度）
 - **`ENERGY_RECOVERY_RATE`**：定数タブ > Character カテゴリ（MP/SP 回復速度）
 - **戦況評価閾値**：`HP_STATUS_*` / `COMBAT_RATIO_*` / `POWER_BALANCE_*`（定数タブ > PartyLeader カテゴリ）
-- **属性・個別ステータス**：`assets/master/stats/class_stats.json` / `attribute_stats.json` / `enemy_list.json`（ステータスタブ・敵一覧タブ）
+- **属性・個別ステータス**：`assets/master/stats/class_stats.json` / `enemy_class_stats.json` / `attribute_stats.json` / `enemy_list.json`（味方ステータス・敵ステータス・属性補正・敵一覧タブ）
 
 ## 要調査・要整理項目
 バグ可能性・構造整理・命名整理など、実装ではなく調査系のタスク：
@@ -1649,7 +1716,16 @@ rank値: C=0, B=1, A=2, S=3
 - ✅ **敵クラスステータスの利用状況調査**：2026-04-20 完了。詳細は [docs/investigation_enemy_class_stats.md](docs/investigation_enemy_class_stats.md) 参照
   - 重要発見：11 ステータス中 10 個は正常動作・move_speed のみ dead / 16 敵中 11 敵が人間 class_stats を借用 / `enemy_class_stats.json` が Config Editor で編集不可
 
+- ✅ **敵クラスステータスの Config Editor 対応（Step 1-A）**：完了。詳細は [docs/history.md](docs/history.md) 参照
+  - 事前調査（ステータス算出ロジック）でロジックは既に統一済みと判明。当初想定より小さい範囲で完了
+  - Config Editor のトップタブをフラット 8 タブ構造（`定数 | 味方クラス | 味方ステータス | 属性補正 | 敵一覧 | 敵クラス | 敵ステータス | アイテム`）に再編
+  - サブタブ構造（「ステータス」→ クラスステータス / 属性補正）を廃止しトップレベルに昇格。属性補正は味方・敵共通のルールなので味方ブロックと敵ブロックの橋渡し位置に独立タブとして配置
+  - `_build_class_stats_tab(parent, tab_name, source_id, data, class_ids)` として描画関数を共通化。味方ステータスと敵ステータスで同じグリッドを再利用
+  - 残る非対称項目：画像フォルダ名パース関数の共通化（`_parse_folder_name` / `_parse_enemy_folder_name`）は別タスク化（優先度低）
+
 - **`PlayerController._spawn_heal_effect` の実態確認**：`docs/investigation_skill_executor_constants.md` の調査で、このメソッドがどこからも呼ばれていない可能性が指摘されている。SkillExecutor 移行後の残骸の可能性。参照調査して本当に未使用ならデッドコードとして削除
+
+- **画像フォルダ名パース関数の共通化（優先度低）**：`CharacterGenerator._parse_folder_name`（味方・プレフィックスマッチ）と `_parse_enemy_folder_name`（敵・`_male_`/`_female_` 境界検出）が別実装。敵 ID にハイフンが含まれるため両者の戦略が異なるが、共通インターフェイスで統合できる余地あり。動作には問題なし
 
 ## 参照ファイル
 - docs/spec.md：詳細仕様書（実装前に参照すること）

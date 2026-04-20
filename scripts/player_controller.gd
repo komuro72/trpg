@@ -38,11 +38,11 @@ signal healed_npc_member(target: Character)
 ## パーティーメンバー切り替えリクエストシグナル（game_map が処理）
 signal switch_char_requested(new_char: Character)
 
-## 移動アニメーションの1タイルあたりの時間・基準値（秒）
-## この定数が移動速度を決める。game_speed で割った値が実効値になる
+## 移動アニメーション時間は character.get_move_duration() で取得する（Step 1-B〜）
+## 実効値 = BASE_MOVE_DURATION × 50 / character_data.move_speed（game_speed で除算して実時間化）
+## ガード中の 50% 速度化は get_move_duration() 内で自動適用される
 ## 【旧方式との違い】タイマーによる移動間隔制御を廃止し、アニメーション完了を
 ## 次移動の gate として使う先行入力バッファ方式に変更（Phase 9-1）
-const MOVE_INTERVAL: float = 0.30
 ## TURN_DELAY は GlobalConstants.TURN_DELAY（Config Editor 対象）を参照
 const CLASS_JSON_DIR := "res://assets/master/classes/"
 
@@ -505,7 +505,7 @@ func _process_guard_and_move(_delta: float) -> void:
 	# その場で歩行アニメーションを再生する（時間停止を防ぐ）
 	if not character.is_moving() and not _is_turning \
 			and _get_input_direction() != Vector2i.ZERO:
-		character.walk_in_place(MOVE_INTERVAL / GlobalConstants.game_speed)
+		character.walk_in_place(character.get_move_duration() / GlobalConstants.game_speed)
 
 
 func _process_pre_delay(delta: float) -> void:
@@ -1259,17 +1259,12 @@ func _try_move(dir: Vector2i) -> void:
 		if _can_move_to_excluding(new_pos, ally):
 			if not _try_push(ally, dir, 0):
 				return  # 押し出し失敗 → 移動しない
-			var duration := MOVE_INTERVAL / GlobalConstants.game_speed
-			if character.is_guarding:
-				duration *= 2.0
-			character.move_to(new_pos, duration)
+			# get_move_duration() がガード中の 50% 速度化（×2.0）を自動適用する
+			character.move_to(new_pos, character.get_move_duration() / GlobalConstants.game_speed)
 		return  # ally はいるが壁などで押し出せない場合も移動しない
 	elif _can_move_to(new_pos):
-		# ガード中は移動速度50%（duration を2倍にする）
-		var duration := MOVE_INTERVAL / GlobalConstants.game_speed
-		if character.is_guarding:
-			duration *= 2.0
-		character.move_to(new_pos, duration)
+		# get_move_duration() がガード中の 50% 速度化（×2.0）を自動適用する
+		character.move_to(new_pos, character.get_move_duration() / GlobalConstants.game_speed)
 	# 移動できない場合（ガード中 or 向き一致で壁など）は何もしない
 	# NPC との会話は Aボタン押下で起動（バンプ検出は廃止）
 
@@ -1407,8 +1402,8 @@ func _try_push(target_char: Character, push_dir: Vector2i, depth: int) -> bool:
 			if not _try_push(next_ally, cand_dir, depth + 1):
 				continue  # 再帰押し出し失敗 → 別方向を試す
 		# 押し出し実行（プレイヤーと同じ速度で同時アニメーション）
-		var duration := MOVE_INTERVAL / GlobalConstants.game_speed
-		target_char.move_to(dest, duration)
+		# プレイヤーの get_move_duration() を使う（押されるキャラの move_speed は参照しない）
+		target_char.move_to(dest, character.get_move_duration() / GlobalConstants.game_speed)
 		return true
 
 	return false

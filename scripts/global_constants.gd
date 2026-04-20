@@ -272,6 +272,15 @@ var CRITICAL_RATE_DIVISOR: float = 300.0
 ## [ConfigEditor 対象]
 var ENERGY_RECOVERY_RATE: float = 3.0
 
+## 1 マス移動のベース時間（秒）。move_speed=50 のキャラがこの値で 1 マス移動する
+## 実効値 = BASE_MOVE_DURATION × 50 / move_speed（逆比例補正・設計原則「移動関連の二層構造」）
+## [ConfigEditor 対象]
+var BASE_MOVE_DURATION: float = 0.40
+
+## ガード中の移動時間倍率。2.0 で移動速度が 50% になる（duration を 2 倍にする）
+## [ConfigEditor 対象]
+var GUARD_MOVE_DURATION_WEIGHT: float = 2.0
+
 ## ------------------------------------------------------------
 ## Effect 関連（2026-04-19〜）
 ## ------------------------------------------------------------
@@ -475,6 +484,8 @@ const CONFIG_KEYS: Array[String] = [
 	"CRITICAL_RATE_DIVISOR",
 	# Character タブ（追加）
 	"ENERGY_RECOVERY_RATE",
+	"BASE_MOVE_DURATION",
+	"GUARD_MOVE_DURATION_WEIGHT",
 	# Effect タブ（2026-04-19〜）
 	"TURN_DELAY",
 	"AUTO_CANCEL_FLASH",

@@ -575,6 +575,22 @@ func walk_in_place(duration: float = 0.4) -> void:
 	_visual_duration    = maxf(duration, 0.01)
 
 
+## 1 マス移動の論理時間（秒・game_speed=1.0 時の値）を返す
+## 設計原則「移動関連の二層構造」：ベース値 × 能力値補正の逆比例式で算出
+##   実効値 = BASE_MOVE_DURATION × 50 / move_speed
+## ガード中は GUARD_MOVE_DURATION_WEIGHT を掛ける（通常 2.0 倍 = 50% 速度）
+## 下限は 0.10 秒（ハードコード・設計前提）
+## 呼出側は通常 `get_move_duration() / GlobalConstants.game_speed` で実時間に変換する
+func get_move_duration() -> float:
+	var move_speed := 50.0
+	if character_data != null and character_data.move_speed > 0.0:
+		move_speed = float(character_data.move_speed)
+	var duration := GlobalConstants.BASE_MOVE_DURATION * 50.0 / move_speed
+	if is_guarding:
+		duration *= GlobalConstants.GUARD_MOVE_DURATION_WEIGHT
+	return maxf(0.10, duration)
+
+
 func move_to(new_grid_pos: Vector2i, duration: float = 0.4) -> void:
 	# ガード中は向きを変更しない（guard_facing を維持）
 	if not is_guarding:

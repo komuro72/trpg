@@ -10,7 +10,8 @@ enum PathMethod { DIRECT, ASTAR, ASTAR_FLANK }
 ## 後方互換用（PartyLeader.Strategy と int 値一致。_assign_orders 側で参照する値）
 enum Strategy   { ATTACK, FLEE, WAIT }
 
-const MOVE_INTERVAL  := 0.40  ## タイル移動の間隔・基準値（秒）。game_speed=1.0 時の標準速度
+## 移動時間は character.get_move_duration() で取得する（Step 1-B〜）
+## 実効値 = BASE_MOVE_DURATION × 50 / character_data.move_speed（ベース × 能力値補正）
 const WAIT_DURATION  := 3.0  ## wait アクションの待機時間・基準値（秒）
 const QUEUE_MIN_LEN  := 3    ## キューがこれ以下になったら補充するしきい値
 
@@ -391,7 +392,9 @@ func _process(delta: float) -> void:
 				if still_moving:
 					# タイマーは「ゲーム内秒」で持つ（カウントダウンで game_speed を掛ける）。
 					# move_to の tween 長は実時間秒なので別途 _get_move_interval() を使う。
-					_timer = MOVE_INTERVAL
+					# get_move_duration() は論理時間（game_speed=1.0 時の秒数）を返す
+					_timer = _member.get_move_duration() if _member != null \
+						else GlobalConstants.BASE_MOVE_DURATION
 				else:
 					_state = _State.IDLE
 					_complete_action()
@@ -2239,11 +2242,14 @@ func _get_path_method() -> PathMethod:
 		_:       return PathMethod.ASTAR
 
 
-## 移動間隔（秒/タイル）。サブクラスで上書きして速度変更可能
-## zombie=遅い(MOVE_INTERVAL*2.0) / wolf=速い(MOVE_INTERVAL*0.67) など
+## 移動間隔（秒/タイル・実時間）。Step 1-B〜 は character.get_move_duration() で一元管理
+## 種族別の速度差は enemy_class_stats.json / class_stats.json の move_speed 値で表現する
+## （旧：Wolf / Zombie は本関数をオーバーライドしていた → 廃止済み）
 ## GlobalConstants.game_speed で割ることで設定画面の速度変更に対応する
 func _get_move_interval() -> float:
-	return MOVE_INTERVAL / GlobalConstants.game_speed
+	if _member != null:
+		return _member.get_move_duration() / GlobalConstants.game_speed
+	return GlobalConstants.BASE_MOVE_DURATION / GlobalConstants.game_speed
 
 
 ## 攻撃実行後に呼ばれるフック。MP消費などはここで行う（サブクラスでオーバーライド）

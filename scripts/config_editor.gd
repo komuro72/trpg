@@ -36,20 +36,20 @@ const TABS: Array[String] = [
 ## TABS に含まれないカテゴリの定数を集める予備タブ
 const UNKNOWN_TAB: String = "Unknown"
 
-## トップレベルタブ（6種類）
-## 将来ここに別ドメインのエディタを追加する際はこの配列と _build_top_tab_X を追加
+## トップレベルタブ（8 種類・フラット構造）
+## 表示順序：定数 | 味方クラス | 味方ステータス | 属性補正 | 敵一覧 | 敵クラス | 敵ステータス | アイテム
+## 味方系ブロック → 共通ルール（属性補正）→ 敵系ブロック → アイテム、という流れ
+## タブ名略称と内部データの対応：
+##   「味方ステータス」 → class_stats.json（本来は「味方クラスステータス」・UI 簡潔化のため短縮）
+##   「敵ステータス」   → enemy_class_stats.json（本来は「敵クラスステータス」・同上）
 const TOP_TAB_CONSTANTS:    String = "定数"
 const TOP_TAB_ALLY_CLASS:   String = "味方クラス"
-const TOP_TAB_ENEMY_CLASS:  String = "敵クラス"
+const TOP_TAB_ALLY_STATS:   String = "味方ステータス"
+const TOP_TAB_ATTR_STATS:   String = "属性補正"
 const TOP_TAB_ENEMY_LIST:   String = "敵一覧"
-const TOP_TAB_STATS:        String = "ステータス"
+const TOP_TAB_ENEMY_CLASS:  String = "敵クラス"
+const TOP_TAB_ENEMY_STATS:  String = "敵ステータス"
 const TOP_TAB_ITEM:         String = "アイテム"
-
-## ステータスタブ内のサブタブ名
-const STATS_SUB_TABS: Array[String] = [
-	"クラスステータス",
-	"属性補正",
-]
 
 # ============================================================================
 # クラス系タブ（味方クラス / 敵クラス）— Phase B
@@ -113,8 +113,9 @@ const CLASS_VALUE_COL_W:  int = 150
 # ============================================================================
 # ステータスタブ（Phase B）
 # ============================================================================
-const STATS_CLASS_PATH: String = "res://assets/master/stats/class_stats.json"
-const STATS_ATTR_PATH:  String = "res://assets/master/stats/attribute_stats.json"
+const STATS_CLASS_PATH:       String = "res://assets/master/stats/class_stats.json"
+const STATS_ENEMY_CLASS_PATH: String = "res://assets/master/stats/enemy_class_stats.json"
+const STATS_ATTR_PATH:        String = "res://assets/master/stats/attribute_stats.json"
 
 ## クラスステータスのセル幅（LineEdit 2つ分）
 const STAT_NAME_COL_W:  int = 200
@@ -246,15 +247,18 @@ var _class_cell_widgets: Dictionary = {}  ## "class_id|param_key" → LineEdit
 var _class_dirty:        Dictionary = {}  ## class_id → bool（書き戻し対象フラグ）
 var _class_cell_styles:  Dictionary = {}  ## "class_id|param_key" → StyleBoxFlat（ハイライト制御）
 
-## ステータス（Phase B）: 2 つの JSON をロード
-## class_stats.json: クラス × ステータス × {base, rank}
-## attribute_stats.json: sex/age/build × ステータス + random_max
-var _class_stats_data: Dictionary = {}  ## 元 JSON（キー順保持）
-var _attr_stats_data:  Dictionary = {}  ## 元 JSON（キー順保持）
-var _class_stats_dirty: bool = false
-var _attr_stats_dirty:  bool = false
+## ステータス（Phase B）: 3 つの JSON をロード
+## class_stats.json:       味方クラス × ステータス × {base, rank}
+## enemy_class_stats.json: 敵固有クラス × ステータス × {base, rank}（leadership/obedience なし）
+## attribute_stats.json:   sex/age/build × ステータス + random_max（味方・敵で共用）
+var _class_stats_data:        Dictionary = {}  ## class_stats.json（キー順保持）
+var _enemy_class_stats_data:  Dictionary = {}  ## enemy_class_stats.json（キー順保持）
+var _attr_stats_data:         Dictionary = {}  ## attribute_stats.json（キー順保持）
+var _class_stats_dirty:       bool = false
+var _enemy_class_stats_dirty: bool = false
+var _attr_stats_dirty:        bool = false
 ## ウィジェット参照
-## class_stats: key = "class_id|stat|base" or "class_id|stat|rank"
+## 味方・敵で共用。キーは "{source}|{class_id}|{stat}|{sub_key}"（source ∈ {"ally", "enemy"}）
 var _class_stats_cell_widgets: Dictionary = {}
 var _class_stats_cell_styles:  Dictionary = {}
 ## attribute_stats: key = "category|attr|stat" or "random_max|stat"
@@ -421,7 +425,7 @@ func _build_ui() -> void:
 	_status_lbl.add_theme_font_size_override("font_size", 12)
 	outer.add_child(_status_lbl)
 
-	# トップレベルタブ（定数 / 味方クラス / 敵 / ステータス / アイテム）
+	# トップレベルタブ（定数 / 味方クラス / 味方ステータス / 属性補正 / 敵一覧 / 敵クラス / 敵ステータス / アイテム）
 	_top_tab_container = TabContainer.new()
 	_top_tab_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_top_tab_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -429,9 +433,11 @@ func _build_ui() -> void:
 
 	_build_top_tab_constants(_top_tab_container)
 	_build_top_tab_ally_class(_top_tab_container)
-	_build_top_tab_enemy_class(_top_tab_container)
+	_build_top_tab_ally_stats(_top_tab_container)
+	_build_top_tab_attr_stats(_top_tab_container)
 	_build_top_tab_enemy_list(_top_tab_container)
-	_build_top_tab_stats(_top_tab_container)
+	_build_top_tab_enemy_class(_top_tab_container)
+	_build_top_tab_enemy_stats(_top_tab_container)
 	_build_top_tab_item(_top_tab_container)
 
 	# 初期状態のタブ名（● インジケータ）を一度更新
@@ -1602,33 +1608,68 @@ func _apply_enemy_indiv_edits(eid: String) -> Variant:
 	return out
 
 
-## 「ステータス」トップタブ：クラスステータス・属性補正のサブタブ
-func _build_top_tab_stats(parent: TabContainer) -> void:
-	var container := VBoxContainer.new()
-	container.name = TOP_TAB_STATS
-	container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	parent.add_child(container)
-	parent.set_tab_title(parent.get_tab_count() - 1, TOP_TAB_STATS)
-
+## 「味方ステータス」トップタブ：class_stats.json の編集（味方 7 クラス）
+## 味方系ブロックの一員としてタブ順 3 番目に配置
+func _build_top_tab_ally_stats(parent: TabContainer) -> void:
 	_load_stats_files()
+	_build_class_stats_tab(parent, TOP_TAB_ALLY_STATS, "ally",
+		_class_stats_data, CLASS_IDS)
 
-	var sub_tc := TabContainer.new()
-	sub_tc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sub_tc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	container.add_child(sub_tc)
 
-	_build_class_stats_sub_tab(sub_tc)
-	_build_attr_stats_sub_tab(sub_tc)
+## 「属性補正」トップタブ：attribute_stats.json の編集（味方・敵で共用）
+func _build_top_tab_attr_stats(parent: TabContainer) -> void:
+	_load_stats_files()
+	var root := VBoxContainer.new()
+	root.name = TOP_TAB_ATTR_STATS
+	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(root)
+	parent.set_tab_title(parent.get_tab_count() - 1, TOP_TAB_ATTR_STATS)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(scroll)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	scroll.add_child(vbox)
+
+	if _attr_stats_data.is_empty():
+		var err := Label.new()
+		err.text = "attribute_stats.json が読み込めませんでした。"
+		err.add_theme_color_override("font_color", Color(1.0, 0.5, 0.5))
+		vbox.add_child(err)
+		return
+
+	# 属性補正テーブル
+	_build_attr_group_separator(vbox, "属性補正")
+	_build_attr_table(vbox)
+
+	# random_max テーブル
+	_build_attr_group_separator(vbox, "random_max（乱数上限）")
+	_build_random_max_table(vbox)
+
+
+## 「敵ステータス」トップタブ：enemy_class_stats.json の編集（敵固有 5 クラス）
+## leadership / obedience は敵クラス定義にないため表示されない（仕様どおり）
+func _build_top_tab_enemy_stats(parent: TabContainer) -> void:
+	_load_stats_files()
+	_build_class_stats_tab(parent, TOP_TAB_ENEMY_STATS, "enemy",
+		_enemy_class_stats_data, ENEMY_CLASS_IDS)
 
 
 ## ステータス系 JSON をすべて読み込む
+## 3 つの builder から呼ばれるため、2 回目以降は再読込して dirty フラグもリセットする
 func _load_stats_files() -> void:
 	var cs: Variant = _read_json_file(STATS_CLASS_PATH)
 	_class_stats_data = cs as Dictionary if cs is Dictionary else {}
+	var ec: Variant = _read_json_file(STATS_ENEMY_CLASS_PATH)
+	_enemy_class_stats_data = ec as Dictionary if ec is Dictionary else {}
 	var ats: Variant = _read_json_file(STATS_ATTR_PATH)
 	_attr_stats_data = ats as Dictionary if ats is Dictionary else {}
 	_class_stats_dirty = false
+	_enemy_class_stats_dirty = false
 	_attr_stats_dirty = false
 
 
@@ -1651,17 +1692,22 @@ func _read_json_file(path: String) -> Variant:
 
 
 # ----------------------------------------------------------------------------
-# サブタブ：クラスステータス（class_stats.json）
+# クラスステータス（class_stats.json / enemy_class_stats.json 共用）
+# source_id ∈ {"ally", "enemy"} で味方・敵を切り替える
 # ----------------------------------------------------------------------------
 
-## class_stats.json 編集用グリッド（列=クラス、行=ステータス、各セルに base/rank の 2 LineEdit）
-func _build_class_stats_sub_tab(parent: TabContainer) -> void:
+## クラスステータス編集グリッドを 1 つのトップレベルタブとして構築
+## 列 = クラス、行 = ステータス、各セル = base/rank の 2 LineEdit 横並び
+## 行順（ステータスキー）は先頭クラスが持つキーを採用する（enemy は leadership/obedience を
+## 持たないため自然に表示対象外になる）
+func _build_class_stats_tab(parent: TabContainer, tab_name: String, source_id: String,
+		data: Dictionary, class_ids: Array[String]) -> void:
 	var root := VBoxContainer.new()
-	root.name = STATS_SUB_TABS[0]
+	root.name = tab_name
 	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	parent.add_child(root)
-	parent.set_tab_title(parent.get_tab_count() - 1, STATS_SUB_TABS[0])
+	parent.set_tab_title(parent.get_tab_count() - 1, tab_name)
 
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1672,23 +1718,23 @@ func _build_class_stats_sub_tab(parent: TabContainer) -> void:
 	grid.add_theme_constant_override("separation", 2)
 	scroll.add_child(grid)
 
-	if _class_stats_data.is_empty():
+	if data.is_empty():
 		var err := Label.new()
-		err.text = "class_stats.json が読み込めませんでした。"
+		err.text = "ステータス JSON が読み込めませんでした（source=%s）。" % source_id
 		err.add_theme_color_override("font_color", Color(1.0, 0.5, 0.5))
 		grid.add_child(err)
 		return
 
-	# 画面上のクラス順は CLASS_IDS を使う。JSON に存在するクラスのみ表示
+	# 表示対象クラス順は引数 class_ids をそのまま使う（JSON に存在するもののみ）
 	var display_classes: Array[String] = []
-	for cid: String in CLASS_IDS:
-		if _class_stats_data.has(cid):
+	for cid: String in class_ids:
+		if data.has(cid):
 			display_classes.append(cid)
 
 	# 先頭クラスのステータスキー順を行順として使う
 	var stat_keys: Array[String] = []
 	if not display_classes.is_empty():
-		var first := _class_stats_data[display_classes[0]] as Dictionary
+		var first := data[display_classes[0]] as Dictionary
 		for raw_k: Variant in first.keys():
 			stat_keys.append(raw_k as String)
 
@@ -1697,7 +1743,7 @@ func _build_class_stats_sub_tab(parent: TabContainer) -> void:
 
 	# 各ステータス行
 	for stat: String in stat_keys:
-		_build_class_stats_row(grid, stat, display_classes)
+		_build_class_stats_row(grid, source_id, data, stat, display_classes)
 
 
 func _build_class_stats_header(parent: VBoxContainer, classes: Array[String]) -> void:
@@ -1743,7 +1789,8 @@ func _build_class_stats_header(parent: VBoxContainer, classes: Array[String]) ->
 		pair.add_child(rl)
 
 
-func _build_class_stats_row(parent: VBoxContainer, stat: String, classes: Array[String]) -> void:
+func _build_class_stats_row(parent: VBoxContainer, source_id: String, data: Dictionary,
+		stat: String, classes: Array[String]) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
 	parent.add_child(row)
@@ -1755,7 +1802,7 @@ func _build_class_stats_row(parent: VBoxContainer, stat: String, classes: Array[
 	row.add_child(name_lbl)
 
 	for cid: String in classes:
-		var class_entry := _class_stats_data[cid] as Dictionary
+		var class_entry := data[cid] as Dictionary
 		var has_stat := class_entry.has(stat)
 		var pair := HBoxContainer.new()
 		pair.custom_minimum_size = Vector2(STAT_CELL_W, 0)
@@ -1774,12 +1821,12 @@ func _build_class_stats_row(parent: VBoxContainer, stat: String, classes: Array[
 			pair.add_child(dash2)
 			continue
 		var entry := class_entry[stat] as Dictionary
-		_add_class_stats_cell(pair, cid, stat, "base", entry.get("base", 0))
-		_add_class_stats_cell(pair, cid, stat, "rank", entry.get("rank", 0))
+		_add_class_stats_cell(pair, source_id, cid, stat, "base", entry.get("base", 0))
+		_add_class_stats_cell(pair, source_id, cid, stat, "rank", entry.get("rank", 0))
 
 
-func _add_class_stats_cell(parent: HBoxContainer, class_id: String, stat: String,
-		sub_key: String, value: Variant) -> void:
+func _add_class_stats_cell(parent: HBoxContainer, source_id: String, class_id: String,
+		stat: String, sub_key: String, value: Variant) -> void:
 	var cell := LineEdit.new()
 	cell.text = _stringify_class_value(value)
 	cell.custom_minimum_size = Vector2(STAT_SUBCELL_W, 0)
@@ -1788,84 +1835,64 @@ func _add_class_stats_cell(parent: HBoxContainer, class_id: String, stat: String
 	cell.add_theme_stylebox_override("normal", sb)
 	cell.add_theme_stylebox_override("focus", sb)
 	parent.add_child(cell)
-	var key := "%s|%s|%s" % [class_id, stat, sub_key]
+	var key := "%s|%s|%s|%s" % [source_id, class_id, stat, sub_key]
 	_class_stats_cell_widgets[key] = cell
 	_class_stats_cell_styles[key] = sb
-	cell.text_changed.connect(_on_class_stats_cell_changed.bind(class_id, stat, sub_key))
+	cell.text_changed.connect(_on_class_stats_cell_changed.bind(source_id, class_id, stat, sub_key))
 
 
-func _on_class_stats_cell_changed(new_text: String, class_id: String, stat: String, sub_key: String) -> void:
-	var key := "%s|%s|%s" % [class_id, stat, sub_key]
+func _on_class_stats_cell_changed(new_text: String, source_id: String, class_id: String,
+		stat: String, sub_key: String) -> void:
+	var key := "%s|%s|%s|%s" % [source_id, class_id, stat, sub_key]
 	var sb := _class_stats_cell_styles.get(key) as StyleBoxFlat
 	if sb == null:
 		return
-	var orig := _class_stats_orig_text(class_id, stat, sub_key)
+	var orig := _class_stats_orig_text(source_id, class_id, stat, sub_key)
 	var changed := new_text != orig
 	sb.bg_color = HIGHLIGHT_BG_COLOR if changed else Color(0.12, 0.12, 0.16)
-	_class_stats_dirty = _class_stats_has_any_diff()
+	var any_diff := _class_stats_has_any_diff(source_id)
+	if source_id == "enemy":
+		_enemy_class_stats_dirty = any_diff
+	else:
+		_class_stats_dirty = any_diff
 
 
-func _class_stats_orig_text(class_id: String, stat: String, sub_key: String) -> String:
-	if not _class_stats_data.has(class_id):
+## source_id に対応する元データを返す（"ally" → class_stats, "enemy" → enemy_class_stats）
+func _class_stats_data_for(source_id: String) -> Dictionary:
+	if source_id == "enemy":
+		return _enemy_class_stats_data
+	return _class_stats_data
+
+
+func _class_stats_orig_text(source_id: String, class_id: String, stat: String, sub_key: String) -> String:
+	var data := _class_stats_data_for(source_id)
+	if not data.has(class_id):
 		return ""
-	var class_entry := _class_stats_data[class_id] as Dictionary
+	var class_entry := data[class_id] as Dictionary
 	if not class_entry.has(stat):
 		return ""
 	var entry := class_entry[stat] as Dictionary
 	return _stringify_class_value(entry.get(sub_key, 0))
 
 
-func _class_stats_has_any_diff() -> bool:
+func _class_stats_has_any_diff(source_id: String) -> bool:
 	for raw_key: Variant in _class_stats_cell_widgets.keys():
 		var wk := raw_key as String
+		var parts := wk.split("|")
+		if parts.size() != 4 or parts[0] != source_id:
+			continue
 		var cell := _class_stats_cell_widgets[wk] as LineEdit
 		if cell == null:
 			continue
-		var parts := wk.split("|")
-		if parts.size() != 3:
-			continue
-		var orig := _class_stats_orig_text(parts[0], parts[1], parts[2])
+		var orig := _class_stats_orig_text(parts[0], parts[1], parts[2], parts[3])
 		if cell.text != orig:
 			return true
 	return false
 
 
 # ----------------------------------------------------------------------------
-# サブタブ：属性補正（attribute_stats.json）
+# 属性補正（attribute_stats.json）— トップタブ「属性補正」から呼ばれる補助関数群
 # ----------------------------------------------------------------------------
-
-func _build_attr_stats_sub_tab(parent: TabContainer) -> void:
-	var root := VBoxContainer.new()
-	root.name = STATS_SUB_TABS[1]
-	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	parent.add_child(root)
-	parent.set_tab_title(parent.get_tab_count() - 1, STATS_SUB_TABS[1])
-
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_child(scroll)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 10)
-	scroll.add_child(vbox)
-
-	if _attr_stats_data.is_empty():
-		var err := Label.new()
-		err.text = "attribute_stats.json が読み込めませんでした。"
-		err.add_theme_color_override("font_color", Color(1.0, 0.5, 0.5))
-		vbox.add_child(err)
-		return
-
-	# 属性補正テーブル
-	_build_attr_group_separator(vbox, "属性補正")
-	_build_attr_table(vbox)
-
-	# random_max テーブル
-	_build_attr_group_separator(vbox, "random_max（乱数上限）")
-	_build_random_max_table(vbox)
-
 
 func _build_attr_group_separator(parent: VBoxContainer, title: String) -> void:
 	var panel := PanelContainer.new()
@@ -2089,13 +2116,13 @@ func _make_cell_style() -> StyleBoxFlat:
 # ステータス系ファイル保存
 # ----------------------------------------------------------------------------
 
-## class_stats.json + attribute_stats.json をまとめて保存
+## ステータス系 JSON をまとめて保存（味方クラス / 敵クラス / 属性補正 それぞれ dirty 時のみ）
 ## 戻り値：{"saved": Array[String], "errors": Array[String]}
 func _save_stats_files() -> Dictionary:
 	var result := {"saved": [], "errors": []}
-	# class_stats
+	# class_stats.json（味方）
 	if _class_stats_dirty:
-		var new_cs: Variant = _apply_class_stats_edits(_class_stats_data)
+		var new_cs: Variant = _apply_class_stats_edits(_class_stats_data, "ally")
 		if new_cs == null:
 			(result["errors"] as Array).append("class_stats.json: 型変換失敗")
 		else:
@@ -2108,9 +2135,26 @@ func _save_stats_files() -> Dictionary:
 				f.close()
 				_class_stats_data = new_cs as Dictionary
 				_class_stats_dirty = false
-				_clear_cell_styles(_class_stats_cell_styles)
+				_clear_class_stats_styles_for("ally")
 				(result["saved"] as Array).append("class_stats.json")
-	# attribute_stats
+	# enemy_class_stats.json（敵）
+	if _enemy_class_stats_dirty:
+		var new_ec: Variant = _apply_class_stats_edits(_enemy_class_stats_data, "enemy")
+		if new_ec == null:
+			(result["errors"] as Array).append("enemy_class_stats.json: 型変換失敗")
+		else:
+			var f := FileAccess.open(STATS_ENEMY_CLASS_PATH, FileAccess.WRITE)
+			if f == null:
+				(result["errors"] as Array).append(
+					"enemy_class_stats.json: 書き込み失敗 err=%d" % FileAccess.get_open_error())
+			else:
+				f.store_string(JSON.stringify(new_ec, "  ", false))
+				f.close()
+				_enemy_class_stats_data = new_ec as Dictionary
+				_enemy_class_stats_dirty = false
+				_clear_class_stats_styles_for("enemy")
+				(result["saved"] as Array).append("enemy_class_stats.json")
+	# attribute_stats.json（味方・敵共用）
 	if _attr_stats_dirty:
 		var new_at: Variant = _apply_attr_stats_edits(_attr_stats_data)
 		if new_at == null:
@@ -2138,18 +2182,32 @@ func _clear_cell_styles(styles: Dictionary) -> void:
 			sb.bg_color = Color(0.12, 0.12, 0.16)
 
 
-## class_stats を編集値で書き換えて新 Dictionary を返す（元のキー順・ネスト構造を保持）
+## _class_stats_cell_styles のうち指定 source_id のセルのみハイライト解除
+## （味方保存時に敵のハイライトを消さない／その逆を防ぐ）
+func _clear_class_stats_styles_for(source_id: String) -> void:
+	var prefix := source_id + "|"
+	for raw_key: Variant in _class_stats_cell_styles.keys():
+		var wk := raw_key as String
+		if not wk.begins_with(prefix):
+			continue
+		var sb := _class_stats_cell_styles[wk] as StyleBoxFlat
+		if sb != null:
+			sb.bg_color = Color(0.12, 0.12, 0.16)
+
+
+## class_stats 系（味方 or 敵）を編集値で書き換えて新 Dictionary を返す
+## 元のキー順・ネスト構造を保持。source_id で味方 / 敵のどちらのセルを処理するかを切り替え
 ## 型変換失敗時は null を返す
-func _apply_class_stats_edits(orig: Dictionary) -> Variant:
+func _apply_class_stats_edits(orig: Dictionary, source_id: String) -> Variant:
 	var out := orig.duplicate(true) as Dictionary
 	for raw_key: Variant in _class_stats_cell_widgets.keys():
 		var wk := raw_key as String
 		var parts := wk.split("|")
-		if parts.size() != 3:
+		if parts.size() != 4 or parts[0] != source_id:
 			continue
-		var cid: String = parts[0]
-		var stat: String = parts[1]
-		var sub_key: String = parts[2]
+		var cid: String = parts[1]
+		var stat: String = parts[2]
+		var sub_key: String = parts[3]
 		var cell := _class_stats_cell_widgets[wk] as LineEdit
 		if cell == null:
 			continue
@@ -2163,8 +2221,8 @@ func _apply_class_stats_edits(orig: Dictionary) -> Variant:
 			continue
 		var coerced := _coerce_class_value(cell.text, entry[sub_key])
 		if not bool(coerced.get("ok", false)):
-			push_warning("[ConfigEditor] class_stats %s.%s.%s 型変換失敗: '%s'" \
-				% [cid, stat, sub_key, cell.text])
+			push_warning("[ConfigEditor] %s class_stats %s.%s.%s 型変換失敗: '%s'" \
+				% [source_id, cid, stat, sub_key, cell.text])
 			return null
 		entry[sub_key] = coerced["value"]
 	return out
@@ -2856,10 +2914,12 @@ func _on_top_tab_changed(_idx: int) -> void:
 	var is_ally := top == TOP_TAB_ALLY_CLASS
 	var is_enemy_class := top == TOP_TAB_ENEMY_CLASS
 	var is_enemy_list := top == TOP_TAB_ENEMY_LIST
-	var is_stats := top == TOP_TAB_STATS
+	var is_ally_stats := top == TOP_TAB_ALLY_STATS
+	var is_attr_stats := top == TOP_TAB_ATTR_STATS
+	var is_enemy_stats := top == TOP_TAB_ENEMY_STATS
 	var is_item := top == TOP_TAB_ITEM
 	_btn_save.disabled = not (is_constants or is_ally or is_enemy_class \
-		or is_enemy_list or is_stats or is_item)
+		or is_enemy_list or is_ally_stats or is_attr_stats or is_enemy_stats or is_item)
 	# リセット / デフォルト化は定数タブ専用機能だが、どのタブからでも押せるようにする
 	# （ボタンを見て「押せる」と認識できる状態にしておく方が UX として分かりやすい）
 	_btn_reset.disabled = false
@@ -2887,7 +2947,8 @@ func _on_save_pressed() -> void:
 					_set_status("保存しました: %s" % ", ".join(saved), Color(0.55, 1.0, 0.55))
 			else:
 				_set_status("エラー: %s" % " / ".join(errors), Color(1.0, 0.5, 0.5))
-		TOP_TAB_STATS:
+		TOP_TAB_ALLY_STATS, TOP_TAB_ATTR_STATS, TOP_TAB_ENEMY_STATS:
+			# _save_stats_files が 3 つのステータス JSON を dirty 時のみまとめて書き戻す
 			var result := _save_stats_files()
 			var saved: Array = result.get("saved", [])
 			var errors: Array = result.get("errors", [])
@@ -2938,7 +2999,8 @@ func _on_reset_pressed() -> void:
 			dialog_text = "すべての定数をデフォルト値に戻します。よろしいですか？\n（UI 上の値のみ変更・保存は別途「保存」ボタンで）"
 		TOP_TAB_ENEMY_LIST:
 			dialog_text = "敵一覧の未保存の変更を破棄して JSON から再読込します。よろしいですか？"
-		TOP_TAB_ALLY_CLASS, TOP_TAB_ENEMY_CLASS, TOP_TAB_STATS:
+		TOP_TAB_ALLY_CLASS, TOP_TAB_ENEMY_CLASS, \
+		TOP_TAB_ALLY_STATS, TOP_TAB_ATTR_STATS, TOP_TAB_ENEMY_STATS:
 			_set_status("このタブのリセットは未実装です", Color(0.8, 0.8, 0.6))
 			return
 		_:
@@ -2992,7 +3054,7 @@ func _on_commit_pressed() -> void:
 			dialog_text = "敵クラス JSON の現在値を「デフォルト」としてディスクに書き込みます。\n（他タブと異なり専用のデフォルトファイルはないため、通常の保存と同じ動作です）"
 		TOP_TAB_ENEMY_LIST:
 			dialog_text = "敵一覧 JSON の現在値を「デフォルト」としてディスクに書き込みます。\n（他タブと異なり専用のデフォルトファイルはないため、通常の保存と同じ動作です）"
-		TOP_TAB_STATS:
+		TOP_TAB_ALLY_STATS, TOP_TAB_ATTR_STATS, TOP_TAB_ENEMY_STATS:
 			dialog_text = "ステータス JSON の現在値を「デフォルト」としてディスクに書き込みます。\n（他タブと異なり専用のデフォルトファイルはないため、通常の保存と同じ動作です）"
 		_:
 			_set_status("このタブでは「現在値をすべてデフォルト化」は使えません",
@@ -3028,7 +3090,7 @@ func _on_commit_confirmed(dlg: ConfirmationDialog) -> void:
 		TOP_TAB_ENEMY_LIST:
 			var result: Dictionary = _save_enemy_list_tab()
 			_report_commit_save_result(result)
-		TOP_TAB_STATS:
+		TOP_TAB_ALLY_STATS, TOP_TAB_ATTR_STATS, TOP_TAB_ENEMY_STATS:
 			var result: Dictionary = _save_stats_files()
 			_report_commit_save_result(result)
 		_:

@@ -112,7 +112,8 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	data.block_right_front       = stats.get("block_right_front", 0) as int
 	data.block_left_front        = stats.get("block_left_front",  0) as int
 	data.block_front             = stats.get("block_front",       0) as int
-	data.move_speed              = _convert_move_speed(stats.move_speed)
+	# move_speed は 0-100 スコアで直接格納（Character.get_move_duration() が逆比例式で実効値を算出）
+	data.move_speed              = float(stats.move_speed)
 	data.leadership              = stats.leadership
 	data.obedience               = clampf(float(stats.obedience) / 100.0, 0.0, 1.0)
 	data.is_flying          = bool(class_json.get("is_flying",  false))
@@ -261,7 +262,8 @@ static func apply_enemy_stats(data: CharacterData) -> void:
 	data.block_left_front    = mini(100, stats.get("block_left_front",  0) as int)
 	data.block_front         = mini(100, stats.get("block_front",       0) as int)
 	if stats.has("move_speed"):
-		data.move_speed = _convert_move_speed(stats.move_speed)
+		# 0-100 スコアで直接格納（Character.get_move_duration() が逆比例式で実効値を算出）
+		data.move_speed = float(stats.move_speed)
 
 	# クラス JSON（assets/master/classes/{stat_type}.json）を読み込んで
 	# attack_type / attack_range / slots.Z/V 由来の pre/post_delay 等を上書きする。
@@ -506,10 +508,3 @@ static func _slot_cost(slot_dict: Dictionary) -> int:
 	var mp_c: int = int(slot_dict.get("mp_cost", 0))
 	var sp_c: int = int(slot_dict.get("sp_cost", 0))
 	return maxi(mp_c, sp_c)
-
-
-## move_speed スコア（0-100）を秒/タイルに変換する
-## score=0 → 0.80s（最遅）、score=100 → 0.20s（最速）
-## 変換式: seconds = 0.8 - score × 0.006（要調整）
-static func _convert_move_speed(score: int) -> float:
-	return maxf(0.1, 0.8 - float(score) * 0.006)
