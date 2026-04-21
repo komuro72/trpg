@@ -499,6 +499,9 @@ func _start_action(action: Dictionary) -> void:
 			# 表示ラベルと生成経路のみ区別する。将来はそれぞれ独自の経路探索ロジックに差別化予定。
 			# 2026-04-21 ステップ 3：味方側の新ロジックは _target null でも動作する（脅威コストは全対立陣営を自動集計）
 			# 敵側レガシー実装は _target 必須・null なら現在位置を返すため、結果として _complete_action 経由で完了する
+			# freed オブジェクトはガード：GDScript の typed Character 引数に freed を渡すと型不一致エラー
+			if _target != null and not is_instance_valid(_target):
+				_target = null
 			var goal := _find_flee_goal(_target)
 			if goal == _member.grid_pos:
 				_complete_action()
@@ -620,16 +623,20 @@ func _start_action(action: Dictionary) -> void:
 ## 目標に向かって1タイル進む。移動継続中なら true、到達またはスタックなら false
 func _step_toward_goal() -> bool:
 	var action_type := _current_action.get("action", "") as String
+	# freed オブジェクトはガード：typed Character 引数に freed を渡すと型不一致エラー
+	if _target != null and not is_instance_valid(_target):
+		_target = null
 	if action_type == "move_to_formation":
 		_goal = _formation_move_goal()
 	elif action_type == "move_to_explore":
 		pass  # goal は _start_action で固定済み（リアルタイム更新しない）
-	elif _target != null and is_instance_valid(_target):
-		if action_type == "move_to_attack":
+	elif action_type == "move_to_attack":
+		if _target != null and is_instance_valid(_target):
 			_goal = _calc_attack_goal(_target, _get_path_method())
-		elif action_type == "flee" or action_type == "fall_back" or action_type == "keep_distance":
-			# flee / fall_back / keep_distance は全て「脅威から離れる」移動（当面同じ実装）
-			_goal = _find_flee_goal(_target)
+	elif action_type == "flee" or action_type == "fall_back" or action_type == "keep_distance":
+		# flee / fall_back / keep_distance は全て「脅威から離れる」移動（当面同じ実装）
+		# 新ロジック（味方）は _target null でも動作する（脅威コストは全対立陣営を自動集計）
+		_goal = _find_flee_goal(_target)
 
 	if _member.grid_pos == _goal:
 		return false
