@@ -21,7 +21,7 @@ GlobalConstants="*res://scripts/global_constants.gd"
 SoundManager="*res://scripts/sound_manager.gd"
 MessageLog="*res://scripts/message_log.gd"
 SaveManager="*res://scripts/save_manager.gd"
-Logger="*res://scripts/logger.gd"
+DebugLog="*res://scripts/logger.gd"
 
 [display]
 

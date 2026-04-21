@@ -17,7 +17,7 @@
 本日は「PartyStatusWindow（F1 で開くデバッグウィンドウ）の表示改善」を中心に、関連する調査・設計統一・dead code 整理を大量に実施。
 
 1. **DebugWindow の上下分離**：旧 DebugWindow を F1=`PartyStatusWindow`（パーティー状態）・F2=`CombatLogWindow`（combat/ai ログ）の 2 つの独立ウィンドウに分離。相互排他トグル・各 85%×85% サイズ・layer=15 完全透過
-2. **デバッグ用ロガー Logger Autoload を新設**：`Logger.log(message)` 1 関数。コンソール + `res://logs/runtime.log`（毎起動リセット・flush 付き）の 2 系統に出力。旧 F2「デバッグ情報コンソール出力（`user://debug_floor_info.txt`）」は**機能ごと廃止**
+2. **デバッグ用ロガー DebugLog Autoload を新設**：`DebugLog.log(message)` 1 関数。コンソール + `res://logs/runtime.log`（毎起動リセット・flush 付き）の 2 系統に出力。旧 F2「デバッグ情報コンソール出力（`user://debug_floor_info.txt`）」は**機能ごと廃止**（当初 Autoload 名 `Logger` で実装したが、Godot 4.6 組込 `Logger` クラスとの衝突を避けるため `DebugLog` にリネーム）
 3. **PartyStatusWindow の表示拡充**（複数セッションに跨る大規模改訂）
    - F3 詳細度トグル（高のみ → 高+中 → 高+中+低 の 3 段階循環・セッション内のみ保持）
    - 旧 F3「無敵モード」を F6 に移動
@@ -597,7 +597,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 
 #### 共通
 - MessageWindow には combat/ai メッセージは流れない（system/battle のみ表示）
-- 旧「デバッグ情報コンソール出力（F2 → user://debug_floor_info.txt 書き出し）」は 2026-04-21 に機能ごと廃止した。代替は Logger Autoload（「デバッグ用ロガー（Logger）」節参照）。必要になれば Logger 経由で再実装する
+- 旧「デバッグ情報コンソール出力（F2 → user://debug_floor_info.txt 書き出し）」は 2026-04-21 に機能ごと廃止した。代替は DebugLog Autoload（「デバッグ用ロガー（DebugLog）」節参照）。必要になれば DebugLog 経由で再実装する
 
 #### F7 スナップショット（2026-04-21 追加・PartyStatusWindow と独立）
 現在の全パーティー状態を `res://logs/runtime.log` に一括ダンプするデバッグ補助機能。バランス調整・戦略切替の時系列記録・FLEE 発動の追跡などに使う。静止画スクリーンショットより情報密度の高い「状態スナップショット」を残すための機能。
@@ -606,7 +606,7 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 - **ウィンドウ独立**：PartyStatusWindow の表示・非表示に関わらず動作（F1 閉じていても F7 だけで取得可能）
 - **詳細度は常に最大**：F3 で画面が「高のみ」になっていても、ログには「高+中+低」相当の全情報を出力する（画面の `_detail_level` には影響しない・終了時に復元）
 - **ConfigEditor（F4）開時は無効**：誤動作防止
-- **出力先**：`Logger.log()` 経由で `res://logs/runtime.log` に追記（1 回の呼び出しで多行文字列として渡す・先頭行のみ Logger の `[HH:MM:SS.mmm]` プレフィックスが付く）
+- **出力先**：`DebugLog.log()` 経由で `res://logs/runtime.log` に追記（1 回の呼び出しで多行文字列として渡す・先頭行のみ DebugLog の `[HH:MM:SS.mmm]` プレフィックスが付く）
 - **出力内容**：
   - 区切り線 + ヘッダー部（時刻・フロア・操作キャラ・ゲーム速度）
   - プレイヤーパーティー → NPC パーティー → 敵パーティー（画面表示と同順序・同条件）
@@ -1126,12 +1126,12 @@ rank値: C=0, B=1, A=2, S=3
 - Claude Code：CLAUDE.mdの更新・仕様書（docs/spec.md）の更新・GDScriptの実装・コミット/プッシュを行う
 - 仕様相談はclaude.aiで行い、確定した仕様をもとに Claude Code が CLAUDE.md を更新してから実装する
 
-## デバッグ用ロガー（Logger）
-不具合調査のために Claude Code が一時的にログ出力を仕込むための仕組み。ゲームを実行 → ログファイルが書かれる → Claude Code がファイルを直接読んで解析する、という往復を想定する。問題解決後は Logger 呼び出しを削除する**使い捨て運用**（print デバッグと同じ感覚・ただし結果が残る）。
+## デバッグ用ロガー（DebugLog）
+不具合調査のために Claude Code が一時的にログ出力を仕込むための仕組み。ゲームを実行 → ログファイルが書かれる → Claude Code がファイルを直接読んで解析する、という往復を想定する。問題解決後は DebugLog 呼び出しを削除する**使い捨て運用**（print デバッグと同じ感覚・ただし結果が残る）。
 
 ### 実装
-- Autoload として登録（`scripts/logger.gd` / Autoload 名 `Logger`）
-- API は 1 関数で開始：`Logger.log(message: String)`。将来タグ・レベル分けが必要になったら段階的に拡張
+- Autoload として登録（`scripts/logger.gd` / Autoload 名 `DebugLog`）
+- API は 1 関数で開始：`DebugLog.log(message: String)`。将来タグ・レベル分けが必要になったら段階的に拡張
 - 出力フォーマット：`[HH:MM:SS.mmm] メッセージ`
 - 出力先（両方に出す）:
   1. Godot コンソール（`print`）
@@ -1140,15 +1140,18 @@ rank値: C=0, B=1, A=2, S=3
 - `logs/` フォルダが存在しなければ `DirAccess.make_dir_recursive_absolute()` で自動作成
 - `logs/` は `.gitignore` 済み（コミットしない）
 
+### Autoload 名についての注意
+当初は `Logger` という名前で Autoload を登録したが、Godot 4.6 には抽象クラス `Logger` が組み込まれており、`Logger.log(...)` の外部呼び出しが「`Static function "log()" not found in base GDScriptNativeClass`」エラーで失敗する問題があった。Autoload 名に `Logger` を使うと組み込みクラスと衝突して名前解決が壊れるため、`DebugLog` にリネームした。ファイル名は `logger.gd` のまま。
+
 ### 使用例
 ```gdscript
-Logger.log("player hp=%d pos=%s" % [hero.hp, str(hero.grid_pos)])
-Logger.log("stair enter floor=%d" % _current_floor_index)
+DebugLog.log("player hp=%d pos=%s" % [hero.hp, str(hero.grid_pos)])
+DebugLog.log("stair enter floor=%d" % _current_floor_index)
 ```
 
 ### Phase 14（Steam 配布）に向けた TODO
 `res://` への書き込みは**エディタ実行時のみ保証される**（Godot の仕様）。エクスポート後（Steam 配布ビルド）では `res://` は読み取り専用になるため、以下のいずれかの対応が必要：
-- リリースビルドでは Logger 自体を無効化（`OS.has_feature("editor")` 等で分岐）
+- リリースビルドでは DebugLog 自体を無効化（`OS.has_feature("editor")` 等で分岐）
 - 書き出し先を `user://` に切り替え
 
 Phase 14 着手時に決定する。それまでの開発中は `res://logs/` への書き出しで運用。

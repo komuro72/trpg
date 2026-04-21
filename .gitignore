@@ -26,6 +26,6 @@ work/
 # APIキー（絶対にコミットしない）
 api_key.txt
 
-# デバッグ用ログ（Logger Autoload の出力先。毎起動で上書きされる）
+# デバッグ用ログ（DebugLog Autoload の出力先。毎起動で上書きされる）
 logs/
 

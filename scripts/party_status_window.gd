@@ -45,7 +45,7 @@ var _detail_level: int = 0
 
 ## 変数名 → 優先度レベル（0=高 / 1=中 / 2=低）のマッピング（単一の真実源）
 ## 詳細度レベルと照合して表示有無を決める。新変数の追加・優先度変更はここだけ触る。
-## キー名は Logger / duck typing で参照するので `_` プレフィックスなし
+## キー名は duck typing（`ai.get("_xxx")` 等）で参照するので `_` プレフィックスなし
 const VAR_PRIORITY: Dictionary = {
 	# リーダー行（パーティー全体情報）
 	"reeval_timer":              1,  # 中：次の戦略再評価まで残秒
@@ -1149,7 +1149,7 @@ func _hp_status_label(hs: int) -> String:
 ## 切り替えてヘルパ群（`_build_*_parts` / `_format_*`）を呼び、終了時に復元する。
 ## 画面の詳細度設定（F3）には影響しない。
 ##
-## 出力は Logger.log() に 1 回の多行文字列として渡す（先頭行のみ Logger の
+## 出力は DebugLog.log() に 1 回の多行文字列として渡す（先頭行のみ DebugLog の
 ## `[HH:MM:SS.mmm]` タイムスタンプが付く）。
 func snapshot_to_log() -> void:
 	var saved_detail_level: int = _detail_level
@@ -1158,7 +1158,7 @@ func snapshot_to_log() -> void:
 	var text: String = _build_snapshot_text()
 
 	_detail_level = saved_detail_level
-	Logger.log(text)
+	DebugLog.log(text)
 
 
 ## スナップショット全体のテキストを組み立てる

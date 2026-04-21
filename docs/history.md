@@ -8,7 +8,7 @@
 本日は「PartyStatusWindow（F1 デバッグウィンドウ）の表示改善」を中心に、関連する調査・設計統一・dead code 削除を大量に実施。主要な変更は以下：
 
 - **DebugWindow の F1/F2 分離**：上下 2 つの独立ウィンドウへ（F1=PartyStatusWindow / F2=CombatLogWindow）
-- **Logger Autoload 新設**：`Logger.log()` 経由で `res://logs/runtime.log` に出力。旧 F2「デバッグ情報コンソール出力」機能は廃止
+- **DebugLog Autoload 新設**：`DebugLog.log()` 経由で `res://logs/runtime.log` に出力。旧 F2「デバッグ情報コンソール出力」機能は廃止（当初 Autoload 名 `Logger` で実装したが、Godot 4.6 組込 `Logger` クラスとの名前衝突で `Static function "log()" not found in base GDScriptNativeClass` エラーが出たため `DebugLog` にリネーム）
 - **PartyStatusWindow 詳細度トグル（F3）**：3 段階循環・横一列流しレイアウト・クラス名のメンバー行移動
 - **敵固有表示グループの新設**：動的判断（`種: sflee / nomp / lich:X`）・静的属性（`ignfle / undead / flying / immune / proj / chase / terr`）
 - **敵の指示体系表示を一掃**：リーダー行の仮想ヒント（`mv=/battle=/tgt=/hp=`）を `strategy=<ENUM>` に刷新、メンバー行の指示ライン（M/C/F/L/S/HP/E/I）を削除
@@ -72,7 +72,7 @@
 **実装**：
 
 - [`scripts/party_status_window.gd`](../scripts/party_status_window.gd) に `snapshot_to_log()` 新設
-- F7 押下時に現在の全パーティー状態を `res://logs/runtime.log` に一括ダンプ（Logger Autoload 経由）
+- F7 押下時に現在の全パーティー状態を `res://logs/runtime.log` に一括ダンプ（DebugLog Autoload 経由）
 - **詳細度は常に最大**：`_detail_level` を一時的に 2 に切り替えてヘルパー群を呼び、終了時に復元。画面の F3 設定には影響しない
 - **ウィンドウ独立**：PartyStatusWindow が閉じていても F7 単独で動作（`game_map.gd:_input` で F7 を受信）
 - **ConfigEditor（F4）開時は無効**：誤動作防止
@@ -121,21 +121,26 @@ PartyStatusWindow Snapshot
 - 既存機能維持：0.2 秒ごとの更新・MessageLog.debug_log_added シグナル・リーダー選択・カメラ追跡
 - F3 選択リセット・F2 切替時の `_restore_hero_floor_view()` 呼出しは PartyStatusWindow に紐付く
 
-### デバッグ用 Logger Autoload 新設
+### デバッグ用 DebugLog Autoload 新設
 
-`scripts/logger.gd`（`class_name Logger` / Autoload 名 `Logger`）を新設。デバッグ目的の一時的なログ出力を「コード編集 → 実行 → Claude Code がファイル直読」のフローに置き換える。
+`scripts/logger.gd`（Autoload 名 `DebugLog`）を新設。デバッグ目的の一時的なログ出力を「コード編集 → 実行 → Claude Code がファイル直読」のフローに置き換える。
 
-- API：`Logger.log(message: String)` 1 関数（将来タグ・レベル拡張の余地あり）
+- API：`DebugLog.log(message: String)` 1 関数（将来タグ・レベル拡張の余地あり）
 - フォーマット：`[HH:MM:SS.mmm] メッセージ`
 - 出力先 2 系統：Godot コンソール（`print`）+ `res://logs/runtime.log`（毎起動リセット・`FileAccess.WRITE`・書込ごとに `flush()`・`NOTIFICATION_WM_CLOSE_REQUEST` で明示クローズ）
 - `logs/` フォルダが無ければ `DirAccess.make_dir_recursive_absolute()` で自動作成
 - `.gitignore` に `logs/` を追加
 - Steam 配布時の TODO：`res://` はエクスポート後読み取り専用のため、Phase 14 でリリースビルド無効化 or `user://` 切替が必要
 
+**Autoload 名のリネーム（Logger → DebugLog）**：
+- 当初は `Logger` という名前で Autoload を登録したが、Godot 4.6 には抽象クラス `Logger` が組み込みで存在し、`Logger.log(...)` の外部呼び出しが「`Static function "log()" not found in base GDScriptNativeClass`」エラーで失敗する問題があった
+- 組込クラスと同名の Autoload は名前解決が壊れるため `DebugLog` にリネームした。ファイル名は `logger.gd` のまま
+- 発覚：F7 スナップショット機能実装時に外部から初めて呼び出したタイミングで検知
+
 **旧 F2 機能（`user://debug_floor_info.txt` 書き出し）の廃止**：
 - `game_map._print_debug_floor_info()` 関数（約 90 行）を物理削除
 - F2 キーバインドから外し、新規の F2 = CombatLogWindow トグルに割り当て
-- 代替は Logger Autoload（必要になれば Logger 経由で再実装）
+- 代替は DebugLog Autoload（必要になれば DebugLog 経由で再実装）
 
 ### PartyStatusWindow の表示拡充（F3 詳細度トグル・横一列化・クラス名移動）
 
