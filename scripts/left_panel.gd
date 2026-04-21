@@ -238,8 +238,8 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 		ord.get("combat",           "aggressive") as String, "積極攻撃") as String
 	var target_a: String = {"nearest": "最近傍", "weakest": "最弱", "same_as_leader": "リーダーと同じ"}.get(
 		ord.get("target",           "nearest")   as String, "最近傍") as String
-	var lowh_a: String   = {"keep_fighting": "戦い続ける", "retreat": "後退", "flee": "逃走"}.get(
-		ord.get("on_low_hp",        "retreat")   as String, "後退") as String
+	var lowh_a: String   = {"keep_fighting": "戦い続ける", "fall_back": "後退", "flee": "逃走"}.get(
+		ord.get("on_low_hp",        "fall_back")   as String, "後退") as String
 	var pickup_a: String = {"aggressive": "積極的に拾う", "passive": "近くのみ", "avoid": "拾わない"}.get(
 		ord.get("item_pickup",      "aggressive") as String, "積極的に拾う") as String
 	var ord_color := Color(0.55, 0.90, 0.65)

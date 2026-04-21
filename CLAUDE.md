@@ -51,6 +51,14 @@
     - **一時的な副作用**：NpcLeaderAI の CombatSituation.CRITICAL 時自動 FLEE が失われる（ステップ 2 で `battle_policy="retreat"` 自動書き換え方式で復活予定）
     - 設計原則を「パーティーシステムのアーキテクチャ」→「戦略システムの設計原則」として明文化
 12. **F7 PartyStatusWindow スナップショット機能**：現在の全パーティー状態を `res://logs/snapshot_<timestamp>.log` に個別ファイルとして書き出す（詳細度は常に最大・ウィンドウ非表示でも動作・ConfigEditor 開時は無効）。`runtime.log` には押下マーカー 1 行のみ記録し、瞬間の状態記録は独立ファイルとして履歴を蓄積。静止画スクリーンショットより情報密度の高いデバッグ記録として、戦略切替・FLEE 発動・戦力比変化などの時系列追跡に利用できる
+13. **個体アクション `flee` を 3 種に分離**：同じ `flee` アクションが「HP 低下逃走・パーティー撤退・種族カイティング」の 3 コンテキストで共用され PartyStatusWindow で区別できなかった問題を解消
+    - `keep_distance`（距離確保）：GoblinArcher / Salamander の射程維持カイティング
+    - `fall_back`（後退）：個別指示 `on_low_hp = "fall_back"` + HP 低下時の前線後退（新設）
+    - `flee`（逃走）：戦闘離脱用（`on_low_hp = "flee"` / `combat = "flee"` / 敵 `_party_strategy == FLEE`）
+    - `on_low_hp` の内部値 `"retreat"` → `"fall_back"` にリネーム（全体方針 `battle_policy = "retreat"` との内部名重複を解消・UI 表示「後退」は維持）
+    - 実行ロジックは当面 3 種とも同じ（`_find_flee_goal()` で脅威から離れる方向に移動）。差別化は後のタスク
+    - `_STRATEGY_FALL_BACK = 3` を UnitAI 内部戦略値として追加（PartyLeader.Strategy とは独立）
+    - 関連：[`docs/investigation_unit_ai_actions.md`](docs/investigation_unit_ai_actions.md)
 
 #### 2026-04-20（前日の成果）
 - **攻撃操作の 1 発 1 押下化**：TARGETING モードの時間停止仕様を再設計。Z/A 押下中は射程表示＋向き変更可、離した瞬間に攻撃発動の一本化モデルへ。4 つの内部ステート（`PRE_DELAY` / `PRE_DELAY_RELEASED` / `TARGETING` / `POST_DELAY`）で状態遷移を整理し、連打（素早く離す）とじっくり狙う（pre_delay 完了後の時間停止）の両立を実現。詳細は「攻撃フロー（一発一押下モデル）」節
@@ -228,6 +236,20 @@ Step 1-B（move_speed 有効化・MOVE_INTERVAL 廃止・ガード WEIGHT 導入
    - メリット：(1) 情報量の減少を避ける（メンバーが戦略 enum 自体を参照できる）、(2) 味方との対称性（味方は戦略を持たない・敵は戦略 enum を持つ）が明確になる
    - スコープ：`party_leader.gd:219` / `unit_ai.gd:2163` / `party_status_window.gd:868-870` 周辺
    - 背景：味方側 `_party_strategy` 廃止作業（2026-04-21）の対称作業として残された
+
+4. **味方クラスへの `keep_distance` 適用**（優先度：中）
+   - 現状：`keep_distance`（射程維持カイティング）は GoblinArcher / Salamander の敵種族専用
+   - 目標：味方の弓使い・魔法使い（攻撃魔法）クラスにも適用
+   - ATTACK 戦略中 + 敵接近時に自動発火させる形に拡張（種族 AI と同じ仕組みを共通化する方法を検討）
+   - 背景：後衛クラスの挙動を自然にするため・現状は後衛も前線に突っ込む
+
+5. **個体アクションの実行ロジック差別化**（優先度：中）
+   - 現状：`keep_distance` / `fall_back` / `flee` の実行ロジックは全て同じ（`_find_flee_goal()` で脅威から離れる）
+   - 目標：
+     - `keep_distance`：射程内を保つ（遠ざかりすぎない・attack_range を参照）
+     - `fall_back`：リーダー後方 or 射程外まで下がる（`_leader_ref` 参照）
+     - `flee`：安全な場所へ完全離脱（ステップ 3 で `flee_recommended_goal` 実装済みとなる予定）
+   - 背景：2026-04-21 にアクション名だけ分離したので、挙動も意味に合わせる
 
 #### 本日（2026-04-21）の調査で判明した残課題
 
@@ -849,14 +871,35 @@ PartyManager（パーティー管理。全パーティー種別で共通）
 
 ### UnitAI（個体行動層）
 - リーダーからの指示（`receive_order()`）で combat / on_low_hp / move / combat_situation 等を受け取る
-- `_determine_effective_action()` で行動を最終決定する（ATTACK/FLEE/WAIT 相当の int を算出）
+- `_determine_effective_action()` で行動を最終決定する（ATTACK=0 / FLEE=1 / WAIT=2 / FALL_BACK=3 相当の int を算出）
   - 判定優先順位: パーティー撤退 → 種族自己逃走 → 種族攻撃可否 → 個別低HP → 戦況SAFE判定 → combat 方針
 - 種族固有行動は以下のフックメソッドでオーバーライドする（旧 `_resolve_strategy()` を廃止）:
-  - `_should_ignore_flee() -> bool`: FLEE を無視する種族（dark_knight 等）が true を返す
+  - `_should_ignore_flee() -> bool`: FLEE / FALL_BACK を無視する種族（dark_knight 等）が true を返す
   - `_should_self_flee() -> bool`: 自己判断で逃走する種族（goblin 系: HP30%未満）が true を返す
   - `_can_attack() -> bool`: MP 不足等で攻撃不能な種族（mage 系）が false を返す
 - ステートマシン・A*経路探索・アクションキュー管理
 - 全パーティー種別で同じ UnitAI を使用する
+
+#### 個体アクションの分類（2026-04-21 3 種分離）
+
+UnitAI が生成・実行するキューアクションの意味論を分離し、PartyStatusWindow でのデバッグ性を向上させた。
+
+| アクション | 日本語表示 | 発火条件 | 生成元 | 発生キャラ |
+|---|---|---|---|---|
+| `keep_distance` | 距離確保 | 射程維持のための戦術的後退（戦闘継続） | 種族 AI の `_generate_queue` override（ATTACK 戦略中に敵接近） | GoblinArcher / Salamander |
+| `fall_back` | 後退 | 前線から下がる（戦闘継続・HP 低下時の選択肢） | 基底 `_generate_queue` の `strategy == _STRATEGY_FALL_BACK(3)` 分岐 | `on_low_hp = "fall_back"` 設定のメンバー（デフォルト・HP < `NEAR_DEATH_THRESHOLD` 時） |
+| `flee` | 逃走 | 戦闘から離脱する（パーティーから離れて安全な場所へ） | 基底 `_generate_queue` の `strategy == 1(FLEE)` 分岐（敵のみ）・味方は `move_to_explore` に変換 | `on_low_hp = "flee"` / `combat = "flee"` / 敵 `_party_strategy == FLEE` / ゴブリン系 HP < 30% 自己逃走 |
+
+- **実行ロジックは 2026-04-21 時点で 3 つとも同じ**（`_find_flee_goal()` で脅威から離れる方向に A* 移動）
+- PartyStatusWindow の表示ラベル（`get_debug_goal_str`）は**別々に出し分け**：「距離確保」「後退」「逃走」
+- 将来差別化予定（「要調査・要整理項目」の「個体アクションの実行ロジック差別化」参照）
+
+#### `on_low_hp` の内部値リネーム（2026-04-21）
+
+`on_low_hp` の選択肢「後退」の内部値を `"retreat"` → `"fall_back"` に変更。全体方針 `battle_policy = "retreat"`（撤退）との**内部名重複を解消**するため。UI 表示ラベル「後退」は変更なし。
+
+- 選択肢：`"keep_fighting"` / `"fall_back"`（旧 `"retreat"`）/ `"flee"`
+- デフォルト値：`"fall_back"`（`Character.current_order` / `Party.global_orders` / `UnitAI._on_low_hp` / `NpcLeaderAI` hint すべて更新済み）
 
 ### データの流れ
 

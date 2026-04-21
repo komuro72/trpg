@@ -395,7 +395,8 @@ const GLOBAL_MOVE:        Array[String] = ["follow", "same_room", "cluster", "ex
 ## 後方互換エイリアス（旧 GLOBAL_COMBAT → GLOBAL_MOVE）
 const GLOBAL_COMBAT:      Array[String] = ["follow", "same_room", "cluster", "explore", "standby"]
 const GLOBAL_TARGET:      Array[String] = ["nearest", "weakest", "same_as_leader", "support"]
-const GLOBAL_LOW_HP:      Array[String] = ["keep_fighting", "retreat", "flee"]
+## on_low_hp の選択肢（2026-04-21 リネーム：retreat → fall_back・全体方針 battle_policy="retreat" との重複解消）
+const GLOBAL_LOW_HP:      Array[String] = ["keep_fighting", "fall_back", "flee"]
 const GLOBAL_ITEM_PICKUP: Array[String] = ["aggressive", "passive", "avoid"]
 const GLOBAL_HP_POTION:   Array[String] = ["use", "never"]
 const GLOBAL_SP_MP_POTION: Array[String] = ["use", "never"]

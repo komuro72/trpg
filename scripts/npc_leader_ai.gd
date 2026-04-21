@@ -199,7 +199,7 @@ func _get_explore_move_policy() -> String:
 ## NPC パーティーの global_orders ヒントを返す（デバッグウィンドウ表示用）
 ## _global_orders が設定されていない場合は NPC デフォルト値＋探索モードを合成して返す
 ## NPC 固有差分:
-##   - デフォルト方針が「follow / same_as_leader / retreat / passive」（プレイヤー追従前提）
+##   - デフォルト方針が「follow / same_as_leader / fall_back / passive」（プレイヤー追従前提）
 ##   - sp_mp_potion キーを持つ（ベース版は持たない）
 ##   - 探索モード（敵未検知）時に階段移動中なら target_floor キーを追加（_get_target_floor 固有）
 ##
@@ -215,7 +215,7 @@ func get_global_orders_hint() -> Dictionary:
 			"move":          "follow",
 			"battle_policy": "attack",
 			"target":        "same_as_leader",
-			"on_low_hp":     "retreat",
+			"on_low_hp":     "fall_back",
 			"item_pickup":   "passive",
 			"hp_potion":     "use",
 			"sp_mp_potion":  "use",

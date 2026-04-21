@@ -118,13 +118,14 @@ var joined_to_player: bool = false
 ## battle_formation: surround=包囲 / front=前衛 / rear=後衛 / same_as_leader=リーダーと同じ
 ## combat:           aggressive=積極攻撃 / support=援護 / standby=待機
 ## target:           nearest=最近傍 / weakest=最弱 / same_as_leader=リーダーと同じ
-## on_low_hp:        keep_fighting=戦い続ける / retreat=後退 / flee=逃走
+## on_low_hp:        keep_fighting=戦い続ける / fall_back=後退 / flee=逃走
+##   2026-04-21 リネーム：retreat → fall_back（全体方針 battle_policy="retreat" との内部名重複を解消）
 var current_order: Dictionary = {
 	"move":             "follow",
 	"battle_formation": "surround",
 	"combat":           "attack",
 	"target":           "same_as_leader",
-	"on_low_hp":        "retreat",
+	"on_low_hp":        "fall_back",
 	"item_pickup":      "passive",
 	"special_skill":    "strong_enemy",
 	"heal":             "lowest_hp_first",

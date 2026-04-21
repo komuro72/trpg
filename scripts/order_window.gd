@@ -28,7 +28,7 @@ const GLOBAL_ROWS: Array = [
 	 "options": ["nearest", "weakest", "same_as_leader", "support"],
 	 "labels":  ["最近傍", "最弱優先", "リーダーと同じ", "援護"]},
 	{"key": "on_low_hp",    "label": "低HP時の行動",
-	 "options": ["keep_fighting", "retreat", "flee"],
+	 "options": ["keep_fighting", "fall_back", "flee"],
 	 "labels":  ["戦闘継続", "後退", "逃走"]},
 	{"key": "item_pickup",  "label": "アイテム取得",
 	 "options": ["aggressive", "passive", "avoid"],

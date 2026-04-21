@@ -10,6 +10,12 @@ enum PathMethod { DIRECT, ASTAR, ASTAR_FLANK }
 ## 後方互換用（PartyLeader.Strategy と int 値一致。_assign_orders 側で参照する値）
 enum Strategy   { ATTACK, FLEE, WAIT }
 
+## UnitAI 内部専用の戦略値（PartyLeader.Strategy にはマップしない・_determine_effective_action が返す）
+## `_STRATEGY_FALL_BACK` = 3：on_low_hp="fall_back" + HP 低下時の前線後退
+##   FLEE(1) と挙動は当面同じ（脅威から離れる移動）だが、意図が違うため別アクション名で分離する
+##   PartyLeader.Strategy.DEFEND(3) と int 値は偶然同じだが、UnitAI 内部限定のため衝突しない
+const _STRATEGY_FALL_BACK := 3
+
 ## 移動時間は character.get_move_duration() で取得する（Step 1-B〜）
 ## 実効値 = BASE_MOVE_DURATION × 50 / character_data.move_speed（ベース × 能力値補正）
 const WAIT_DURATION  := 3.0  ## wait アクションの待機時間・基準値（秒）
@@ -45,12 +51,12 @@ var _current_action: Dictionary = {}  ## 実行中アクション
 
 ## 行動決定用フィールド（receive_order で更新）
 var _combat:           String    = "attack"   ## 戦闘方針 (attack / defense / flee / standby)
-var _on_low_hp:        String    = "retreat"  ## 低HP時行動 (keep_fighting / retreat / flee)
+var _on_low_hp:        String    = "fall_back"  ## 低HP時行動 (keep_fighting / fall_back / flee)
 var _party_fleeing:    bool      = false      ## パーティーレベルの撤退指示（全員逃走）
 var _target:           Character
 var _reeval_timer:     float     = 0.0  ## フォールバック再評価タイマー（オーダーなし時）
 ## 後方互換: _strategy は _generate_queue の内部判断結果を保存（デバッグ・キュー補充判定用）
-var _strategy:         int       = 2  ## 0=ATTACK, 1=FLEE, 2=WAIT 相当
+var _strategy:         int       = 2  ## 0=ATTACK, 1=FLEE, 2=WAIT, 3=FALL_BACK 相当（_STRATEGY_FALL_BACK 参照）
 
 const _REEVAL_FALLBACK := 1.5  ## フォールバック再評価間隔（秒）
 
@@ -175,6 +181,10 @@ func get_debug_goal_str() -> String:
 			return "→帰還"
 		"flee":
 			return "逃走"
+		"fall_back":
+			return "後退"
+		"keep_distance":
+			return "距離確保"
 		"wait":
 			return "待機"
 		"attack":
@@ -234,7 +244,7 @@ func receive_order(order: Dictionary) -> void:
 	_special_skill     = order.get("special_skill", "strong_enemy") as String
 	_combat_situation  = order.get("combat_situation", {}) as Dictionary
 	_combat            = order.get("combat",       "attack") as String
-	_on_low_hp         = order.get("on_low_hp",    "retreat") as String
+	_on_low_hp         = order.get("on_low_hp",    "fall_back") as String
 	_party_fleeing     = order.get("party_fleeing", false) as bool
 
 	var raw_leader: Variant = order.get("leader", null)
@@ -469,7 +479,10 @@ func _start_action(action: Dictionary) -> void:
 			_state = _State.MOVING
 			_timer = 0.0  ## 最初の1歩は即時開始
 
-		"flee":
+		"flee", "fall_back", "keep_distance":
+			# 3 アクションとも当面は同じ実行ロジック（脅威から離れる方向への移動）
+			# flee=戦闘離脱 / fall_back=前線後退 / keep_distance=射程維持 と意味論的に分離し
+			# 表示ラベルと生成経路のみ区別する。将来はそれぞれ独自の経路探索ロジックに差別化予定。
 			if _target == null or not is_instance_valid(_target):
 				_complete_action()
 				return
@@ -601,7 +614,8 @@ func _step_toward_goal() -> bool:
 	elif _target != null and is_instance_valid(_target):
 		if action_type == "move_to_attack":
 			_goal = _calc_attack_goal(_target, _get_path_method())
-		elif action_type == "flee":
+		elif action_type == "flee" or action_type == "fall_back" or action_type == "keep_distance":
+			# flee / fall_back / keep_distance は全て「脅威から離れる」移動（当面同じ実装）
 			_goal = _find_flee_goal(_target)
 
 	if _member.grid_pos == _goal:
@@ -718,9 +732,9 @@ func _generate_queue(strategy: int, target: Character) -> Array:
 		if item_pos != Vector2i(-1, -1) and item_pos != _member.grid_pos:
 			return [{"action": "move_to_explore", "goal": item_pos}]
 
-	# --- 行動決定（strategy: 0=ATTACK, 1=FLEE, 2=WAIT） ---
+	# --- 行動決定（strategy: 0=ATTACK, 1=FLEE, 2=WAIT, 3=FALL_BACK） ---
 
-	# FLEE: 逃走
+	# FLEE: 戦闘離脱（on_low_hp=flee / combat=flee / 敵パーティー FLEE / 自己逃走種族）
 	if strategy == 1:
 		# 味方は撤退先（安全部屋 or 最寄りの上り階段）へ向かう
 		if _member.is_friendly:
@@ -734,6 +748,17 @@ func _generate_queue(strategy: int, target: Character) -> Array:
 		var q: Array = []
 		for _i: int in range(5):
 			q.append({"action": "flee"})
+		return q
+
+	# FALL_BACK: 前線後退（on_low_hp="fall_back" + HP 低下・戦闘継続の意図）
+	# 2026-04-21 新設：実行ロジックは当面 flee と同じ（脅威から離れる方向への移動）。
+	# 将来的に「射程外まで下がる」「リーダー後方に下がる」等へ差別化する予定。
+	if strategy == _STRATEGY_FALL_BACK:
+		if target == null or not is_instance_valid(target):
+			return [{"action": "wait"}]
+		var q: Array = []
+		for _i: int in range(5):
+			q.append({"action": "fall_back"})
 		return q
 
 	# ATTACK: 戦闘
@@ -2180,8 +2205,13 @@ func _determine_effective_action() -> int:
 			"flee":
 				if not _should_ignore_flee():
 					return 1  # FLEE
-			"retreat":
-				return 2  # WAIT（cluster 移動はリーダー側で move_policy に設定済み）
+			"fall_back":
+				# 2026-04-21：retreat を fall_back にリネームし、WAIT(2) → FALL_BACK(3) に変更
+				# fall_back アクションキューを _generate_queue 側で直接生成する
+				# 逃げない種族（DarkKnight / Zombie 等）は _should_ignore_flee() 経由で fall_back も無視
+				# （従来 retreat=WAIT の時も DarkKnight 系は cluster 移動で実質その場に留まる挙動だった）
+				if not _should_ignore_flee():
+					return _STRATEGY_FALL_BACK  # FALL_BACK
 
 	# 5. combat_situation が SAFE なら移動方針に従う（WAIT 相当）
 	if _is_combat_safe():

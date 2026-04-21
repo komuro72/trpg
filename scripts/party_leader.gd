@@ -254,7 +254,7 @@ func _assign_orders() -> void:
 
 		var order          := member.current_order
 		var combat         : String = order.get("combat",          "attack")
-		var on_low_hp      : String = order.get("on_low_hp",       "retreat")
+		var on_low_hp      : String = order.get("on_low_hp",       "fall_back")
 		var tgt_policy     : String = order.get("target",          "same_as_leader")
 		var battle_form    : String = order.get("battle_formation", "surround")
 
@@ -290,10 +290,10 @@ func _assign_orders() -> void:
 		elif _is_in_guard_room_mode():
 			move_policy = "guard_room"
 
-		# on_low_hp=retreat 時は cluster に上書き
-		if on_low_hp == "retreat" and member.max_hp > 0 \
-				and float(member.hp) / float(member.max_hp) < GlobalConstants.NEAR_DEATH_THRESHOLD:
-			move_policy = "cluster"
+		# 注：2026-04-21 以前は `on_low_hp=retreat + HP低下 → move_policy=cluster` 上書きがここにあったが、
+		# on_low_hp=fall_back は UnitAI 側で `_STRATEGY_FALL_BACK` を返し `fall_back` アクションキューを
+		# 直接生成するようになったため、ここでの move_policy 上書きは不要（strategy=FALL_BACK 分岐が
+		# move_policy を無視して fall_back 実行に進むため）。
 
 		# ── ターゲット選択 ────────────────────────────────────────────────
 		var target: Character

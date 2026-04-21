@@ -831,7 +831,7 @@ func _format_action_goal(m: Character, pm: PartyManager) -> String:
 
 
 ## 指示パーツ（中優先度）：メンバーの order 関連フィールドをパーツ配列で返す
-## 例: ["M:follow", "C:attack", "F:surround", "L:retreat", "S:strong", "HP:use", "E:use", "I:passive"]
+## 例: ["M:follow", "C:attack", "F:surround", "L:fall_bac", "S:strong", "HP:use", "E:use", "I:passive"]
 ## 各フィールドを個別パーツにすることで横一列流しレイアウトでの折返し精度を上げる
 ## _shorten() が空文字列 / null を "-" に変換するため、敵の未設定フィールドも "-" で表示される
 func _build_orders_field_list(ai: UnitAI) -> PackedStringArray:

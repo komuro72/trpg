@@ -15,6 +15,8 @@
 - **Character ステータス設計統一**：13 ステータス全てを Character 最終値フィールドに保持・装備補正取得を単一 API に集約
 - **味方側 `_party_strategy` / `party_fleeing` 廃止（ステップ 1）**：敵専用概念に変更・プレイヤー個別指示が `party_fleeing=true` で上書きされる仕様違反を解消
 - **F7 PartyStatusWindow スナップショット機能を新設**：全パーティー状態を `res://logs/snapshot_<timestamp>.log` に個別ファイルとして書き出し（詳細度最大固定・ウィンドウ非表示でも動作・ConfigEditor 開時は無効・`runtime.log` には押下マーカー 1 行のみ）
+- **個体アクション `flee` を 3 種に分離（`keep_distance` / `fall_back` / `flee`）**：PartyStatusWindow の表示が「HP 低下逃走・パーティー撤退・種族カイティング」で全て「逃走」になっていた問題を解消
+- **`on_low_hp` の内部値 `"retreat"` → `"fall_back"` にリネーム**（UI 表示「後退」は維持・全体方針 `battle_policy = "retreat"` との内部名重複解消）
 - **dead code 削除**：`Character.get_direction_multiplier()`
 - **調査ドキュメント 5 件新規作成**：`investigation_debug_variables.md` / `investigation_enemy_order_system.md` / `investigation_enemy_order_effective.md` / `investigation_receive_order_keys.md` / `investigation_party_strategy_ally_removal.md`
 
@@ -110,6 +112,64 @@ PartyStatusWindow Snapshot
 ```
 
 **設計経緯（2026-04-21 個別ファイル化改訂）**：当初は `runtime.log` に直接多行ダンプしていたが、「瞬間の状態記録」という独立した単位として個別ファイルに分離した。通常ログと混在すると可読性が低く、また多行スナップショットが runtime.log を埋めて他のログが見づらくなる問題を解消した。
+
+---
+
+### 個体アクション `flee` を 3 種に分離（`keep_distance` / `fall_back` / `flee`）
+
+**背景**：F7 スナップショットで `strategy=ATTACK` なのに敵メンバーが「逃走」と表示される現象があり、調査の結果 GoblinArcher の射程維持カイティング（`_generate_queue` で `{"action": "flee"}` を ATTACK 戦略中にキュー投入する仕組み）が表示に反映されていると判明。「HP 低下逃走」「パーティー FLEE 撤退」「種族カイティング」の 3 コンテキストで同じ `flee` アクションが使われており、PartyStatusWindow で意味を区別できなかった。
+
+詳細調査は [`docs/investigation_unit_ai_actions.md`](investigation_unit_ai_actions.md) 参照（アクション総数 13 種・重複用途 1 種・_generate_queue override 2 種族）。
+
+**設計方針**：
+
+1. 個体アクションを意味論的に分離：
+   - `keep_distance`（距離確保）：射程維持のための戦術的後退（戦闘継続）
+   - `fall_back`（後退）：前線から下がる（戦闘継続・HP 低下時の選択肢）
+   - `flee`（逃走）：戦闘から離脱する（パーティーから離れて安全な場所へ）
+2. 個別指示 → 個体アクションの対応を明確化：
+   - `on_low_hp = "fall_back"` + HP 低下 → `{"action": "fall_back"}`
+   - `on_low_hp = "flee"` + HP 低下 → `{"action": "flee"}`
+   - `combat = "flee"` → `{"action": "flee"}`
+   - `keep_distance` は個別指示から独立（種族 AI 専用の自動発火）
+3. 実行ロジックは当面 3 種とも同じ（`_find_flee_goal()` で脅威から離れる方向に移動）。差別化は将来タスク
+4. 内部名リネーム：`on_low_hp = "retreat"` → `"fall_back"`（全体方針 `battle_policy = "retreat"` との内部名重複を解消・UI 表示「後退」は維持）
+
+**実装変更**：
+
+- **[`scripts/unit_ai.gd`](../scripts/unit_ai.gd)**：
+  - `const _STRATEGY_FALL_BACK := 3` 新設（UnitAI 内部専用の戦略値・PartyLeader.Strategy とは独立）
+  - `_determine_effective_action()`：`"fall_back"` ケースを `_STRATEGY_FALL_BACK`（3）を返すよう変更（旧：WAIT=2 を返していた）。`_should_ignore_flee()` で DarkKnight 等の「逃げない」種族は fall_back も無視
+  - `_generate_queue()`：strategy == 3（FALL_BACK）の分岐を新設。5x `{"action": "fall_back"}` を生成
+  - 実行ディスパッチ（`_start_action` / `_step_toward_goal`）：`"flee"` / `"fall_back"` / `"keep_distance"` の 3 アクション全てで `_find_flee_goal()` を呼ぶ共通実装
+  - `get_debug_goal_str()`：`"fall_back" → "後退"` / `"keep_distance" → "距離確保"` のラベルを追加
+- **[`scripts/goblin_archer_unit_ai.gd`](../scripts/goblin_archer_unit_ai.gd)**：`_generate_queue` のカイティングキュー `{"action": "flee"}` → `{"action": "keep_distance"}` にリネーム
+- **[`scripts/salamander_unit_ai.gd`](../scripts/salamander_unit_ai.gd)**：同上
+- **[`scripts/party_leader.gd`](../scripts/party_leader.gd)**：`on_low_hp == "retreat"` の cluster 上書きを撤去（fall_back が専用 strategy を持つため不要に）・`on_low_hp` デフォルト値を `"fall_back"` に変更
+- **on_low_hp 値リネーム（`"retreat"` → `"fall_back"`）** の影響ファイル：
+  - [`scripts/character.gd`](../scripts/character.gd)（`current_order` デフォルト）
+  - [`scripts/party.gd`](../scripts/party.gd)（`global_orders` デフォルト）
+  - [`scripts/order_window.gd`](../scripts/order_window.gd)（`GLOBAL_ROWS` の on_low_hp options）
+  - [`scripts/global_constants.gd`](../scripts/global_constants.gd)（`GLOBAL_LOW_HP`）
+  - [`scripts/left_panel.gd`](../scripts/left_panel.gd)（表示ラベル辞書）
+  - [`scripts/unit_ai.gd`](../scripts/unit_ai.gd)（デフォルト・receive_order）
+  - [`scripts/npc_leader_ai.gd`](../scripts/npc_leader_ai.gd)（NPC hint デフォルト）
+
+**`"retreat"` を保持した箇所**：
+- `battle_policy` の選択肢（全体方針「撤退」の内部値）は変更せず
+- `order_window.gd:BATTLE_POLICY_PRESET` の `"retreat":` キー（battle_policy 値）
+- `unit_ai.gd:_find_friendly_retreat_goal()` 関数名とローカル変数 `var retreat`（意味的に正しい命名）
+
+**一時的な挙動保証**：
+
+- 3 アクションの実行ロジックは同一（`_find_flee_goal()`）のため、表面上の移動挙動は変わらない
+- PartyStatusWindow の表示ラベルのみ「距離確保」「後退」「逃走」に分離され、デバッグ時の意図識別が可能に
+- DarkKnight / Zombie 等「逃げない種族」は fall_back も無視（`_should_ignore_flee()` ガード）。従来 `retreat=WAIT+cluster` で実質その場に留まっていた挙動を保持
+
+**将来の差別化予定**（「次セッションで検討するタスク」項目 5）：
+- `keep_distance`：射程内を保つ（遠ざかりすぎない）
+- `fall_back`：リーダー後方 or 射程外まで下がる
+- `flee`：安全な場所へ完全離脱（ステップ 3 の `flee_recommended_goal` 実装で対応予定）
 
 **用途例**：
 

@@ -5,7 +5,7 @@ extends UnitAI
 ## behavior_description: "炎を吐く大型トカゲ。接近されると後退して射程を確保する。絶対に逃げない。"
 ##
 ## 従順度: 0.8
-## 近距離対処: ターゲットがMIN_CLOSE_RANGE以内なら flee で後退する
+## 近距離対処: ターゲットがMIN_CLOSE_RANGE以内なら keep_distance で後退する（射程維持カイティング）
 ## 経路探索: A* 最短経路
 ## 自己保存条件: なし（絶対に逃げない）
 
@@ -21,14 +21,15 @@ func _should_ignore_flee() -> bool:
 	return true
 
 
-## キュー生成: 攻撃戦略のとき、ターゲットが近すぎれば後退キューを優先する
+## キュー生成: 攻撃戦略のとき、ターゲットが近すぎれば射程維持のためのカイティング（keep_distance）を優先する
+## 2026-04-21 改訂：action を flee → keep_distance にリネーム（カイティングと戦闘離脱を意味論的に分離）
 func _generate_queue(strategy: int, target: Character) -> Array:
 	if strategy == 0 and target != null and is_instance_valid(target):
 		var dist := _manhattan(_member.grid_pos, target.grid_pos)
 		if dist <= MIN_CLOSE_RANGE:
 			var q: Array = []
 			for _i: int in range(3):
-				q.append({"action": "flee"})
+				q.append({"action": "keep_distance"})
 			return q
 	return super._generate_queue(strategy, target)
 
