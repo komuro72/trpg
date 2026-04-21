@@ -1137,3 +1137,255 @@ func _hp_status_label(hs: int) -> String:
 		int(GlobalConstants.HpStatus.LOW):      return "低"
 		int(GlobalConstants.HpStatus.CRITICAL): return "危"
 	return "?"
+
+
+# --------------------------------------------------------------------------
+# F7 スナップショット機能（2026-04-21 追加）
+# --------------------------------------------------------------------------
+## 現在の全パーティー状態を `res://logs/runtime.log` にテキストダンプする
+##
+## game_map から F7 押下で呼ばれる（ウィンドウの表示・非表示に関わらず動作）。
+## 詳細度は常に最高（高+中+低）で出力するため、`_detail_level` を一時的に 2 に
+## 切り替えてヘルパ群（`_build_*_parts` / `_format_*`）を呼び、終了時に復元する。
+## 画面の詳細度設定（F3）には影響しない。
+##
+## 出力は Logger.log() に 1 回の多行文字列として渡す（先頭行のみ Logger の
+## `[HH:MM:SS.mmm]` タイムスタンプが付く）。
+func snapshot_to_log() -> void:
+	var saved_detail_level: int = _detail_level
+	_detail_level = 2  # 常に最高詳細度で出力
+
+	var text: String = _build_snapshot_text()
+
+	_detail_level = saved_detail_level
+	Logger.log(text)
+
+
+## スナップショット全体のテキストを組み立てる
+## 構造：ヘッダー部（区切り線・時刻・フロア・操作キャラ・速度）
+##       + プレイヤーパーティー + NPC パーティー + 敵パーティー
+##       + フッター（区切り線）
+func _build_snapshot_text() -> String:
+	var lines: PackedStringArray = []
+	lines.append("================================================================")
+	lines.append("PartyStatusWindow Snapshot")
+	lines.append("================================================================")
+
+	# ヘッダー部
+	var d: Dictionary = Time.get_datetime_dict_from_system()
+	var ms: int = Time.get_ticks_msec() % 1000
+	lines.append("時刻: %04d-%02d-%02d %02d:%02d:%02d.%03d" % [
+		int(d.get("year",   0)), int(d.get("month",  0)), int(d.get("day",    0)),
+		int(d.get("hour",   0)), int(d.get("minute", 0)), int(d.get("second", 0)), ms])
+	var player_floor: int = int(_get_floor.call()) if _get_floor.is_valid() else 0
+	lines.append("フロア: %d" % player_floor)
+	var active_name: String = "?"
+	if _hero != null and is_instance_valid(_hero) and _hero.character_data != null:
+		var cd: CharacterData = _hero.character_data
+		var class_jp: String = GlobalConstants.CLASS_NAME_JP.get(cd.class_id, "") as String
+		active_name = cd.character_name
+		if not class_jp.is_empty():
+			active_name += "（%s）" % class_jp
+	lines.append("操作キャラ: %s" % active_name)
+	lines.append("ゲーム速度: %.1fx" % GlobalConstants.game_speed)
+	lines.append("----------------------------------------------------------------")
+
+	# プレイヤーパーティー
+	if _party != null:
+		lines.append_array(_snapshot_player_party_lines(player_floor))
+
+	# NPC パーティー
+	var nms: Array = _get_npc_managers.call() if _get_npc_managers.is_valid() else []
+	for nm_v: Variant in nms:
+		var nm := nm_v as PartyManager
+		if nm == null or not is_instance_valid(nm):
+			continue
+		lines.append_array(_snapshot_party_block_lines(nm, "NPC", player_floor, true))
+
+	# 敵パーティー
+	var ems: Array = _get_enemy_managers.call() if _get_enemy_managers.is_valid() else []
+	for em_v: Variant in ems:
+		var em := em_v as PartyManager
+		if em == null or not is_instance_valid(em):
+			continue
+		lines.append_array(_snapshot_party_block_lines(em, "敵", player_floor, false))
+
+	lines.append("================================================================")
+	return "\n".join(lines)
+
+
+## プレイヤーパーティーブロックのテキスト行を返す（`_draw_player_party` と対応）
+## 表示フロアにメンバーが 1 人もいなければ空配列を返す（画面表示と同じ条件）
+func _snapshot_player_party_lines(floor_idx: int) -> PackedStringArray:
+	var out: PackedStringArray = []
+	if _party == null:
+		return out
+	var sorted: Array = _party.sorted_members()
+	var floor_members: Array = []
+	var any_on_floor: bool = false
+	for m_v: Variant in sorted:
+		var m := m_v as Character
+		if not is_instance_valid(m):
+			continue
+		floor_members.append(m)
+		if m.current_floor == floor_idx:
+			any_on_floor = true
+	if not any_on_floor or floor_members.is_empty():
+		return out
+
+	var alive: int = 0
+	for m_v: Variant in floor_members:
+		if (m_v as Character).hp > 0:
+			alive += 1
+
+	var go: Dictionary = _party.global_orders
+	var mv_str:     String = _label("move",          go.get("move",          "-") as String)
+	var battle_str: String = _label("battle_policy", go.get("battle_policy", "-") as String)
+	var tgt_str:    String = _label("target",        go.get("target",        "-") as String)
+	var hp_str:     String = _label("on_low_hp",     go.get("on_low_hp",     "-") as String)
+	var item_str:   String = _label("item_pickup",   go.get("item_pickup",   "-") as String)
+
+	var sit_str: String = "?"
+	var pb_str:  String = "?"
+	var hs_str:  String = "?"
+	if _hero_manager != null and is_instance_valid(_hero_manager):
+		var hint: Dictionary = _hero_manager.get_global_orders_hint()
+		sit_str = _combat_situation_label(hint.get("combat_situation", 0) as int)
+		pb_str  = _power_balance_label(hint.get("power_balance", 0) as int)
+		pb_str += " " + _format_strength_breakdown(hint)
+		hs_str  = _hp_status_label(hint.get("hp_status", 0) as int)
+
+	var header: String = "[プレイヤー]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
+		alive, floor_members.size(), sit_str, pb_str, hs_str,
+		mv_str, battle_str, tgt_str, hp_str, item_str]
+	header += _format_leader_extras(_hero_manager)
+	out.append(header)
+
+	for m_v: Variant in floor_members:
+		var m := m_v as Character
+		if not is_instance_valid(m):
+			continue
+		out.append("  " + _build_member_line(m, _hero_manager, floor_idx))
+	return out
+
+
+## NPC / 敵パーティーブロックのテキスト行を返す（`_draw_party_block` と対応）
+## show_orders: false=敵（item= 列省略）、true=NPC（全列表示）
+func _snapshot_party_block_lines(pm: PartyManager, type_label: String,
+		floor_idx: int, show_orders: bool) -> PackedStringArray:
+	var out: PackedStringArray = []
+	var members: Array[Character] = pm.get_members()
+	if members.is_empty():
+		return out
+
+	var any_on_floor: bool = false
+	for m_v: Variant in members:
+		var mc := m_v as Character
+		if is_instance_valid(mc) and mc.current_floor == floor_idx:
+			any_on_floor = true
+			break
+	if not any_on_floor:
+		return out
+
+	var floor_members: Array[Character] = []
+	for m_v: Variant in members:
+		var m := m_v as Character
+		if is_instance_valid(m):
+			floor_members.append(m)
+	if floor_members.is_empty():
+		return out
+
+	var alive: int = 0
+	for m: Character in floor_members:
+		if m.hp > 0:
+			alive += 1
+
+	var hint: Dictionary = pm.get_global_orders_hint()
+	var sit_str: String = _combat_situation_label(hint.get("combat_situation", 0) as int)
+	var pb_str:  String = _power_balance_label(hint.get("power_balance", 0) as int)
+	pb_str += " " + _format_strength_breakdown(hint)
+	var hs_str:  String = _hp_status_label(hint.get("hp_status", 0) as int)
+
+	var is_enemy: bool = pm.party_type == "enemy"
+	var header: String
+	if is_enemy:
+		var strategy_name: String = _strategy_enum_name_for(pm)
+		header = "[%s]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  strategy=%s" % [
+			type_label, alive, floor_members.size(),
+			sit_str, pb_str, hs_str, strategy_name]
+	else:
+		var mv_raw:     String = hint.get("move", "-") as String
+		var mv_str:     String = _label("move", mv_raw)
+		if mv_raw == "stairs_down" or mv_raw == "stairs_up":
+			var tgt_f: String = hint.get("target_floor", "?") as String
+			mv_str += "(F" + tgt_f + ")"
+		var battle_str: String = _label("battle_policy", hint.get("battle_policy", "-") as String)
+		var tgt_str:    String = _label("target",        hint.get("target",        "-") as String)
+		var hp_str:     String = _label("on_low_hp",     hint.get("on_low_hp",     "-") as String)
+		if show_orders:
+			var item_str: String = _label("item_pickup", hint.get("item_pickup", "-") as String)
+			header = "[%s]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
+				type_label, alive, floor_members.size(),
+				sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str, item_str]
+		else:
+			header = "[%s]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s" % [
+				type_label, alive, floor_members.size(),
+				sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str]
+	header += _format_leader_extras(pm)
+	out.append(header)
+
+	for m: Character in floor_members:
+		out.append("  " + _build_member_line(m, pm, floor_idx))
+	return out
+
+
+## 1 メンバーを 1 行のテキストにまとめる（画面表示の`_draw_member_block` と同順序・折返しなし）
+## 行動ボディ / 目的 / 指示 / 敵動的判断 / 状態 / 12 ステータス / 敵静的属性 を空白区切りで連結
+func _build_member_line(m: Character, pm: PartyManager, display_floor: int) -> String:
+	if m == null or not is_instance_valid(m):
+		return "(invalid)"
+
+	var ai: UnitAI = null
+	if pm != null and is_instance_valid(pm):
+		ai = pm.get_unit_ai(m)
+
+	var buf: PackedStringArray = []
+
+	# 行動ボディ
+	buf.append(_format_action_body(m, display_floor))
+
+	# 目的（先頭に " " が含まれる場合あり・空文字なら省略）
+	var goal_s: String = _format_action_goal(m, pm)
+	if not goal_s.is_empty():
+		buf.append(goal_s.lstrip(" "))
+
+	# 指示グループ（味方メンバーのみ・detail=1 以上）
+	if ai != null and is_instance_valid(ai) and m.is_friendly:
+		var order_parts: PackedStringArray = _build_orders_field_list(ai)
+		if not order_parts.is_empty():
+			buf.append("指示:" + " ".join(order_parts))
+
+	# 敵固有・動的判断グループ（敵メンバーのみ・detail=1 以上）
+	if ai != null and is_instance_valid(ai) and not m.is_friendly:
+		var enemy_dyn: PackedStringArray = _build_enemy_dynamic_parts(m, ai)
+		if not enemy_dyn.is_empty():
+			buf.append("種:" + " ".join(enemy_dyn))
+
+	# 状態グループ（detail=2）
+	if ai != null and is_instance_valid(ai):
+		var ai_flag_parts: PackedStringArray = _build_ai_flag_parts(ai, m)
+		if not ai_flag_parts.is_empty():
+			buf.append("状態:" + " ".join(ai_flag_parts))
+
+	# 12 ステータスグループ（detail=2）
+	var stat_parts: PackedStringArray = _build_char_stat_parts(m)
+	if not stat_parts.is_empty():
+		buf.append(" ".join(stat_parts))
+
+	# 敵固有・静的属性グループ（detail=2・敵メンバーのみ）
+	if ai != null and is_instance_valid(ai):
+		var enemy_stat: PackedStringArray = _build_enemy_static_parts(m, ai)
+		if not enemy_stat.is_empty():
+			buf.append(" ".join(enemy_stat))
+
+	return " | ".join(buf)

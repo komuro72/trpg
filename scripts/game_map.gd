@@ -127,6 +127,14 @@ func _input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 			KEY_F5:
 				get_tree().reload_current_scene()
+			KEY_F7:
+				# F7: 全パーティー状態を res://logs/runtime.log にスナップショット出力
+				# PartyStatusWindow の表示・非表示に関わらず動作。
+				# ConfigEditor（F4）が開いているときは無効（誤動作防止）。
+				if party_status_window != null \
+						and not (config_editor != null and config_editor.visible):
+					party_status_window.snapshot_to_log()
+					get_viewport().set_input_as_handled()
 
 
 ## 手作りダンジョンJSON（dungeon_handcrafted.json）を読み込む

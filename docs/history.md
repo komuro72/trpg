@@ -14,6 +14,7 @@
 - **敵の指示体系表示を一掃**：リーダー行の仮想ヒント（`mv=/battle=/tgt=/hp=`）を `strategy=<ENUM>` に刷新、メンバー行の指示ライン（M/C/F/L/S/HP/E/I）を削除
 - **Character ステータス設計統一**：13 ステータス全てを Character 最終値フィールドに保持・装備補正取得を単一 API に集約
 - **味方側 `_party_strategy` / `party_fleeing` 廃止（ステップ 1）**：敵専用概念に変更・プレイヤー個別指示が `party_fleeing=true` で上書きされる仕様違反を解消
+- **F7 PartyStatusWindow スナップショット機能を新設**：全パーティー状態を `res://logs/runtime.log` に一括ダンプ（詳細度最大固定・ウィンドウ非表示でも動作・ConfigEditor 開時は無効）
 - **dead code 削除**：`Character.get_direction_multiplier()`
 - **調査ドキュメント 5 件新規作成**：`investigation_debug_variables.md` / `investigation_enemy_order_system.md` / `investigation_enemy_order_effective.md` / `investigation_receive_order_keys.md` / `investigation_party_strategy_ally_removal.md`
 
@@ -61,6 +62,50 @@
 
 - [`docs/investigation_receive_order_keys.md`](investigation_receive_order_keys.md)：receive_order ペイロード全 12 キーの棚卸し（指示 9 / パーティー文脈 2 / 戦況判断 1・dead transmission なし）
 - [`docs/investigation_party_strategy_ally_removal.md`](investigation_party_strategy_ally_removal.md)：影響範囲調査（参照 40 箇所・変更 5 ファイル）
+
+---
+
+### F7 PartyStatusWindow スナップショット機能
+
+**背景**：静止画スクリーンショットは情報密度が低く、バランス調整・戦略切替の時系列追跡に不向き。PartyStatusWindow の表示内容（パーティー戦略・戦況・メンバーステータス・指示・敵固有フラグ等）をテキストで残せると、戦略切替・FLEE 発動・戦力比変化などのデバッグが容易になる。
+
+**実装**：
+
+- [`scripts/party_status_window.gd`](../scripts/party_status_window.gd) に `snapshot_to_log()` 新設
+- F7 押下時に現在の全パーティー状態を `res://logs/runtime.log` に一括ダンプ（Logger Autoload 経由）
+- **詳細度は常に最大**：`_detail_level` を一時的に 2 に切り替えてヘルパー群を呼び、終了時に復元。画面の F3 設定には影響しない
+- **ウィンドウ独立**：PartyStatusWindow が閉じていても F7 単独で動作（`game_map.gd:_input` で F7 を受信）
+- **ConfigEditor（F4）開時は無効**：誤動作防止
+- 画面描画の文字列ヘルパー（`_format_action_body` / `_build_orders_field_list` / `_build_char_stat_parts` 等）を再利用し、表示と記録の一貫性を保つ
+- 1 メンバー 1 行にフラット化（画面は折返しあり・スナップショットは `|` 区切りで折返しなし）
+
+**出力構造**：
+
+```
+[HH:MM:SS.mmm] ================================================================
+PartyStatusWindow Snapshot
+================================================================
+時刻: 2026-04-21 14:32:15.123
+フロア: 2
+操作キャラ: 主人公（剣士）
+ゲーム速度: 1.0x
+----------------------------------------------------------------
+[プレイヤー]  生存:3/3  戦況:安全 ...
+  ★主人公[A](剣士) HP:50/50 SP:20/20 ... | →... | 指示:M:follow C:attack ... | pow:70+4 ...
+  ...
+[NPC]  生存:2/2  ...
+  ...
+[敵]  生存:4/4  戦況:互角 ... strategy=ATTACK
+  ...
+================================================================
+```
+
+**用途例**：
+
+- 敵パーティーが FLEE に入った瞬間の記録
+- プレイヤーが特定装備を変更する前後の戦力値比較
+- NPC の探索モード判定の結果確認
+- Step 1 廃止の動作検証（`strategy=FLEE` / 敵メンバー行 `P↓` が記録されるか）
 
 ---
 
