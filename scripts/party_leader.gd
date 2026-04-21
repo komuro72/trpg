@@ -359,6 +359,12 @@ func get_party_debug_info() -> Dictionary:
 	}
 
 
+## 初期メンバー数を返す（セットアップ時の人数・死亡後も不変）
+## PartyStatusWindow の「生存:X/Y」表示の分母（Y）に使用
+func get_initial_count() -> int:
+	return _initial_count
+
+
 ## デバッグ情報を収集して返す
 func get_debug_info() -> Array:
 	var result: Array = []

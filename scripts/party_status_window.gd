@@ -257,6 +257,21 @@ func clear_selection() -> void:
 	leader_selected.emit(null)
 
 
+## ウィンドウを開くときにプレイヤーリーダーをデフォルト選択する（game_map から呼ぶ）
+## F1 押下時に矢印キーを押さなくても ▶ マーカーとカメラ追跡が有効になる。
+## 2026-04-21 追加：以前は未選択状態で開いていたため、最初の矢印キー入力までカーソルが出なかった。
+func select_default_leader() -> void:
+	if _party == null:
+		return
+	var leader := _get_any_leader(_party.sorted_members())
+	if leader == null or not is_instance_valid(leader):
+		return
+	_selected_leader = leader
+	leader_selected.emit(_selected_leader)
+	if _control != null:
+		_control.queue_redraw()
+
+
 func _process(delta: float) -> void:
 	if not visible:
 		return
@@ -428,6 +443,10 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 		if m.hp > 0:
 			alive += 1
 
+	# 分母（初期メンバー数）：_on_member_died で _members からは erase されるので、
+	# PartyLeader._initial_count（セットアップ時の人数・不変）を使う
+	var total: int = _party_initial_count(pm, floor_members.size())
+
 	# リーダーメンバー参照（▶ 選択マーカー判定用・is_leader 優先）
 	## 2026-04-21 改訂：リーダー行からリーダー名・クラスを除去。識別は [種別] + 色分け +
 	## メンバー行の ★/クラス名で行う。leader_member は ▶ マーカー表示とメンバー行での
@@ -458,7 +477,7 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 		## 敵：strategy=<ENUM_NAME>（ATTACK / FLEE / WAIT / DEFEND / EXPLORE / GUARD_ROOM）
 		var strategy_name: String = _strategy_enum_name_for(pm)
 		header = "[%s]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  strategy=%s" % [
-			type_label, alive, floor_members.size(),
+			type_label, alive, total,
 			sit_str, pb_str, hs_str, strategy_name]
 	else:
 		## 味方（NPC パーティー・show_orders=true 想定）：従来通り mv/battle/tgt/hp/item
@@ -474,11 +493,11 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 		if show_orders:
 			var item_str: String = _label("item_pickup", hint.get("item_pickup", "-") as String)
 			header = "[%s]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
-				type_label, alive, floor_members.size(),
+				type_label, alive, total,
 				sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str, item_str]
 		else:
 			header = "[%s]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s" % [
-				type_label, alive, floor_members.size(),
+				type_label, alive, total,
 				sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str]
 
 	# 詳細度レベルに応じてヘッダーに追加情報を付加
@@ -562,6 +581,8 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 		pb_str += " " + _format_strength_breakdown(hint)
 		hs_str = _hp_status_label(hint.get("hp_status", 0) as int)
 
+	# 分母：プレイヤー Party は死亡してもメンバーリストから削除しないため実サイズで OK
+	# （敵/NPC は PartyManager._on_member_died で erase される・PartyLeader._initial_count を使う）
 	var header := "[プレイヤー]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
 		alive, floor_members.size(),
 		sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str, item_str]
@@ -1139,6 +1160,23 @@ func _hp_status_label(hs: int) -> String:
 	return "?"
 
 
+## 「生存:X/Y」の分母 Y を算出する
+## AI 管理パーティー（enemy / npc）：死亡時 PartyManager._on_member_died が
+## _members.erase() を呼ぶため現在サイズは生存者数になる。初期メンバー数を返すため
+## PartyLeader.get_initial_count() を参照する。
+## プレイヤーパーティー：adoption で動的に増減するため `_initial_count` は意味を持たない
+## （setup_adopted 時は主人公 1 人固定）。現在サイズ（fallback_size）をそのまま使う。
+func _party_initial_count(pm: PartyManager, fallback_size: int) -> int:
+	if pm == null or not is_instance_valid(pm):
+		return fallback_size
+	if pm.party_type == "player":
+		return fallback_size
+	var leader: PartyLeader = pm.get_party_leader()
+	if leader != null and is_instance_valid(leader) and leader.has_method("get_initial_count"):
+		return leader.get_initial_count()
+	return fallback_size
+
+
 # --------------------------------------------------------------------------
 # F7 スナップショット機能（2026-04-21 追加・2026-04-21 個別ファイル化改訂）
 # --------------------------------------------------------------------------
@@ -1330,6 +1368,9 @@ func _snapshot_party_block_lines(pm: PartyManager, type_label: String,
 		if m.hp > 0:
 			alive += 1
 
+	# 分母：PartyLeader._initial_count（死亡後も不変）を使う
+	var total: int = _party_initial_count(pm, floor_members.size())
+
 	var hint: Dictionary = pm.get_global_orders_hint()
 	var sit_str: String = _combat_situation_label(hint.get("combat_situation", 0) as int)
 	var pb_str:  String = _power_balance_label(hint.get("power_balance", 0) as int)
@@ -1341,7 +1382,7 @@ func _snapshot_party_block_lines(pm: PartyManager, type_label: String,
 	if is_enemy:
 		var strategy_name: String = _strategy_enum_name_for(pm)
 		header = "[%s]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  strategy=%s" % [
-			type_label, alive, floor_members.size(),
+			type_label, alive, total,
 			sit_str, pb_str, hs_str, strategy_name]
 	else:
 		var mv_raw:     String = hint.get("move", "-") as String
@@ -1355,11 +1396,11 @@ func _snapshot_party_block_lines(pm: PartyManager, type_label: String,
 		if show_orders:
 			var item_str: String = _label("item_pickup", hint.get("item_pickup", "-") as String)
 			header = "[%s]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
-				type_label, alive, floor_members.size(),
+				type_label, alive, total,
 				sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str, item_str]
 		else:
 			header = "[%s]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s" % [
-				type_label, alive, floor_members.size(),
+				type_label, alive, total,
 				sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str]
 	header += _format_leader_extras(pm)
 	out.append(header)

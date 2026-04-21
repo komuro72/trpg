@@ -1280,7 +1280,6 @@ func _on_enemy_party_wiped(items: Array, room_id: String, floor_idx: int) -> voi
 		placed += 1
 	if placed > 0:
 		queue_redraw()
-		print("[GameMap] アイテム %d 個をフロア%d 部屋 %s に散布" % [placed, floor_idx, room_id])
 		# 操作キャラがいる部屋のイベントのみ音とメッセージを出す
 		var is_local := false
 		if floor_idx == _current_floor_index and player_controller != null \
@@ -2189,6 +2188,8 @@ func _toggle_party_status_window() -> void:
 		if combat_log_window != null and combat_log_window.visible:
 			combat_log_window.visible = false
 		party_status_window.visible = true
+		# プレイヤーリーダーをデフォルト選択（矢印キーを押さなくてもカーソルとカメラ追跡が有効に）
+		party_status_window.select_default_leader()
 	# vision_system.debug_show_all は PartyStatusWindow の可視状態と連動
 	if vision_system != null:
 		vision_system.debug_show_all = party_status_window.visible
