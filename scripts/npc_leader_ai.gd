@@ -79,45 +79,45 @@ func _create_unit_ai(_member: Character) -> UnitAI:
 	return NpcUnitAI.new()
 
 
-## パーティー全体の戦略を評価する
-## 同じフロアに生存 かつ NPC自身が訪問済みのエリアにいる敵がいれば ATTACK、いなければ EXPLORE
-## 戦況判断（CombatSituation）に基づき CRITICAL 時は FLEE に切り替える
-func _evaluate_party_strategy() -> Strategy:
-	# 自パーティーのフロアを取得
+## NPC が検知している敵（同フロア・訪問済みエリア内）がいるか判定する
+## 2026-04-21 追加：旧 `_evaluate_party_strategy()` の敵検知ロジックを抽出・単独公開。
+## 戦略評価を廃止したため（味方は `_party_strategy` を使わない）、基底の
+## `_is_in_explore_mode()` を override してこの結果で分岐する。
+##
+## 判定条件（順次チェック）:
+##   - 同フロア（他フロアの敵は無視）
+##   - 訪問済みエリア（未探索エリアの敵は `debug_show_all` でも無視）
+##   - MapData 未初期化時は `enemy.visible` にフォールバック
+##
+## 将来課題（ステップ 2）: `_combat_situation.situation == CRITICAL` で
+## `_global_orders.battle_policy = "retreat"` に書き換えて自動 FLEE を復活する。
+## 本ステップでは CRITICAL 時の自動 FLEE は一時的に失われている
+## （個別指示 `on_low_hp = "flee"` による個人逃走は従来どおり発動する）。
+func _has_visible_enemy() -> bool:
 	var my_floor := -1
 	for m: Character in _party_members:
 		if is_instance_valid(m):
 			my_floor = m.current_floor
 			break
-	var has_visible_enemy := false
 	for enemy: Character in _enemy_list:
 		if not is_instance_valid(enemy) or enemy.hp <= 0:
 			continue
-		# 同フロアの敵のみ ATTACK トリガーにする（他フロアの敵は無視）
 		if my_floor >= 0 and enemy.current_floor != my_floor:
 			continue
-		# NPC 自身が訪問済みのエリアにいる敵のみ ATTACK トリガーにする
-		# （debug_show_all による全敵可視化の影響を受けない）
 		if _map_data != null:
 			var area_id := _map_data.get_area(enemy.grid_pos)
 			if area_id.is_empty() or not _visited_areas.has(area_id):
 				continue
 		elif not enemy.visible:
-			# MapData なし（初期化前）のフォールバック
 			continue
-		has_visible_enemy = true
-		break
+		return true
+	return false
 
-	if not has_visible_enemy:
-		return Strategy.EXPLORE
 
-	# 敵がいる場合：戦況判断で撤退するか決定する
-	var situation_val: int = _combat_situation.get("situation",
-		int(GlobalConstants.CombatSituation.SAFE)) as int
-	if situation_val == int(GlobalConstants.CombatSituation.CRITICAL):
-		return Strategy.FLEE
-
-	return Strategy.ATTACK
+## 探索モードか判定する（基底 party_leader.gd:_assign_orders の EXPLORE 分岐フック）
+## 敵を検知していなければ探索モード（leader=explore/stairs・非leader=cluster で動く）
+func _is_in_explore_mode() -> bool:
+	return not _has_visible_enemy()
 
 
 ## 現在の状態に基づく目標フロアを返す（戦力値 + HP 補正）
@@ -197,11 +197,15 @@ func _get_explore_move_policy() -> String:
 
 
 ## NPC パーティーの global_orders ヒントを返す（デバッグウィンドウ表示用）
-## _global_orders が設定されていない場合は NPC デフォルト値＋現在戦略を合成して返す
+## _global_orders が設定されていない場合は NPC デフォルト値＋探索モードを合成して返す
 ## NPC 固有差分:
 ##   - デフォルト方針が「follow / same_as_leader / retreat / passive」（プレイヤー追従前提）
 ##   - sp_mp_potion キーを持つ（ベース版は持たない）
-##   - EXPLORE 時に階段移動中なら target_floor キーを追加（_get_target_floor 固有）
+##   - 探索モード（敵未検知）時に階段移動中なら target_floor キーを追加（_get_target_floor 固有）
+##
+## 2026-04-21 改訂：`_party_strategy` は敵専用概念に変更したため、`match _party_strategy` による
+## ヒント合成を廃止。探索モード判定は `_is_in_explore_mode()` 経由で行う。
+## CRITICAL 時の FLEE 自動切替はステップ 2 で `battle_policy="retreat"` への自動書き換え方式で復活予定。
 func get_global_orders_hint() -> Dictionary:
 	var hint: Dictionary
 	if not _global_orders.is_empty():
@@ -216,19 +220,11 @@ func get_global_orders_hint() -> Dictionary:
 			"hp_potion":     "use",
 			"sp_mp_potion":  "use",
 		}
-		match _party_strategy:
-			Strategy.FLEE:
-				hint["battle_policy"] = "retreat"
-				hint["on_low_hp"]     = "flee"
-			Strategy.WAIT, Strategy.DEFEND:
-				hint["battle_policy"] = "defense"
-			Strategy.EXPLORE:
-				var pol := _get_explore_move_policy()
-				hint["move"] = pol
-				if pol == "stairs_down" or pol == "stairs_up":
-					hint["target_floor"] = str(_get_target_floor())
-			Strategy.GUARD_ROOM:
-				hint["move"] = "guard_room"
+		if _is_in_explore_mode():
+			var pol := _get_explore_move_policy()
+			hint["move"] = pol
+			if pol == "stairs_down" or pol == "stairs_up":
+				hint["target_floor"] = str(_get_target_floor())
 	# 戦況判断（_evaluate_strategic_status() の結果を流し込む）
 	var sit: int = _combat_situation.get("situation", int(GlobalConstants.CombatSituation.SAFE)) as int
 	hint["combat_situation"] = sit
@@ -249,15 +245,10 @@ func get_global_orders_hint() -> Dictionary:
 
 
 ## 戦略変更の理由
+## 2026-04-21 改訂：味方は `_party_strategy` を計算しないため、このメソッドは
+## 現状呼ばれない（`_log_strategy_change` は敵パーティーでのみ発火する）。
+## 将来ステップ 2 で FLEE 自動切替を復活する際、battle_policy 変更時のログに使う余地あり。
 func _get_strategy_change_reason() -> String:
-	if _party_strategy == Strategy.ATTACK:
-		return "敵を検知"
-	if _party_strategy == Strategy.FLEE:
-		return "戦況危険・撤退"
-	if _party_strategy == Strategy.EXPLORE:
-		return "敵なし・周辺探索"
-	if _party_strategy == Strategy.WAIT:
-		return "敵なし"
 	return super._get_strategy_change_reason()
 
 
@@ -462,9 +453,11 @@ func wants_to_initiate() -> bool:
 	return false
 
 
-## 現在 ATTACK 戦略中か（共闘フラグ更新に使用）
+## 現在戦闘中か（共闘フラグ更新に使用）
+## 2026-04-21 改訂：`_party_strategy` は敵専用概念のため、味方 NPC では敵検知フラグで判定する。
+## 現状このメソッドは外部から呼ばれていないが、API として残す（将来共闘実績の更新で使う余地あり）。
 func is_in_combat() -> bool:
-	return _party_strategy == Strategy.ATTACK
+	return _has_visible_enemy()
 
 
 ## 共闘フラグを設定する（game_map が同エリア戦闘を検出したときに呼ぶ）

@@ -3,7 +3,7 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
-## 2026-04-21（デバッグウィンドウ表示改善・Character ステータス設計統一・dead code 整理）
+## 2026-04-21（デバッグウィンドウ表示改善・Character ステータス設計統一・味方側 _party_strategy 廃止・dead code 整理）
 
 本日は「PartyStatusWindow（F1 デバッグウィンドウ）の表示改善」を中心に、関連する調査・設計統一・dead code 削除を大量に実施。主要な変更は以下：
 
@@ -13,8 +13,54 @@
 - **敵固有表示グループの新設**：動的判断（`種: sflee / nomp / lich:X`）・静的属性（`ignfle / undead / flying / immune / proj / chase / terr`）
 - **敵の指示体系表示を一掃**：リーダー行の仮想ヒント（`mv=/battle=/tgt=/hp=`）を `strategy=<ENUM>` に刷新、メンバー行の指示ライン（M/C/F/L/S/HP/E/I）を削除
 - **Character ステータス設計統一**：13 ステータス全てを Character 最終値フィールドに保持・装備補正取得を単一 API に集約
+- **味方側 `_party_strategy` / `party_fleeing` 廃止（ステップ 1）**：敵専用概念に変更・プレイヤー個別指示が `party_fleeing=true` で上書きされる仕様違反を解消
 - **dead code 削除**：`Character.get_direction_multiplier()`
-- **調査ドキュメント 3 件新規作成**：`investigation_debug_variables.md` / `investigation_enemy_order_system.md` / `investigation_enemy_order_effective.md`
+- **調査ドキュメント 5 件新規作成**：`investigation_debug_variables.md` / `investigation_enemy_order_system.md` / `investigation_enemy_order_effective.md` / `investigation_receive_order_keys.md` / `investigation_party_strategy_ally_removal.md`
+
+---
+
+### 味方側 `_party_strategy` / `party_fleeing` 廃止（ステップ 1）
+
+**背景**：プレイヤー操作パーティーでは OrderWindow の個別指示（`combat` / `battle_formation` 等）が最終指示のはずだが、既存実装では `PartyLeaderPlayer._evaluate_party_strategy()` が `global_orders.battle_policy` を Strategy enum に変換し、`Strategy.FLEE` 時に `party_fleeing = true` をメンバーに配布していた。UnitAI 側では `_party_fleeing` フラグが個別指示より優先されるため、プレイヤーの細かな指示が意図せず上書きされる。NpcLeaderAI も同様の構造で、CombatSituation.CRITICAL 時に FLEE 戦略に切り替わる副作用があった。
+
+**設計原則（2026-04-21 確立）**：
+
+1. `_party_strategy` は**敵パーティー（EnemyLeaderAI 系）専用**の概念。味方では計算・保持しない
+2. `party_fleeing` は**敵メンバー専用の配布フラグ**。味方メンバーには常に false を配布
+3. パーティー戦略はリーダー個人の属性ではない。`_leader_ref._party_strategy` 経由の取得は**将来にわたって禁止**
+4. 味方の戦略は `global_orders.battle_policy` を通じた**個別指示のプリセット流し込み**（OrderWindow の `_apply_battle_policy_preset`）経由のみで反映する
+
+**実装変更**：
+
+- **`scripts/party_leader.gd`** に基底フックを追加：
+  - `_is_enemy_party() -> bool`：先頭生存メンバーの `is_friendly` で判別
+  - `_is_in_explore_mode() -> bool`：EXPLORE 相当。基底実装は `_party_strategy == EXPLORE`
+  - `_is_in_guard_room_mode() -> bool`：GUARD_ROOM 相当。基底実装は `_party_strategy == GUARD_ROOM`
+  - `_assign_orders()` で `_is_enemy_party()` ガード下でのみ `_evaluate_party_strategy()` / `_apply_range_check()` / `_log_strategy_change` を実行
+  - `party_fleeing = is_enemy_party and _party_strategy == FLEE` に変更
+  - EXPLORE / GUARD_ROOM 分岐を `_is_in_explore_mode()` / `_is_in_guard_room_mode()` 経由に変更
+- **`scripts/party_leader_player.gd`**：`_evaluate_party_strategy()` override を物理削除
+- **`scripts/npc_leader_ai.gd`**：
+  - `_evaluate_party_strategy()` override を物理削除
+  - 敵検知ロジックを `_has_visible_enemy()` として抽出（同フロア・訪問済みエリアの生存敵チェック）
+  - `_is_in_explore_mode()` を override：`not _has_visible_enemy()` を返す
+  - `get_global_orders_hint()` から `match _party_strategy` 分岐を削除し `_is_in_explore_mode()` 経由に変更
+  - `_get_strategy_change_reason()` を `super` 呼出のみに簡素化（`_log_strategy_change` は敵のみ発火するため NPC では使われない）
+  - `is_in_combat()` を `_has_visible_enemy()` に変更
+- **`scripts/party_status_window.gd`**：`_build_ai_flag_parts(ai, m)` に member 引数を追加し、`m.is_friendly` なら `P↓` 表示をスキップ
+- **`scripts/party_manager.gd`**：`_check_room_suppression()` にコメント追加（敵専用動作であることを明示）
+
+**一時的に失われる挙動（ステップ 2 で復活予定）**：
+
+- NpcLeaderAI の CombatSituation.CRITICAL 時自動 FLEE（パーティー単位での撤退切替）
+  - 個別指示 `on_low_hp = "flee"` による個人逃走は従来どおり発動
+  - ステップ 2 で `_global_orders["battle_policy"] = "retreat"` への自動書き換え方式で復活予定
+  - それまでの期間、CRITICAL 時は戦闘継続するが個別 HP 低下メンバーのみ逃走
+
+**関連調査**：
+
+- [`docs/investigation_receive_order_keys.md`](investigation_receive_order_keys.md)：receive_order ペイロード全 12 キーの棚卸し（指示 9 / パーティー文脈 2 / 戦況判断 1・dead transmission なし）
+- [`docs/investigation_party_strategy_ally_removal.md`](investigation_party_strategy_ally_removal.md)：影響範囲調査（参照 40 箇所・変更 5 ファイル）
 
 ---
 

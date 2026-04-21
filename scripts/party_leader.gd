@@ -205,18 +205,26 @@ func _process(delta: float) -> void:
 ## 戦略を評価して各メンバーにオーダーを発行する
 ## パーティー戦略に応じて move / combat / party_fleeing を決定し UnitAI に渡す
 ## 行動の最終決定は UnitAI._determine_effective_action() が行う
+##
+## 2026-04-21 改訂：`_party_strategy` は敵パーティー（EnemyLeaderAI 系）専用概念に変更。
+## 味方（PartyLeaderPlayer / NpcLeaderAI）では戦略評価・更新を行わず、個別指示は
+## `_global_orders.battle_policy` のプリセット流し込み（OrderWindow）経由のみで反映する。
+## 詳細: docs/investigation_party_strategy_ally_removal.md / docs/investigation_receive_order_keys.md
 func _assign_orders() -> void:
-	_party_strategy = _apply_range_check(_evaluate_party_strategy())
+	# 戦略評価は敵パーティーのみ実施する（味方は _party_strategy を使わない）
+	var is_enemy_party := _is_enemy_party()
+	if is_enemy_party:
+		_party_strategy = _apply_range_check(_evaluate_party_strategy())
 
-	# 戦略変更時にログ出力
-	if _party_strategy != _prev_strategy:
-		var old_strategy := _prev_strategy
-		_prev_strategy = _party_strategy
-		if log_enabled and not _has_player_controlled_member():
-			_log_strategy_change(old_strategy)
+		# 戦略変更時にログ出力
+		if _party_strategy != _prev_strategy:
+			var old_strategy := _prev_strategy
+			_prev_strategy = _party_strategy
+			if log_enabled and not _has_player_controlled_member():
+				_log_strategy_change(old_strategy)
 
-	# パーティーレベルの撤退判断
-	var party_fleeing := (_party_strategy == Strategy.FLEE)
+	# パーティーレベルの撤退判断（敵専用フラグ・味方は常に false）
+	var party_fleeing := is_enemy_party and _party_strategy == Strategy.FLEE
 
 	# リーダーのターゲットを先に決定（same_as_leader ポリシー用）
 	var leader_target: Character = null
@@ -262,8 +270,12 @@ func _assign_orders() -> void:
 			else:
 				formation_ref = leader_char
 
-		# ── パーティー戦略に応じた移動方針の上書き ──────────────────────────
-		if _party_strategy == Strategy.EXPLORE:
+		# ── 探索モード / 帰還モードに応じた移動方針の上書き ────────────────
+		## _is_in_explore_mode() / _is_in_guard_room_mode() はサブクラスが override する
+		## 敵：`_party_strategy == EXPLORE / GUARD_ROOM` で判定（PartyLeader 基底実装）
+		## NPC：敵検知フラグで explore を判定（NpcLeaderAI.override）
+		## GUARD_ROOM は敵専用（縄張り範囲外から帰還する）ので味方では常に false
+		if _is_in_explore_mode():
 			if not joined_to_player:
 				var pol := _get_explore_move_policy()
 				if pol == "stairs_down" or pol == "stairs_up":
@@ -275,7 +287,7 @@ func _assign_orders() -> void:
 					move_policy = "explore"
 				else:
 					move_policy = "cluster"
-		elif _party_strategy == Strategy.GUARD_ROOM:
+		elif _is_in_guard_room_mode():
 			move_policy = "guard_room"
 
 		# on_low_hp=retreat 時は cluster に上書き
@@ -615,9 +627,34 @@ func get_explore_move_policy() -> String:
 	return _get_explore_move_policy()
 
 
-## パーティー全体の戦略を評価する（サブクラスがオーバーライド）
+## パーティー全体の戦略を評価する（敵系サブクラスのみオーバーライド）
+## 2026-04-21 改訂：味方（PartyLeaderPlayer / NpcLeaderAI）は override しない。
+## _assign_orders() 側で `_is_enemy_party()` ガードにより味方では呼ばれない。
+## 敵系サブクラス（EnemyLeaderAI / Goblin・Wolf）は従来どおり override する。
 func _evaluate_party_strategy() -> Strategy:
 	return Strategy.WAIT
+
+
+## 探索モードか判定する（EXPLORE 相当・leader/follower で移動方針を分岐）
+## 敵：`_party_strategy == EXPLORE` で判定（基底実装）
+## NPC：敵検知フラグで override（NpcLeaderAI）
+func _is_in_explore_mode() -> bool:
+	return _party_strategy == Strategy.EXPLORE
+
+
+## 縄張り帰還モードか判定する（GUARD_ROOM 相当・敵専用）
+## 味方では常に false（味方は縄張り概念を持たない）
+func _is_in_guard_room_mode() -> bool:
+	return _party_strategy == Strategy.GUARD_ROOM
+
+
+## このパーティーが敵パーティーかを判定する（先頭生存メンバーの is_friendly で判別）
+## メンバー全員死亡時は false（戦略評価対象外）
+func _is_enemy_party() -> bool:
+	for m: Character in _party_members:
+		if is_instance_valid(m):
+			return not m.is_friendly
+	return false
 
 
 ## 指定メンバーの攻撃ターゲットを選択する（サブクラスがオーバーライド）

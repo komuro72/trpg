@@ -529,6 +529,10 @@ func _on_member_died(character: Character) -> void:
 
 ## 部屋制圧判定：全メンバーが「死亡 or 敵走離脱」なら party_wiped を発火する
 ## 呼び出しタイミング：メンバー死亡時
+##
+## 【敵パーティー専用】呼び出し元（_on_member_died）が `party_type == "enemy"` でガード済み。
+## `_leader_ai._party_strategy == FLEE` の参照は敵専用フィールドのため味方への適用不可
+## （2026-04-21 の味方側 `_party_strategy` 廃止後も、この判定は敵でのみ動作する）。
 func _check_room_suppression() -> void:
 	if _room_id.is_empty() or _map_data == null:
 		return

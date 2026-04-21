@@ -716,7 +716,7 @@ func _draw_member_block(font: Font, m: Character, x: float, y: float, w: float,
 
 	# 状態グループ（UnitAI 側フラグ・詳細度 >= 2）
 	if _detail_level >= 2 and ai != null and is_instance_valid(ai):
-		var ai_flag_parts: PackedStringArray = _build_ai_flag_parts(ai)
+		var ai_flag_parts: PackedStringArray = _build_ai_flag_parts(ai, m)
 		if not ai_flag_parts.is_empty():
 			segs.append({"text": "  状態:", "color": FLAGS_COLOR})
 			for p: String in ai_flag_parts:
@@ -857,15 +857,19 @@ func _build_orders_field_list(ai: UnitAI) -> PackedStringArray:
 
 ## UnitAI 側フラグパーツ（低優先度）：パーティー状態・種族固有の時系列情報をパーツ配列で返す
 ## 例: ["P↓", "F↑", "warp:1.2s"]
-##   P↓ = _party_fleeing（パーティー撤退中）
+##   P↓ = _party_fleeing（パーティー撤退中・敵メンバー限定）
 ##   F↑ = _floor_following（フロア追従中）
 ##   warp:1.2s = DarkLord 固有・次ワープまで残秒
 ## 該当フラグがない場合は空配列を返す
 ## ※ Lich の lich_water は 2026-04-21 に「敵固有・動的判断」として中優先度に移動
 ##   （`_build_enemy_dynamic_parts` で描画）
-func _build_ai_flag_parts(ai: UnitAI) -> PackedStringArray:
+##
+## 2026-04-21 改訂：`_party_fleeing` は敵専用フラグに変更（味方には配布されず常に false）。
+## 味方メンバー行に P↓ が出ないよう `m.is_friendly` ガードを追加。
+func _build_ai_flag_parts(ai: UnitAI, m: Character) -> PackedStringArray:
 	var parts: PackedStringArray = []
-	if _show_var("party_fleeing"):
+	## party_fleeing は敵メンバー限定（味方では常に false なので表示する意味なし）
+	if _show_var("party_fleeing") and m != null and not m.is_friendly:
 		var pf_v: Variant = ai.get("_party_fleeing")
 		if pf_v != null and (pf_v as bool):
 			parts.append("P↓")

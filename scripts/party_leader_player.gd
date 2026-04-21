@@ -2,11 +2,16 @@ class_name PartyLeaderPlayer
 extends PartyLeader
 
 ## プレイヤー操作パーティー用リーダー
-## PartyLeader を継承し、OrderWindow の指示（global_orders）を戦略・ターゲット選択に変換する。
+## PartyLeader を継承し、OrderWindow の指示（global_orders）でメンバーに個別指示を配布する。
 ## プレイヤーの指示を覆さない（戦況判断はメンバーAIの条件評価のみに使う）。
 ##
+## 2026-04-21 改訂：`_party_strategy` / `_evaluate_party_strategy()` は敵専用概念に変更。
+## 味方では `global_orders.battle_policy` が個別指示のプリセット流し込み
+## （OrderWindow._apply_battle_policy_preset → member.current_order）にのみ使われる。
+## party_fleeing フラグ配布も敵専用（基底 party_leader.gd:_assign_orders で味方は常に false）。
+##
 ## PartyLeaderAI との違い:
-##   - 戦略は global_orders.battle_policy から決定（AIの自動判断ではない）
+##   - _party_strategy を計算・保持しない（味方共通の方針）
 ##   - ターゲットは global_orders.target 設定 + _friendly_list から選択
 ##   - _select_target_for() はプレイヤー視点の敵リスト（_enemy_list）から選択
 
@@ -22,20 +27,6 @@ func set_enemy_list(enemies: Array[Character]) -> void:
 ## 対立するキャラクターのリスト（敵リスト）を返す
 func _get_opposing_characters() -> Array[Character]:
 	return _enemy_list
-
-
-## パーティー全体の戦略を評価する
-## global_orders.battle_policy を戦略に変換する
-func _evaluate_party_strategy() -> Strategy:
-	var policy: String = _global_orders.get("battle_policy", "attack") as String
-	match policy:
-		"attack":
-			return Strategy.ATTACK
-		"defense":
-			return Strategy.WAIT
-		"retreat":
-			return Strategy.FLEE
-	return Strategy.ATTACK
 
 
 ## 指定メンバーの攻撃ターゲットを選択する
