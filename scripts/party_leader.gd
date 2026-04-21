@@ -365,6 +365,39 @@ func get_initial_count() -> int:
 	return _initial_count
 
 
+## 戦闘方針プリセットをパーティーメンバー全員に適用する（2026-04-21 追加・ステップ 2）
+## policy: "attack" / "defense" / "retreat" のいずれか
+##
+## 役割：`_global_orders.battle_policy` の変更を各メンバーの `current_order`（個別指示）に流し込む。
+## プレイヤーは OrderWindow.`_apply_battle_policy_preset` が同じロジックで動作するが、NPC 側は
+## OrderWindow を経由しないため PartyLeader 基底に同等機構を持つ。
+##
+## プリセット定義は `OrderWindow.BATTLE_POLICY_PRESET`（クラス別 × 方針別 → {combat, battle_formation}）
+## を再利用する。ヒーラーは専用プリセット（rear / 方針対応 combat / heal=lowest_hp_first）。
+##
+## NpcLeaderAI が CRITICAL 時に `_global_orders["battle_policy"] = "retreat"` と書き換えた後、
+## このメソッドを呼んで全メンバーの個別指示を更新する。
+func apply_battle_policy_preset(policy: String) -> void:
+	for mv: Variant in _party_members:
+		var ch := mv as Character
+		if not is_instance_valid(ch) or ch.character_data == null:
+			continue
+		if ch.character_data.class_id == "healer":
+			# ヒーラー専用プリセット：隊形=rear、戦闘=方針に対応、回復=lowest_hp_first
+			var healer_combat: String = {"attack": "attack", "defense": "defense", "retreat": "flee"}.get(policy, "attack") as String
+			ch.current_order["battle_formation"] = "rear"
+			ch.current_order["combat"]           = healer_combat
+			ch.current_order["heal"]             = "lowest_hp_first"
+		else:
+			var cid: String = ch.character_data.class_id
+			var class_presets: Dictionary = OrderWindow.BATTLE_POLICY_PRESET.get(cid, {}) as Dictionary
+			if class_presets.is_empty():
+				continue
+			var preset: Dictionary = class_presets.get(policy, {}) as Dictionary
+			for pkey: String in preset:
+				ch.current_order[pkey] = preset.get(pkey, "") as String
+
+
 ## デバッグ情報を収集して返す
 func get_debug_info() -> Array:
 	var result: Array = []

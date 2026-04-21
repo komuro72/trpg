@@ -292,6 +292,15 @@
     "type": "float",
     "value": 0.5
   },
+  "NPC_POLICY_CHANGE_COOLDOWN": {
+    "category": "NpcLeaderAI",
+    "description": "NpcLeaderAI の battle_policy 自動書き換えクールダウン（秒）。CRITICAL/SAFE 境界振動を抑制",
+    "max": 30.0,
+    "min": 0.0,
+    "step": 0.5,
+    "type": "float",
+    "value": 3.0
+  },
   "PARTY_FLEE_ALIVE_RATIO": {
     "category": "EnemyLeaderAI",
     "description": "パーティーの生存メンバー率がこの値未満で FLEE 戦略へ切替（ゴブリン・ウルフ系）",

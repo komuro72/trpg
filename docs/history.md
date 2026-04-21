@@ -17,6 +17,7 @@
 - **F7 PartyStatusWindow スナップショット機能を新設**：全パーティー状態を `res://logs/snapshot_<timestamp>.log` に個別ファイルとして書き出し（詳細度最大固定・ウィンドウ非表示でも動作・ConfigEditor 開時は無効・`runtime.log` には押下マーカー 1 行のみ）
 - **個体アクション `flee` を 3 種に分離（`keep_distance` / `fall_back` / `flee`）**：PartyStatusWindow の表示が「HP 低下逃走・パーティー撤退・種族カイティング」で全て「逃走」になっていた問題を解消
 - **`on_low_hp` の内部値 `"retreat"` → `"fall_back"` にリネーム**（UI 表示「後退」は維持・全体方針 `battle_policy = "retreat"` との内部名重複解消）
+- **ステップ 2 完了：NpcLeaderAI CRITICAL 時 `battle_policy` 自動書き換え**：ステップ 1 で失われた NPC の自動 FLEE を別経路で復活（`_global_orders["battle_policy"] = "retreat"` ベース・PartyLeaderPlayer と同じ経路）
 - **dead code 削除**：`Character.get_direction_multiplier()`
 - **調査ドキュメント 5 件新規作成**：`investigation_debug_variables.md` / `investigation_enemy_order_system.md` / `investigation_enemy_order_effective.md` / `investigation_receive_order_keys.md` / `investigation_party_strategy_ally_removal.md`
 
@@ -170,6 +171,49 @@ PartyStatusWindow Snapshot
 - `keep_distance`：射程内を保つ（遠ざかりすぎない）
 - `fall_back`：リーダー後方 or 射程外まで下がる
 - `flee`：安全な場所へ完全離脱（ステップ 3 の `flee_recommended_goal` 実装で対応予定）
+
+---
+
+### ステップ 2：NpcLeaderAI CRITICAL 時 `battle_policy` 自動書き換え
+
+**背景**：ステップ 1（味方側 `_party_strategy` / `party_fleeing` 廃止）で `NpcLeaderAI._evaluate_party_strategy()` を削除した結果、「戦況 CombatSituation.CRITICAL 時の自動 FLEE」が一時的に失われていた。復活させる必要があるが、旧実装（`_party_strategy = Strategy.FLEE` に切り替える）ではなく、**NpcLeaderAI が自分の `_global_orders.battle_policy` を `"retreat"` に書き換える**方式で実装することで、PartyLeaderPlayer と同じ経路（OrderWindow 経由プリセット流し込みと等価）で FLEE を発動させる形に統一する。
+
+**設計方針**：
+
+1. `_evaluate_party_strategy()` は復活させない（味方は `_party_strategy` を使わない原則を維持）
+2. NpcLeaderAI が自分の `_global_orders["battle_policy"]` を自動書き換え
+3. CRITICAL → `"retreat"` / SAFE → `"attack"` の 2 閾値切替。中間領域は現状維持（境界振動抑制）
+4. プリセット流し込み機構を共通化（PartyLeader 基底 → NPC / プレイヤー共通経路化）
+5. クールダウンで短時間の連続切替を抑制
+
+**実装変更**：
+
+- **[`scripts/party_leader.gd`](../scripts/party_leader.gd)** に `apply_battle_policy_preset(policy: String)` 公開メソッド新設
+  - OrderWindow の `_apply_battle_policy_preset` と同等ロジックを PartyLeader 基底に持たせる
+  - `OrderWindow.BATTLE_POLICY_PRESET`（クラス別 × 方針別）を再利用・ヒーラーは専用プリセット
+  - `_party_members` を対象にメンバーの `current_order` を一括更新
+- **[`scripts/npc_leader_ai.gd`](../scripts/npc_leader_ai.gd)**：
+  - `_evaluate_and_update_battle_policy()` 新設（毎フレーム判定・安価な早期リターン付き）
+  - `_last_policy_change_time: float = -INF` 変数追加（クールダウン管理）
+  - `_combat_situation_label()` ヘルパー追加（ログ用）
+  - `_process(delta)` で `super._process(delta)` 後に上記関数を呼ぶ（`joined_to_player` 中は対象外）
+  - 書き換え時は `_global_orders["battle_policy"] = new_policy` → `apply_battle_policy_preset(new_policy)` → `notify_situation_changed()` で即時伝達
+  - `[NPC戦況判断]` ログを `MessageLog.add_ai()` に出力
+- **[`scripts/global_constants.gd`](../scripts/global_constants.gd)**：`NPC_POLICY_CHANGE_COOLDOWN = 3.0`（float）追加・Config Editor NpcLeaderAI カテゴリに登録
+- **[`assets/master/config/constants_default.json`](../assets/master/config/constants_default.json)**：`NPC_POLICY_CHANGE_COOLDOWN` メタ情報追加（min=0.0 / max=30.0 / step=0.5）
+
+**OrderWindow 側のプリセット流し込みは変更なし**：プレイヤー側は従来どおり `OrderWindow._apply_battle_policy_preset` で `Party.members` を直接更新する。PartyLeader 基底の `apply_battle_policy_preset` は NPC 用に新設した同等処理。軽い重複はあるがスコープ分離優先（プレイヤー OrderWindow vs NPC 自律判断）。
+
+**動作観察**：
+
+- NPC 交戦中に戦力比 < 0.5（CRITICAL）になると battle_policy が `attack → retreat` に切り替わり、各メンバーの `combat = "flee"` / `battle_formation = "gather"`（近接クラス）/ `rear`（後衛クラス）へプリセット流し込まれる
+- メンバーが逃走キュー（UnitAI の `{"action": "flee"}` 5 個）を取得して脅威から離脱
+- 敵から離れて戦況 SAFE に戻ると `battle_policy = attack` に復帰・通常行動再開
+- 境界値で戦況が振動しても 3 秒間は再切替しない（`NPC_POLICY_CHANGE_COOLDOWN`）
+
+**敵パーティーへの非影響**：敵は `_party_strategy`（enum）ベースの FLEE 判定を維持。NpcLeaderAI のロジックは party_type="npc" 限定。
+
+**プレイヤーパーティーへの非影響**：プレイヤーは OrderWindow 経由の手動設定のみ反映。NpcLeaderAI のロジックは PartyManager.party_type による分岐で発火しない。
 
 **用途例**：
 

@@ -276,6 +276,12 @@ func _select_target_for(member: Character) -> Character:
 
 func _process(delta: float) -> void:
 	super._process(delta)
+	# 戦況 CRITICAL/SAFE に応じた battle_policy 自動書き換え（2026-04-21 追加・ステップ 2）
+	## super._process は _reeval_timer 経過時に _combat_situation を更新するので、
+	## その結果を見て battle_policy を切り替える。joined_to_player 中はプレイヤー管理の
+	## パーティーなので対象外（プレイヤーが OrderWindow で手動設定する）。
+	if not joined_to_player:
+		_evaluate_and_update_battle_policy()
 	# 合流済みパーティーは対象外（プレイヤーが直接管理する）
 	if joined_to_player:
 		return
@@ -284,6 +290,77 @@ func _process(delta: float) -> void:
 		_auto_item_timer = 0.0
 		_auto_equip_members()
 		_auto_share_potions()
+
+
+# --------------------------------------------------------------------------
+# battle_policy 自動書き換え（2026-04-21 ステップ 2 追加）
+# --------------------------------------------------------------------------
+
+## 直近で battle_policy を書き換えた時刻（Time.get_ticks_msec()/1000.0 ベース・秒）
+## `NPC_POLICY_CHANGE_COOLDOWN` のクールダウン管理に使用。
+## 初期値 -INF により起動直後の切り替えは常に許可される
+var _last_policy_change_time: float = -INF
+
+
+## 戦況 CombatSituation に応じて `_global_orders.battle_policy` を自動書き換えする
+## （ステップ 1 で削除した `_evaluate_party_strategy()` 由来の自動 FLEE を別経路で復活）
+##
+## 設計方針：
+##   - CRITICAL（戦力比 < 0.5）→ `battle_policy = "retreat"`（個別指示を撤退プリセットに一括更新）
+##   - SAFE（敵を検知していない）→ `battle_policy = "attack"`（通常の攻撃/探索に戻す）
+##   - 中間領域（DISADVANTAGE / EVEN / ADVANTAGE / OVERWHELMING）は現状維持
+##     → CRITICAL/SAFE の 2 閾値切替のみ。境界振動を抑える
+##   - クールダウン `NPC_POLICY_CHANGE_COOLDOWN`（既定 3.0 秒）で短時間の再書き換えを抑制
+##
+## プリセット流し込みは基底 `PartyLeader.apply_battle_policy_preset()` を呼ぶ
+## （PartyLeaderPlayer が OrderWindow 経由で行うのと同等の処理）
+func _evaluate_and_update_battle_policy() -> void:
+	var situation: int = _combat_situation.get("situation",
+		int(GlobalConstants.CombatSituation.SAFE)) as int
+
+	var current_policy: String = _global_orders.get("battle_policy", "attack") as String
+	var new_policy: String = current_policy
+	if situation == int(GlobalConstants.CombatSituation.CRITICAL):
+		new_policy = "retreat"
+	elif situation == int(GlobalConstants.CombatSituation.SAFE):
+		new_policy = "attack"
+	# 中間領域は現状維持（new_policy = current_policy）
+
+	if new_policy == current_policy:
+		return
+
+	# クールダウンチェック（頻繁な切り替え防止）
+	var now: float = Time.get_ticks_msec() / 1000.0
+	if now - _last_policy_change_time < GlobalConstants.NPC_POLICY_CHANGE_COOLDOWN:
+		return
+
+	# 書き換え＆プリセット流し込み
+	_global_orders["battle_policy"] = new_policy
+	_last_policy_change_time = now
+	apply_battle_policy_preset(new_policy)
+	# メンバー指示へ即座に伝達（次の _reeval_timer を待たずに _assign_orders を発火）
+	notify_situation_changed()
+
+	# ログ（デバッグ・プレイ観察用）
+	if MessageLog != null:
+		var leader_name := _get_leader_name()
+		var sit_label: String = _combat_situation_label(situation)
+		MessageLog.add_ai(
+			"[NPC戦況判断] %s: 戦況=%s → battle_policy=%s" % [
+				leader_name, sit_label, new_policy])
+
+
+## CombatSituation enum 値を短い日本語ラベルに変換する（ログ用）
+## party_status_window.gd 側の同名関数と同じロジックだが、依存を作らないため NpcLeaderAI にも持つ
+func _combat_situation_label(sit: int) -> String:
+	match sit:
+		int(GlobalConstants.CombatSituation.SAFE):          return "安全"
+		int(GlobalConstants.CombatSituation.OVERWHELMING):  return "圧倒"
+		int(GlobalConstants.CombatSituation.ADVANTAGE):     return "優勢"
+		int(GlobalConstants.CombatSituation.EVEN):          return "互角"
+		int(GlobalConstants.CombatSituation.DISADVANTAGE):  return "劣勢"
+		int(GlobalConstants.CombatSituation.CRITICAL):      return "危険"
+	return "?"
 
 
 ## パーティー全体の未装備品を最適配分する

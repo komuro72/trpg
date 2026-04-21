@@ -66,6 +66,13 @@ var FLOOR_4_RANK_THRESHOLD: int = 24
 ## [ConfigEditor 対象・NpcLeaderAI カテゴリ]
 var FLOOR_RETREAT_RATIO: float = 0.5
 
+## NpcLeaderAI の battle_policy 自動書き換えクールダウン（秒）
+## 2026-04-21 追加（ステップ 2：CRITICAL 時 battle_policy 自動書き換え）
+## 戦況 CRITICAL/SAFE が境界値で振動したときに battle_policy が頻繁に変わるのを抑制する。
+## retreat ⇔ attack の切替からこの秒数が経過していないと再書き換えを行わない。
+## [ConfigEditor 対象・NpcLeaderAI カテゴリ]
+var NPC_POLICY_CHANGE_COOLDOWN: float = 3.0
+
 ## アイテム取得範囲（item_pickup=passive 設定時の取得判定距離・マンハッタン距離）
 const ITEM_PICKUP_RANGE: int = 2
 ## 瀕死判定閾値（HP率がこれ以下で「瀕死」と判定。ヒールポーション自動使用・on_low_hp発動・heal "aggressive" モード対象選定に使用）
@@ -471,6 +478,7 @@ const CONFIG_KEYS: Array[String] = [
 	"FLOOR_3_RANK_THRESHOLD",
 	"FLOOR_4_RANK_THRESHOLD",
 	"FLOOR_RETREAT_RATIO",
+	"NPC_POLICY_CHANGE_COOLDOWN",
 	# EnemyLeaderAI タブ
 	"PARTY_FLEE_ALIVE_RATIO",
 	# UnitAI タブ
