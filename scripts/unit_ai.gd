@@ -499,8 +499,10 @@ func _start_action(action: Dictionary) -> void:
 			# 表示ラベルと生成経路のみ区別する。将来はそれぞれ独自の経路探索ロジックに差別化予定。
 			# 2026-04-21 ステップ 3：味方側の新ロジックは _target null でも動作する（脅威コストは全対立陣営を自動集計）
 			# 敵側レガシー実装は _target 必須・null なら現在位置を返すため、結果として _complete_action 経由で完了する
-			# freed オブジェクトはガード：GDScript の typed Character 引数に freed を渡すと型不一致エラー
-			if _target != null and not is_instance_valid(_target):
+			# freed オブジェクトはガード：typed Character 引数に freed を渡すと型不一致エラー
+			# （Godot 4.6 では freed Object の `!= null` 比較が false を返すケースがあるため、
+			#  `is_instance_valid()` 単独で判定する）
+			if not is_instance_valid(_target):
 				_target = null
 			var goal := _find_flee_goal(_target)
 			if goal == _member.grid_pos:
@@ -624,14 +626,16 @@ func _start_action(action: Dictionary) -> void:
 func _step_toward_goal() -> bool:
 	var action_type := _current_action.get("action", "") as String
 	# freed オブジェクトはガード：typed Character 引数に freed を渡すと型不一致エラー
-	if _target != null and not is_instance_valid(_target):
+	# （Godot 4.6 では freed Object の `!= null` 比較が false を返すケースがあるため、
+	#  `is_instance_valid()` 単独で判定する）
+	if not is_instance_valid(_target):
 		_target = null
 	if action_type == "move_to_formation":
 		_goal = _formation_move_goal()
 	elif action_type == "move_to_explore":
 		pass  # goal は _start_action で固定済み（リアルタイム更新しない）
 	elif action_type == "move_to_attack":
-		if _target != null and is_instance_valid(_target):
+		if is_instance_valid(_target):
 			_goal = _calc_attack_goal(_target, _get_path_method())
 	elif action_type == "flee" or action_type == "fall_back" or action_type == "keep_distance":
 		# flee / fall_back / keep_distance は全て「脅威から離れる」移動（当面同じ実装）
@@ -1427,19 +1431,24 @@ func _find_friendly_retreat_goal() -> Vector2i:
 ## 経路が無い / 出口がない場合は旧実装（`_find_flee_goal_legacy`）にフォールバック
 ##
 ## 敵パーティーの FLEE 逃走先は現状スコープ外（`_party_strategy == FLEE` 時も旧実装を使用）
-func _find_flee_goal(threat: Character) -> Vector2i:
+##
+## 引数を untyped にしているのは防御的措置：GDScript 4.6 では freed Object を typed
+## 引数に渡すと型不一致エラーが出る。内部で `is_instance_valid()` で正規化する
+func _find_flee_goal(threat) -> Vector2i:
+	# freed → null に正規化
+	var safe_threat: Character = threat if is_instance_valid(threat) else null
 	# 味方のみ新ロジック適用。敵は従来どおり（派生タスクで対応予定）
 	if _member == null or not is_instance_valid(_member) or _map_data == null \
 			or not _member.is_friendly:
-		return _find_flee_goal_legacy(threat)
+		return _find_flee_goal_legacy(safe_threat)
 
 	var current_area: String = _map_data.get_area(_member.grid_pos)
 	if current_area.is_empty():
-		return _find_flee_goal_legacy(threat)
+		return _find_flee_goal_legacy(safe_threat)
 
 	var exit_tiles: Array[Vector2i] = _map_data.get_exit_tiles_from(current_area)
 	if exit_tiles.is_empty():
-		return _find_flee_goal_legacy(threat)
+		return _find_flee_goal_legacy(safe_threat)
 
 	var recommended: Vector2i = _flee_recommended_goal
 	var best_exit: Vector2i = Vector2i(-1, -1)
@@ -1460,7 +1469,7 @@ func _find_flee_goal(threat: Character) -> Vector2i:
 			best_exit = exit_tile
 
 	if best_exit == Vector2i(-1, -1):
-		return _find_flee_goal_legacy(threat)
+		return _find_flee_goal_legacy(safe_threat)
 	return best_exit
 
 
