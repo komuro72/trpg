@@ -19,6 +19,7 @@
 - **`on_low_hp` の内部値 `"retreat"` → `"fall_back"` にリネーム**（UI 表示「後退」は維持・全体方針 `battle_policy = "retreat"` との内部名重複解消）
 - **ステップ 2 完了：NpcLeaderAI CRITICAL 時 `battle_policy` 自動書き換え**：ステップ 1 で失われた NPC の自動 FLEE を別経路で復活（`_global_orders["battle_policy"] = "retreat"` ベース・PartyLeaderPlayer と同じ経路）
 - **ステップ 3 完了：FLEE 時の逃走先決定ロジック**：味方パーティーに二段階方式（リーダー推奨出口 + メンバー自律選択）を実装・脅威コスト付き A* + エリア BFS 距離の複合評価
+- **PartyStatusWindow の FLEE 時避難先情報表示**：ヘッダーの戦況判断ブロック末尾に `避難先:<area_id>(d:<n>)@(<x>,<y>)` / フォールバック時 `避難先:!fb@(<x>,<y>)` を追加（味方パーティー限定）
 - **dead code 削除**：`Character.get_direction_multiplier()`
 - **調査ドキュメント 5 件新規作成**：`investigation_debug_variables.md` / `investigation_enemy_order_system.md` / `investigation_enemy_order_effective.md` / `investigation_receive_order_keys.md` / `investigation_party_strategy_ally_removal.md`
 
@@ -278,6 +279,57 @@ PartyStatusWindow Snapshot
 
 - **敵パーティーへの同ロジック適用**（優先度：中）：現状、敵の `flee` は `_find_flee_goal_legacy`（脅威から 5 タイル離れる）のまま。味方と同じ二段階ロジックを敵にも適用する。避難先は敵種族ごとに異なる可能性（縄張り戻り / 階段逃走など）の設計検討が必要
 - **`_find_friendly_retreat_goal` 削除**（優先度：低・dead code）
+- **戦況判断と避難先計算の関数統合**（優先度：低）：`_evaluate_strategic_status()` と `_determine_flee_recommended_goal()` を統合し、避難先情報も `combat_situation` 辞書に含める
+
+---
+
+### PartyStatusWindow FLEE 時避難先情報表示
+
+**背景**：ステップ 3 で FLEE 時の推奨出口タイル（`_flee_recommended_goal`）はメンバー行に `flee→(x,y)` として表示されたが、「パーティー全体として目指している避難先エリア」と「そこまでの BFS 距離」がログから追えなかった。リーダーが自律計算する高次の戦略意図（どのエリアを目指しているか）を可視化する。
+
+**設計方針**：
+1. 表示位置は**戦況判断ブロック末尾**（`HP:満` の直後）。`battle=撤退` は全体指示（プレイヤー設定値）なので触らず、避難先情報は「戦況判断の派生情報」として独立扱い
+2. **パーティー FLEE 中のみ表示**（`_is_party_fleeing() == true`）・通常時は非表示でヘッダーの形を変えない
+3. **味方パーティー限定**（敵は FLEE 実装が別タスク）
+4. フォールバック状態を明示（`!fb` マーカー）
+
+**実装変更**：
+
+- **[`scripts/party_leader.gd`](../scripts/party_leader.gd)**：
+  - 避難先情報の保持変数 3 つ追加：`_flee_refuge_area_id: String` / `_flee_refuge_distance: int` / `_flee_is_fallback: bool`
+  - `_update_flee_recommended_goal()`：FLEE でないときに全 4 変数をクリア
+  - `_determine_flee_recommended_goal()` 刷新：
+    - 開始時に 3 変数をリセット
+    - 各出口ループ内で `exit_refuge_area` / `exit_refuge_dist` を追跡（選ばれた出口の対応避難先を記録）
+    - フォールバック条件を明示：MapData 不在・リーダー不在・エリア空・出口なし・避難先エリア一覧空・選択出口から避難先到達不能 → `_flee_is_fallback = true`
+    - 選ばれた出口の `best_refuge_area` / `best_refuge_dist` を 3 変数に記録
+  - 公開 getter 3 つ追加：`get_flee_refuge_area_id()` / `get_flee_refuge_distance()` / `is_flee_fallback()`
+- **[`scripts/party_status_window.gd`](../scripts/party_status_window.gd)**：
+  - ヘルパー関数 `_format_flee_refuge_suffix(pm)` 新設
+    - 味方パーティー限定（`party_type == "enemy"` は空文字）
+    - `goal == Vector2i(-1, -1)` は空文字
+    - フォールバック時：`  避難先:!fb@(x,y)`
+    - 通常：`  避難先:<area_id>(d:<n>)@(x,y)`
+    - 情報欠損時もフォールバック扱い（防御的）
+  - `_draw_party_block` / `_draw_player_party` ヘッダーに suffix を追加（`_format_leader_extras` の前）
+  - snapshot 版 `_snapshot_player_party_lines` / `_snapshot_party_block_lines` にも同じ suffix 追加（F7 出力に自動反映）
+
+**出力例**：
+
+```
+# 通常（FLEE 中・避難先あり）
+[NPC]  生存:2/2  戦況:劣勢 戦力:劣位 F(4+0.0)4.0 C(4+0.0)4.0 E(6+0.0)6.0 HP:満  避難先:area_safe_00(d:3)@(44,13)  mv=追従  battle=撤退 ...
+
+# フォールバック（避難先不明 or 到達不能）
+[NPC]  生存:2/2  戦況:劣勢 ... HP:満  避難先:!fb@(44,13)  mv=追従  battle=撤退 ...
+
+# 通常時（FLEE でない）
+[NPC]  生存:2/2  戦況:安全 ... HP:満  mv=追従  battle=攻撃 ...
+```
+
+**派生課題**（要調査項目に記録）：
+- 戦況判断（`_evaluate_strategic_status`）と避難先計算（`_determine_flee_recommended_goal`）の関数統合（将来的に `combat_situation` 辞書に避難先情報を含める）
+- 敵パーティーの避難先表示対応（将来の敵 FLEE 新ロジック実装時）
 
 **動作観察**：
 

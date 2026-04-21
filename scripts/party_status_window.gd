@@ -501,6 +501,9 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 				type_label, alive, total,
 				sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str]
 
+	# FLEE 中の避難先情報（味方パーティー限定・戦況判断派生情報として戦況ブロック末尾に付加）
+	header += _format_flee_refuge_suffix(pm)
+
 	# 詳細度レベルに応じてヘッダーに追加情報を付加
 	header += _format_leader_extras(pm)
 
@@ -587,6 +590,7 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 	var header := "[プレイヤー]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
 		alive, floor_members.size(),
 		sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str, item_str]
+	header += _format_flee_refuge_suffix(_hero_manager)
 	header += _format_leader_extras(_hero_manager)
 	if y + LINE_H > bottom:
 		return y
@@ -1170,6 +1174,37 @@ func _hp_status_label(hs: int) -> String:
 	return "?"
 
 
+## FLEE 時の避難先情報 suffix を返す（戦況判断ブロック末尾に付加）
+## 形式:
+##   通常（FLEE 中・避難先あり）: `  避難先:<area_id>(d:<n>)@(<x>,<y>)`
+##   フォールバック（避難先不明）: `  避難先:!fb@(<x>,<y>)`
+##   FLEE でない / 敵パーティー / 情報なし: `""`（空文字列）
+## 味方パーティー限定。敵パーティーは FLEE 実装が別タスクのため、将来同様の表示を検討する
+func _format_flee_refuge_suffix(pm: PartyManager) -> String:
+	if pm == null or not is_instance_valid(pm):
+		return ""
+	if pm.party_type == "enemy":
+		return ""
+	var leader: PartyLeader = pm.get_party_leader()
+	if leader == null or not is_instance_valid(leader):
+		return ""
+	if not leader.has_method("get_flee_recommended_goal"):
+		return ""
+	var goal: Vector2i = leader.get_flee_recommended_goal()
+	if goal == Vector2i(-1, -1):
+		return ""
+	if leader.has_method("is_flee_fallback") and leader.is_flee_fallback():
+		return "  避難先:!fb@(%d,%d)" % [goal.x, goal.y]
+	var area_id: String = leader.get_flee_refuge_area_id() \
+			if leader.has_method("get_flee_refuge_area_id") else ""
+	var dist: int = leader.get_flee_refuge_distance() \
+			if leader.has_method("get_flee_refuge_distance") else -1
+	if area_id.is_empty() or dist < 0:
+		# 何らかの理由で情報欠損 → フォールバック扱い
+		return "  避難先:!fb@(%d,%d)" % [goal.x, goal.y]
+	return "  避難先:%s(d:%d)@(%d,%d)" % [area_id, dist, goal.x, goal.y]
+
+
 ## 「生存:X/Y」の分母 Y を算出する
 ## AI 管理パーティー（enemy / npc）：死亡時 PartyManager._on_member_died が
 ## _members.erase() を呼ぶため現在サイズは生存者数になる。初期メンバー数を返すため
@@ -1336,6 +1371,7 @@ func _snapshot_player_party_lines(floor_idx: int) -> PackedStringArray:
 	var header: String = "[プレイヤー]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
 		alive, floor_members.size(), sit_str, pb_str, hs_str,
 		mv_str, battle_str, tgt_str, hp_str, item_str]
+	header += _format_flee_refuge_suffix(_hero_manager)
 	header += _format_leader_extras(_hero_manager)
 	out.append(header)
 
@@ -1412,6 +1448,7 @@ func _snapshot_party_block_lines(pm: PartyManager, type_label: String,
 			header = "[%s]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s" % [
 				type_label, alive, total,
 				sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str]
+	header += _format_flee_refuge_suffix(pm)
 	header += _format_leader_extras(pm)
 	out.append(header)
 
