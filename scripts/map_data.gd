@@ -234,3 +234,88 @@ func is_walkable_for_enemy(pos: Vector2i, flying: bool) -> bool:
 	if not is_walkable_for(pos, flying):
 		return false
 	return not is_safe_tile(pos)
+
+
+# --------------------------------------------------------------------------
+# FLEE 逃走先決定 API（2026-04-21 ステップ 3 追加）
+# --------------------------------------------------------------------------
+
+## 指定フロアの避難先エリア ID 一覧を返す
+## フロア 0: 安全部屋群のエリア ID（get_safe_tiles() から導出・重複排除）
+## フロア 1 以降: 上り階段タイルのあるエリア ID（find_stairs(STAIRS_UP) から導出・重複排除）
+## 該当エリアが存在しない場合は空配列
+func get_refuge_area_ids(floor_id: int) -> Array[String]:
+	var result: Array[String] = []
+	if floor_id == 0:
+		for pos: Variant in _safe_tiles.keys():
+			var area: String = _area_map.get(pos, "") as String
+			if not area.is_empty() and not result.has(area):
+				result.append(area)
+	else:
+		var ups: Array[Vector2i] = find_stairs(TileType.STAIRS_UP)
+		for pos: Vector2i in ups:
+			var area: String = _area_map.get(pos, "") as String
+			if not area.is_empty() and not result.has(area):
+				result.append(area)
+	return result
+
+
+## 2 つのエリア間の部屋単位の距離（ホップ数）を BFS で返す
+## from == to の場合は 0、到達不能の場合は -1
+## `_adjacent_areas`（build_adjacency() で構築済み）を参照
+func get_area_distance(from_area_id: String, to_area_id: String) -> int:
+	if from_area_id.is_empty() or to_area_id.is_empty():
+		return -1
+	if from_area_id == to_area_id:
+		return 0
+	var visited: Dictionary = {from_area_id: true}
+	var queue: Array = [[from_area_id, 0]]
+	while not queue.is_empty():
+		var head: Array = queue.pop_front() as Array
+		var cur: String = head[0] as String
+		var dist: int = head[1] as int
+		var neighbors: Array[String] = _adjacent_areas.get(cur, []) as Array[String]
+		for n: String in neighbors:
+			if visited.has(n):
+				continue
+			if n == to_area_id:
+				return dist + 1
+			visited[n] = true
+			queue.append([n, dist + 1])
+	return -1
+
+
+## エリアの内側出口タイル一覧を返す
+## 定義: そのエリア内のタイルのうち、4 近傍に異なるエリア ID（非空）を持つタイルがあるタイル
+## A* のゴールとして使い、そのエリア内で完結する経路を探索させる
+func get_exit_tiles_from(area_id: String) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	if area_id.is_empty():
+		return result
+	for pos_var: Variant in _area_map.keys():
+		if _area_map[pos_var] != area_id:
+			continue
+		var pos := pos_var as Vector2i
+		for offset: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0),
+				Vector2i(0, 1), Vector2i(0, -1)]:
+			var neighbor_area: String = _area_map.get(pos + offset, "") as String
+			if not neighbor_area.is_empty() and neighbor_area != area_id:
+				result.append(pos)
+				break
+	return result
+
+
+## 内側出口タイルから隣接する別エリアの ID 一覧を返す
+## 1 つの出口タイルが複数の別エリアに接することもあり得るので Array[String] を返す
+## （通路タイルがちょうど 3 エリアの交点にいるようなケースを想定）
+func get_adjacent_area_ids_of_exit(exit_tile: Vector2i) -> Array[String]:
+	var result: Array[String] = []
+	var own_area: String = _area_map.get(exit_tile, "") as String
+	for offset: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0),
+			Vector2i(0, 1), Vector2i(0, -1)]:
+		var neighbor_area: String = _area_map.get(exit_tile + offset, "") as String
+		if neighbor_area.is_empty() or neighbor_area == own_area:
+			continue
+		if not result.has(neighbor_area):
+			result.append(neighbor_area)
+	return result

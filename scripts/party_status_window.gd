@@ -77,6 +77,7 @@ const VAR_PRIORITY: Dictionary = {
 	"party_fleeing":             2,  # 低：パーティー撤退中
 	"floor_following":           2,  # 低：フロア追従中
 	"warp_timer":                2,  # 低：DarkLord 固有・次ワープまで残秒
+	"flee_recommended_goal":     2,  # 低：FLEE 時のリーダー推奨出口（味方のみ・2026-04-21 ステップ 3）
 
 	# 敵固有・動的判断（中）※ 2026-04-21 追加
 	"should_self_flee":          1,  # 中：ゴブリン系 HP 低下時の自己逃走判定
@@ -877,10 +878,11 @@ func _build_orders_field_list(ai: UnitAI) -> PackedStringArray:
 
 
 ## UnitAI 側フラグパーツ（低優先度）：パーティー状態・種族固有の時系列情報をパーツ配列で返す
-## 例: ["P↓", "F↑", "warp:1.2s"]
+## 例: ["P↓", "F↑", "warp:1.2s", "flee→(12,8)"]
 ##   P↓ = _party_fleeing（パーティー撤退中・敵メンバー限定）
 ##   F↑ = _floor_following（フロア追従中）
 ##   warp:1.2s = DarkLord 固有・次ワープまで残秒
+##   flee→(x,y) = リーダー推奨出口タイル（2026-04-21 ステップ 3・味方パーティー FLEE 中のみ）
 ## 該当フラグがない場合は空配列を返す
 ## ※ Lich の lich_water は 2026-04-21 に「敵固有・動的判断」として中優先度に移動
 ##   （`_build_enemy_dynamic_parts` で描画）
@@ -894,6 +896,14 @@ func _build_ai_flag_parts(ai: UnitAI, m: Character) -> PackedStringArray:
 		var pf_v: Variant = ai.get("_party_fleeing")
 		if pf_v != null and (pf_v as bool):
 			parts.append("P↓")
+	## flee_recommended_goal は味方メンバー限定（敵は現状 FLEE 逃走先の推奨機構なし）
+	## パーティー FLEE 中（有効値 != Vector2i(-1, -1)）のみ表示
+	if _show_var("flee_recommended_goal") and m != null and m.is_friendly:
+		var rg_v: Variant = ai.get("_flee_recommended_goal")
+		if rg_v != null:
+			var rg: Vector2i = rg_v as Vector2i
+			if rg != Vector2i(-1, -1):
+				parts.append("flee→(%d,%d)" % [rg.x, rg.y])
 	if _show_var("floor_following"):
 		var ff_v: Variant = ai.get("_floor_following")
 		if ff_v != null and (ff_v as bool):

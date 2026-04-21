@@ -87,6 +87,16 @@ var POTION_SP_MP_AUTOUSE_THRESHOLD: float = 0.5
 ## 種族固有自己逃走HP閾値（goblin系の _should_self_flee がこの値未満で true を返す）
 ## [ConfigEditor 対象]
 var SELF_FLEE_HP_THRESHOLD: float = 0.3
+
+## FLEE 時の逃走先決定ロジック（2026-04-21 ステップ 3 追加）
+## `UnitAI._calc_threat_cost()` / `_astar_with_cost()` / 逃走先推奨決定で使用
+## 詳細仕様：CLAUDE.md「FLEE 時の逃走先決定ロジック」セクション
+## [ConfigEditor 対象・UnitAI カテゴリ]
+var FLEE_THREAT_RANGE: int              = 5      ## 敵から何マス以内を危険とみなすか
+var FLEE_THREAT_WEIGHT: float           = 3.0    ## 危険マス 1 つあたりのコスト加算量
+var FLEE_AREA_DISTANCE_WEIGHT: float    = 10.0   ## 出口 → 避難先の部屋単位 BFS 距離係数
+var FLEE_NON_RECOMMENDED_PENALTY: float = 15.0   ## リーダー推奨外出口のペナルティ
+var FLEE_REEVAL_MIN_INTERVAL: float     = 0.3    ## エリア変化による強制再評価の最小インターバル（秒）
 ## パーティー逃走の生存率閾値（goblin/wolf リーダー：生存メンバー率がこれ未満で FLEE 戦略に切り替え）
 ## [ConfigEditor 対象] 外部 JSON (assets/master/config/constants.json) から読み込み
 var PARTY_FLEE_ALIVE_RATIO: float = 0.5
@@ -483,6 +493,11 @@ const CONFIG_KEYS: Array[String] = [
 	"PARTY_FLEE_ALIVE_RATIO",
 	# UnitAI タブ
 	"SELF_FLEE_HP_THRESHOLD",
+	"FLEE_THREAT_RANGE",
+	"FLEE_THREAT_WEIGHT",
+	"FLEE_AREA_DISTANCE_WEIGHT",
+	"FLEE_NON_RECOMMENDED_PENALTY",
+	"FLEE_REEVAL_MIN_INTERVAL",
 	"SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES",
 	"SPECIAL_ATTACK_FIRE_ZONE_RANGE",
 	"SPECIAL_ATTACK_FIRE_ZONE_MIN_ENEMIES",

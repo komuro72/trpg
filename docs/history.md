@@ -18,6 +18,7 @@
 - **個体アクション `flee` を 3 種に分離（`keep_distance` / `fall_back` / `flee`）**：PartyStatusWindow の表示が「HP 低下逃走・パーティー撤退・種族カイティング」で全て「逃走」になっていた問題を解消
 - **`on_low_hp` の内部値 `"retreat"` → `"fall_back"` にリネーム**（UI 表示「後退」は維持・全体方針 `battle_policy = "retreat"` との内部名重複解消）
 - **ステップ 2 完了：NpcLeaderAI CRITICAL 時 `battle_policy` 自動書き換え**：ステップ 1 で失われた NPC の自動 FLEE を別経路で復活（`_global_orders["battle_policy"] = "retreat"` ベース・PartyLeaderPlayer と同じ経路）
+- **ステップ 3 完了：FLEE 時の逃走先決定ロジック**：味方パーティーに二段階方式（リーダー推奨出口 + メンバー自律選択）を実装・脅威コスト付き A* + エリア BFS 距離の複合評価
 - **dead code 削除**：`Character.get_direction_multiplier()`
 - **調査ドキュメント 5 件新規作成**：`investigation_debug_variables.md` / `investigation_enemy_order_system.md` / `investigation_enemy_order_effective.md` / `investigation_receive_order_keys.md` / `investigation_party_strategy_ally_removal.md`
 
@@ -214,6 +215,78 @@ PartyStatusWindow Snapshot
 **敵パーティーへの非影響**：敵は `_party_strategy`（enum）ベースの FLEE 判定を維持。NpcLeaderAI のロジックは party_type="npc" 限定。
 
 **プレイヤーパーティーへの非影響**：プレイヤーは OrderWindow 経由の手動設定のみ反映。NpcLeaderAI のロジックは PartyManager.party_type による分岐で発火しない。
+
+---
+
+### ステップ 3：FLEE 時の逃走先決定ロジック（二段階方式）
+
+**背景**：ステップ 1・2 で味方 FLEE の発火経路（`battle_policy = "retreat"` + メンバー個別指示プリセット）は整ったが、実際の逃走先決定は旧実装（`_find_friendly_retreat_goal`：単純な最近安全タイル + `_find_flee_goal_legacy`：脅威から 5 タイル離れる）で、脅威を考慮しない・避難先への経路を考えない粗い実装だった。
+
+新設計は「リーダー層（戦略）がパーティー全体の推奨出口を決定 → メンバー層（戦術）が自分の位置から全出口を評価・推奨バイアス付きで選択」の二段階協調ロジック。
+
+**設計方針**：
+
+1. **二段階構造**：リーダー推奨出口 + メンバー自律選択（統率と柔軟性の両立）
+2. **出口タイル定義**：現エリア内のタイルで 4 近傍に別エリアがあるタイル（「内側出口」）。A* ゴールが現エリア内で完結
+3. **A* 探索範囲は現エリア内に限定**：計算量抑制 + 脅威情報の精度保証
+4. **避難先は複数候補対応**：フロア 0 = 複数の安全部屋 / フロア 1 以降 = 複数の上り階段エリア。各候補への最小 BFS 距離を取る
+5. **個体 FLEE / パーティー FLEE で推奨バイアスを切替**：パーティー FLEE = バイアスあり（統率）、個体 FLEE = バイアスなし（自律）
+6. **`flee_recommended_goal` はパーティー文脈情報として配布**：receive_order の辞書に追加（Vector2i(-1, -1) = 推奨なし）
+7. **敵ステータス直接参照禁止ルール準拠**：脅威コストは位置と `is_friendly` のみ参照・HP や power は見ない
+8. **敵パーティーは現状スコープ外**：敵は `_find_flee_goal_legacy`（従来実装）のままで動作
+
+**実装変更**：
+
+- **[`scripts/map_data.gd`](../scripts/map_data.gd)** に 4 API 新設：
+  - `get_refuge_area_ids(floor_id: int) -> Array[String]`：避難先エリア ID 一覧（フロア 0 = `_safe_tiles` から導出 / フロア 1 以降 = `find_stairs(STAIRS_UP)` から導出・重複排除）
+  - `get_area_distance(from, to) -> int`：エリア間の BFS ホップ数（`_adjacent_areas` を使用・到達不能 = -1・同一 = 0）
+  - `get_exit_tiles_from(area_id) -> Array[Vector2i]`：エリアの内側出口タイル一覧
+  - `get_adjacent_area_ids_of_exit(exit_tile) -> Array[String]`：出口タイルの向こう側エリア ID 一覧
+- **[`scripts/unit_ai.gd`](../scripts/unit_ai.gd)** 拡張：
+  - `_flee_recommended_goal: Vector2i` 変数追加（receive_order で受信）
+  - `_last_area_id: String` 変数追加（エリア変化検知用）
+  - `_astar_with_cost(start, goal, cost_fn, area_limit_id)` 新規：タイルコスト関数 + エリア制限対応の A*（既存 `_astar` は非破壊で維持）
+  - `_calc_threat_cost(tile) -> float`：脅威コスト計算（対立陣営の生存キャラについて `max(0, FLEE_THREAT_RANGE - manhattan) × FLEE_THREAT_WEIGHT` を合計）
+  - `_path_cost(path, threat_fn) -> float`：経路の合計コスト（1 ステップあたり 1.0 + 脅威コスト）
+  - `_find_flee_goal()` を新ロジックに更新（味方のみ・敵は `_find_flee_goal_legacy` へ）
+  - `_find_flee_goal_legacy(threat)`：旧実装を改名（敵 / 孤立エリアフォールバック用）
+  - `_is_in_refuge_area()`：現エリアが避難先エリアかの判定
+  - `_notify_area_change_if_needed()`：`_process` 内で毎フレーム呼ばれ、エリア変化時にリーダー通知
+  - `_generate_queue` の味方 FLEE 分岐を変更：`move_to_explore`（最近安全タイル直行）→ `{"action": "flee"}` × 5（新ロジックで段階的に避難先へ）
+  - 避難先到達時は `{"action": "wait"}` を返す
+- **[`scripts/party_leader.gd`](../scripts/party_leader.gd)** 拡張：
+  - `_flee_recommended_goal: Vector2i` / `_flee_last_reeval_time: float` 変数追加
+  - `get_flee_recommended_goal() -> Vector2i`：外部公開 getter
+  - `_is_party_fleeing() -> bool`：味方（`battle_policy == "retreat"`）/ 敵（`_party_strategy == FLEE`）の統一判定
+  - `_update_flee_recommended_goal()`：`_assign_orders()` から毎回呼ばれて推奨出口を更新
+  - `_determine_flee_recommended_goal()`：現エリアの全出口を評価 → 最小コストの出口を返す（リーダー UnitAI インスタンスで `_astar_with_cost` を呼ぶ）
+  - `_get_first_alive_leader() -> Character`：生存メンバー取得ヘルパー
+  - `on_member_area_changed(member, new_area)`：メンバー UnitAI からの通知受けて推奨出口再計算（`FLEE_REEVAL_MIN_INTERVAL` クールダウン付き）
+  - `_assign_orders()` の receive_order 辞書に `flee_recommended_goal` キーを追加
+- **[`scripts/party_status_window.gd`](../scripts/party_status_window.gd)**：
+  - `_build_ai_flag_parts(ai, m)` に `flee→(x,y)` 表示を追加（詳細度「低」・味方メンバー限定）
+  - VAR_PRIORITY に `flee_recommended_goal = 2` を登録
+- **[`scripts/global_constants.gd`](../scripts/global_constants.gd)**：5 定数新設（UnitAI カテゴリ・Config Editor 対応）
+  - `FLEE_THREAT_RANGE = 5` / `FLEE_THREAT_WEIGHT = 3.0` / `FLEE_AREA_DISTANCE_WEIGHT = 10.0` / `FLEE_NON_RECOMMENDED_PENALTY = 15.0` / `FLEE_REEVAL_MIN_INTERVAL = 0.3`
+- **[`assets/master/config/constants_default.json`](../assets/master/config/constants_default.json)**：上記 5 定数のメタ情報追加
+
+**A* 呼び出し構造**：PartyLeader から A* を呼ぶ際は、リーダーの UnitAI インスタンスを経由する（walker コンテキスト = `is_friendly` / `is_flying` / `_move_policy` 等が必要なため）。`_unit_ais.get(leader.name)._astar_with_cost(...)` の形で呼ぶ。
+
+**デッドコード候補**：`UnitAI._find_friendly_retreat_goal()` は今回の改訂で呼び出し元が消失した。dead code として次の棚卸しで物理削除予定。
+
+**派生課題**：
+
+- **敵パーティーへの同ロジック適用**（優先度：中）：現状、敵の `flee` は `_find_flee_goal_legacy`（脅威から 5 タイル離れる）のまま。味方と同じ二段階ロジックを敵にも適用する。避難先は敵種族ごとに異なる可能性（縄張り戻り / 階段逃走など）の設計検討が必要
+- **`_find_friendly_retreat_goal` 削除**（優先度：低・dead code）
+
+**動作観察**：
+
+- 味方 NPC が交戦中に CRITICAL → `battle_policy = "retreat"` に切り替わる（ステップ 2）
+- リーダーが現エリアの全出口を評価し、最も安全かつ安全部屋に近い出口を `_flee_recommended_goal` に設定
+- 各メンバーは自分の位置から全出口を評価・リーダー推奨なら bias=0、不一致なら +15 のペナルティ
+- 脅威コストが高い経路（敵集団が待ち構える出口など）は自然に避けられる
+- メンバーがエリアをまたぐたびにリーダーが推奨出口を再計算・次の出口を配布
+- PartyStatusWindow（F1 + F3 で詳細度「高+中+低」）のメンバー行に `flee→(x,y)` 表示
 
 **用途例**：
 
