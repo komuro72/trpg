@@ -1140,17 +1140,20 @@ func _hp_status_label(hs: int) -> String:
 
 
 # --------------------------------------------------------------------------
-# F7 スナップショット機能（2026-04-21 追加）
+# F7 スナップショット機能（2026-04-21 追加・2026-04-21 個別ファイル化改訂）
 # --------------------------------------------------------------------------
-## 現在の全パーティー状態を `res://logs/runtime.log` にテキストダンプする
+## 現在の全パーティー状態を `res://logs/snapshot_YYYYMMDD_HHMMSS_mmm.log` に書き出す
 ##
 ## game_map から F7 押下で呼ばれる（ウィンドウの表示・非表示に関わらず動作）。
 ## 詳細度は常に最高（高+中+低）で出力するため、`_detail_level` を一時的に 2 に
 ## 切り替えてヘルパ群（`_build_*_parts` / `_format_*`）を呼び、終了時に復元する。
 ## 画面の詳細度設定（F3）には影響しない。
 ##
-## 出力は DebugLog.log() に 1 回の多行文字列として渡す（先頭行のみ DebugLog の
-## `[HH:MM:SS.mmm]` タイムスタンプが付く）。
+## 出力先：
+##   - `res://logs/snapshot_<timestamp>.log` に本体（多行テキスト）を書き出す
+##     （毎起動リセットされない・手動削除で履歴管理する）
+##   - `res://logs/runtime.log` には「F7 snapshot → snapshot_<timestamp>.log」の
+##     1 行マーカーのみを `DebugLog.log()` で記録（時系列上の押下時刻を追うため）
 func snapshot_to_log() -> void:
 	var saved_detail_level: int = _detail_level
 	_detail_level = 2  # 常に最高詳細度で出力
@@ -1158,7 +1161,34 @@ func snapshot_to_log() -> void:
 	var text: String = _build_snapshot_text()
 
 	_detail_level = saved_detail_level
-	DebugLog.log(text)
+
+	# タイムスタンプ付きファイル名を生成（ミリ秒まで含めて重複衝突を回避）
+	var d: Dictionary = Time.get_datetime_dict_from_system()
+	var ms: int = Time.get_ticks_msec() % 1000
+	var stamp: String = "%04d%02d%02d_%02d%02d%02d_%03d" % [
+		int(d.get("year",   0)), int(d.get("month",  0)), int(d.get("day",    0)),
+		int(d.get("hour",   0)), int(d.get("minute", 0)), int(d.get("second", 0)), ms]
+	var filename: String = "snapshot_%s.log" % stamp
+	var path: String = "res://logs/%s" % filename
+
+	# logs/ フォルダがなければ作成（DebugLog と同じ扱い）
+	if not DirAccess.dir_exists_absolute("res://logs"):
+		var err: int = DirAccess.make_dir_recursive_absolute("res://logs")
+		if err != OK:
+			push_warning("[F7 Snapshot] logs ディレクトリ作成失敗 (err=%d)" % err)
+			return
+
+	# 個別ファイルに本体を書き出す（毎起動リセットしない・履歴として残す）
+	var f: FileAccess = FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		push_warning("[F7 Snapshot] ファイル作成失敗: %s (err=%d)" % [
+			path, FileAccess.get_open_error()])
+		return
+	f.store_string(text)
+	f.close()
+
+	# runtime.log には押下マーカー 1 行だけ記録（時系列追跡用）
+	DebugLog.log("F7 snapshot → %s" % filename)
 
 
 ## スナップショット全体のテキストを組み立てる

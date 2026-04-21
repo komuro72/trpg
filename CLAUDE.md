@@ -50,7 +50,7 @@
     - PartyStatusWindow の `P↓` 表示を敵メンバー限定に絞る
     - **一時的な副作用**：NpcLeaderAI の CombatSituation.CRITICAL 時自動 FLEE が失われる（ステップ 2 で `battle_policy="retreat"` 自動書き換え方式で復活予定）
     - 設計原則を「パーティーシステムのアーキテクチャ」→「戦略システムの設計原則」として明文化
-12. **F7 PartyStatusWindow スナップショット機能**：現在の全パーティー状態を `res://logs/runtime.log` に一括ダンプ（詳細度は常に最大・ウィンドウ非表示でも動作・ConfigEditor 開時は無効）。静止画スクリーンショットより情報密度の高いデバッグ記録として、戦略切替・FLEE 発動・戦力比変化などの時系列追跡に利用できる
+12. **F7 PartyStatusWindow スナップショット機能**：現在の全パーティー状態を `res://logs/snapshot_<timestamp>.log` に個別ファイルとして書き出す（詳細度は常に最大・ウィンドウ非表示でも動作・ConfigEditor 開時は無効）。`runtime.log` には押下マーカー 1 行のみ記録し、瞬間の状態記録は独立ファイルとして履歴を蓄積。静止画スクリーンショットより情報密度の高いデバッグ記録として、戦略切替・FLEE 発動・戦力比変化などの時系列追跡に利用できる
 
 #### 2026-04-20（前日の成果）
 - **攻撃操作の 1 発 1 押下化**：TARGETING モードの時間停止仕様を再設計。Z/A 押下中は射程表示＋向き変更可、離した瞬間に攻撃発動の一本化モデルへ。4 つの内部ステート（`PRE_DELAY` / `PRE_DELAY_RELEASED` / `TARGETING` / `POST_DELAY`）で状態遷移を整理し、連打（素早く離す）とじっくり狙う（pre_delay 完了後の時間停止）の両立を実現。詳細は「攻撃フロー（一発一押下モデル）」節
@@ -449,7 +449,7 @@ assets/images/tiles/
 | PartyStatusWindow 詳細度トグル | F3 | — | 表示情報量を 3 段階で循環（高のみ → 高+中 → 高+中+低 → 高のみ…）。PartyStatusWindow 表示中のみ有効・セッション内のみ保持（再起動で「高のみ」にリセット） |
 | ConfigEditor の表示/非表示 | F4 | — | 定数管理UI。タイトル画面・ゲーム中の両方で起動可。ゲーム中は時間停止 |
 | パーティー無敵化（選択中リーダー） | F6 | — | PartyStatusWindow で選択中のリーダーのパーティー全員を無敵化トグル。HP/MP/SP を最大値の10倍に設定（再押下で元に戻す）。PartyStatusWindow 表示中のみ有効 |
-| PartyStatusWindow スナップショット | F7 | — | 現在の全パーティー状態を `res://logs/runtime.log` に出力（詳細度は常に最大・ウィンドウ非表示でも動作・ConfigEditor 開時は無効） |
+| PartyStatusWindow スナップショット | F7 | — | 現在の全パーティー状態を `res://logs/snapshot_<timestamp>.log` に個別ファイル出力（詳細度は常に最大・ウィンドウ非表示でも動作・ConfigEditor 開時は無効・`runtime.log` には押下マーカー 1 行のみ記録） |
 | シーン再スタート | F5 | — | |
 
 ### メニュー内共通操作
@@ -600,19 +600,22 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 - 旧「デバッグ情報コンソール出力（F2 → user://debug_floor_info.txt 書き出し）」は 2026-04-21 に機能ごと廃止した。代替は DebugLog Autoload（「デバッグ用ロガー（DebugLog）」節参照）。必要になれば DebugLog 経由で再実装する
 
 #### F7 スナップショット（2026-04-21 追加・PartyStatusWindow と独立）
-現在の全パーティー状態を `res://logs/runtime.log` に一括ダンプするデバッグ補助機能。バランス調整・戦略切替の時系列記録・FLEE 発動の追跡などに使う。静止画スクリーンショットより情報密度の高い「状態スナップショット」を残すための機能。
+現在の全パーティー状態を `res://logs/snapshot_<timestamp>.log` に個別ファイルとして書き出すデバッグ補助機能。バランス調整・戦略切替の時系列記録・FLEE 発動の追跡などに使う。静止画スクリーンショットより情報密度の高い「状態スナップショット」を残すための機能。
 
 - **トリガー**：F7 押下（`game_map.gd:_input` で受信）
 - **ウィンドウ独立**：PartyStatusWindow の表示・非表示に関わらず動作（F1 閉じていても F7 だけで取得可能）
-- **詳細度は常に最大**：F3 で画面が「高のみ」になっていても、ログには「高+中+低」相当の全情報を出力する（画面の `_detail_level` には影響しない・終了時に復元）
+- **詳細度は常に最大**：F3 で画面が「高のみ」になっていても、スナップショットには「高+中+低」相当の全情報を出力する（画面の `_detail_level` には影響しない・終了時に復元）
 - **ConfigEditor（F4）開時は無効**：誤動作防止
-- **出力先**：`DebugLog.log()` 経由で `res://logs/runtime.log` に追記（1 回の呼び出しで多行文字列として渡す・先頭行のみ DebugLog の `[HH:MM:SS.mmm]` プレフィックスが付く）
-- **出力内容**：
+- **出力先（2 系統）**：
+  1. **本体**：`res://logs/snapshot_YYYYMMDD_HHMMSS_mmm.log` を毎回新規作成（タイムスタンプはミリ秒まで含めて衝突回避・毎起動リセットしない・手動削除で履歴管理）
+  2. **マーカー**：`res://logs/runtime.log` に `F7 snapshot → snapshot_<timestamp>.log` の 1 行を `DebugLog.log()` で記録（runtime.log から「いつ F7 を押したか」と対応ファイル名を辿れる）
+- **出力内容（本体ファイル）**：
   - 区切り線 + ヘッダー部（時刻・フロア・操作キャラ・ゲーム速度）
   - プレイヤーパーティー → NPC パーティー → 敵パーティー（画面表示と同順序・同条件）
   - 各メンバーは 1 行にフラット化（画面では折返しあり・スナップショットは折返しなしで `|` 区切り）
   - 画面と同じ略称・同じ値（`_format_action_body` / `_build_orders_field_list` / `_build_char_stat_parts` 等を再利用）
-- **実装**：[`scripts/party_status_window.gd`](scripts/party_status_window.gd) の `snapshot_to_log()` が公開 API。`_build_snapshot_text()` → `_snapshot_player_party_lines()` / `_snapshot_party_block_lines()` / `_build_member_line()` で多行テキストを組み立てる
+- **ファイル整理方針**：snapshot ファイルは自動削除しない。大量にたまったら手動で削除する。将来「最新 N 件のみ保持」等の自動整理機構を追加する余地あり（今回スコープ外）
+- **実装**：[`scripts/party_status_window.gd`](scripts/party_status_window.gd) の `snapshot_to_log()` が公開 API。`_build_snapshot_text()` → `_snapshot_player_party_lines()` / `_snapshot_party_block_lines()` / `_build_member_line()` で多行テキストを組み立て、`FileAccess.WRITE` で個別ファイルに書き出す
 
 ### メッセージ表記方針
 - メッセージウィンドウに表示するバトルメッセージは**自然言語**で記述する（記号的表現を避ける）

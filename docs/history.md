@@ -14,7 +14,7 @@
 - **敵の指示体系表示を一掃**：リーダー行の仮想ヒント（`mv=/battle=/tgt=/hp=`）を `strategy=<ENUM>` に刷新、メンバー行の指示ライン（M/C/F/L/S/HP/E/I）を削除
 - **Character ステータス設計統一**：13 ステータス全てを Character 最終値フィールドに保持・装備補正取得を単一 API に集約
 - **味方側 `_party_strategy` / `party_fleeing` 廃止（ステップ 1）**：敵専用概念に変更・プレイヤー個別指示が `party_fleeing=true` で上書きされる仕様違反を解消
-- **F7 PartyStatusWindow スナップショット機能を新設**：全パーティー状態を `res://logs/runtime.log` に一括ダンプ（詳細度最大固定・ウィンドウ非表示でも動作・ConfigEditor 開時は無効）
+- **F7 PartyStatusWindow スナップショット機能を新設**：全パーティー状態を `res://logs/snapshot_<timestamp>.log` に個別ファイルとして書き出し（詳細度最大固定・ウィンドウ非表示でも動作・ConfigEditor 開時は無効・`runtime.log` には押下マーカー 1 行のみ）
 - **dead code 削除**：`Character.get_direction_multiplier()`
 - **調査ドキュメント 5 件新規作成**：`investigation_debug_variables.md` / `investigation_enemy_order_system.md` / `investigation_enemy_order_effective.md` / `investigation_receive_order_keys.md` / `investigation_party_strategy_ally_removal.md`
 
@@ -72,17 +72,20 @@
 **実装**：
 
 - [`scripts/party_status_window.gd`](../scripts/party_status_window.gd) に `snapshot_to_log()` 新設
-- F7 押下時に現在の全パーティー状態を `res://logs/runtime.log` に一括ダンプ（DebugLog Autoload 経由）
+- F7 押下時に現在の全パーティー状態を `res://logs/snapshot_<timestamp>.log` に個別ファイルとして書き出す
+- **ファイル命名**：`snapshot_YYYYMMDD_HHMMSS_mmm.log`（ミリ秒まで含めて短時間の重複押下でも衝突回避）
+- **ファイル管理**：毎起動リセットしない（履歴として蓄積）・手動削除で整理する。将来「最新 N 件のみ保持」等の自動整理機構を追加する余地あり
+- **マーカー行**：`res://logs/runtime.log` に `F7 snapshot → snapshot_<timestamp>.log` の 1 行を `DebugLog.log()` で記録。「いつ F7 を押したか」と対応ファイル名を runtime.log から辿れる
 - **詳細度は常に最大**：`_detail_level` を一時的に 2 に切り替えてヘルパー群を呼び、終了時に復元。画面の F3 設定には影響しない
 - **ウィンドウ独立**：PartyStatusWindow が閉じていても F7 単独で動作（`game_map.gd:_input` で F7 を受信）
 - **ConfigEditor（F4）開時は無効**：誤動作防止
 - 画面描画の文字列ヘルパー（`_format_action_body` / `_build_orders_field_list` / `_build_char_stat_parts` 等）を再利用し、表示と記録の一貫性を保つ
 - 1 メンバー 1 行にフラット化（画面は折返しあり・スナップショットは `|` 区切りで折返しなし）
 
-**出力構造**：
+**出力構造（snapshot ファイル本体）**：
 
 ```
-[HH:MM:SS.mmm] ================================================================
+================================================================
 PartyStatusWindow Snapshot
 ================================================================
 時刻: 2026-04-21 14:32:15.123
@@ -99,6 +102,14 @@ PartyStatusWindow Snapshot
   ...
 ================================================================
 ```
+
+**runtime.log 側のマーカー例**：
+
+```
+[14:32:15.123] F7 snapshot → snapshot_20260421_143215_123.log
+```
+
+**設計経緯（2026-04-21 個別ファイル化改訂）**：当初は `runtime.log` に直接多行ダンプしていたが、「瞬間の状態記録」という独立した単位として個別ファイルに分離した。通常ログと混在すると可読性が低く、また多行スナップショットが runtime.log を埋めて他のログが見づらくなる問題を解消した。
 
 **用途例**：
 
