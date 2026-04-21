@@ -3,6 +3,181 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-21（デバッグウィンドウ表示改善・Character ステータス設計統一・dead code 整理）
+
+本日は「PartyStatusWindow（F1 デバッグウィンドウ）の表示改善」を中心に、関連する調査・設計統一・dead code 削除を大量に実施。主要な変更は以下：
+
+- **DebugWindow の F1/F2 分離**：上下 2 つの独立ウィンドウへ（F1=PartyStatusWindow / F2=CombatLogWindow）
+- **Logger Autoload 新設**：`Logger.log()` 経由で `res://logs/runtime.log` に出力。旧 F2「デバッグ情報コンソール出力」機能は廃止
+- **PartyStatusWindow 詳細度トグル（F3）**：3 段階循環・横一列流しレイアウト・クラス名のメンバー行移動
+- **敵固有表示グループの新設**：動的判断（`種: sflee / nomp / lich:X`）・静的属性（`ignfle / undead / flying / immune / proj / chase / terr`）
+- **敵の指示体系表示を一掃**：リーダー行の仮想ヒント（`mv=/battle=/tgt=/hp=`）を `strategy=<ENUM>` に刷新、メンバー行の指示ライン（M/C/F/L/S/HP/E/I）を削除
+- **Character ステータス設計統一**：13 ステータス全てを Character 最終値フィールドに保持・装備補正取得を単一 API に集約
+- **dead code 削除**：`Character.get_direction_multiplier()`
+- **調査ドキュメント 3 件新規作成**：`investigation_debug_variables.md` / `investigation_enemy_order_system.md` / `investigation_enemy_order_effective.md`
+
+---
+
+### DebugWindow の上下 2 ウィンドウ分離（F1 / F2）
+
+旧 DebugWindow（上 55% パーティー状態 + 下 45% combat/ai ログ）を 2 つの独立した CanvasLayer に分離。
+
+- **`scripts/party_status_window.gd`** 新設（`class_name PartyStatusWindow`・F1）：パーティー状態表示
+- **`scripts/combat_log_window.gd`** 新設（`class_name CombatLogWindow`・F2）：combat/ai ログ表示
+- **旧 `scripts/debug_window.gd` を物理削除**
+- 相互排他トグル：両方が同時表示されることはない（F1 表示中に F2 で切替、F1 で閉じると全閉 等）
+- 各ウィンドウは画面中央 85%×85%・完全透過・layer=15
+- 既存機能維持：0.2 秒ごとの更新・MessageLog.debug_log_added シグナル・リーダー選択・カメラ追跡
+- F3 選択リセット・F2 切替時の `_restore_hero_floor_view()` 呼出しは PartyStatusWindow に紐付く
+
+### デバッグ用 Logger Autoload 新設
+
+`scripts/logger.gd`（`class_name Logger` / Autoload 名 `Logger`）を新設。デバッグ目的の一時的なログ出力を「コード編集 → 実行 → Claude Code がファイル直読」のフローに置き換える。
+
+- API：`Logger.log(message: String)` 1 関数（将来タグ・レベル拡張の余地あり）
+- フォーマット：`[HH:MM:SS.mmm] メッセージ`
+- 出力先 2 系統：Godot コンソール（`print`）+ `res://logs/runtime.log`（毎起動リセット・`FileAccess.WRITE`・書込ごとに `flush()`・`NOTIFICATION_WM_CLOSE_REQUEST` で明示クローズ）
+- `logs/` フォルダが無ければ `DirAccess.make_dir_recursive_absolute()` で自動作成
+- `.gitignore` に `logs/` を追加
+- Steam 配布時の TODO：`res://` はエクスポート後読み取り専用のため、Phase 14 でリリースビルド無効化 or `user://` 切替が必要
+
+**旧 F2 機能（`user://debug_floor_info.txt` 書き出し）の廃止**：
+- `game_map._print_debug_floor_info()` 関数（約 90 行）を物理削除
+- F2 キーバインドから外し、新規の F2 = CombatLogWindow トグルに割り当て
+- 代替は Logger Autoload（必要になれば Logger 経由で再実装）
+
+### PartyStatusWindow の表示拡充（F3 詳細度トグル・横一列化・クラス名移動）
+
+F3 キーで詳細度を 3 段階循環（高のみ → 高+中 → 高+中+低）。セッション内のみ保持・再起動で「高のみ」にリセット。旧 F3「無敵モード」は F6 に移動。
+
+**詳細度マッピング**：`PartyStatusWindow.VAR_PRIORITY: Dictionary` に変数名→優先度レベル（0=高 / 1=中 / 2=低）の単一の真実源を定義。新しい変数追加・優先度微調整はここだけ触る。
+
+**横一列流しレイアウト改訂**（旧：強制 1〜3 行/メンバー）：
+- メンバー情報（行動 / 指示 / ステータス）を 1 メンバー 1 論理行に集約
+- 幅超過時のみセグメント境界で自然折返し
+- セグメント単位で色分け（行動ボディ=HP 色 / 目的=シアン / 指示=黄緑 / 状態・ステータス=茶系）
+- 継続行ではセグメント先頭の空白を削除して左端から描画
+
+**クラス名の表示位置変更**：
+- リーダー行から**リーダー名・クラス名を除去**（`[プレイヤー] 生存:4/4 ...` のみ）
+- クラス名は各メンバー行に移動（`★名前[C](ヒーラー) HP:... mv=... →目的`）
+- 識別は `[種別]` + 色分け + メンバー行の `★` / `(クラス)` の組み合わせで行う運用
+
+**行動ラインに energy 表示を追加**：`MP:x/y` / `SP:x/y` をクラスに応じて切替（`CharacterData.is_magic_class()`）。`max_energy == 0` のキャラは省略
+
+**詳細度「低」でフラグライン拡張**：UnitAI 側フラグ（P↓ / F↑ / warp）＋ Character 12 ステータスを `abbr:base+bonus` 形式で一列表示
+- Character ステータス略称表：`pow` / `skl` / `rng` / `br` / `bl` / `bf` / `pr` / `mr` / `da` / `ld` / `ob` / `mv_s` + `fac` / `leader`
+- `abbr:base+bonus` 形式（装備補正非 0 時）・`abbr:base` 形式（補正 0 時）
+- 素値・補正ともに 0 のフィールドは省略（弓使いの `br/bl` など）
+
+**敵固有表示グループを新設**：
+- 動的判断（中）：`種: sflee nomp lich:水`（`_should_self_flee` / `_can_attack` / LichUnitAI._lich_water）
+- 静的属性（低）：`ignfle undead flying immune proj:<type> chase:N terr:N`（`_should_ignore_flee` / is_undead / is_flying / instant_death_immune / projectile_type / chase_range / territory_range）
+- 味方メンバーでは本グループは空配列を返す（`m.is_friendly` ガード）
+- 敵メンバーでは「指示ライン」の代替表示として位置付け
+
+---
+
+### 敵メンバー行の指示ラインを削除（リーダー行廃止と同じ論理）
+
+前段で敵リーダー行の仮想ヒント（`mv=... battle=... tgt=... hp=...`）を廃止したのと同じ論理で、**敵メンバー行の指示ライン**（`指示: M:... C:... F:... L:... S:... HP:... E:... I:...`）も削除。
+
+#### 再検証結果（前回調査書との整合）
+実装前に 8 項目 × 敵実動経路を再検証し、前回調査書と矛盾しないことを確認：
+- `_move_policy="spread"`（敵固定）：`_generate_move_queue()` には "spread" 分岐なし → `_` デフォルト（formation/wait）。`_formation_satisfied()` / `_target_in_formation_zone()` の "spread" 分岐は存在するが、値が変化しないため decision を生まない
+- `_combat="attack"`（敵 Character デフォルト）：`_determine_effective_action()` L2191 の `match _combat` で `"attack"` ブランチに着地 → 固定 ATTACK
+- `_battle_formation="surround"`（敵 Character デフォルト）：L760 / L2239 の match `_` デフォルト → 標準攻撃フロー。値が変化しない
+- `_on_low_hp="retreat"`（敵 Character デフォルト）：L2179 の match `"retreat"` ブランチ → 固定 WAIT。値が変化しない
+- `_special_skill`：`_generate_special_attack_queue()` L1859 と `_generate_buff_queue()` L1806 の冒頭 `if not _member.is_friendly: return []` で参照される前に空配列返却
+- `_hp_potion="never"` / `_sp_mp_potion="never"`：`if _hp_potion == "use"` / `if _sp_mp_potion == "use"` の条件式が成立せず、潜在的に呼ばれる経路でも何も起きない
+- `_item_pickup="passive"`：敵の `_is_combat_safe()` が真になるケースが稀・敵はそもそも inventory 管理を持たないため実質無効
+
+全 8 項目とも敵実動に影響しないことを確認。前回調査書の分類（(A) 4 件 / (B) 3 件 / (C) 1 件）と整合。
+
+#### 変更内容
+1. **`party_status_window.gd` `_draw_member_block()` 指示グループに `m.is_friendly` ガードを追加**：敵メンバーでは指示グループを出力しない
+2. 敵固有・動的判断グループ（`種: sflee nomp lich:水`）は 2026-04-21 に追加済みのため変更不要。敵メンバーの指示スロットの代替表示として位置付け
+3. **CLAUDE.md「デバッグウィンドウ」節の指示グループ項目**に「味方メンバーのみ」の注記を追加
+
+#### 仮想ヒント生成コードの扱い
+`PartyLeader.get_global_orders_hint()` の `match _party_strategy` 仮想ヒント生成は、前段（同日・敵リーダー行 `strategy=<ENUM>` 化）で既に物理削除済み。本変更で新たに削除するコードはない。
+
+#### 維持するコード
+`_assign_orders()` が敵 UnitAI にも `_combat` / `_battle_formation` / `_on_low_hp` 等を渡す部分は削除しない。味方では有効に機能するため、フローを統一した方が保守性が高い。UnitAI 側で敵の該当フィールドを参照する match 分岐も残す（値が固定のため no-op だが、`is_friendly` 分岐を増やすと複雑化するため維持）。
+
+---
+
+### 敵リーダー行の仮想ヒント表示を廃止し `strategy=<ENUM>` 直接表示に
+
+#### 背景
+PartyStatusWindow の敵リーダー行に表示されていた `mv=密集 battle=攻撃 tgt=最近傍 hp=戦闘継続` は、2 段階の調査で「UnitAI 実動と連動していない誤解を招く表示」だと判明した：
+
+1. [`docs/investigation_enemy_order_system.md`](investigation_enemy_order_system.md)（2026-04-21）：敵 PartyManager の `_global_orders` は常に空辞書であり、`_assign_orders` は敵には `_move_policy="spread"` 固定を渡す。UnitAI の指示フィールドは敵では Character デフォルト（`_combat="attack"` 等）のまま参照されない
+2. [`docs/investigation_enemy_order_effective.md`](investigation_enemy_order_effective.md)（2026-04-21）：敵リーダー行の `mv=密集 battle=攻撃 tgt=最近 hp=戦闘継続` は `PartyLeader.get_global_orders_hint()` が `_party_strategy` から合成した**仮想ラベル**であり、`_global_orders` でも `current_order` でもない第 3 のデータソース。UnitAI 側の実動（種族フック + ハードコード）とは完全に切り離されている
+
+7 フィールド（mv / battle / tgt / hp / item / hp_potion / sp_mp_potion）全てが「(A) 表示だけで意味なし」判定。敵の指示体系は味方と**完全に異なる**ため、味方と同じ `mv=... battle=...` 形式での表示は続けるべきではないと結論。
+
+#### 変更内容
+1. **敵リーダー行のヘッダーフォーマットを変更**（`party_status_window.gd` `_draw_party_block()`）
+   - 旧：`[敵] 生存:2/2 戦況:優勢 戦力:... HP:満  mv=密集 battle=攻撃 tgt=最近傍 hp=戦闘継続`
+   - 新：`[敵] 生存:2/2 戦況:優勢 戦力:... HP:満  strategy=ATTACK`
+   - `strategy=` の値は `_party_strategy` enum を**英字のまま**（`ATTACK` / `FLEE` / `WAIT` / `DEFEND` / `EXPLORE` / `GUARD_ROOM`）表示し、「素の内部変数」であることを視覚的に明示。日本語化が必要な UI 用途では `PartyLeader.get_current_strategy_name()` を使う
+   - 味方（プレイヤー・NPC）のヘッダーは変更なし（`mv / battle / tgt / hp / item` は `_global_orders` の実値で動的）
+2. **仮想ヒント合成コードを物理削除**（`party_leader.gd` `get_global_orders_hint()`）
+   - 旧：`match _party_strategy` で `ATTACK → {"move": "cluster", "battle_policy": "attack", ...}` 等の仮想ラベル辞書を生成
+   - 新：`_global_orders` が空なら単に空辞書を返す（`combat_situation` / `power_balance` / `hp_status` / 戦力内訳キーは従来通り付与）
+   - grep 確認：敵リーダー行の旧描画以外に `hint.get("move")` 等の参照なし（味方は `_global_orders.duplicate()` パス、NPC は `npc_leader_ai.gd` 側のオーバーライドを通るため、基底の match 分岐は到達不能だった）
+3. **`_strategy_enum_name_for()`** ヘルパを `party_status_window.gd` に追加（`PartyLeader.Strategy` enum → 英字名への変換。日本語化用の `_strategy_to_preset_name()` とは別用途）
+4. **CLAUDE.md「デバッグウィンドウ」節**を更新：味方と敵のヘッダーフォーマットが異なる旨を明記・調査ドキュメントへのリンクを追加
+
+
+
+### Character ステータスの最終値保持に統一（13 ステータス）
+
+#### 背景
+- Config Editor のアイテムタブでは 13 ステータス全てに装備補正を設定可能（`ITEM_STAT_CHOICES` 配列が `power / skill / block_* / physical_resistance / magic_resistance / defense_accuracy / leadership / obedience / move_speed / vitality / energy`）
+- 一方 Character クラスが「装備補正込みの最終値」として独自フィールドを持っていたのは `power` / `attack_range` / `max_hp` / `max_energy` の 4 項目のみ（`skill` フィールドも存在したが装備補正なしの素値コピー）
+- 残り 9 ステータスはダメージ計算・AI 判断のたびに `character_data.X + character_data.get_X_bonus()` を計算する非対称な設計で、DRY 違反かつバグ温床
+
+#### 変更内容
+- **Character に 10 フィールド追加**：`skill` / `block_right_front` / `block_left_front` / `block_front` / `physical_resistance` / `magic_resistance` / `defense_accuracy` / `leadership` / `obedience` / `move_speed`。全て「装備補正込みの最終値」として保持
+- **`CharacterData.get_equipment_bonus(stat_name: String) -> float`** を新設（全 equipped スロットの `stats.<name>` を合計する統一 API）
+- **旧 7 個別 getter を物理削除**：`get_weapon_power_bonus` / `get_weapon_range_bonus` / `get_weapon_block_right_bonus` / `get_weapon_block_front_bonus` / `get_shield_block_left_bonus` / `get_total_physical_resistance_score` / `get_total_magic_resistance_score` / `get_total_physical_resistance` / `get_total_magic_resistance`
+  - `resistance_to_ratio(score)` static メソッドは残置（純粋な計算ユーティリティ）
+- **`Character.refresh_stats_from_equipment()` を統一**：13 ステータス全てを 1 関数で再計算。アイテムキー名→Character フィールド名のマッピング（`vitality`→`max_hp` / `energy`→`max_energy` / `range_bonus`→`attack_range`）を内包
+- **`Character._init_stats()` を簡素化**：素値コピーを廃止し `refresh_stats_from_equipment()` に一本化（装備補正と非装備補正の初期化経路を統一）
+
+#### 呼び出し側の修正
+- `Character.take_damage()`：`character_data.get_total_*_resistance()` → `CharacterData.resistance_to_ratio(self.physical_resistance|magic_resistance)`
+- `Character._calc_block_power_front_guard()` / `_calc_block_per_class()`：`cd.block_* + cd.get_*_bonus()` → `self.block_*` 直接参照
+- `Character.get_move_duration()`：`character_data.move_speed` → `self.move_speed`
+- `UnitAI._generate_heal_queue()`：`_member.character_data.power` → `_member.power`
+- `UnitAI._find_undead_target()`：`_member.character_data.attack_range` → `_member.attack_range`
+- `NpcLeaderAI`：合流交渉スコア計算で `ch.character_data.leadership` → `ch.leadership`、`m.character_data.obedience` → `m.obedience`（装備補正込みの最終値を使うように）
+- `PlayerController` 3 箇所：`character.character_data.get_weapon_range_bonus()` → `int(character.character_data.get_equipment_bonus("range_bonus"))`（スロット射程計算は slot.range + bonus の独立ロジックのため個別に修正）
+- `OrderWindow._get_stat_rows()`：2 列表示の `bonus` 列を全て `cd.get_equipment_bonus("X")` 経由に統一。`統率力` / `従順度` 行も装備補正対応に拡張。`射程` 行は `Character.attack_range`（最終値）を表示するよう変更
+
+#### 設計原則
+- **最終値参照**：戦闘計算・AI 判断は Character 側のフィールド（`self.power` / `self.physical_resistance` 等）を直接参照する
+- **素値参照**：素値が欲しい UI 表示（OrderWindow の 2 列）だけ `character_data.X` を直接参照する
+- **装備補正取得**：単一 API `CharacterData.get_equipment_bonus(stat_name)` に集約（個別 getter 群は廃止）
+
+#### CLAUDE.md の記述修正
+以下の記述は Config Editor の仕様（全ステータス補正可）と矛盾していたため書き換え：
+- 「防御技量 `defense_accuracy` | キャラ固有の素値（装備による変化なし）」→「装備補正対応」
+- 「防御強度 `block_*` | クラス固有値（装備補正なし）」→「装備補正対応」
+- 「補正がかからないもの：defense_accuracy / move_speed / leadership / obedience / max_hp / max_mp」→ リストごと削除（全ステータス補正対応のため）
+- 「統率力 | 当面は値のみ保持」→「装備補正対応（将来拡張余地）」
+
+### dead code 削除：`Character.get_direction_multiplier()`
+
+2026-04-20 の `docs/investigation_turn_cost.md` 調査で確認済みの dead code を物理削除。
+
+- `scripts/character.gd` から `static func get_direction_multiplier(attacker, target) -> float` を削除（11 行）
+- 廃止済みの `1.0倍 / 1.5倍 / 2.0倍` 方向ダメージ倍率関数。現行ダメージ計算（`_apply_block_directional` + 耐性軽減）で方向は**防御可否のみに影響**する仕様で、倍率は適用されない（CLAUDE.md「命中・被ダメージ計算」節どおり）
+- grep 確認：`scripts/` 配下に呼び出し箇所なし・doc コメントのみ残存していた
+- あわせて `move_to()` 内コメント「`guard_facing を維持`」を「`facing を維持`」に修正（`guard_facing` は存在しない変数・コメント残骸）
+
 ## 2026-04-20（攻撃操作 1 発 1 押下化・Config Editor hidden フラグ・移動関連調査）
 
 本日のセッションは「操作性改善」と「次の大規模リファクタの前提整備（調査）」の二本立て。

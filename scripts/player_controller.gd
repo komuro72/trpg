@@ -173,7 +173,7 @@ func get_current_slot_range_info() -> Dictionary:
 	var action: String = str(sd.get("action", "melee"))
 	var range_bonus: int = 0
 	if character != null and character.character_data != null:
-		range_bonus = character.character_data.get_weapon_range_bonus()
+		range_bonus = int(character.character_data.get_equipment_bonus("range_bonus"))
 	var range_val: int = int(sd.get("range", 1)) + range_bonus
 	return { "action": action, "range": range_val }
 
@@ -831,7 +831,7 @@ func _is_target_in_range(target: Character, sd: Dictionary) -> bool:
 	if not is_instance_valid(target) or target.hp <= 0:
 		return false
 	var action: String = str(sd.get("action", "melee"))
-	var range_bonus: int = character.character_data.get_weapon_range_bonus() \
+	var range_bonus: int = int(character.character_data.get_equipment_bonus("range_bonus")) \
 		if character != null and character.character_data != null else 0
 	var range_val: int = int(sd.get("range", 1)) + range_bonus
 	if action == "melee":
@@ -1004,7 +1004,7 @@ func _update_world_time() -> void:
 func _get_valid_targets() -> Array[Character]:
 	var sd:        Dictionary = _get_slot()
 	var action:    String     = str(sd.get("action", "melee"))
-	var range_bonus: int = character.character_data.get_weapon_range_bonus() \
+	var range_bonus: int = int(character.character_data.get_equipment_bonus("range_bonus")) \
 		if character != null and character.character_data != null else 0
 	var range_val: int = int(sd.get("range", 1)) + range_bonus
 	var result: Array[Character] = []

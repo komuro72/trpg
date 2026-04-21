@@ -34,17 +34,37 @@ var join_index: int = 0
 ## プレイヤーが直接操作中のキャラクターであることを示すフラグ（UnitAI は処理をスキップする）
 var is_player_controlled: bool = false
 
-## 基本ステータス（character_data から _ready() で初期化）
-var hp:           int  = 1
-var max_hp:       int  = 1
+## 基本ステータス（装備補正込みの最終値。character_data から _ready() で初期化・
+## 装備変更時 refresh_stats_from_equipment() で再計算。13 ステータス全てに適用する統一設計）
+## 素値（装備補正前の値）が必要な場合は character_data.X を直接参照する（例：OrderWindow の素値/補正値 2 列表示）
+var hp:                 int   = 1
+var max_hp:             int   = 1   ## = character_data.max_hp + 装備補正（"vitality" キー）
 ## エネルギー（全クラス共通。UI 表示は character_data.is_magic_class() で
 ## 魔法クラス→「MP」/ 非魔法クラス→「SP」として切り替え）
-var energy:       int  = 0
-var max_energy:   int  = 0
-var power:        int  = 1   ## 物理威力 or 魔法威力（クラスに応じて使い分け）
-var skill:        int  = 0   ## 物理技量 or 魔法技量（命中・クリティカル率の基礎値）
-var attack_range: int  = 1   ## 装備補正込みの射程（refresh_stats_from_equipment() で更新）
-var is_flying:    bool = false
+var energy:             int   = 0
+var max_energy:         int   = 0   ## = character_data.max_energy + 装備補正（"energy" キー）
+var power:              int   = 1   ## 物理威力 or 魔法威力（クラスに応じて使い分け）
+var skill:              int   = 0   ## 物理技量 or 魔法技量（命中・クリティカル率の基礎値）
+var attack_range:       int   = 1   ## 射程（装備 "range_bonus" キーで補正）
+var is_flying:          bool  = false
+
+## 防御強度 3 フィールド（装備補正込み・方向別に独立判定）
+var block_right_front:  int   = 0   ## 正面・右側面で有効（剣士・斧戦士・斥候・ハーピー等）
+var block_left_front:   int   = 0   ## 正面・左側面で有効（剣士・斧戦士・ハーピー等）
+var block_front:        int   = 0   ## 正面のみ有効（弓使い・魔法使い・ヒーラー・ゾンビ等）
+
+## 耐性（逓減カーブ適用前の能力値。装備補正込み）
+var physical_resistance: int  = 0   ## 物理耐性能力値（ダメージ軽減率は resistance_to_ratio で算出）
+var magic_resistance:    int  = 0   ## 魔法耐性能力値
+
+var defense_accuracy:    int  = 50  ## 防御判定の成功率 %（装備補正込み）
+
+## リーダーシップ・従順度（NPC 合流交渉で参照される値・装備補正込み）
+var leadership:          int   = 5
+var obedience:           float = 0.5  ## 0.0〜1.0 スケール（character_data と同じ）
+
+## 移動速度（0〜100 スコア・装備補正込み。get_move_duration() で逆比例補正して実時間化）
+var move_speed:          float = 50.0
 
 ## 最後にダメージを与えたキャラクター（ドロップ帰属の追跡用）
 var last_attacker: Character = null
@@ -256,27 +276,46 @@ func _update_modulate() -> void:
 
 
 ## character_data からステータスを初期化する
+## refresh_stats_from_equipment() が 13 ステータス全てを素値＋装備補正で計算するため
+## ここでは素値コピーを行わず（refresh_stats_from_equipment に一本化）・hp/energy の現在値だけ初期化する
 func _init_stats() -> void:
 	if character_data == null:
 		return
-	max_hp       = character_data.max_hp
-	hp           = max_hp
-	max_energy   = character_data.max_energy
-	energy       = max_energy
-	power        = character_data.power
-	skill        = character_data.skill
 	is_flying    = character_data.is_flying
 	refresh_stats_from_equipment()
+	# max 値が確定した後に現在値を上限値へ初期化する（refresh 後に hp/energy を埋める）
+	hp           = max_hp
+	energy       = max_energy
 
 
-## 装備補正をキャラのパラメータに反映する
-## 装備変更時（_init_stats / OrderWindow._do_equip）に呼ぶ
+## 装備補正をキャラのパラメータに反映する（13 ステータス全て）
+## 装備変更時（_init_stats / OrderWindow._do_equip）に呼ぶ。
+## 素値（character_data.X）+ 装備補正（全 equipped スロットの stats.X 合計）= Character.X
+## 注意：hp / energy は max 値と共に変動するが、このメソッドでは max 値のみ再計算する
+## （現在値の hp / energy は維持される。装備付け替えで max が上がった場合は上限クランプで調整）
 func refresh_stats_from_equipment() -> void:
 	if character_data == null:
 		return
-	power        = character_data.power + character_data.get_weapon_power_bonus()
-	skill        = character_data.skill  # skill は装備補正なし（仕様）
-	attack_range = character_data.attack_range + character_data.get_weapon_range_bonus()
+	var cd := character_data
+	max_hp              = cd.max_hp              + int(cd.get_equipment_bonus("vitality"))
+	max_energy          = cd.max_energy          + int(cd.get_equipment_bonus("energy"))
+	power               = cd.power               + int(cd.get_equipment_bonus("power"))
+	skill               = cd.skill               + int(cd.get_equipment_bonus("skill"))
+	attack_range        = cd.attack_range        + int(cd.get_equipment_bonus("range_bonus"))
+	block_right_front   = cd.block_right_front   + int(cd.get_equipment_bonus("block_right_front"))
+	block_left_front    = cd.block_left_front    + int(cd.get_equipment_bonus("block_left_front"))
+	block_front         = cd.block_front         + int(cd.get_equipment_bonus("block_front"))
+	physical_resistance = cd.physical_resistance + int(cd.get_equipment_bonus("physical_resistance"))
+	magic_resistance    = cd.magic_resistance    + int(cd.get_equipment_bonus("magic_resistance"))
+	defense_accuracy    = cd.defense_accuracy    + int(cd.get_equipment_bonus("defense_accuracy"))
+	leadership          = cd.leadership          + int(cd.get_equipment_bonus("leadership"))
+	obedience           = cd.obedience           +     cd.get_equipment_bonus("obedience")
+	move_speed          = cd.move_speed          +     cd.get_equipment_bonus("move_speed")
+	# 現在値が新しい max を超える場合は上限クランプ（装備で max が下がった場合等）
+	if hp > max_hp:
+		hp = max_hp
+	if energy > max_energy:
+		energy = max_energy
 
 
 func _setup_sprite() -> void:
@@ -582,17 +621,17 @@ func walk_in_place(duration: float = 0.4) -> void:
 ## 下限は 0.10 秒（ハードコード・設計前提）
 ## 呼出側は通常 `get_move_duration() / GlobalConstants.game_speed` で実時間に変換する
 func get_move_duration() -> float:
-	var move_speed := 50.0
-	if character_data != null and character_data.move_speed > 0.0:
-		move_speed = float(character_data.move_speed)
-	var duration := GlobalConstants.BASE_MOVE_DURATION * 50.0 / move_speed
+	## self.move_speed は装備補正込みの最終値（refresh_stats_from_equipment で更新）
+	## 未初期化・0 以下の場合は 50.0（標準値）にフォールバック
+	var ms: float = move_speed if move_speed > 0.0 else 50.0
+	var duration := GlobalConstants.BASE_MOVE_DURATION * 50.0 / ms
 	if is_guarding:
 		duration *= GlobalConstants.GUARD_MOVE_DURATION_WEIGHT
 	return maxf(0.10, duration)
 
 
 func move_to(new_grid_pos: Vector2i, duration: float = 0.4) -> void:
-	# ガード中は向きを変更しない（guard_facing を維持）
+	# ガード中は向きを変更しない（facing を維持）
 	if not is_guarding:
 		var d := new_grid_pos - grid_pos
 		if d.x > 0:
@@ -825,12 +864,13 @@ func take_damage(raw_amount: int, multiplier: float = 1.0, attacker: Character =
 	var is_fully_blocked: bool = blocked > 0 and raw_after_mult <= blocked
 
 	# 3. 耐性適用（逓減軽減）
+	## Character.physical_resistance / magic_resistance は装備補正済みの最終値。
+	## resistance_to_ratio で 0〜1 の軽減率に変換してからダメージに乗算する
 	var resistance := 0.0
-	if character_data != null:
-		if attack_is_magic:
-			resistance = character_data.get_total_magic_resistance()
-		else:
-			resistance = character_data.get_total_physical_resistance()
+	if attack_is_magic:
+		resistance = CharacterData.resistance_to_ratio(magic_resistance)
+	else:
+		resistance = CharacterData.resistance_to_ratio(physical_resistance)
 	var actual: int = maxi(1, int(float(after_block) * (1.0 - resistance)))
 
 	# 戦闘計算ログ出力（デバッグ用 COMBAT メッセージ）
@@ -896,47 +936,34 @@ func _calc_attack_direction(attacker: Character) -> String:
 
 
 ## ガード中正面攻撃のブロック量（成功率100%・全防御強度フィールドの合計）を返す
-## クラス固有値＋装備補正を合算する
+## Character の block_* は素値＋装備補正の最終値（refresh_stats_from_equipment で更新）
 func _calc_block_power_front_guard() -> int:
-	if character_data == null:
-		return 0
-	var cd := character_data
-	var brf := cd.block_right_front + cd.get_weapon_block_right_bonus()
-	var blf := cd.block_left_front  + cd.get_shield_block_left_bonus()
-	var bf  := cd.block_front       + cd.get_weapon_block_front_bonus()
-	return brf + blf + bf
+	return block_right_front + block_left_front + block_front
 
 
 ## 防御強度3フィールドによるブロック量を返す（各フィールドを独立してロール）
-## クラス固有値＋装備補正を合算し、方向と defense_accuracy でロール判定する
+## Character の block_* / defense_accuracy は装備補正済みの最終値を参照する
 ## block_right_front: 正面・右側面で有効（剣士・斧戦士・斥候・ハーピー・ダークロード等）
 ## block_left_front:  正面・左側面で有効（剣士・斧戦士・ハーピー・ダークロード等）
 ## block_front:       正面のみ有効（弓使い・魔法使い・ヒーラー・ゾンビ・ウルフ等）
 func _calc_block_per_class(direction: String) -> int:
-	if character_data == null:
-		return 0
-	var cd := character_data
-	var acc: float = float(cd.defense_accuracy) / 100.0
-	# クラス固有値＋装備補正の合計
-	var brf := cd.block_right_front + cd.get_weapon_block_right_bonus()
-	var blf := cd.block_left_front  + cd.get_shield_block_left_bonus()
-	var bf  := cd.block_front       + cd.get_weapon_block_front_bonus()
+	var acc: float = float(defense_accuracy) / 100.0
 	var total := 0
 
 	# block_right_front: 正面・右側面で有効
-	if brf > 0 and direction in ["front", "right"]:
+	if block_right_front > 0 and direction in ["front", "right"]:
 		if randf() < acc:
-			total += brf
+			total += block_right_front
 
 	# block_left_front: 正面・左側面で有効
-	if blf > 0 and direction in ["front", "left"]:
+	if block_left_front > 0 and direction in ["front", "left"]:
 		if randf() < acc:
-			total += blf
+			total += block_left_front
 
 	# block_front: 正面のみ有効
-	if bf > 0 and direction == "front":
+	if block_front > 0 and direction == "front":
 		if randf() < acc:
-			total += bf
+			total += block_front
 
 	return total
 
@@ -1279,19 +1306,6 @@ func spawn_heal_effect(eff_mode: String) -> void:
 	effect.mode     = eff_mode
 	effect.position = position
 	parent.add_child(effect)
-
-
-## 攻撃者から対象を攻撃したときの方向ダメージ倍率を返す
-## 正面：1.0倍 / 側面：1.5倍 / 背面：2.0倍
-static func get_direction_multiplier(attacker: Character, target: Character) -> float:
-	# targetから見たattackerの位置 = 攻撃が来る方向
-	var attack_from := attacker.grid_pos - target.grid_pos
-	var target_fwd  := dir_to_vec(target.facing)
-	if attack_from == target_fwd:
-		return 1.0  # 正面
-	elif attack_from == -target_fwd:
-		return 2.0  # 背面
-	return 1.5      # 側面
 
 
 ## Direction enum → グリッド方向ベクトル

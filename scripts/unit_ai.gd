@@ -1776,7 +1776,7 @@ func _can_attack_target(target: Character, atype: String) -> bool:
 func _generate_heal_queue() -> Array:
 	if _member == null or _member.character_data == null:
 		return []
-	if _member.character_data.power <= 0:
+	if _member.power <= 0:
 		return []
 	var cost := _member.character_data.heal_cost
 	if cost <= 0:
@@ -2072,7 +2072,7 @@ func _find_heal_target_by_ratio(candidates: Array[Character], my_friendly: bool,
 func _find_undead_target() -> Character:
 	if _member == null or _member.character_data == null:
 		return null
-	var range_val := _member.character_data.attack_range
+	var range_val := _member.attack_range
 	for ch: Character in _all_members:
 		if not is_instance_valid(ch) or ch.hp <= 0:
 			continue

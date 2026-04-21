@@ -83,7 +83,8 @@ var _dialogue_npc_manager: PartyManager  ## 現在会話中の PartyManager
 var _dialogue_npc_initiates: bool = false
 var npc_dialogue_window: NpcDialogueWindow  ## NPC会話専用ウィンドウ
 var pause_menu: PauseMenu  ## ポーズメニュー
-var debug_window: DebugWindow  ## F1 デバッグウィンドウ
+var party_status_window: PartyStatusWindow  ## F1 パーティー状態ウィンドウ
+var combat_log_window:   CombatLogWindow    ## F2 combat/ai ログウィンドウ
 var config_editor: CanvasLayer = null  ## F4 ConfigEditor（開発用定数エディタ）
 var _debug_follow_target: Character = null  ## デバッグ用カメラ追跡対象（null=通常追跡）
 ## デバッグ表示フロア（-1=通常。>=0 のときそのフロアを描画。ゲームロジックは _current_floor_index を使用）
@@ -116,16 +117,9 @@ func _input(event: InputEvent) -> void:
 			KEY_TAB:
 				_toggle_order_window()
 			KEY_F1:
-				if debug_window != null:
-					debug_window.visible = not debug_window.visible
-					if not debug_window.visible:
-						debug_window.clear_selection()
-						_restore_hero_floor_view()
-					if vision_system != null:
-						vision_system.debug_show_all = debug_window.visible
-						queue_redraw()
+				_toggle_party_status_window()
 			KEY_F2:
-				_print_debug_floor_info()
+				_toggle_combat_log_window()
 			KEY_F4:
 				_toggle_config_editor()
 				# 同じ F4 イベントが config_editor._unhandled_input に伝搬して
@@ -669,11 +663,11 @@ func _setup_panels() -> void:
 	if player_controller != null:
 		player_controller.consumable_bar = consumable_bar
 
-	# デバッグウィンドウ（F1 で表示/非表示トグル）
-	debug_window = DebugWindow.new()
-	debug_window.name = "DebugWindow"
-	add_child(debug_window)
-	debug_window.setup(
+	# パーティー状態ウィンドウ（F1 で表示/非表示トグル）
+	party_status_window = PartyStatusWindow.new()
+	party_status_window.name = "PartyStatusWindow"
+	add_child(party_status_window)
+	party_status_window.setup(
 		party,
 		func() -> Array:
 			var all_ems: Array = []
@@ -690,7 +684,12 @@ func _setup_panels() -> void:
 		hero,
 		_hero_manager
 	)
-	debug_window.leader_selected.connect(_on_debug_leader_selected)
+	party_status_window.leader_selected.connect(_on_debug_leader_selected)
+
+	# combat / ai ログウィンドウ（F2 で表示/非表示トグル）
+	combat_log_window = CombatLogWindow.new()
+	combat_log_window.name = "CombatLogWindow"
+	add_child(combat_log_window)
 
 	# 起動時の初期フロア・エリア名を表示
 	if area_name_display != null:
@@ -2139,7 +2138,7 @@ func _update_character_visibility() -> void:
 
 
 ## F4 ConfigEditor を表示・非表示トグル（初回のみ生成）
-## 他UI（OrderWindow / PauseMenu / DebugWindow / NpcDialogueWindow）表示中は F4 を無視
+## 他UI（OrderWindow / PauseMenu / PartyStatusWindow / CombatLogWindow / NpcDialogueWindow）表示中は F4 を無視
 ## ただし ConfigEditor 自身が既に開いている場合は閉じる操作のみ許可
 func _toggle_config_editor() -> void:
 	var already_open := config_editor != null and config_editor.visible
@@ -2149,7 +2148,9 @@ func _toggle_config_editor() -> void:
 			return
 		if pause_menu != null and pause_menu.is_open():
 			return
-		if debug_window != null and debug_window.visible:
+		if party_status_window != null and party_status_window.visible:
+			return
+		if combat_log_window != null and combat_log_window.visible:
 			return
 		if npc_dialogue_window != null and npc_dialogue_window.visible:
 			return
@@ -2164,105 +2165,46 @@ func _toggle_config_editor() -> void:
 		config_editor.call("toggle")
 
 
-## F2 デバッグ情報をファイルに書き出す（フルスクリーン実行対応）
-## 出力先: user://debug_floor_info.txt
-func _print_debug_floor_info() -> void:
-	var lines: PackedStringArray = []
-	lines.append("=== DEBUG FLOOR INFO ===")
-	lines.append("current_floor: %d" % _current_floor_index)
-
-	lines.append("")
-	lines.append("--- Characters ---")
-	# プレイヤーパーティー
-	for member: Variant in party.members:
-		var ch := member as Character
-		if not is_instance_valid(ch):
-			continue
-		var cname := ch.character_data.character_name if ch.character_data != null else "?"
-		lines.append("  [%s] floor=%d grid_pos=%s HP=%d/%d visible=%s is_active=true (player_party)" % [
-			cname, ch.current_floor, str(ch.grid_pos), ch.hp, ch.max_hp, str(ch.visible)])
-	# 全フロアの敵
-	for fi: int in range(_per_floor_enemies.size()):
-		for em: PartyManager in (_per_floor_enemies[fi] as Array):
-			if not is_instance_valid(em):
-				continue
-			var active := em.is_active()
-			for ch: Character in em.get_enemies():
-				if not is_instance_valid(ch):
-					continue
-				var cname := ch.character_data.character_name if ch.character_data != null else "?"
-				lines.append("  [%s] floor=%d grid_pos=%s HP=%d/%d visible=%s is_active=%s" % [
-					cname, fi, str(ch.grid_pos), ch.hp, ch.max_hp, str(ch.visible), str(active)])
-	# 全フロアのNPC
-	for fi: int in range(_per_floor_npcs.size()):
-		for pm: PartyManager in (_per_floor_npcs[fi] as Array):
-			if not is_instance_valid(pm):
-				continue
-			var active := pm.is_active()
-			for ch: Character in pm.get_members():
-				if not is_instance_valid(ch):
-					continue
-				var cname := ch.character_data.character_name if ch.character_data != null else "?"
-				lines.append("  [%s(NPC)] floor=%d grid_pos=%s HP=%d/%d visible=%s is_active=%s" % [
-					cname, fi, str(ch.grid_pos), ch.hp, ch.max_hp, str(ch.visible), str(active)])
-
-	lines.append("")
-	lines.append("--- Occupied Tiles (floor別) ---")
-	for fi: int in range(_per_floor_enemies.size()):
-		var tiles: Array[Vector2i] = []
-		for em: PartyManager in (_per_floor_enemies[fi] as Array):
-			if not is_instance_valid(em):
-				continue
-			for ch: Character in em.get_enemies():
-				if is_instance_valid(ch) and ch.hp > 0:
-					for t: Vector2i in ch.get_occupied_tiles():
-						tiles.append(t)
-		if fi < _per_floor_npcs.size():
-			for pm: PartyManager in (_per_floor_npcs[fi] as Array):
-				if not is_instance_valid(pm):
-					continue
-				for ch: Character in pm.get_members():
-					if is_instance_valid(ch) and ch.hp > 0:
-						for t: Vector2i in ch.get_occupied_tiles():
-							tiles.append(t)
-		if fi == _current_floor_index:
-			for member: Variant in party.members:
-				var ch := member as Character
-				if is_instance_valid(ch) and ch.hp > 0:
-					for t: Vector2i in ch.get_occupied_tiles():
-						tiles.append(t)
-		lines.append("floor %d: %s" % [fi, str(tiles)])
-
-	lines.append("")
-	lines.append("--- Passable Check (blocking_characters) ---")
-	if player_controller != null:
-		lines.append("blocking_characters count: %d" % player_controller.blocking_characters.size())
-		var invalid_count := 0
-		for ch: Character in player_controller.blocking_characters:
-			if not is_instance_valid(ch):
-				invalid_count += 1
-		lines.append("  invalid entries: %d" % invalid_count)
-		var occupied: Array[Vector2i] = []
-		for ch: Character in player_controller.blocking_characters:
-			if is_instance_valid(ch):
-				for t: Vector2i in ch.get_occupied_tiles():
-					occupied.append(t)
-		lines.append("  occupied by blocking_characters: %s" % str(occupied))
-	lines.append("========================")
-
-	# ファイルに書き出す
-	var path := "user://debug_floor_info.txt"
-	var file := FileAccess.open(path, FileAccess.WRITE)
-	if file != null:
-		for line: String in lines:
-			file.store_line(line)
-		file.close()
-		var abs_path := ProjectSettings.globalize_path(path)
-		if message_window != null:
-			message_window.show_message("[DEBUG] F2: %s に出力しました" % abs_path)
+## F1 パーティー状態ウィンドウの表示/非表示トグル
+## 相互排他：CombatLogWindow が開いていたら閉じてから開く
+## 閉じる際はリーダー選択リセット・カメラを操作キャラ追跡に戻す
+func _toggle_party_status_window() -> void:
+	if party_status_window == null:
+		return
+	if party_status_window.visible:
+		# 自分を閉じる
+		party_status_window.visible = false
+		party_status_window.clear_selection()
+		_restore_hero_floor_view()
 	else:
-		if message_window != null:
-			message_window.show_message("[DEBUG] F2: ファイル書き込み失敗")
+		# 相互排他：ログウィンドウが開いていれば閉じる
+		if combat_log_window != null and combat_log_window.visible:
+			combat_log_window.visible = false
+		party_status_window.visible = true
+	# vision_system.debug_show_all は PartyStatusWindow の可視状態と連動
+	if vision_system != null:
+		vision_system.debug_show_all = party_status_window.visible
+		queue_redraw()
+
+
+## F2 combat / ai ログウィンドウの表示/非表示トグル
+## 相互排他：PartyStatusWindow が開いていたら閉じてから開く
+func _toggle_combat_log_window() -> void:
+	if combat_log_window == null:
+		return
+	if combat_log_window.visible:
+		# 自分を閉じる
+		combat_log_window.visible = false
+	else:
+		# 相互排他：パーティー状態ウィンドウが開いていれば閉じる
+		if party_status_window != null and party_status_window.visible:
+			party_status_window.visible = false
+			party_status_window.clear_selection()
+			_restore_hero_floor_view()
+			if vision_system != null:
+				vision_system.debug_show_all = false
+				queue_redraw()
+		combat_log_window.visible = true
 
 
 ## タイル画像をプリロードする（画像がない場合はフォールバック色を使用）

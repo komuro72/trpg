@@ -188,7 +188,7 @@ func condition_sprite_modulate(cond: String) -> Color:
 			return _pulse_color(CONDITION_COLOR_SPRITE_CRITICAL)
 
 
-## スプライト系パレットの静的色（点滅なし・DebugWindow 用）
+## スプライト系パレットの静的色（点滅なし・PartyStatusWindow 用）
 func condition_sprite_color(cond: String) -> Color:
 	match cond:
 		"healthy": return CONDITION_COLOR_SPRITE_HEALTHY

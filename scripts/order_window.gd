@@ -683,40 +683,43 @@ func _get_stat_rows(ch: Character) -> Dictionary:
 	var energy_label := "MP" if _is_magic_cls else "SP"
 	left.append({"label": energy_label, "type": "hp_mp",
 		"current": ch.energy, "max": ch.max_energy})
+	## OrderWindow の 2 列表示は「素値（character_data.X）/ 装備補正（get_equipment_bonus）」
+	## 最終値（ch.X）は表示上 base + bonus として表示される
 	var power_label := "魔法威力" if _is_magic_cls else "物理威力"
 	left.append({"label": power_label, "type": "num",
-		"base": cd.power, "bonus": cd.get_weapon_power_bonus()})
+		"base": cd.power, "bonus": int(cd.get_equipment_bonus("power"))})
 	# 技量（ヒーラーは必ず命中のため非表示）
 	if cd.attack_type != "heal":
 		var skill_label := "魔法技量" if _is_magic_cls else "物理技量"
-		left.append({"label": skill_label, "type": "num", "base": cd.skill, "bonus": 0})
+		left.append({"label": skill_label, "type": "num",
+			"base": cd.skill, "bonus": int(cd.get_equipment_bonus("skill"))})
 	# 防御強度（3 方向すべて常に表示）
 	# 理由: アイテムを他メンバーに渡す操作があるため、閲覧中キャラのクラスで
 	# 行の有無を決めると、渡し先で有効な補正値が見えなくなる。
 	# 装備不可のキャラでも inventory にある装備の補正値を確認できるようにする
 	left.append({"label": "右手防御強度", "type": "num",
-		"base": cd.block_right_front, "bonus": cd.get_weapon_block_right_bonus()})
+		"base": cd.block_right_front, "bonus": int(cd.get_equipment_bonus("block_right_front"))})
 	left.append({"label": "左手防御強度", "type": "num",
-		"base": cd.block_left_front, "bonus": cd.get_shield_block_left_bonus()})
+		"base": cd.block_left_front, "bonus": int(cd.get_equipment_bonus("block_left_front"))})
 	left.append({"label": "両手防御強度", "type": "num",
-		"base": cd.block_front, "bonus": cd.get_weapon_block_front_bonus()})
+		"base": cd.block_front, "bonus": int(cd.get_equipment_bonus("block_front"))})
 
 	# ── 右列 ──────────────────────────────────────────────────────────────────
-	var phys_equip := cd.get_total_physical_resistance_score() - cd.physical_resistance
 	right.append({"label": "物理耐性", "type": "num",
-		"base": cd.physical_resistance, "bonus": phys_equip})
-	var mag_equip := cd.get_total_magic_resistance_score() - cd.magic_resistance
+		"base": cd.physical_resistance, "bonus": int(cd.get_equipment_bonus("physical_resistance"))})
 	right.append({"label": "魔法耐性", "type": "num",
-		"base": cd.magic_resistance, "bonus": mag_equip})
-	right.append({"label": "防御技量", "type": "num", "base": cd.defense_accuracy, "bonus": 0})
+		"base": cd.magic_resistance, "bonus": int(cd.get_equipment_bonus("magic_resistance"))})
+	right.append({"label": "防御技量", "type": "num",
+		"base": cd.defense_accuracy, "bonus": int(cd.get_equipment_bonus("defense_accuracy"))})
 	right.append({"label": "攻撃タイプ", "type": "str",
 		"value": ATTACK_TYPE_LABELS.get(cd.attack_type, cd.attack_type) as String})
-	# 射程：最終値のみ表示
-	var final_range := cd.attack_range + cd.get_weapon_range_bonus()
-	right.append({"label": "射程(タイル)", "type": "str", "value": str(final_range)})
-	right.append({"label": "統率力", "type": "num", "base": cd.leadership, "bonus": 0})
+	# 射程：最終値のみ表示（Character.attack_range が装備補正込みの最終値）
+	right.append({"label": "射程(タイル)", "type": "str", "value": str(ch.attack_range)})
+	right.append({"label": "統率力", "type": "num",
+		"base": cd.leadership, "bonus": int(cd.get_equipment_bonus("leadership"))})
 	right.append({"label": "従順度", "type": "num",
-		"base": roundi(cd.obedience * 100.0), "bonus": 0})
+		"base": roundi(cd.obedience * 100.0),
+		"bonus": roundi(cd.get_equipment_bonus("obedience") * 100.0)})
 
 	return {"left": left, "right": right}
 

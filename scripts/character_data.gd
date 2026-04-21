@@ -263,43 +263,24 @@ func _equip_item(item: Dictionary) -> void:
 			equipped_shield = item
 
 
-## 装備中の武器から射程補正を返す（弓・杖のみ range_bonus を持つ。他は 0）
-func get_weapon_range_bonus() -> int:
-	return int((equipped_weapon.get("stats", {}) as Dictionary).get("range_bonus", 0))
-
-
-## 装備中の武器から威力補正を返す（物理・魔法共用）
-func get_weapon_power_bonus() -> int:
-	return int((equipped_weapon.get("stats", {}) as Dictionary).get("power", 0))
-
-
-## 装備中の武器から右手防御強度補正を返す（剣・斧・短剣。正面・右側面で有効）
-func get_weapon_block_right_bonus() -> int:
-	return int((equipped_weapon.get("stats", {}) as Dictionary).get("block_right_front", 0))
-
-
-## 装備中の武器から両手防御強度補正を返す（弓・杖。正面のみ有効）
-func get_weapon_block_front_bonus() -> int:
-	return int((equipped_weapon.get("stats", {}) as Dictionary).get("block_front", 0))
-
-
-## 装備中の盾から左手防御強度補正を返す（盾。正面・左側面で有効）
-func get_shield_block_left_bonus() -> int:
-	return int((equipped_shield.get("stats", {}) as Dictionary).get("block_left_front", 0))
-
-
-## 装備補正込みの物理耐性の能力値合計を返す（素値 + 防具 + 盾）
-func get_total_physical_resistance_score() -> int:
-	var bonus := int((equipped_armor.get("stats",  {}) as Dictionary).get("physical_resistance", 0))
-	var shield := int((equipped_shield.get("stats", {}) as Dictionary).get("physical_resistance", 0))
-	return physical_resistance + bonus + shield
-
-
-## 装備補正込みの魔法耐性の能力値合計を返す（素値 + 防具 + 盾）
-func get_total_magic_resistance_score() -> int:
-	var bonus := int((equipped_armor.get("stats",  {}) as Dictionary).get("magic_resistance", 0))
-	var shield := int((equipped_shield.get("stats", {}) as Dictionary).get("magic_resistance", 0))
-	return magic_resistance + bonus + shield
+## 装備補正の統一取得 API（2026-04-21〜）：
+## 全ての equipped スロット（武器・防具・盾）の stats.<stat_name> を合計して返す。
+## 旧 getter 群（get_weapon_*_bonus / get_shield_*_bonus / get_total_*_resistance_score）を
+## 1 関数に集約。stat_name は `power` / `skill` / `block_right_front` / `block_left_front` /
+## `block_front` / `physical_resistance` / `magic_resistance` / `defense_accuracy` /
+## `leadership` / `obedience` / `move_speed` / `vitality` / `energy` / `range_bonus` を想定。
+## 戻り値は float（整数ステータスは呼出側で `int()` キャスト）。
+func get_equipment_bonus(stat_name: String) -> float:
+	var total: float = 0.0
+	for slot_v: Variant in [equipped_weapon, equipped_armor, equipped_shield]:
+		var slot := slot_v as Dictionary
+		if slot == null or slot.is_empty():
+			continue
+		var stats := slot.get("stats", {}) as Dictionary
+		if stats == null or not stats.has(stat_name):
+			continue
+		total += float(stats.get(stat_name, 0))
+	return total
 
 
 ## 能力値から軽減率に変換する（逓減カーブ: score / (score + 100)）
@@ -307,16 +288,6 @@ static func resistance_to_ratio(score: int) -> float:
 	if score <= 0:
 		return 0.0
 	return float(score) / (float(score) + 100.0)
-
-
-## 装備補正込みの物理耐性の軽減率を返す（0.0〜1.0）
-func get_total_physical_resistance() -> float:
-	return resistance_to_ratio(get_total_physical_resistance_score())
-
-
-## 装備補正込みの魔法耐性の軽減率を返す（0.0〜1.0）
-func get_total_magic_resistance() -> float:
-	return resistance_to_ratio(get_total_magic_resistance_score())
 
 
 ## 通常攻撃（スロット Z）の pre_delay を返す

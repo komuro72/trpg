@@ -147,6 +147,12 @@ func get_member_goal_str(member_name: String) -> String:
 	return unit_ai.get_debug_goal_str()
 
 
+## デバッグウィンドウ用: 指定メンバーの UnitAI を返す（PartyStatusWindow の詳細表示用）
+## 内部状態（_state / _timer / _queue 等）を直接参照するための窓口。null 可
+func get_unit_ai(member_name: String) -> UnitAI:
+	return _unit_ais.get(member_name) as UnitAI
+
+
 ## フロアアイテム辞書の参照を全 UnitAI に配布する（game_map から呼ばれる）
 func set_floor_items(items: Dictionary) -> void:
 	for unit_ai_var: Variant in _unit_ais.values():
@@ -411,32 +417,26 @@ func get_current_strategy_name() -> String:
 	return _strategy_to_preset_name(_party_strategy)
 
 
+## 表示用の全体指示ヒントを返す（PartyStatusWindow のヘッダー行用）
+## 味方パーティー（Player / 合流済み NPC）：`_global_orders` の実値を返す
+## 敵パーティー：`_global_orders` は空のままなので、呼出側（party_status_window.gd の
+## 敵分岐）は move/battle_policy/target/on_low_hp/item_pickup キーを参照せず、
+## 代わりに `_party_strategy` を直接表示する（docs/investigation_enemy_order_effective.md 参照）
+## どちらのケースでも `combat_situation` / `power_balance` / `hp_status` / 戦力内訳キーは必ず付与する
+##
+## 2026-04-21 改訂：旧実装は空の `_global_orders` に対して `_party_strategy` から仮想ラベル
+## （`{"move": "cluster", "battle_policy": "attack", ...}`）を合成していたが、UnitAI 実動と
+## 連動しない誤解を招く表示だったため廃止（詳細は docs/history.md の同日エントリ参照）
 func get_global_orders_hint() -> Dictionary:
-	var hint: Dictionary
+	var hint: Dictionary = {}
 	if not _global_orders.is_empty():
 		hint = _global_orders.duplicate()
-	else:
-		match _party_strategy:
-			Strategy.ATTACK:
-				hint = {"move": "cluster", "battle_policy": "attack",   "target": "nearest", "hp_potion": "never", "on_low_hp": "keep_fighting", "item_pickup": "avoid"}
-			Strategy.FLEE:
-				hint = {"move": "cluster", "battle_policy": "retreat",  "target": "nearest", "hp_potion": "never", "on_low_hp": "flee",          "item_pickup": "avoid"}
-			Strategy.WAIT:
-				hint = {"move": "standby", "battle_policy": "defense",  "target": "nearest", "hp_potion": "never", "on_low_hp": "keep_fighting", "item_pickup": "avoid"}
-			Strategy.DEFEND:
-				hint = {"move": "same_room", "battle_policy": "defense","target": "nearest", "hp_potion": "never", "on_low_hp": "keep_fighting", "item_pickup": "avoid"}
-			Strategy.EXPLORE:
-				hint = {"move": "explore",     "battle_policy": "attack",   "target": "nearest", "hp_potion": "never", "on_low_hp": "keep_fighting", "item_pickup": "avoid"}
-			Strategy.GUARD_ROOM:
-				hint = {"move": "guard_room",  "battle_policy": "retreat",  "target": "nearest", "hp_potion": "never", "on_low_hp": "keep_fighting", "item_pickup": "avoid"}
-			_:
-				hint = {"move": "-", "battle_policy": "-", "target": "-", "hp_potion": "-", "on_low_hp": "-", "item_pickup": "-"}
 	# 戦況判断を追加（_evaluate_strategic_status() の結果を流し込む）
 	var sit: int = _combat_situation.get("situation", int(GlobalConstants.CombatSituation.SAFE)) as int
 	hint["combat_situation"] = sit
 	hint["power_balance"] = _combat_situation.get("power_balance", 0)
 	hint["hp_status"]     = _combat_situation.get("hp_status", 0)
-	# full_party / nearby_allied / nearby_enemy の 3 系統（DebugWindow 表示用）
+	# full_party / nearby_allied / nearby_enemy の 3 系統（PartyStatusWindow 表示用）
 	hint["full_party_strength"]    = _combat_situation.get("full_party_strength", 0.0)
 	hint["full_party_rank_sum"]    = _combat_situation.get("full_party_rank_sum", 0)
 	hint["full_party_tier_sum"]    = _combat_situation.get("full_party_tier_sum", 0.0)

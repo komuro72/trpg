@@ -81,14 +81,14 @@ func set_vision_system(vs: VisionSystem) -> void:
 		_leader_ai.set_vision_system(vs)
 
 
-## 現在の戦略名を返す（DebugWindow 表示用）
+## 現在の戦略名を返す（PartyStatusWindow 表示用）
 func get_strategy_name() -> String:
 	if _leader_ai != null:
 		return _leader_ai.get_current_strategy_name()
 	return "-"
 
 
-## 全体指示のヒントを返す（DebugWindow 表示用）
+## 全体指示のヒントを返す（PartyStatusWindow 表示用）
 func get_global_orders_hint() -> Dictionary:
 	if _leader_ai != null:
 		return _leader_ai.get_global_orders_hint()
@@ -100,6 +100,20 @@ func get_member_goal_str(member: Character) -> String:
 	if _leader_ai == null or member == null:
 		return ""
 	return _leader_ai.get_member_goal_str(member.name)
+
+
+## デバッグ用: 指定メンバーの UnitAI を返す（PartyStatusWindow の詳細表示用）
+## 内部状態を直接参照するための窓口。null 可
+func get_unit_ai(member: Character) -> UnitAI:
+	if _leader_ai == null or member == null:
+		return null
+	return _leader_ai.get_unit_ai(member.name)
+
+
+## デバッグ用: PartyLeader 本体を返す（PartyStatusWindow のリーダー行拡張用）
+## null 可（未 activate 状態など）
+func get_party_leader() -> PartyLeader:
+	return _leader_ai
 
 
 ## 現在の探索移動方針を返す（game_map が NPC の階段使用意図を判定するために使用）

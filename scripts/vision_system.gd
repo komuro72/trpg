@@ -40,10 +40,10 @@ var _visible_tiles: Dictionary = {}
 ## エリアデータが存在するか（存在しない場合は視界システムを無効化して全タイル表示）
 var _has_area_data: bool = false
 
-## デバッグ時に未探索区域を表示するフラグ（F1 DebugWindow 表示中に true）
+## デバッグ時に未探索区域を表示するフラグ（F1 PartyStatusWindow 表示中に true）
 var debug_show_all: bool = false
 
-## DebugWindow で別フロアを閲覧中のフロアインデックス（-1=通常・game_map が設定）
+## PartyStatusWindow で別フロアを閲覧中のフロアインデックス（-1=通常・game_map が設定）
 var debug_view_floor: int = -1
 
 

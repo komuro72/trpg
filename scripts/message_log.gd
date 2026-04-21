@@ -4,7 +4,7 @@
 ##
 ## 表示先の分離：
 ##   system / battle → MessageWindow（常時表示）
-##   combat / ai     → DebugWindow のみ（debug_log_added シグナル経由）
+##   combat / ai     → CombatLogWindow のみ（debug_log_added シグナル経由）
 
 extends Node
 
@@ -25,7 +25,7 @@ signal entry_added()
 ## attacker / defender は Character 実体（null 可）。死亡判定に使用
 signal battle_message_added(attacker_data: CharacterData, defender_data: CharacterData, message: String, attacker: Character, defender: Character)
 
-## combat / ai メッセージが追加されたとき発火するシグナル（DebugWindow 用）
+## combat / ai メッセージが追加されたとき発火するシグナル（CombatLogWindow 用）
 ## エリアフィルタを無視して全メッセージを発火する
 signal debug_log_added(text: String, color: Color)
 

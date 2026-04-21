@@ -9,11 +9,38 @@
 ### 現在のフェーズ
 - Phase 13（パーティーシステム刷新）完了
 - Phase 14（Steam 配布準備）未着手
-- 現状は「リファクタリング・定数整理・設計明示化・legacy 一掃」の段階（2026-04-20 時点）
+- 現状は「リファクタリング・定数整理・設計明示化・legacy 一掃」の段階（2026-04-21 時点）
 
 ### 最近の大きな変更
 
-#### 2026-04-20（本日の成果）
+#### 2026-04-21（本日の成果：デバッグウィンドウ表示改善・Character ステータス設計統一）
+本日は「PartyStatusWindow（F1 で開くデバッグウィンドウ）の表示改善」を中心に、関連する調査・設計統一・dead code 整理を大量に実施。
+
+1. **DebugWindow の上下分離**：旧 DebugWindow を F1=`PartyStatusWindow`（パーティー状態）・F2=`CombatLogWindow`（combat/ai ログ）の 2 つの独立ウィンドウに分離。相互排他トグル・各 85%×85% サイズ・layer=15 完全透過
+2. **デバッグ用ロガー Logger Autoload を新設**：`Logger.log(message)` 1 関数。コンソール + `res://logs/runtime.log`（毎起動リセット・flush 付き）の 2 系統に出力。旧 F2「デバッグ情報コンソール出力（`user://debug_floor_info.txt`）」は**機能ごと廃止**
+3. **PartyStatusWindow の表示拡充**（複数セッションに跨る大規模改訂）
+   - F3 詳細度トグル（高のみ → 高+中 → 高+中+低 の 3 段階循環・セッション内のみ保持）
+   - 旧 F3「無敵モード」を F6 に移動
+   - メンバー情報を**横一列化**（旧：強制 1〜3 行/メンバーを廃止）。幅超過時のみ自然折返し
+   - リーダー行から**名前・クラス名を除去**・クラス名は各メンバー行（`★名前[C](ヒーラー)`）へ移動
+   - 行動ラインに `MP:x/y` / `SP:x/y`（energy）を追加（クラスに応じて MP/SP 切替）
+   - 詳細度「低」でフラグライン拡張：UnitAI 側（P↓ F↑ warp）＋ Character 12 ステータス（pow/skl/rng/br/bl/bf/pr/mr/da/ld/ob/mv_s/fac/leader）を `abbr:base+bonus` 形式で表示
+4. **Character クラスのステータス設計統一**（大規模リファクタリング）
+   - 13 ステータス全てを Character に**最終値フィールドとして保持**（素値＋装備補正）。従来 `power` / `attack_range` / `max_hp` / `max_energy` のみだった対称性の欠落を解消
+   - `CharacterData.get_equipment_bonus(stat_name)` に**単一 API 集約**（旧 7 個別 getter を物理削除）
+   - 呼出側（`Character.take_damage` / `_calc_block_*` / `UnitAI` / `NpcLeaderAI` / `OrderWindow` / `PlayerController`）を Character 最終値参照に切替
+5. **敵リーダー行の `mv/battle/tgt/hp` 表示を廃止**、`strategy=<ENUM>`（`_party_strategy` の素値）直接表示に統一。`PartyLeader.get_global_orders_hint()` の仮想ヒント合成コード（`match _party_strategy` ブランチ）を物理削除
+6. **敵メンバー行の指示ライン廃止**（M/C/F/L/S/HP/E/I）。敵では全 8 項目が Character デフォルト固定または `is_friendly` ガードで参照されないため表示する意味なし
+7. **敵固有表示グループを新設**：
+   - 動的判断（中）：`種: sflee nomp lich:水`（`_should_self_flee` / `_can_attack` / Lich の `_lich_water`）
+   - 静的属性（低）：`ignfle undead flying immune proj:... chase:N terr:N`（`_should_ignore_flee` / is_undead / is_flying / instant_death_immune / projectile_type / chase_range / territory_range）
+8. **dead code 整理**：`Character.get_direction_multiplier()`（方向ダメージ倍率 dead code）を物理削除。`guard_facing` コメント残骸も修正
+9. **調査ドキュメント 3 件新規作成**：
+   - [`docs/investigation_debug_variables.md`](docs/investigation_debug_variables.md)：PartyLeader / UnitAI / Character の状態変数棚卸し（22 + 42 + 71 行）
+   - [`docs/investigation_enemy_order_system.md`](docs/investigation_enemy_order_system.md)：敵の指示体系がなぜ味方と異なるか（8 フィールド比較マトリクス・(A)/(B)/(C) 分類）
+   - [`docs/investigation_enemy_order_effective.md`](docs/investigation_enemy_order_effective.md)：敵リーダー行の旧表示が実動に効くか（7 フィールド全て (A) 表示のみ・根本原因は仮想ヒント合成）
+
+#### 2026-04-20（前日の成果）
 - **攻撃操作の 1 発 1 押下化**：TARGETING モードの時間停止仕様を再設計。Z/A 押下中は射程表示＋向き変更可、離した瞬間に攻撃発動の一本化モデルへ。4 つの内部ステート（`PRE_DELAY` / `PRE_DELAY_RELEASED` / `TARGETING` / `POST_DELAY`）で状態遷移を整理し、連打（素早く離す）とじっくり狙う（pre_delay 完了後の時間停止）の両立を実現。詳細は「攻撃フロー（一発一押下モデル）」節
   - 設計過程：(1) 確定の二度押し廃止＋release-to-fire を実装 → (2) ボタン解放を「攻撃ボタンを押している間だけ向き変更」に縛るよう改修 → (3) PRE_DELAY 終了後 TARGETING への引き継ぎでも向き変更を有効化 → (4) ボタン解放時の自動キャンセルタイマー再起動を追加 → (5) TARGETING 時間停止を「ホールド中のみ」に再設計し、PRE_DELAY_RELEASED 状態を新設して連打のテンポ感を回復
 - **Config Editor の hidden フラグ導入**：定数メタデータに `hidden: true` を追加できるようにし、デフォルトでは Config Editor から非表示。下部ボタン列右端に「隠し項目も表示」チェックボックスを追加（セッション内のみ保持・open() ごとにリセット・薄いアルファでグレーアウト気味に表示）。既存の `CONDITION_COLOR_*`（スプライト/ゲージ/テキスト × 4 段階 = 12 個）を hidden 化
@@ -160,13 +187,40 @@ Step 1-B（move_speed 有効化・MOVE_INTERVAL 廃止・ガード WEIGHT 導入
 5. **Step 4：向き変更コストの完全対称化**
    - 全局面で向き変更コストを発生させる（プレイヤーの通常移動のみコストありの非対称を解消）
    - `BASE_TURN_DURATION` を新設、`move_speed` で同様に補正（`BASE_TURN_DURATION × 50 / move_speed`）
-   - dead code 整理：`character.gd` の `guard_facing` コメント残骸、`get_direction_multiplier` 関数
+   - ✅ dead code 整理は 2026-04-21 に完了：`character.gd` の `get_direction_multiplier` 関数を物理削除・`guard_facing` コメントを `facing を維持` に修正（詳細は [docs/history.md](docs/history.md) 参照）
    - TURN_DELAY 中の論理 facing 不一致（0.15 秒間旧向きのまま）を修正
 
 6. **Step 5：近接攻撃範囲拡大**
    - 前方 5 マス化（正面 1 + 左右 1 + 斜め前 2）
    - 斜め前攻撃後の向きは維持、左右攻撃後は向きを変える（既存挙動を維持）
    - スプライトの 45° 回転で斜め前を表現するか試す
+
+#### 本日（2026-04-21）の調査で判明した残課題
+
+PartyStatusWindow の表示改善の過程で判明したが、本日は対応しなかった課題群。Step 2 以降とは独立に、優先度低めで継続する。
+
+1. **敵の UnitAI 指示フィールドの物理削除検討**（優先度：低）
+   - 現状：`_combat` / `_battle_formation` / `_on_low_hp` / `_move_policy` / `_special_skill` / `_hp_potion` / `_sp_mp_potion` / `_item_pickup` の 8 項目は敵では Character デフォルト固定で実動に関与しない（本日の調査で確認・全項目 (A) / (B) / (C) のいずれかに分類）
+   - 本日の対応：PartyStatusWindow の表示から消しただけで、コード上は `_assign_orders()` で敵にも渡している
+   - 将来検討：`_assign_orders()` 側で敵には渡さないようにする設計見直し。ただし味方では有効なフィールドなので、安易な削除より `is_friendly` 分岐で早期リターンする等の整理が妥当
+   - 詳細：[`docs/investigation_enemy_order_system.md`](docs/investigation_enemy_order_system.md) / [`docs/investigation_enemy_order_effective.md`](docs/investigation_enemy_order_effective.md)
+
+2. **味方側の UnitAI 指示ラインの表示妥当性の再点検**（優先度：低）
+   - 敵側で指示ライン（M / C / F / L / S / HP / E / I）を廃止した流れを受けて、味方側で表示している同フィールドも本当に全項目デバッグ価値があるか再検討したい
+   - 特に `_hp_potion` / `_sp_mp_potion` / `_item_pickup` など「use / never」「aggressive / passive」等の単純な 2〜3 値フィールドは、見るメリットと画面占有コストのバランスが悪い可能性
+   - 判断基準：ゲーム中に値が動的に変化するか。指示のまま固定なら画面占有するほどの価値はない
+   - PartyStatusWindow の `_build_orders_field_list` の見直し候補
+
+3. **`UnitAI.obedience` の状態変数扱いの再検討**（優先度：低）
+   - 棚卸し調査で「`_init()` でサブクラス固定値を設定する事実上の定数」と判明（[`docs/investigation_debug_variables.md`](docs/investigation_debug_variables.md)）
+   - 現状は var 扱いだが、デバッグ表示価値はほぼなし（値が変化しないので）
+   - `const` 化するか、`character_data.obedience`（0.0〜1.0 の装備補正込み最終値）と統合するか要検討
+
+4. **`PartyLeader.get_global_orders_hint()` 現状の再整理**（優先度：低）
+   - 2026-04-21 に仮想ヒント合成（`match _party_strategy`）を物理削除済み。現在は `_global_orders.duplicate()` + combat_situation 付与のみ
+   - 敵では `_global_orders` が常に空なので、実質的に「戦況判断の配信 API」になっている。命名 `get_global_orders_hint` が実態と乖離
+   - 改名候補：`get_party_debug_hint()` / `get_combat_status_hint()` 等
+   - 影響範囲：`party_status_window.gd` / `party_manager.gd` / `npc_leader_ai.gd`（override している）の 3 箇所
 
 #### 並行して継続するタスク
 - **フロア基準値（`FLOOR_*_RANK_THRESHOLD` / `FLOOR_RETREAT_RATIO`）の実プレイ調整**：装備 tier 戦力反映（2026-04-19）により同じ基準値でも降下しやすくなっている。DebugWindow の `F(R+T)s` 表示で観察
@@ -356,9 +410,11 @@ assets/images/tiles/
 | ターゲット循環（TARGETING中） | 矢印キー | LB / RB | ターゲット選択中のみ有効 |
 | 指示／ステータスウィンドウ | Tab | Select / Back | |
 | ポーズメニュー開閉 | Esc | Start | |
-| DebugWindowの表示/非表示 | F1 | — | 画面中央にデバッグウィンドウをトグル表示（ゲーム進行継続） |
-| デバッグ情報コンソール出力 | F2 | — | キャラ・フロア・占有タイル情報を user://debug_floor_info.txt に書き出し |
+| パーティー状態ウィンドウの表示/非表示 | F1 | — | 画面中央に PartyStatusWindow をトグル表示（パーティー状態）。F2 ログウィンドウが開いていたら自動で閉じる（相互排他）。ゲーム進行継続 |
+| combat/ai ログウィンドウの表示/非表示 | F2 | — | 画面中央に CombatLogWindow をトグル表示（ログのみ）。F1 パーティー状態ウィンドウが開いていたら自動で閉じる（相互排他）。ゲーム進行継続 |
+| PartyStatusWindow 詳細度トグル | F3 | — | 表示情報量を 3 段階で循環（高のみ → 高+中 → 高+中+低 → 高のみ…）。PartyStatusWindow 表示中のみ有効・セッション内のみ保持（再起動で「高のみ」にリセット） |
 | ConfigEditor の表示/非表示 | F4 | — | 定数管理UI。タイトル画面・ゲーム中の両方で起動可。ゲーム中は時間停止 |
+| パーティー無敵化（選択中リーダー） | F6 | — | PartyStatusWindow で選択中のリーダーのパーティー全員を無敵化トグル。HP/MP/SP を最大値の10倍に設定（再押下で元に戻す）。PartyStatusWindow 表示中のみ有効 |
 | シーン再スタート | F5 | — | |
 
 ### メニュー内共通操作
@@ -375,27 +431,138 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 - OrderWindowトップレベルで「戻る」を押すとウィンドウを閉じる（Tab/Selectと同じ）
 - テーブル内の指示値切替（移動/隊形/戦闘/ターゲット/低HP/アイテム取得の各列）は左右キーで値を切替。「決定/戻る」は名前列・全体方針行・ログ行でのみ適用
 
-### デバッグウィンドウ（DebugWindow）
-- F1 キーで画面中央に表示/非表示トグル。ゲームは進行継続
-- 画面幅70%・高さ80%（**背景パネルなし・完全透過**。CanvasLayer layer=15）
-- **上半分（55%）**：現在フロアの全パーティー状態をリアルタイム表示（0.2秒ごとに更新）
-  - 表示対象：プレイヤーパーティー（青系）→ NPCパーティー（緑系）→ 敵パーティー（赤系）の順
-  - 表示条件: いずれか1人が表示フロアにいるパーティーを表示。別フロアのメンバーは名前頭に `[Fx]` を付加
-  - 各パーティー：[種別] リーダー名(クラス)  生存:x/y  戦況:xxx 戦力:xx(my/enemy) HP:xx mv=... battle=... ...
-  - 各メンバー：★操作中  名前(クラス)[ランク]  HP:x/y  [スタン][ガード]
-  - メンバー個別指示概要（battle_formation/combat/target または heal）
-  - **メンバーの行動目的（goal）行**: `→DOWN階段(15,3)` / `→攻撃Goblin` / `L追従(DOWN/キュー空/WAIT)` / `[cluster]キュー空(IDLE)` 等。末尾に `_state` ラベル併記（IDLE/MOV/WAIT/ATKp/ATKpost）
-  - HP比率で色分け：50%超=白、25-50%=黄、25%以下=赤
-  - **上下キーでリーダー行を循環選択**（DebugWindow表示中のみ有効・入力は伝播しない。敵・NPC・プレイヤーの全リーダーが対象）
-  - 選択中リーダー行は黄色「▶」マーカーを行頭に表示
-  - メンバーは1行に横並び表示（`[Fx]★名前[ランク] HP:x/y [ス][ガ]` 形式・幅超過時は "..." で打ち切り）
-  - 各パーティーブロック = ヘッダー行 + メンバー横並び行 + 目的行 の3行固定（ブロック間空白なし）
-  - リーダーを選択するとカメラがそのキャラを追跡（`leader_selected` シグナル → `game_map.set_debug_follow_target()`）
-  - F1で閉じると選択リセット・カメラは操作キャラの追跡に戻る
-- **下半分（45%）**：combat/ai ログ（最新50件・新着が下に追加）
-  - combat=黄色、ai=水色（MessageWindow と同じ色分け）
-  - `MessageLog.debug_log_added` シグナル経由で受信（エリアフィルタなし・全メッセージ表示）
+### デバッグウィンドウ（PartyStatusWindow / CombatLogWindow）
+2026-04-21 に旧 DebugWindow を上下 2 つの独立ウィンドウに分離した。F1・F2 は相互排他でトグル（両方同時表示は発生しない）。どちらも画面中央・**背景パネルなし・完全透過**・CanvasLayer layer=15。ゲームは進行継続（時間停止しない）。
+
+**トグル動作（相互排他）**
+- 何も表示されていない状態で F1 → 上段（PartyStatusWindow）のみ表示
+- 何も表示されていない状態で F2 → 下段（CombatLogWindow）のみ表示
+- 上段表示中に F2 → 下段のみ表示（上段は自動で閉じる）
+- 下段表示中に F1 → 上段のみ表示（下段は自動で閉じる）
+- 上段表示中に F1 → 全て閉じる
+- 下段表示中に F2 → 全て閉じる
+
+#### 上段：PartyStatusWindow（F1・`scripts/party_status_window.gd`）
+- 現在フロアの全パーティー状態をリアルタイム表示（0.2秒ごとに更新）
+- サイズ：画面幅 85% × 高さ 85%（中央配置・単独表示なので従来の 55% 上半分制約から解放）
+- 表示対象：プレイヤーパーティー（青系）→ NPCパーティー（緑系）→ 敵パーティー（赤系）の順
+- 表示条件: いずれか1人が表示フロアにいるパーティーを表示。別フロアのメンバーは名前頭に `[Fx]` を付加
+- HP 比率で色分け（スプライト系パレット）：healthy=白 / wounded=黄 / injured=橙 / critical=赤
+- **上下キーでリーダー行を循環選択**（PartyStatusWindow 表示中のみ有効・入力は伝播しない。敵・NPC・プレイヤーの全リーダーが対象）。下段単体表示中は上下キー無効
+- 選択中リーダー行は黄色「▶」マーカーを行頭に表示
+- リーダーを選択するとカメラがそのキャラを追跡（`leader_selected` シグナル → `game_map.set_debug_follow_target()`）
+- F1 で閉じる／F2 で切替時は選択リセット・カメラは操作キャラの追跡に戻る
+- `vision_system.debug_show_all` は PartyStatusWindow の可視状態と連動（上段表示中のみ未探索エリアも含めて全敵可視化）
+
+##### 詳細度トグル（F3・3 段階循環）
+- ウィンドウ表示中に F3 を押すたびにメンバー行の情報量が切り替わる：**高のみ → 高+中 → 高+中+低 → 高のみ…**
+- セッション内のみ保持・ゲーム再起動で「高のみ」にリセット（永続化なし）
+- 非表示時は F3 を無視
+- 現在のステート表示は行わない（切り替えると表示内容が変わるので視覚的に判別可能）
+- 変数と優先度のマッピングは `PartyStatusWindow.VAR_PRIORITY` 定数に一元管理（変数名→優先度レベル 0〜2）。新しい状態変数を追加・優先度を微調整するときはここだけ触る
+
+##### レイアウト（2026-04-21 改訂：横一列流し）
+パーティーブロック = **ヘッダー行 1 行** + **メンバー行 N 行（1 メンバー = 1 論理行・幅超過時のみ折返し）**。
+
+改訂の要点：
+- メンバー情報は**横一列に流す**レイアウトに変更。行動・指示・ステータスを 1 メンバー 1 論理行に集約し、幅超過時のみ自然に折り返す（旧：強制 1〜3 行/メンバーを廃止）
+- リーダー行から**リーダー名・クラス名を除去**。クラス名は各メンバー行（`★名前[C](ヒーラー)` のように）に移動
+- **敵パーティーも味方と同じ詳細度表示**（指示グループ・ステータスグループ）。ただし敵のヘッダーは `item=` を省略（敵は item_pickup 指示を持たないため）
+
+**ヘッダー行（パーティー全体情報・常に 1 行）**
+
+味方と敵で末尾のフィールドが異なる（2026-04-21 改訂）：
+
+- **味方（プレイヤー・NPC）**：`[種別]  生存:x/y  戦況:xxx 戦力:F(R+T)s C(R+T)s E(R+T)s HP:xxx  mv=... battle=... tgt=... hp=... item=...`
+  - `mv / battle / tgt / hp / item` は `_global_orders` の実値（プレイヤーは OrderWindow で変更可・NPC は自律判断）
+  - NPC は `item=` を含む（プレイヤー経由の item_pickup 指示）。敵は `item=` なし（item_pickup 指示を持たないため）
+- **敵**：`[種別]  生存:x/y  戦況:xxx 戦力:... HP:...  strategy=<ENUM>`
+  - `strategy=` は `PartyLeader._party_strategy` の素値（`ATTACK` / `FLEE` / `WAIT` / `DEFEND` / `EXPLORE` / `GUARD_ROOM`）。日本語化せず enum 名のまま表示し「素の変数値」であることを視覚的に明示
+  - 敵の行動は UnitAI 指示フィールドではなく、パーティー戦略 + 種族フック + ハードコード種族ロジックで決まる。味方と同じ `mv=... battle=...` 表示は誤解を招くため廃止（旧実装は `_party_strategy` から仮想ラベル合成 → 2026-04-21 削除）
+- リーダー名・クラス名は載せない（識別は `[種別]` + 色分け + メンバー行の `★` / `(クラス)` で行う）
+- 優先度「中」で追加：`re:0.8s 探索:5`（`_reeval_timer` / `_visited_areas` サイズ）
+- 優先度「低」で追加（NPC パーティーのみ該当）：`合流:Y 拒絶:N 共闘:Y 回復:N 床固定`
+- 関連調査：`docs/investigation_enemy_order_system.md` / `docs/investigation_enemy_order_effective.md`
+
+**メンバー行（1 メンバー = 1 論理行。幅超過時のみ自然折返し）**
+
+詳細度ごとに横一列に追加される情報群：
+
+1. **行動ボディ**（常時・HP 色）：`[Fx]★名前[ランク](クラス) HP:x/y MP|SP:x/y mv=0.40s [ス][ガ]`
+   - `(クラス)` は `CLASS_NAME_JP`（例：ヒーラー・剣士）。2026-04-21 にリーダー行から移動
+   - `★` は `is_player_controlled`（操作中マーカー）
+   - MP/SP は `CharacterData.is_magic_class()` でクラス分岐（`max_energy == 0` のキャラでは省略）
+2. **目的**（常時・シアン）：` →攻撃Goblin[ATKp 0.34s q3]` のように `UnitAI._state` / `_timer` / `_queue.size()` を付加
+3. **指示グループ**（詳細度 >= 1・黄緑・**味方メンバーのみ**）：`  指示: M:follow C:attack F:surround L:retreat S:strong HP:use E:use I:passive`
+   - 略号：M=move_policy / C=combat / F=battle_formation / L=on_low_hp / S=special_skill / HP=hp_potion / E=sp_mp_potion / I=item_pickup
+   - 各フィールドは `_shorten()` で 8 文字以内に短縮（空文字列 / null は `-` に置換）
+   - **2026-04-21 改訂**：敵メンバーでは本グループを出力しない。敵では全 8 項目が Character デフォルトから変化せず・または `is_friendly == false` ガードで参照されないため、表示しても意味がない（調査：`docs/investigation_enemy_order_system.md` / `docs/investigation_enemy_order_effective.md`）
+4. **敵固有・動的判断グループ**（詳細度 >= 1・黄緑・**敵メンバーのみ**）※ 2026-04-21 追加：`  種: sflee nomp lich:水`
+   - sflee=`_should_self_flee()` 戻り値 true（ゴブリン系が HP 30% 未満で動的判定）
+   - nomp=`_can_attack()` 戻り値 false（魔法系の MP 不足で攻撃不可）
+   - lich:水/火=`LichUnitAI._lich_water`（次攻撃の属性切替・攻撃ごとに反転）
+   - 該当なしの場合は「種:」グループごと省略（味方では常に省略）
+   - 背景：敵は OrderWindow 経由の指示を受けず、種族フックで独自判断する（詳細は `docs/investigation_enemy_order_system.md`）。味方の指示グループの代替表示として位置付ける
+5. **状態グループ**（詳細度 >= 2・茶系）：`  状態: P↓ F↑ warp:1.2s`（UnitAI 側フラグが非空のときのみ）
+   - P↓=party_fleeing / F↑=floor_following / warp:1.2s=DarkLord 次ワープ残秒
+   - ※ lich:水/火 は 2026-04-21 に「敵固有・動的判断」として上のグループ 4 に移動
+6. **12 ステータスグループ**（詳細度 >= 2・茶系）：`  pow:70+4 skl:45 rng:1 br:20+10 pr:5+8 mr:5 da:50 ld:5 ob:50 mv_s:50 fac:味方 leader`
+   - 各ステータスは `abbr:base+bonus` 形式（装備補正が非 0 のとき）・または `abbr:base`（補正 0）
+   - 素値と装備補正の**両方が 0** のフィールドは省略（クラス固有差分・例：弓使いは `br/bl` を持たないので省略）
+7. **敵固有・静的属性グループ**（詳細度 >= 2・茶系・**敵メンバーのみ**）※ 2026-04-21 追加：` ignfle undead flying immune proj:fire chase:10 terr:50`
+   - フック系（true のときのみ表示）：ignfle=`_should_ignore_flee()`（DarkKnight / Zombie 等 9 種族）
+   - JSON 属性（true のときのみ表示）：undead=is_undead / flying=is_flying / immune=instant_death_immune
+   - 文字列（非空のときのみ表示）：proj:{type}=projectile_type
+   - 数値（敵なら常に表示）：chase:{n}=chase_range / terr:{n}=territory_range
+   - 12 ステータスグループの直後に続けて表示（同じ茶系色・グループ間にダブルスペース挟まず流れる）
+
+**実装面**：セグメント単位（行動ボディ / 目的 / 指示プレフィックス + 各フィールド / 種プレフィックス + 敵動的判断 / 状態プレフィックス + 各フラグ / 各ステータス部品 / 敵静的属性）でチャンク化し、行幅を超えたセグメント境界で自動折返しする。折返し後の継続行ではセグメント先頭の空白を削除して頭から描画する。
+
+##### Character ステータス略称表（12 ステータス + fac/leader）
+| 略称 | フィールド | 備考 |
+|-----|-----------|------|
+| `pow`  | `power` | 物理/魔法威力（クラス共通フィールド） |
+| `skl`  | `skill` | 物理/魔法技量 |
+| `rng`  | `attack_range` | 射程（タイル） |
+| `br`   | `block_right_front` | 右手防御強度（正面・右側面で有効） |
+| `bl`   | `block_left_front` | 左手防御強度（正面・左側面で有効） |
+| `bf`   | `block_front` | 両手防御強度（正面のみ有効） |
+| `pr`   | `physical_resistance` | 物理耐性の能力値（軽減率は逓減変換） |
+| `mr`   | `magic_resistance` | 魔法耐性の能力値 |
+| `da`   | `defense_accuracy` | 防御判定成功率（%） |
+| `ld`   | `leadership` | 統率力（NPC 合流交渉） |
+| `ob`   | `obedience` | 従順度（内部 0.0〜1.0 を ×100 表示） |
+| `mv_s` | `move_speed` | 移動速度スコア（生値）。実効秒は行動ラインの `mv=...` で別表示 |
+| `fac`  | `is_friendly` | 陣営（味方/敵）ラベル |
+| `leader` | `is_leader` | リーダーフラグ（true 時のみ表示） |
+
+##### 敵固有表示略称表（2026-04-21 追加・敵メンバーのみ表示）
+| 略称 | フィールド / フック | 詳細度 | 表示条件 |
+|-----|-----------------|-------|--------|
+| `sflee`  | `UnitAI._should_self_flee()` | 中 | true 時のみ（ゴブリン系の HP 30% 未満） |
+| `nomp`   | `UnitAI._can_attack()` | 中 | false 時のみ（魔法系の MP 不足） |
+| `lich:水` / `lich:火` | `LichUnitAI._lich_water` | 中 | Lich のみ（常時） |
+| `ignfle` | `UnitAI._should_ignore_flee()` | 低 | true 時のみ（DarkKnight / Zombie 等 9 種族） |
+| `undead` | `character_data.is_undead` | 低 | true 時のみ（Skeleton / Skeleton-archer / Lich） |
+| `flying` | `character_data.is_flying` | 低 | true 時のみ（Harpy / Demon / DarkLord） |
+| `immune` | `character_data.instant_death_immune` | 低 | true 時のみ（ボス級） |
+| `proj:{type}` | `character_data.projectile_type` | 低 | 非空のとき（例 `proj:thunder_bullet`） |
+| `chase:{n}` | `character_data.chase_range` | 低 | 敵なら常に表示 |
+| `terr:{n}`   | `character_data.territory_range` | 低 | 敵なら常に表示 |
+
+##### 行数上限への配慮
+「高のみ」モードなら現状と同程度（1 + 1×メンバー数 行/パーティー）で収まる。「高+中+低」モードで画面下端からあふれる場合は、単純に下端で打ち切る（スクロール未実装）。フロア 0 に全 NPC 12 パーティー同居する最悪ケースでは 1+3×平均メンバー数 × 12 = 画面上限近くなるので、必要なら後日「選択中リーダーのみ詳細展開」の二層表示を検討（別タスク）。
+
+#### 下段：CombatLogWindow（F2・`scripts/combat_log_window.gd`）
+- combat/ai ログ（最新50件・新着が下に追加）
+- サイズ：画面幅 85% × 高さ 85%（中央配置）
+- combat=黄色、ai=水色（MessageWindow と同じ色分け）
+- `MessageLog.debug_log_added` シグナル経由で受信（エリアフィルタなし・全メッセージ表示）
+- ログ蓄積はウィンドウの可視状態に関わらず常に行う（閉じていても最新50件は保持）
+
+#### 共通
 - MessageWindow には combat/ai メッセージは流れない（system/battle のみ表示）
+- 旧「デバッグ情報コンソール出力（F2 → user://debug_floor_info.txt 書き出し）」は 2026-04-21 に機能ごと廃止した。代替は Logger Autoload（「デバッグ用ロガー（Logger）」節参照）。必要になれば Logger 経由で再実装する
 
 ### メッセージ表記方針
 - メッセージウィンドウに表示するバトルメッセージは**自然言語**で記述する（記号的表現を避ける）
@@ -880,6 +1047,33 @@ rank値: C=0, B=1, A=2, S=3
 - Claude Code：CLAUDE.mdの更新・仕様書（docs/spec.md）の更新・GDScriptの実装・コミット/プッシュを行う
 - 仕様相談はclaude.aiで行い、確定した仕様をもとに Claude Code が CLAUDE.md を更新してから実装する
 
+## デバッグ用ロガー（Logger）
+不具合調査のために Claude Code が一時的にログ出力を仕込むための仕組み。ゲームを実行 → ログファイルが書かれる → Claude Code がファイルを直接読んで解析する、という往復を想定する。問題解決後は Logger 呼び出しを削除する**使い捨て運用**（print デバッグと同じ感覚・ただし結果が残る）。
+
+### 実装
+- Autoload として登録（`scripts/logger.gd` / Autoload 名 `Logger`）
+- API は 1 関数で開始：`Logger.log(message: String)`。将来タグ・レベル分けが必要になったら段階的に拡張
+- 出力フォーマット：`[HH:MM:SS.mmm] メッセージ`
+- 出力先（両方に出す）:
+  1. Godot コンソール（`print`）
+  2. `res://logs/runtime.log`（ファイル・プロジェクトルート配下の `logs/` フォルダ）
+- ファイル仕様：毎起動でリセット（`FileAccess.WRITE`）・書き込みごとに `flush()`（クラッシュ時も直前行が残る）・Autoload 起動時にハンドルを開き `NOTIFICATION_WM_CLOSE_REQUEST` で明示クローズ
+- `logs/` フォルダが存在しなければ `DirAccess.make_dir_recursive_absolute()` で自動作成
+- `logs/` は `.gitignore` 済み（コミットしない）
+
+### 使用例
+```gdscript
+Logger.log("player hp=%d pos=%s" % [hero.hp, str(hero.grid_pos)])
+Logger.log("stair enter floor=%d" % _current_floor_index)
+```
+
+### Phase 14（Steam 配布）に向けた TODO
+`res://` への書き込みは**エディタ実行時のみ保証される**（Godot の仕様）。エクスポート後（Steam 配布ビルド）では `res://` は読み取り専用になるため、以下のいずれかの対応が必要：
+- リリースビルドでは Logger 自体を無効化（`OS.has_feature("editor")` 等で分岐）
+- 書き出し先を `user://` に切り替え
+
+Phase 14 着手時に決定する。それまでの開発中は `res://logs/` への書き出しで運用。
+
 ## 定数管理（Config Editor）
 
 ゲームバランス調整と定数の棚卸しを目的とした開発用UI。
@@ -1213,22 +1407,28 @@ rank値: C=0, B=1, A=2, S=3
 - 敵ドロップ品は部屋の奥に行くほど強くなる
 
 ### 装備の補正値
-- **武器（剣・斧・短剣）**：`power`・`block_right_front` を補正
-- **武器（弓・杖）**：`power`・`block_front` を補正（射程補正は将来実装）
-- **盾**：`block_left_front` を補正
-- **防具（鎧）**：`physical_resistance`（0〜30）・`magic_resistance`（0〜15）を補正
-- **防具（服）**：`physical_resistance`（0〜15）・`magic_resistance`（0〜15）を補正
-- **防具（ローブ）**：`physical_resistance`（0〜15）・`magic_resistance`（0〜30）を補正
-- 補正がかからないもの：defense_accuracy（防御技量）・move_speed・leadership・obedience・max_hp・max_mp
+**2026-04-21 の設計統一**：装備補正は **13 ステータス全てに対応**（Config Editor アイテムタブ `ITEM_STAT_CHOICES` と一致）。
+
+- **対象ステータス**：`power` / `skill` / `block_right_front` / `block_left_front` / `block_front` / `physical_resistance` / `magic_resistance` / `defense_accuracy` / `leadership` / `obedience` / `move_speed` / `vitality`（→ `max_hp`）/ `energy`（→ `max_energy`）。さらに武器の射程延長に `range_bonus` キーを使う
+- 現行のアイテムマスター（`assets/master/items/generated/*.json`）が実際に使うキーは一部（主に `power` / `block_*` / `physical_resistance` / `magic_resistance` / `range_bonus`）。それ以外のキー（`skill` / `defense_accuracy` / `leadership` / `obedience` / `move_speed` / `vitality` / `energy`）は将来のアイテム拡張余地として対応済み
+- 典型的な用途（現状の命名規則の根拠）：
+  - **武器（剣・斧・短剣）**：`power`・`block_right_front`
+  - **武器（弓・杖）**：`power`・`block_front`・`range_bonus`
+  - **盾**：`block_left_front`
+  - **防具（鎧）**：`physical_resistance` 0〜30・`magic_resistance` 0〜15
+  - **防具（服）**：`physical_resistance` 0〜15・`magic_resistance` 0〜15
+  - **防具（ローブ）**：`physical_resistance` 0〜15・`magic_resistance` 0〜30
+- 実装面：`CharacterData.get_equipment_bonus(stat_name)` が全 equipped スロット（武器・防具・盾）の `stats.<name>` を合計する単一 API。旧 `get_weapon_power_bonus()` 等の個別 getter は 2026-04-21 に廃止・1 関数に集約
 
 ### ダメージ計算への装備補正反映
-- 物理威力／魔法威力 = キャラ素値 + 武器 power
-- 物理耐性  = キャラ素値 + 防具 physical_resistance
-- 魔法耐性  = キャラ素値 + 防具 magic_resistance
-- 右手防御強度 = キャラ素値（block_right_front）+ 武器 block_right_front（剣・斧・短剣のみ）
-- 左手防御強度 = キャラ素値（block_left_front）+ 盾 block_left_front
-- 両手防御強度 = キャラ素値（block_front）+ 武器 block_front（弓・杖のみ）
-- OrderWindow のステータス表示：保有または装備補正がある防御強度フィールドのみ「右手防御強度」「左手防御強度」「両手防御強度」として表示（素値・補正値の2列）
+**2026-04-21 の設計統一**：ダメージ・戦闘計算・AI 判断は Character 側の**装備補正込みの最終値**（`Character.power` / `physical_resistance` 等）を直接参照する。`character_data.X + 装備補正` を毎回計算する方式は廃止。
+
+- 最終値の保持：Character クラスが 13 ステータス分のフィールドを持つ（`max_hp` / `max_energy` / `power` / `skill` / `attack_range` / `block_right_front` / `block_left_front` / `block_front` / `physical_resistance` / `magic_resistance` / `defense_accuracy` / `leadership` / `obedience` / `move_speed`）
+- 再計算タイミング：`Character.refresh_stats_from_equipment()` が 13 ステータス全てを一括再計算（初期化時・装備変更時に呼ぶ）
+- 素値が欲しい場面では **`character_data.X`** を直接参照する（例：OrderWindow の「素値 / 装備補正 / 最終値」2 列表示）
+- 耐性計算：`CharacterData.resistance_to_ratio(Character.physical_resistance)` / 同（magic）で 0〜1 の軽減率を算出（逓減カーブ `score / (score + 100)` 適用前の能力値は装備補正込み）
+- 防御強度 3 フィールド：`Character.block_*` を直接参照し、`Character.defense_accuracy` でロール判定
+- OrderWindow のステータス表示：3 防御強度すべて常時表示（素値 / 装備補正 / 最終値 3 列）。アイテム受渡し先で有効な補正値を見失わない配慮
 
 ### アイテム生成
 - 補正値はランダム生成（フロア深度に応じた範囲内）
@@ -1390,19 +1590,22 @@ rank値: C=0, B=1, A=2, S=3
 | `none`（回復しない） | 対象なし（null を返す） |
 
 ### キャラクターステータス
+**2026-04-21 の設計統一**：数値系 13 ステータスは全て「素値（`character_data.X`）＋装備補正（`CharacterData.get_equipment_bonus(X)`）＝最終値（`Character.X`）」の二層構造。戦闘・AI 計算は Character 側の最終値を直接参照する。素値が必要な UI 表示（OrderWindow の 2 列）だけ `character_data.X` を直接参照する。
+
 | ステータス | フィールド名（実装） | 説明 |
 |-----------|-------------------|------|
-| HP | `max_hp` / `hp` | ヒットポイント |
-| エネルギー | `max_energy` / `energy` | 全クラス共通のリソース。UI 表示は `CharacterData.is_magic_class()` で魔法クラス→「MP」/ 非魔法クラス→「SP」に切替（内部データは同じ `energy`）|
-| 物理威力／魔法威力 | `power` | 攻撃ダメージ・回復量の共通値。UI表示ラベルはクラスに応じて「物理威力」（物理クラス）または「魔法威力」（魔法クラス）に切り替え |
-| 物理技量／魔法技量 | `skill` | 命中精度・クリティカル率の基礎値。UI表示ラベルはクラスに応じて「物理技量」または「魔法技量」に切り替え |
-| 物理攻撃耐性 | `physical_resistance` | 物理ダメージ軽減の能力値（整数）。軽減率 = 値/(値+100)。クラスごとに素値を設定＋装備補正 |
-| 魔法攻撃耐性 | `magic_resistance` | 魔法ダメージ軽減の能力値（整数）。軽減率 = 値/(値+100)。クラスごとに素値を設定＋装備補正 |
-| 防御技量 | `defense_accuracy` | 防御判定の成功しやすさ。キャラ固有の素値（装備による変化なし） |
-| 防御強度 | `block_right_front` / `block_left_front` / `block_front` | 防御成功時に無効化できるダメージ量。クラス固有値（装備補正なし）。方向別に3フィールド。OrderWindowで保有フィールドのみ「右手防御強度」「左手防御強度」「両手防御強度」として表示 |
-| 移動速度 | `move_speed` | 0-100 スコア（高いほど速い・標準 50）。実効値は `Character.get_move_duration()` が `BASE_MOVE_DURATION × 50 / move_speed` で算出。Step 1-B（2026-04-20）から live data 化 |
-| 統率力（leadership） | `leadership` | リーダー側。クラス・ランクから算出して確定後不変。当面は値のみ保持 |
-| 従順度（obedience） | `obedience` | 個体側（0.0〜1.0）。クラス・種族・ランクから算出して確定後不変。当面は値のみ保持 |
+| HP | `max_hp` / `hp` | ヒットポイント。`max_hp` は装備補正（`vitality` キー）対応 |
+| エネルギー | `max_energy` / `energy` | 全クラス共通のリソース。UI 表示は `CharacterData.is_magic_class()` で魔法クラス→「MP」/ 非魔法クラス→「SP」に切替（内部データは同じ `energy`）。`max_energy` は装備補正（`energy` キー）対応 |
+| 物理威力／魔法威力 | `power` | 攻撃ダメージ・回復量の共通値。UI 表示ラベルはクラスに応じて切替。装備補正対応 |
+| 物理技量／魔法技量 | `skill` | 命中精度・クリティカル率の基礎値。UI 表示ラベルはクラスに応じて切替。装備補正対応（現状のアイテム生成規則では使用なし・将来拡張余地） |
+| 物理攻撃耐性 | `physical_resistance` | 物理ダメージ軽減の能力値（整数）。軽減率 = 値/(値+100)。装備補正対応 |
+| 魔法攻撃耐性 | `magic_resistance` | 魔法ダメージ軽減の能力値（整数）。軽減率 = 値/(値+100)。装備補正対応 |
+| 防御技量 | `defense_accuracy` | 防御判定の成功率（%）。装備補正対応（現状のアイテム生成規則では使用なし・将来拡張余地） |
+| 防御強度 | `block_right_front` / `block_left_front` / `block_front` | 防御成功時に無効化できるダメージ量。方向別に3フィールド。装備補正対応（武器=right_front or front / 盾=left_front）。OrderWindow で常時 3 行表示 |
+| 射程 | `attack_range` | 攻撃射程（タイル）。装備補正キーは `range_bonus`（弓・杖のみ）|
+| 移動速度 | `move_speed` | 0-100 スコア（高いほど速い・標準 50）。実効値は `Character.get_move_duration()` が `BASE_MOVE_DURATION × 50 / move_speed` で算出。装備補正対応（将来拡張余地） |
+| 統率力（leadership） | `leadership` | NPC 合流交渉の説得力に寄与。装備補正対応（将来拡張余地） |
+| 従順度（obedience） | `obedience` | 個体側（0.0〜1.0 スケール）。NPC 合流スコアに影響。装備補正対応（将来拡張余地） |
 | 即死耐性 | `instant_death_immune` | bool。デフォルト false。ボス級は true（ヘッドショット無効・無力化水魔法短縮） |
 | アンデッド | `is_undead` | bool。デフォルト false。skeleton / skeleton-archer / lich が true。ヒーラーの回復魔法が特効（回復量をダメージとして適用）。物理耐性極高・魔法はある程度有効 |
 | 巻き添え | `friendly_fire` | bool。デフォルト false（将来実装。範囲攻撃が味方・他パーティーにも当たる仕様） |
@@ -1603,6 +1806,7 @@ rank値: C=0, B=1, A=2, S=3
   - 戦力評価は `_evaluate_strategic_status()` を使う（返り値辞書の `full_party_*` / `nearby_allied_*` / `nearby_enemy_*` から必要な値を取り出す）
   - 種族固有リーダーAI（GoblinLeaderAI 等）でも同じルールを守ること
   - 自パーティーのメンバーのステータスは直接参照してよい
+- **ただし開発用デバッグ UI（PartyStatusWindow）は本ルールの対象外**：F1 で開くデバッグウィンドウは「開発者が内部状態を確認するため」の機能のため、敵の hp / power / skill / _move_policy 等の内部状態を表示してよい。本ルールは「**AI の判断ロジック**が敵のステータスを参照すること」を禁じるもので、デバッグ表示（読み取り専用・ゲームプレイに影響しない）は対象外
 
 ## GDScript 警告の運用方針
 - `warnings/inference_on_variant=1`（project.godot に設定済み）により、Variant 推論警告はエラー扱いせず警告として表示する
@@ -1710,7 +1914,8 @@ rank値: C=0, B=1, A=2, S=3
   - 詳細は [docs/history.md](docs/history.md) の 2026-04-19 エントリを参照
 
 - ✅ **向き変更コストの調査**：2026-04-20 完了。詳細は [docs/investigation_turn_cost.md](docs/investigation_turn_cost.md) 参照
-  - 結論：コスト発生はプレイヤー通常移動の TURN_DELAY=0.15s のみ。AI と攻撃中は即時で完全非対称。dead code 2 件（`get_direction_multiplier` / `guard_facing` コメント）を確認
+  - 結論：コスト発生はプレイヤー通常移動の TURN_DELAY=0.15s のみ。AI と攻撃中は即時で完全非対称
+  - dead code 2 件（`get_direction_multiplier` / `guard_facing` コメント）は 2026-04-21 に削除完了（`character.gd`）
 - ✅ **移動関連定数の棚卸し**：2026-04-20 完了。詳細は [docs/investigation_movement_constants.md](docs/investigation_movement_constants.md) 参照
   - 重要発見：`character_data.move_speed` 完全 dead data / `MOVE_INTERVAL` の SoT が PlayerController と UnitAI に分裂 / game_speed 適用パターンが 4 種類混在 / Wolf・Zombie の game_speed 未適用バグ / DarkLordUnitAI の warp_timer 逆方向バグ
 - ✅ **敵クラスステータスの利用状況調査**：2026-04-20 完了。詳細は [docs/investigation_enemy_class_stats.md](docs/investigation_enemy_class_stats.md) 参照

@@ -121,8 +121,6 @@ func _on_arrive() -> void:
 			# apply_stun() 側でまとめて自然言語メッセージを生成する
 			var suppress := _stun_duration > 0.0
 			_target.take_damage(_damage, _multiplier, safe_attacker, _is_magic, suppress)
-			print("[Player] 遠距離攻撃 → %s  HP:%d/%d" % \
-					[_target.name, _target.hp, _target.max_hp])
 		if _stun_duration > 0.0:
 			_target.apply_stun(_stun_duration, safe_attacker)
 	queue_free()

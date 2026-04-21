@@ -523,7 +523,8 @@ func will_accept_with_reason(offer_type: String, player_party: Party) -> Diction
 		if not is_instance_valid(ch):
 			continue
 		if ch.is_leader and ch.character_data != null:
-			leader_leadership = ch.character_data.leadership
+			## Character.leadership は装備補正込みの最終値
+			leader_leadership = ch.leadership
 		if ch.character_data != null:
 			player_rank_sum += RANK_VALUES.get(ch.character_data.rank, 3) as int
 
@@ -544,7 +545,8 @@ func will_accept_with_reason(offer_type: String, player_party: Party) -> Diction
 		if not is_instance_valid(m):
 			continue
 		if m.character_data != null:
-			npc_obedience_sum += m.character_data.obedience
+			## Character.obedience は装備補正込みの最終値
+			npc_obedience_sum += m.obedience
 			npc_rank_sum += RANK_VALUES.get(m.character_data.rank, 3) as int
 		npc_hp_sum     += m.hp
 		npc_max_hp_sum += m.max_hp
