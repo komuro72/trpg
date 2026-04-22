@@ -23,6 +23,36 @@
 3. **ATTACK_TYPE_MULT 調整（0.3→0.2 / 0.2→0.1）**：近距離グループ（melee / dive）と遠距離グループ（ranged / magic）の比率を **2 : 1** に設計変更（旧 1.5 : 1 相当）。旧値では遠距離が「安全なのに火力も高い」状態でリスク/リワード対応が崩れていた。絶対値（0.2 / 0.1）は実プレイで即死問題がほぼ解消した値。詳細は「命中・被ダメージ計算」節
 4. **Config Editor 変更セルのハイライト色を暗色化**：`HIGHLIGHT_BG_COLOR` を `(1.0, 1.0, 0.8)` → `(0.40, 0.32, 0.08)` に変更（[config_editor.gd:19](scripts/config_editor.gd:19)）。明るい文字色との衝突で変更済みセルが読めなかった問題を修正
 
+#### 2026-04-22 夕方以降の成果：ガード中アニメ修正 + 向き変更バグ修正
+
+1. **ガード中移動時の歩行アニメ欠落を修正**
+   - 原因：[character.gd](scripts/character.gd) の `_update_visual_move()` 内、アニメ切替条件に `is_guarding` が含まれており、ガード中は全てのフレーム切替が抑制されていた
+   - 仕様：「歩行中は walk1/walk2/top の通常サイクル、静止中のみ guard.png」に統一
+   - 修正箇所：[character.gd](scripts/character.gd) の 3 箇所（`abort_move` / `_update_visual_move` のフレーム切替 / 同・移動完了時）
+   - ガード中かつ静止/移動完了時は `_update_ready_sprite()` 経由で guard.png に復帰させる形に整理
+   - 副作用なし（攻撃中×ガード中・ターゲット中×ガード中・ガード解除いずれも既存挙動維持）
+
+2. **向き変更中に攻撃ボタンを押すと TARGETING 時間停止が無効化されるバグを修正**
+   - 原因：`_turn_timer` の減算場所が [_process_guard_and_move()](scripts/player_controller.gd:444) 内のみで、PRE_DELAY 中は呼ばれないため `_is_turning` が永遠に true のまま → [_update_world_time()](scripts/player_controller.gd:983) が `_is_turning` を先に評価して TARGETING 時間停止を上書きしていた
+   - 再現ログ：`logs/runtime.log` の line 191〜256（向き変更開始 0.09 秒後に攻撃 → TARGETING で `wtr=true` が 1.25 秒継続 → 敵が射程外へ）
+   - 仕様：**向き変更時間を pre_delay に含める（並行消化）**
+   - 修正方針：
+     - `_turn_timer` を [_process()](scripts/player_controller.gd:357) の早段で一元管理（mode 問わず減算・`world_time_running = false` のときは停止）
+     - [_update_world_time()](scripts/player_controller.gd:983) の判定順を変更（**TARGETING を turning より先に評価**）
+     - [_start_targeting()](scripts/player_controller.gd:711) で `_is_turning` が残っていたら強制完了する安全網を追加（pre_delay < TURN_DELAY のクラスが将来追加された場合への備え）
+   - 効果：プレイヤー体感「押してから TARGETING まで＝ pre_delay の長さ」が一定に。通常は pre_delay (0.3〜0.5s) > TURN_DELAY (0.15s) なので turn は pre_delay 消化中に完了する
+   - 位置付け：これは「要調査・要整理項目」の **Step 4「向き変更コストの完全対称化」の一部先取り**
+
+3. **`_set_mode()` ヘルパー関数を新設**（リファクタリング）
+   - [player_controller.gd:1019](scripts/player_controller.gd:1019) に `_set_mode(new_mode, reason)` を追加。全 `_mode = Mode.XXX` 代入をこのヘルパー経由に統一（7 箇所）
+   - 現状は代入を一元化するだけの薄いラッパ。将来 `_mode` 遷移の追跡が必要になったら 1 箇所に `DebugLog.log` を仕込むだけで全遷移を追える状態を維持
+   - 原因調査時に仕込んだデバッグログ（`[WT] [MODE] [OUTLINE] [RT] [SHADER]` 系）は本日の修正完了時点で全て削除済み（`_set_mode` ヘルパーと `_reason` 引数名だけ残存）
+
+4. **`get_current_target()` の freed 参照クラッシュを修正**
+   - [right_panel.gd:122](scripts/right_panel.gd:122) で `_draw_char_row` 第6引数が freed オブジェクトとなる `InputValidationError` が発生
+   - 原因：[player_controller.gd:200](scripts/player_controller.gd:200) `get_current_target()` が `_valid_targets[_target_index]` の validity を確認せず返していた
+   - 修正：`is_instance_valid(t)` で freed なら null を返すように変更
+
 #### 2026-04-21（FLEE システム大改訂 + PartyStatusWindow 統合 + Character ステータス統一）
 
 本日は以下の 7 テーマに跨って大量の作業を実施。詳細は番号項目で個別記述。
@@ -196,6 +226,34 @@
 - `assets/master/stats/*.json` — クラス・属性ステータス定義
 
 ### 次セッションで検討するタスク（優先順）
+
+#### 🔥 未解決：TARGETING ホールド中にアウトラインされた敵が動く問題（2026-04-22 夕方以降持越し）
+
+本日の向き変更バグ修正で、`_is_turning` に起因する TARGETING 時間停止無効化は解消した。しかし Komuro の実機再現では、**向き変更を伴わないケースでもアウトラインされた敵が動く現象が依然として発生**している。
+
+すなわち、本日の調査で発見した経路（`_is_turning` による上書き）とは**別経路**がまだ存在する。前回調査「TARGETING ホールド中に敵が動く経路はない」の結論は誤り（マトリクスに更に抜けがある）。
+
+**同一原因の疑い**：元々の発端である「射程表示中に被弾すると攻撃がキャンセルされるように見える」問題とも同根の可能性が高い（敵が動いて射程外に出ることで `_valid_targets` が空になりターゲットロスト）。
+
+**調査項目（次セッション）**：
+
+1. `_turn_timer` 一元管理で解消されなかった経路の特定
+2. `_is_turning` 以外で `_update_world_time()` が TARGETING 時間停止を上書きする条件がないか再確認
+3. [character.gd](scripts/character.gd) / [unit_ai.gd](scripts/unit_ai.gd) / その他のキャラ位置更新処理に、`world_time_running` ガードが抜けている経路がないか再調査
+4. Tween / Timer / `_physics_process` 等 Godot 標準機構で world_time_running 非参照の経路がないか（例：`_turn_tween` は既に確認済みで rotation のみだが grid_pos に影響する経路が他にないか）
+
+**着手時の方針**：
+
+1. 2026-04-22 夕方の調査時に仕込んだデバッグログ機構は**本日中に削除済み**（`_set_mode()` ヘルパー本体だけ残存）。再度計測が必要なら [player_controller.gd:1019](scripts/player_controller.gd:1019) の `_set_mode` にログを仕込むのが一番速い
+2. 合わせて `_update_world_time()` 末尾と `_setup_targeting_cursor()` 冒頭、`_refresh_targets()` 冒頭、[character.gd](scripts/character.gd) の `set_outline` / `clear_outline` にも再度 `DebugLog.log` を仕込む（前日の指示履歴に実装例あり）
+3. Komuro に実機再現とログ取得を依頼
+4. ログから新たな原因経路を特定
+
+**関連する未解決**：
+
+- 「射程表示中に被弾すると攻撃がキャンセルされるように見える」問題（項目 3 と同根の可能性大・項目 3 解決後に再現するか確認）
+
+---
 
 #### 🔥 最優先：2026-04-22 の調整を踏まえた実プレイ再検証
 

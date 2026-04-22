@@ -3,6 +3,150 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-22 夕方以降（ガード中歩行アニメ修正 + 向き変更バグ修正）
+
+本日夕方以降のセッションで、Step 1-B 実装後に持越しとなっていた 2 件のバグを解決。あわせて「射程表示中に被弾すると攻撃がキャンセルされる」問題の原因調査を実施したが、同時に観察された別問題（TARGETING ホールド中にアウトラインされた敵が動く現象）の原因が完全には特定できず、次回セッションへ持越し。
+
+### 変更サマリ
+
+1. **ガード中移動時の歩行アニメ欠落を修正**（解決済み）
+2. **向き変更中に攻撃ボタンを押すと TARGETING 時間停止が無効化されるバグを修正**（解決済み）
+3. `_set_mode()` ヘルパー関数新設（リファクタリング）
+4. `get_current_target()` の freed 参照クラッシュを修正（副次対応）
+
+### 1. ガード中移動時の歩行アニメ欠落を修正
+
+**症状**：プレイヤー操作キャラがガード（X/B ホールド）中に移動すると、guard.png で静止したまま 1 マス移動してしまい、歩行アニメ（walk1/walk2）に切り替わらない。Step 1-B（2026-04-20）実装後に観察された 4 つの挙動変化のうちの 1 つ。
+
+**原因**：[`scripts/character.gd`](../scripts/character.gd) の `_update_visual_move()` 内、スプライトフレーム切替条件に `is_guarding` が含まれており（line 703 相当）、ガード中は全てのフレーム切替（walk1 → top → walk2 → top）が抑制されていた。該当条件は 3 箇所：
+
+- `abort_move()`（衝突アボート時の top.png 復帰）
+- `_update_visual_move()` のフレーム切替本体
+- `_update_visual_move()` の移動完了時の top.png 復帰
+
+いずれも「ガード中は静的に guard.png を保ちたい」意図で `is_guarding` が追加されていたが、移動中も同様に抑制されていたのが不具合。
+
+**仕様（確定）**：「歩行中は walk1/walk2/top の通常サイクル、静止中のみ guard.png」に統一。
+
+**修正**：
+- フレーム切替条件から `is_guarding` を除外（歩行中は通常サイクルを通す）
+- `abort_move()` / 移動完了時は `if is_guarding: _update_ready_sprite()` を追加し、ガード中なら guard.png に復帰させる（`_update_ready_sprite()` は既に guard > attack > ready > top のフォールバックを実装済み）
+- 関連コメント 2 箇所を仕様に合わせて更新
+
+**アニメ切替周期**：[`player_controller.gd`](../scripts/player_controller.gd) で `move_to(new_pos, character.get_move_duration() / GlobalConstants.game_speed)` を呼んでおり、ガード中の 2.0 倍（`GUARD_MOVE_DURATION_WEIGHT`）も duration に反映されている。4 フレーム切替は `_visual_elapsed / _visual_duration` に追従する設計なので自動的に正しい周期で再生される。周期側の修正は不要。
+
+**影響範囲**：
+- ガード中移動：歩行アニメ再生・停止時に guard.png 復帰 ← 今回の修正対象
+- ガード中静止：`is_guarding` セッター → `_update_ready_sprite()` で guard.png（既存動作・変更なし）
+- ガード解除：セッターが `_update_ready_sprite()` を呼んで top.png 復帰（既存動作・変更なし）
+- AI：`unit_ai.gd` に `is_guarding` 代入なし。AI はガードしない仕様が守られているので影響なし
+
+### 2. 向き変更中攻撃による TARGETING 時間停止無効化バグ
+
+**症状**：攻撃ボタンをホールドし続けているのに、TARGETING 状態でアウトラインが点灯している間も敵が動き回り、射程外に出てターゲットロスト → 攻撃不発。
+
+**調査の経緯**：この症状の原因特定には 3 回の調査を要した。
+
+- 第 1 回：TARGETING 中は `world_time_running = false` で敵は動かないはず（結論：コード上矛盾なし）→ 観察と一致せず
+- 第 2 回：PRE_DELAY_RELEASED Phase 2 の 0.25 秒間にアウトラインが ON でかつ時間進行中という設計上の例外を発見 → 仮説提示。ただし Komuro は「ホールドし続けている」と複数回確認しており Phase 2 突入条件を満たさない
+- 第 3 回：デバッグログ機構を仕込んで実機ログ取得 → 原因を確定
+
+**デバッグログ仕込み**：原因特定のため以下の計測機構を一時的に追加：
+- `_set_mode(new_mode, reason)` ヘルパー：全 `_mode =` 代入を一元化し、遷移時にログ出力（7 箇所全て置換）
+- `_set_wtr(val, reason)` ヘルパー：`_update_world_time()` の全 return を経由させ、状態変化時のみ差分ログ
+- `_setup_targeting_cursor()` 冒頭に `[OUTLINE]` ログ
+- `_refresh_targets()` 冒頭に `[RT]` ログ（TARGETING / PRE_DELAY_RELEASED 中のみ）
+- [`scripts/character.gd`](../scripts/character.gd) の `set_outline` / `clear_outline` に `[SHADER]` ログ（状態変化時のみ）
+- 併せて差分検出用メンバ変数 `_prev_mode_for_log` / `_prev_wtr_for_log` を追加
+
+**決定的な証拠**（Komuro が取得した実機ログ `logs/runtime.log` の line 191〜256）：
+
+```
+04.592: [WT] mode=NORMAL wtr=true reason=turning hold=false     ← 向き変更開始
+04.683: [MODE] NORMAL → PRE_DELAY (reason=enter_pre_delay, hold=true)  ← 0.09s 後に攻撃
+04.699: [WT] mode=PRE_DELAY wtr=true reason=turning hold=true   ← reason が "turning" のまま
+04.894: [MODE] PRE_DELAY → TARGETING (reason=pre_delay complete, hold=true)
+04.894: [OUTLINE] setup mode=TARGETING hold=true targets=1
+04.894: [SHADER] ゴブリンアーチャー outline=ON wtr=true
+04.912: [WT] mode=TARGETING wtr=true reason=turning hold=true   ← ★ TARGETING なのに wtr=true
+04.912〜06.158: [RT] mode=TARGETING hold=true ... wtr=true      ← 約 1.25 秒間、時間進行継続
+05.175: [SHADER] ゴブリンアーチャー outline=OFF                 ← 敵が射程外へ
+06.158: [MODE] TARGETING → NORMAL (reason=exit_targeting, hold=false)
+```
+
+**根本原因**：
+
+[`player_controller.gd`](../scripts/player_controller.gd) の `_update_world_time()` で、`_is_turning` 判定が `_mode == TARGETING` 判定より先にあった：
+
+```gdscript
+if _is_turning:
+    _set_wtr(true, "turning")
+    return                    ← ★ ここで return → TARGETING 判定に到達しない
+...
+if _mode == Mode.TARGETING:
+    _set_wtr(not _is_in_attack_hold(), ...)
+```
+
+加えて `_turn_timer` を減算する箇所が `_process_guard_and_move()` 内のみで、この関数は `_process_normal()` からしか呼ばれない。攻撃ボタン押下で `_mode = PRE_DELAY` になった瞬間、`match _mode` は `_process_pre_delay` へ分岐するので `_process_guard_and_move()` は一切呼ばれなくなる → `_turn_timer` は永遠に減らない → `_is_turning` は永遠に true のまま。
+
+結果、向き変更中（`TURN_DELAY = 0.15` 秒以内）に攻撃ボタンを押すと `_is_turning = true` が PRE_DELAY / TARGETING / POST_DELAY を通じて固定化し、`_update_world_time()` が `turning` ガードで時間停止を上書きし続ける。
+
+**仕様（確定）**：**向き変更時間を pre_delay に含める（並行消化）**。押下時点で向き変更中でも PRE_DELAY は即座に開始。向き変更 timer と pre_delay timer は並行して減算される。プレイヤー体感「押してから TARGETING までの時間 = pre_delay の長さ」が一定。通常 pre_delay (0.3〜0.5 秒) のほうが TURN_DELAY (0.15 秒) より長いので、向き変更は pre_delay 消化中に完了する。
+
+**修正**：
+
+1. **`_turn_timer` の一元管理**：[`player_controller.gd:_process()`](../scripts/player_controller.gd:357) の `_update_world_time()` 直後に減算ブロックを追加。`world_time_running && _is_turning` の条件で mode 問わず毎フレーム減算。完了時は `complete_turn()` を呼び `_is_turning = false` に。
+2. **`_process_guard_and_move()` の重複減算を削除**：既存の `if _is_turning: _turn_timer -= ... if <= 0: complete_turn ...` ブロックを `if _is_turning: return`（入力ブロックのみ）に縮小。turn 完了後のキー継続移動は次フレームの通常経路で処理される。
+3. **`_update_world_time()` の判定順変更**：`_mode == TARGETING` 判定を `_is_turning` 判定より先に評価。TARGETING ホールド中は turning に関わらず時間停止。
+4. **`_start_targeting()` で残留 turning を強制完了**：安全網として、PRE_DELAY → TARGETING 遷移時に `_is_turning` が残っていたら `complete_turn()` を呼び強制完了。将来 pre_delay が TURN_DELAY より短いクラスが追加された場合の備え。
+
+**位置付け**：これは「要調査・要整理項目」の **Step 4「向き変更コストの完全対称化」の一部先取り**。Step 4 完了時に `BASE_TURN_DURATION` を導入して `move_speed` で補正する際、この一元管理ロジックを流用する。
+
+### 3. `_set_mode()` ヘルパー関数を新設
+
+原因調査の過程で仕込んだデバッグログ用ヘルパーは、修正完了後に削除したが、`_set_mode()` は薄いラッパとして残存させた：
+
+```gdscript
+## _mode 代入を一元化するヘルパー。将来 _mode 遷移のトラッキングが必要になったら
+## この関数内に DebugLog.log を仕込むだけでよい（全代入箇所がここを通るため）
+func _set_mode(new_mode: int, _reason: String) -> void:
+    _mode = new_mode as Mode
+```
+
+全 `_mode = Mode.XXX` 代入（7 箇所）はこのヘルパー経由に統一済み：
+
+| 箇所 | reason 文字列 |
+|---|---|
+| `_process_pre_delay` の解放検知 | `"pre_delay button released"` |
+| `_process_post_delay` の完了処理 | `"post_delay complete"` |
+| `_enter_pre_delay` 本体 | `"enter_pre_delay"` |
+| `_start_targeting` 本体 | `"pre_delay complete"` |
+| `_exit_targeting` 本体 | `"exit_targeting"` |
+| `_enter_post_delay` dur<=0 分岐 | `"enter_post_delay dur<=0"` |
+| `_enter_post_delay` 本体 | `"enter_post_delay"` |
+
+将来 `_mode` 遷移のデバッグが必要になったら、この関数内に `DebugLog.log("[MODE] %s → %s (reason=%s)" % [Mode.keys()[_mode], Mode.keys()[new_mode], _reason])` を 1 行追加するだけで全遷移を追える。
+
+### 4. `get_current_target()` の freed 参照クラッシュを修正
+
+**症状**：`RightPanel._draw_content: Invalid type in function '_draw_char_row' in base 'CanvasLayer (RightPanel)'. The Object-derived class of argument 6 (previously freed) is not a subclass of the expected argument class.`
+
+**原因**：[`scripts/right_panel.gd:122`](../scripts/right_panel.gd:122) `_draw_char_row` 第 6 引数 `current_target` は [`scripts/player_controller.gd:200`](../scripts/player_controller.gd:200) `get_current_target()` から取得されるが、`_valid_targets[_target_index]` を validity チェックせず返していた。ターゲット敵がフレーム内で倒されて freed になった場合、型付き引数（`Character`）のチェックで freed 参照の受け渡しがエラーになる。
+
+**修正**：`get_current_target()` 末尾で `is_instance_valid(t)` チェックを追加し、freed なら null を返す。`_draw_char_row` 側の `current_target == c` 比較は null 受け取りで正常動作。
+
+### 5. 未解決：TARGETING ホールド中に敵が動く現象（向き変更非関与ケース）
+
+上記 2 の修正で `_is_turning` 経路は潰したが、Komuro の実機再現では**向き変更を伴わないケースでも**アウトラインされた敵が動く現象が依然として発生している。
+
+すなわち、本日の調査で発見した経路とは**別経路**がまだ存在する。前回調査「TARGETING ホールド中に敵が動く経路はない」の結論は誤りで、マトリクスに更に抜けがある。
+
+**同一原因の疑い**：元々の発端である「射程表示中に被弾すると攻撃がキャンセルされるように見える」問題とも同根の可能性が高い（敵が動いて射程外に出ることで `_valid_targets` が空になりターゲットロスト）。
+
+次回セッションの最優先課題として CLAUDE.md「次セッションで検討するタスク」に記載済み。着手時はデバッグログ機構の再仕込みから始めるのが効率的（`_set_mode()` ヘルパーは残っているので、その内部に 1 行ログを足すのが最速）。
+
+---
+
 ## 2026-04-22（ダメージ倍率調整 + HP/MP/SP ゲージ表示刷新 + ダメージログラベル修正）
 
 実プレイ検証を経て、バランス・可読性・表示スケールの 3 つに跨る小規模変更を実施。いずれも挙動または表示のみの変更で、計算ロジックや内部データ構造は未変更。

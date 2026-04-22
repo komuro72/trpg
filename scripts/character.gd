@@ -585,7 +585,9 @@ func abort_move() -> void:
 	_visual_duration    = 0.0
 	_pending_grid_pos   = Vector2i(-1, -1)
 	_grid_pos_committed = true
-	if _tex_top != null and not (is_targeting_mode or is_attacking or is_guarding):
+	if is_guarding:
+		_update_ready_sprite()
+	elif _tex_top != null and not (is_targeting_mode or is_attacking):
 		_sprite.texture = _tex_top
 
 
@@ -699,8 +701,8 @@ func _update_visual_move(delta: float) -> void:
 
 	# スプライトフレームを進捗（0→1）で切り替え
 	# シーケンス: 0%～25%=walk1, 25%～50%=top, 50%～75%=walk2, 75%～100%=top
-	# ガード中・ターゲット/攻撃モード中は歩行アニメをスキップ
-	if not (is_targeting_mode or is_attacking or is_guarding):
+	# ターゲット/攻撃モード中は歩行アニメをスキップ（ガード中でも歩行中は通常サイクル）
+	if not (is_targeting_mode or is_attacking):
 		if _tex_walk1 != null or _tex_walk2 != null:
 			var frame := int(t * 4.0) % 4
 			match frame:
@@ -715,8 +717,10 @@ func _update_visual_move(delta: float) -> void:
 			grid_pos = _pending_grid_pos
 			_grid_pos_committed = true
 		_visual_duration = 0.0
-		# 補間完了 → top に戻す（構え/ガードモード中は _update_ready_sprite() に任せる）
-		if not (is_targeting_mode or is_attacking or is_guarding) and _tex_top != null:
+		# 補間完了 → top に戻す（ガード中は guard.png へ復帰・_update_ready_sprite() に任せる）
+		if is_guarding:
+			_update_ready_sprite()
+		elif not (is_targeting_mode or is_attacking) and _tex_top != null:
 			_sprite.texture = _tex_top
 
 

@@ -203,7 +203,10 @@ func get_current_target() -> Character:
 		return null
 	if _valid_targets.is_empty() or _target_index >= _valid_targets.size():
 		return null
-	return _valid_targets[_target_index]
+	var t: Character = _valid_targets[_target_index]
+	if not is_instance_valid(t):
+		return null
+	return t
 
 
 func _ready() -> void:
@@ -363,6 +366,18 @@ func _process(delta: float) -> void:
 	# world_time_running を現在の状態に応じて更新する（is_blocked チェックより前）
 	_update_world_time()
 
+	# 向き変更 timer の一元減算（mode 問わず並行消化・time_running 中のみ）
+	# 旧実装では _process_guard_and_move 内でのみ減算されていたため、攻撃ボタンで
+	# PRE_DELAY に遷移すると _turn_timer が永遠に減らず、TARGETING 時間停止が
+	# _is_turning ガードで上書きされるバグがあった
+	if GlobalConstants.world_time_running and _is_turning:
+		_turn_timer -= delta * GlobalConstants.game_speed
+		if _turn_timer <= 0.0:
+			_is_turning = false
+			_turn_timer = 0.0
+			if is_instance_valid(character):
+				character.complete_turn()
+
 	if is_blocked:
 		# ブロック中（メニュー等）はガードを解除する
 		if character.is_guarding:
@@ -441,17 +456,9 @@ func _process_guard_and_move(_delta: float) -> void:
 		character.is_guarding = want_guard
 
 	# 向き変更ディレイ中は移動入力をブロック（攻撃は _process_normal で処理済み）
+	# _turn_timer の減算と完了処理は _process() 本体で一元管理している（mode 問わず並行消化）
+	# ここでは入力ブロックだけ行う。turn 完了後のキー継続移動は次フレームの通常経路で処理される
 	if _is_turning:
-		_turn_timer -= _delta
-		if _turn_timer <= 0.0:
-			_is_turning = false
-			if is_instance_valid(character):
-				character.complete_turn()
-			# 回転完了：キーがまだ押されていれば移動を実行（離されていれば停止）
-			var cur_dir := _get_input_direction()
-			_pending_move_dir = Vector2i.ZERO
-			if cur_dir != Vector2i.ZERO:
-				_try_move(cur_dir)
 		return
 
 	var dir := _get_input_direction()
@@ -516,7 +523,7 @@ func _process_pre_delay(delta: float) -> void:
 	# pre_delay 完了前にボタンが解放された → PRE_DELAY_RELEASED へ遷移
 	# （残り pre_delay は _pre_delay_remaining にそのまま引き継ぐ）
 	if not _is_in_attack_hold():
-		_mode = Mode.PRE_DELAY_RELEASED
+		_set_mode(Mode.PRE_DELAY_RELEASED, "pre_delay button released")
 		return
 
 	# ホールド中：矢印キー／左スティックで向きのみ変更
@@ -644,7 +651,7 @@ func _process_post_delay(delta: float) -> void:
 	_post_delay_remaining -= delta * GlobalConstants.game_speed
 	if _post_delay_remaining <= 0.0:
 		_post_delay_remaining = 0.0
-		_mode = Mode.NORMAL
+		_set_mode(Mode.NORMAL, "post_delay complete")
 		if is_instance_valid(character):
 			character.is_attacking = false
 		# 攻撃バッファがあれば即座に PRE_DELAY へ
@@ -669,7 +676,7 @@ func _enter_pre_delay() -> void:
 
 	_attack_buffer       = false
 	_pending_move_dir    = Vector2i.ZERO
-	_mode                = Mode.PRE_DELAY
+	_set_mode(Mode.PRE_DELAY, "enter_pre_delay")
 	_move_buffer         = Vector2i.ZERO
 	_pre_delay_remaining = float(sd.get("pre_delay", 0.0))
 	character.is_targeting_mode = true
@@ -697,7 +704,15 @@ func _setup_targeting_cursor() -> void:
 
 ## PRE_DELAY 消化後に TARGETING モードへ移行する（ボタン押下中・時間停止）
 func _start_targeting() -> void:
-	_mode = Mode.TARGETING
+	# 通常 pre_delay > TURN_DELAY なので turning は pre_delay 消化中に完了するが、
+	# 将来 pre_delay が TURN_DELAY より短いクラスが追加された場合の安全網として
+	# TARGETING 入り口で turning が残っていたら強制完了する（視覚的な向きも確定）
+	if _is_turning:
+		_is_turning = false
+		_turn_timer = 0.0
+		if is_instance_valid(character):
+			character.complete_turn()
+	_set_mode(Mode.TARGETING, "pre_delay complete")
 	_setup_targeting_cursor()
 	# 対象なしなら射程オーバーレイを一瞬見せてから自動キャンセル
 	if _valid_targets.is_empty():
@@ -707,7 +722,7 @@ func _start_targeting() -> void:
 
 
 func _exit_targeting() -> void:
-	_mode = Mode.NORMAL
+	_set_mode(Mode.NORMAL, "exit_targeting")
 	_using_v_slot = false
 	# 全キャラクターのアウトライン・is_targeted を完全クリア（漏れを防ぐため全体を走査）
 	for c: Variant in Character._all_chars:
@@ -845,9 +860,9 @@ func _is_target_in_range(target: Character, sd: Dictionary) -> bool:
 
 func _enter_post_delay(dur: float) -> void:
 	if dur <= 0.0:
-		_mode = Mode.NORMAL
+		_set_mode(Mode.NORMAL, "enter_post_delay dur<=0")
 		return
-	_mode = Mode.POST_DELAY
+	_set_mode(Mode.POST_DELAY, "enter_post_delay")
 	_post_delay_remaining = dur
 	if is_instance_valid(character):
 		character.is_attacking = true
@@ -975,17 +990,19 @@ func _update_world_time() -> void:
 	if _item_ui_phase != _ItemUIPhase.NONE:
 		GlobalConstants.world_time_running = false
 		return
-	# 向き変更ディレイ中は時間進行
+	# TARGETING 判定を turning より先に評価する
+	# （turning 中に攻撃して TARGETING に入った場合、turning ガードが時間停止を上書きしないように）
+	if _mode == Mode.TARGETING:
+		# ホールド中はじっくり狙うため時間停止、解放中（即発火/AUTO_CANCEL 待機）は時間進行
+		GlobalConstants.world_time_running = not _is_in_attack_hold()
+		return
+	# 向き変更ディレイ中は時間進行（turn_timer は _process 本体で並行消化される）
 	if _is_turning:
 		GlobalConstants.world_time_running = true
 		return
 	if _mode == Mode.PRE_DELAY or _mode == Mode.PRE_DELAY_RELEASED \
 			or _mode == Mode.POST_DELAY:
 		GlobalConstants.world_time_running = true
-		return
-	if _mode == Mode.TARGETING:
-		# ホールド中はじっくり狙うため時間停止、解放中（即発火/AUTO_CANCEL 待機）は時間進行
-		GlobalConstants.world_time_running = not _is_in_attack_hold()
 		return
 	# NORMAL モード：キャラの状態で判定
 	# _move_buffer に入力が残っている間は「連続移動中」と判断して暗転させない
@@ -996,6 +1013,12 @@ func _update_world_time() -> void:
 			GlobalConstants.world_time_running = true
 			return
 	GlobalConstants.world_time_running = false
+
+
+## _mode 代入を一元化するヘルパー。将来 _mode 遷移のトラッキングが必要になったら
+## この関数内に DebugLog.log を仕込むだけでよい（全代入箇所がここを通るため）
+func _set_mode(new_mode: int, _reason: String) -> void:
+	_mode = new_mode as Mode
 
 
 ## 有効なターゲット一覧を返す（ソートなし）
