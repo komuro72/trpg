@@ -286,9 +286,10 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 const MAX_CARD_HEIGHT: int = 100
 
 ## HP/MP/SP の絶対値表示用基準値（これがバー全幅に対応する量）
-const HP_REF: float = 300.0
-const MP_REF: float = 120.0
-const SP_REF: float = 120.0
+## HP/MP/SP はいずれも絶対値 100 スケール（値 = 100 でバー全幅）。max 値の大小に関わらず一定基準で描画する
+const HP_REF: float = 100.0
+const MP_REF: float = 100.0
+const SP_REF: float = 100.0
 
 ## 魔法クラスのID一覧（MPバーを表示するクラス。それ以外はSPバーを表示）
 const MAGIC_CLASS_IDS: Array = ["magician-fire", "magician-water", "healer"]

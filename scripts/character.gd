@@ -1186,7 +1186,7 @@ func _log_damage(attacker: Character, raw: int, mult: float, is_magic: bool,
 	var base_dmg := raw                        # クリティカル前のベースダメージ
 	var after_crit := int(float(raw) * mult)   # クリティカル後・防御前のダメージ
 
-	# ベースダメージの算出内訳（威力 × 攻撃タイプ倍率 [× スキル倍率]）
+	# ベースダメージの算出内訳（威力 × 攻撃タイプ倍率 [× クラス補正]）
 	var calc_detail := ""
 	if attacker != null and attacker.character_data != null:
 		var atype: String = attacker.character_data.attack_type
@@ -1197,12 +1197,12 @@ func _log_damage(attacker: Character, raw: int, mult: float, is_magic: bool,
 		var type_label: String = type_jp.get(atype, atype) as String
 		var type_base := int(float(attacker.power) * t_mult)
 		if type_base == raw:
-			# damage_mult が実質 1.0（スキル倍率なし）
+			# damage_mult が実質 1.0（クラス補正なし）
 			calc_detail = "（威力%d × %s×%.1f）" % [attacker.power, type_label, t_mult]
 		else:
-			# damage_mult != 1.0（スキル倍率あり。int 切り捨て誤差が出ることがある）
+			# damage_mult != 1.0（クラス補正あり。int 切り捨て誤差が出ることがある）
 			var inferred_dmg_mult := float(raw) / float(type_base) if type_base > 0 else 1.0
-			calc_detail = "（威力%d × %s×%.1f × スキル×%.2f）" % \
+			calc_detail = "（威力%d × %s×%.1f × クラス補正×%.2f）" % \
 					[attacker.power, type_label, t_mult, inferred_dmg_mult]
 
 	var dmg_label: String

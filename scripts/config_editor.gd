@@ -16,7 +16,7 @@
 
 extends CanvasLayer
 
-const HIGHLIGHT_BG_COLOR: Color = Color(1.0, 1.0, 0.8)
+const HIGHLIGHT_BG_COLOR: Color = Color(0.40, 0.32, 0.08)
 const PANEL_BG_COLOR:     Color = Color(0.10, 0.10, 0.14, 0.98)
 const TITLE_TEXT:         String = "Config Editor (開発用)"
 
