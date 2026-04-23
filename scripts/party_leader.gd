@@ -267,6 +267,13 @@ func _assign_orders() -> void:
 				leader_char = lm
 				break
 
+	# パーティーレベルの指示参照（hp_potion / sp_mp_potion / move 等）
+	## 2026-04-23：NPC（未加入）は `_global_orders` が空なので、`_build_orders_part()` の
+	## サブクラスデフォルト（`hp_potion="use"` 等）を AI 実動にも反映させる。
+	## 従来は `_global_orders.get("hp_potion", "never")` で常に "never" に落ち、
+	## NPC がポーション自動使用しない不具合があった
+	var party_orders: Dictionary = _build_orders_part()
+
 	for member: Character in _party_members:
 		if not is_instance_valid(member):
 			continue
@@ -284,7 +291,7 @@ func _assign_orders() -> void:
 		var move_policy  : String    = "spread"
 		var formation_ref: Character = null
 		if member.is_friendly:
-			move_policy = _global_orders.get("move", order.get("move", "same_room")) as String
+			move_policy = party_orders.get("move", order.get("move", "same_room")) as String
 			if leader_char == null or leader_char == member:
 				if _player != null and is_instance_valid(_player) \
 						and (leader_char == _player or joined_to_player):
@@ -349,8 +356,8 @@ func _assign_orders() -> void:
 			"battle_formation":  battle_form,
 			"leader":            formation_ref,
 			"party_fleeing":     party_fleeing,
-			"hp_potion":         _global_orders.get("hp_potion",    "never") as String,
-			"sp_mp_potion":      _global_orders.get("sp_mp_potion", "never") as String,
+			"hp_potion":         party_orders.get("hp_potion",    "never") as String,
+			"sp_mp_potion":      party_orders.get("sp_mp_potion", "never") as String,
 			"item_pickup":       member.current_order.get("item_pickup", "passive") as String,
 			"special_skill":     order.get("special_skill", "strong_enemy") as String,
 			"combat_situation":  _combat_situation,
@@ -675,15 +682,24 @@ func get_current_strategy_name() -> String:
 ## 2026-04-21 改訂：旧実装は空の `_global_orders` に対して `_party_strategy` から仮想ラベル
 ## （`{"move": "cluster", "battle_policy": "attack", ...}`）を合成していたが、UnitAI 実動と
 ## 連動しない誤解を招く表示だったため廃止（詳細は docs/history.md の同日エントリ参照）
+##
+## 2026-04-23 改訂：サブクラス（NpcLeaderAI）での override を廃止し、テンプレートメソッドパターンに統一。
+## 指示部分の差分は `_build_orders_part()` で override し、戦況付与部分は本関数内で共通処理する。
+## これにより PartyStatusWindow で使うキー（hp_real / combat_ratio 等）の追加漏れが起きない
 func get_global_orders_hint() -> Dictionary:
-	var hint: Dictionary = {}
-	if not _global_orders.is_empty():
-		hint = _global_orders.duplicate()
-	# 戦況判断を追加（_evaluate_strategic_status() の結果を流し込む）
+	var hint: Dictionary = _build_orders_part()
+	# 戦況判断を流し込む（全パーティー共通）
 	var sit: int = _combat_situation.get("situation", int(GlobalConstants.CombatSituation.SAFE)) as int
 	hint["combat_situation"] = sit
 	hint["power_balance"] = _combat_situation.get("power_balance", 0)
 	hint["hp_status"]     = _combat_situation.get("hp_status", 0)
+	# HP 内訳（デバッグ表示用・「満」の内部計算を可視化）
+	hint["hp_real"]       = _combat_situation.get("hp_real", 0)
+	hint["hp_potion"]     = _combat_situation.get("hp_potion", 0)
+	hint["hp_max"]        = _combat_situation.get("hp_max", 0)
+	# 戦況比の内訳（デバッグ表示用・my_strength / enemy_strength）
+	hint["my_combat_strength"] = _combat_situation.get("my_combat_strength", 0.0)
+	hint["combat_ratio"]       = _combat_situation.get("combat_ratio", -1.0)
 	# full_party / nearby_allied / nearby_enemy の 3 系統（PartyStatusWindow 表示用）
 	hint["full_party_strength"]    = _combat_situation.get("full_party_strength", 0.0)
 	hint["full_party_rank_sum"]    = _combat_situation.get("full_party_rank_sum", 0)
@@ -697,6 +713,17 @@ func get_global_orders_hint() -> Dictionary:
 	hint["nearby_enemy_rank_sum"]  = _combat_situation.get("nearby_enemy_rank_sum", 0)
 	hint["nearby_enemy_tier_sum"]  = _combat_situation.get("nearby_enemy_tier_sum", 0.0)
 	return hint
+
+
+## 指示部分のヒントを返す（サブクラスで override 可能）
+## 基底：`_global_orders` の実値を返す（空なら空辞書）
+## NpcLeaderAI：未設定時は NPC デフォルト値 + 探索モード判定を上書き
+##
+## 2026-04-23 改訂：サブクラスはこの関数だけ override すればよく、戦況キー追加漏れは起きない
+func _build_orders_part() -> Dictionary:
+	if not _global_orders.is_empty():
+		return _global_orders.duplicate()
+	return {}
 
 
 func _get_strategy_change_reason() -> String:
@@ -928,13 +955,13 @@ func _character_tier_avg(m: Character) -> float:
 
 
 ## 状態ラベルからHP割合を推定する（敵の戦力を過大評価する安全側に倒す）
-## 各ラベルの閾値範囲の最大値を返す
+## 各ラベルの閾値範囲の最大値（その状態に「なる直前」のHP率）を返す
 func _estimate_hp_ratio_from_condition(condition: String) -> float:
 	match condition:
 		"healthy":  return 1.0
-		"wounded":  return GlobalConstants.CONDITION_HEALTHY_THRESHOLD
-		"injured":  return GlobalConstants.CONDITION_WOUNDED_THRESHOLD
-		"critical": return GlobalConstants.CONDITION_INJURED_THRESHOLD
+		"wounded":  return GlobalConstants.CONDITION_WOUNDED_THRESHOLD
+		"injured":  return GlobalConstants.CONDITION_INJURED_THRESHOLD
+		"critical": return GlobalConstants.CONDITION_CRITICAL_THRESHOLD
 		_:          return 1.0  # 不明な値 → 安全側（敵を強く見積もる）
 
 
@@ -1109,10 +1136,12 @@ func _evaluate_strategic_status() -> Dictionary:
 
 	# ==================== 戦況判断 ====================
 	# HP 充足率は自パーティーのみで算出（他パーティーのポーション所持は把握不可）
-	var hp_status := _calc_hp_status_for(_party_members)
+	var hp_breakdown := _calc_hp_breakdown_for(_party_members)
+	var hp_status: int = hp_breakdown.get("status", int(GlobalConstants.HpStatus.CRITICAL)) as int
 
 	var situation: int
 	var power_balance: int
+	var combat_ratio: float = -1.0  # デバッグ表示用（敵なし or enemy_s=0 のとき -1）
 	if nearby_enemy.is_empty():
 		situation = int(GlobalConstants.CombatSituation.SAFE)
 		power_balance = int(GlobalConstants.PowerBalance.OVERWHELMING)
@@ -1123,6 +1152,7 @@ func _evaluate_strategic_status() -> Dictionary:
 			situation = int(GlobalConstants.CombatSituation.SAFE)
 		else:
 			var ratio := my_combat_strength / enemy_s
+			combat_ratio = ratio
 			if ratio >= GlobalConstants.COMBAT_RATIO_OVERWHELMING:
 				situation = int(GlobalConstants.CombatSituation.OVERWHELMING)
 			elif ratio >= GlobalConstants.COMBAT_RATIO_ADVANTAGE:
@@ -1155,6 +1185,15 @@ func _evaluate_strategic_status() -> Dictionary:
 		"situation":      situation,
 		"power_balance":  power_balance,
 		"hp_status":      hp_status,
+
+		# HP 充足率の内訳（デバッグ表示用・ポーション込みで「満」表示になる理由を可視化）
+		"hp_real":        int(hp_breakdown.get("hp", 0)),
+		"hp_potion":      int(hp_breakdown.get("potion", 0)),
+		"hp_max":         int(hp_breakdown.get("max", 0)),
+
+		# 戦況判定に使った戦力比の内訳（デバッグ表示用・my_strength / enemy_strength）
+		"my_combat_strength": my_combat_strength,
+		"combat_ratio":       combat_ratio,
 
 		# full_party（自パ全員・下層判定用・絶対戦力）
 		"full_party_strength":  float(full_stats.strength),
@@ -1201,6 +1240,13 @@ func _calc_hp_status() -> int:
 
 ## 指定メンバーリストの HP 充足率の段階を返す
 func _calc_hp_status_for(members: Array) -> int:
+	return _calc_hp_breakdown_for(members).get("status", int(GlobalConstants.HpStatus.CRITICAL)) as int
+
+
+## 指定メンバーリストの HP 充足率の内訳を返す（デバッグ表示用）
+## 戻り値: { "hp": int, "potion": int, "max": int, "status": int }
+## status は HP_STATUS_FULL/STABLE/LOW/CRITICAL のいずれか
+func _calc_hp_breakdown_for(members: Array) -> Dictionary:
 	var total_hp := 0
 	var total_max := 0
 	var total_potion := 0
@@ -1214,16 +1260,20 @@ func _calc_hp_status_for(members: Array) -> int:
 		total_hp += m.hp
 		total_max += m.max_hp
 		total_potion += _calc_total_potion_hp(m)
+	var status: int
 	if total_max <= 0:
-		return int(GlobalConstants.HpStatus.CRITICAL)
-	var ratio := clampf(float(total_hp + total_potion) / float(total_max), 0.0, 1.0)
-	if ratio >= GlobalConstants.HP_STATUS_FULL:
-		return int(GlobalConstants.HpStatus.FULL)
-	elif ratio >= GlobalConstants.HP_STATUS_STABLE:
-		return int(GlobalConstants.HpStatus.STABLE)
-	elif ratio >= GlobalConstants.HP_STATUS_LOW:
-		return int(GlobalConstants.HpStatus.LOW)
-	return int(GlobalConstants.HpStatus.CRITICAL)
+		status = int(GlobalConstants.HpStatus.CRITICAL)
+	else:
+		var ratio := clampf(float(total_hp + total_potion) / float(total_max), 0.0, 1.0)
+		if ratio >= GlobalConstants.HP_STATUS_FULL:
+			status = int(GlobalConstants.HpStatus.FULL)
+		elif ratio >= GlobalConstants.HP_STATUS_STABLE:
+			status = int(GlobalConstants.HpStatus.STABLE)
+		elif ratio >= GlobalConstants.HP_STATUS_LOW:
+			status = int(GlobalConstants.HpStatus.LOW)
+		else:
+			status = int(GlobalConstants.HpStatus.CRITICAL)
+	return {"hp": total_hp, "potion": total_potion, "max": total_max, "status": status}
 
 
 ## 対立するキャラクターのリストを返す（サブクラスでオーバーライド）

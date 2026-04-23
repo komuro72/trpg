@@ -82,12 +82,6 @@ var NPC_POLICY_CHANGE_COOLDOWN: float = 3.0
 
 ## アイテム取得範囲（item_pickup=passive 設定時の取得判定距離・マンハッタン距離）
 const ITEM_PICKUP_RANGE: int = 2
-## 瀕死判定閾値（HP率がこれ以下で「瀕死」と判定。ヒールポーション自動使用・on_low_hp発動・heal "aggressive" モード対象選定に使用）
-## [ConfigEditor 対象]
-var NEAR_DEATH_THRESHOLD: float = 0.25
-## ヒーラー回復閾値（heal "lowest_hp_first" / "leader_first" モードの対象判定。HP率がこれ未満のメンバーが回復対象）
-## [ConfigEditor 対象]
-var HEALER_HEAL_THRESHOLD: float = 0.5
 ## SP/MPポーション自動使用閾値（sp_mp_potion="use" 設定時、SP率/MP率がこれ未満で自動使用）
 ## [ConfigEditor 対象]
 var POTION_SP_MP_AUTOUSE_THRESHOLD: float = 0.5
@@ -151,13 +145,15 @@ enum ConsumableDisplayMode { NORMAL, ITEM_SELECT, ACTION_SELECT, TRANSFER_SELECT
 ## 状態ラベル（condition）の HP% 閾値（4段階）
 ## Character.get_condition() が返す文字列の判定基準
 ## 戦力評価で敵のHP推定に使用する（_estimate_hp_ratio_from_condition）
+##
+## 命名規則：定数名は「その値を下回ったら次の（悪い）状態になる」を意味する。
+## 例：CONDITION_CRITICAL_THRESHOLD (0.25) 未満なら critical 状態
 ## [ConfigEditor 対象]
-var CONDITION_HEALTHY_THRESHOLD:  float = 0.5   ## HP50%以上 → "healthy"
+var CONDITION_WOUNDED_THRESHOLD:  float = 0.5   ## HP50%未満 → "wounded" 以下
 ## [ConfigEditor 対象]
-var CONDITION_WOUNDED_THRESHOLD:  float = 0.35  ## HP35%以上50%未満 → "wounded"
+var CONDITION_INJURED_THRESHOLD:  float = 0.35  ## HP35%未満 → "injured" 以下
 ## [ConfigEditor 対象]
-var CONDITION_INJURED_THRESHOLD:  float = 0.25  ## HP25%以上35%未満 → "injured"
-## HP25%未満 → "critical"
+var CONDITION_CRITICAL_THRESHOLD: float = 0.25  ## HP25%未満 → "critical"
 
 ## 状態ラベル色（全要素統一・2026-04-17〜）
 ## スプライト・顔アイコンは wounded 以降で点滅（condition_sprite_modulate）
@@ -188,14 +184,15 @@ var CONDITION_COLOR_TEXT_CRITICAL: Color = Color(1.00, 0.35, 0.35)
 
 
 ## HP 比率 → 状態ラベル文字列（"healthy"/"wounded"/"injured"/"critical"）
+## 各閾値は「この値を下回ったら次の（悪い）状態になる」を意味する
 func ratio_to_condition(ratio: float) -> String:
-	if ratio >= CONDITION_HEALTHY_THRESHOLD:
-		return "healthy"
-	elif ratio >= CONDITION_WOUNDED_THRESHOLD:
-		return "wounded"
-	elif ratio >= CONDITION_INJURED_THRESHOLD:
+	if ratio < CONDITION_CRITICAL_THRESHOLD:
+		return "critical"
+	elif ratio < CONDITION_INJURED_THRESHOLD:
 		return "injured"
-	return "critical"
+	elif ratio < CONDITION_WOUNDED_THRESHOLD:
+		return "wounded"
+	return "healthy"
 
 
 ## スプライト・顔アイコン用 modulate 色を返す（wounded 以降は 3Hz 点滅）
@@ -431,7 +428,8 @@ const MEMBER_COMBAT:       Array[String] = ["attack", "defense", "flee"]
 const MEMBER_ATTACK_TARGET: Array[String] = ["nearest", "weakest", "same_as_leader", "support"]
 const MEMBER_SPECIAL:      Array[String] = ["aggressive", "strong_enemy", "disadvantage", "never"]
 ## OrderWindow 個別指示オプション値（ヒーラー専用）
-const MEMBER_HEAL:         Array[String] = ["aggressive", "leader_first", "lowest_hp_first", "none"]
+## 2026-04-23 改訂：旧 "leader_first" / "none" を廃止し、"own_party_first" / "conservative" を新設
+const MEMBER_HEAL:         Array[String] = ["aggressive", "lowest_hp_first", "own_party_first", "conservative"]
 const MEMBER_HEAL_TARGET:  Array[String] = ["lowest_hp", "nearest", "same_as_leader"]
 
 
@@ -454,9 +452,9 @@ const CONFIG_DEFAULT_PATH: String = "res://assets/master/config/constants_defaul
 ## （上から下 → 保存時に constants.json へ書き出す順序）
 const CONFIG_KEYS: Array[String] = [
 	# Character タブ
-	"CONDITION_HEALTHY_THRESHOLD",
 	"CONDITION_WOUNDED_THRESHOLD",
 	"CONDITION_INJURED_THRESHOLD",
+	"CONDITION_CRITICAL_THRESHOLD",
 	"CONDITION_PULSE_HZ",
 	"CONDITION_COLOR_SPRITE_HEALTHY",
 	"CONDITION_COLOR_SPRITE_WOUNDED",
@@ -508,8 +506,6 @@ const CONFIG_KEYS: Array[String] = [
 	"SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES",
 	"SPECIAL_ATTACK_FIRE_ZONE_RANGE",
 	"SPECIAL_ATTACK_FIRE_ZONE_MIN_ENEMIES",
-	"NEAR_DEATH_THRESHOLD",
-	"HEALER_HEAL_THRESHOLD",
 	"POTION_SP_MP_AUTOUSE_THRESHOLD",
 	# SkillExecutor タブ
 	"CRITICAL_RATE_DIVISOR",

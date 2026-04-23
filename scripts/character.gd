@@ -91,13 +91,14 @@ func get_condition() -> String:
 	if max_hp <= 0:
 		return "healthy"
 	var ratio := float(hp) / float(max_hp)
-	if ratio >= GlobalConstants.CONDITION_HEALTHY_THRESHOLD:
-		return "healthy"
-	elif ratio >= GlobalConstants.CONDITION_WOUNDED_THRESHOLD:
-		return "wounded"
-	elif ratio >= GlobalConstants.CONDITION_INJURED_THRESHOLD:
+	## 各閾値は「この値を下回ったら次の（悪い）状態になる」を意味する
+	if ratio < GlobalConstants.CONDITION_CRITICAL_THRESHOLD:
+		return "critical"
+	elif ratio < GlobalConstants.CONDITION_INJURED_THRESHOLD:
 		return "injured"
-	return "critical"
+	elif ratio < GlobalConstants.CONDITION_WOUNDED_THRESHOLD:
+		return "wounded"
+	return "healthy"
 
 ## バフ状態（一時的な防御力アップ。0=なし、>0=残り秒数）
 ## NOTE: 現在はバリアエフェクト表示のみ（numeric な効果なし）。base_defense / defense

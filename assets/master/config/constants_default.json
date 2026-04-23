@@ -1,22 +1,22 @@
 {
-  "CONDITION_HEALTHY_THRESHOLD": {
-    "category": "Character",
-    "description": "HP割合がこの値以上で healthy 状態（点滅なし）",
-    "type": "float",
-    "value": 0.5
-  },
   "CONDITION_WOUNDED_THRESHOLD": {
     "category": "Character",
     "description": "HP割合がこの値未満で wounded 状態（黄色・点滅開始）",
+    "type": "float",
+    "value": 0.5
+  },
+  "CONDITION_INJURED_THRESHOLD": {
+    "category": "Character",
+    "description": "HP割合がこの値未満で injured 状態（橙色）",
     "max": 1.0,
     "min": 0.0,
     "step": 0.05,
     "type": "float",
     "value": 0.35
   },
-  "CONDITION_INJURED_THRESHOLD": {
+  "CONDITION_CRITICAL_THRESHOLD": {
     "category": "Character",
-    "description": "HP割合がこの値未満で injured 状態（これより低ければ critical）",
+    "description": "HP割合がこの値未満で critical 状態（赤色）",
     "type": "float",
     "value": 0.25
   },
@@ -387,18 +387,6 @@
     "step": 1.0,
     "type": "int",
     "value": 2
-  },
-  "NEAR_DEATH_THRESHOLD": {
-    "category": "UnitAI",
-    "description": "瀕死判定 HP 率。ヒールポーション自動使用・on_low_hp 発動・heal aggressive 対象選定に使用",
-    "type": "float",
-    "value": 0.25
-  },
-  "HEALER_HEAL_THRESHOLD": {
-    "category": "UnitAI",
-    "description": "ヒーラーの回復対象判定 HP 率。lowest_hp_first / leader_first モードで対象選定に使用",
-    "type": "float",
-    "value": 0.5
   },
   "POTION_SP_MP_AUTOUSE_THRESHOLD": {
     "category": "UnitAI",

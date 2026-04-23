@@ -2255,61 +2255,114 @@ func _is_empty_floor(pos: Vector2i) -> bool:
 
 
 ## 回復対象を返す。heal（current_order.heal）に従って選定する。
-## _party_peers（自パーティーメンバー）と _player（hero）のみを対象とする。
+## 2026-04-23 改訂：4 モード構成に再設計（aggressive / lowest_hp_first / own_party_first / conservative）
 ## heal:
-##   "aggressive"    : NEAR_DEATH_THRESHOLD 以下のキャラで最もHPが低い者
-##   "leader_first"  : リーダー（_leader_ref）が閾値未満なら優先、その後 aggressive と同じ
-##   "lowest_hp_first": 閾値なし・最もHP割合が低い者（0%は除く）
-##   "none"          : 回復しない（null を返す）
+##   "aggressive"       : HP が満タン以外で最も HP 率が低い 1 人（全 friendly・他パ含む）
+##   "lowest_hp_first"  : HP 減少量 ≥ 回復量 のうち最も HP 率が低い 1 人（全 friendly・他パ含む）
+##   "own_party_first"  : HP 減少量 ≥ 回復量 のうち最も HP 率が低い自パ 1 人（他パ対象外）
+##   "conservative"     : 状態が `wounded` 以下の自パで最も HP 率が低い 1 人（他パ対象外）
+## 旧 "leader_first" / "none" は廃止（下記 _migrate_heal_mode で自動マップ）
 func _find_heal_target() -> Character:
 	if _member == null:
 		return null
 	var heal_mode: String = "lowest_hp_first"
 	if _member.current_order != null:
 		heal_mode = _member.current_order.get("heal", "lowest_hp_first") as String
+	heal_mode = _migrate_heal_mode(heal_mode)
 
-	if heal_mode == "none":
-		return null
+	var my_friendly: bool = _member.is_friendly
 
-	# 候補リストを構築
-	var candidates: Array[Character] = []
-	candidates.assign(_party_peers)
-	if _player != null and is_instance_valid(_player) and not candidates.has(_player):
-		candidates.append(_player)
-	var my_friendly: bool = _member.is_friendly if _member != null else true
+	# 自パ候補（_party_peers + hero・現状は joined/非 joined で同じ構築）
+	var own_party: Array[Character] = []
+	own_party.assign(_party_peers)
+	if _player != null and is_instance_valid(_player) and not own_party.has(_player):
+		own_party.append(_player)
+
+	# 期待回復量（装備補正込みの power × z_heal_mult・最低 1）
+	var heal_amount: float = _calc_expected_heal_amount()
 
 	match heal_mode:
-		"leader_first":
-			# リーダーが閾値未満なら最優先
-			if _leader_ref != null and is_instance_valid(_leader_ref) \
-					and _leader_ref.hp > 0 and _leader_ref.is_friendly == my_friendly:
-				var lr := float(_leader_ref.hp) / float(maxi(_leader_ref.max_hp, 1))
-				if lr < GlobalConstants.HEALER_HEAL_THRESHOLD:
-					return _leader_ref
-			# その後 aggressive と同じ挙動（NEAR_DEATH_THRESHOLD で再選定）
-			return _find_heal_target_by_ratio(candidates, my_friendly,
-					GlobalConstants.NEAR_DEATH_THRESHOLD)
-		"lowest_hp_first":
-			# HP割合が HEALER_HEAL_THRESHOLD 未満のうち最も低い者（無駄回復防止）
-			return _find_heal_target_by_ratio(candidates, my_friendly,
-					GlobalConstants.HEALER_HEAL_THRESHOLD)
-		_:  # "aggressive"
-			return _find_heal_target_by_ratio(candidates, my_friendly,
-					GlobalConstants.NEAR_DEATH_THRESHOLD)
+		"aggressive":
+			# HP が満タン以外・全 friendly（他パ含む）で最低 HP 率
+			var filtered: Array[Character] = []
+			for ch: Character in _collect_all_friendly_candidates(my_friendly):
+				if ch.hp < ch.max_hp:
+					filtered.append(ch)
+			return _pick_lowest_hp_ratio(filtered)
+		"own_party_first":
+			# 自パのみ・HP 減少量 ≥ 回復量
+			var filtered: Array[Character] = []
+			for ch: Character in own_party:
+				if not is_instance_valid(ch) or ch.hp <= 0:
+					continue
+				if ch.is_friendly != my_friendly:
+					continue
+				if float(ch.max_hp - ch.hp) >= heal_amount:
+					filtered.append(ch)
+			return _pick_lowest_hp_ratio(filtered)
+		"conservative":
+			# 自パのみ・状態が healthy 以外
+			var filtered: Array[Character] = []
+			for ch: Character in own_party:
+				if not is_instance_valid(ch) or ch.hp <= 0:
+					continue
+				if ch.is_friendly != my_friendly:
+					continue
+				if ch.get_condition() != "healthy":
+					filtered.append(ch)
+			return _pick_lowest_hp_ratio(filtered)
+		_:  # "lowest_hp_first"
+			# 全 friendly（他パ含む）で HP 減少量 ≥ 回復量
+			var filtered: Array[Character] = []
+			for ch: Character in _collect_all_friendly_candidates(my_friendly):
+				if float(ch.max_hp - ch.hp) >= heal_amount:
+					filtered.append(ch)
+			return _pick_lowest_hp_ratio(filtered)
 
 
-## heal候補リストから最もHP割合が低いキャラを返すヘルパー
-## threshold: この割合未満のキャラのみ対象
-func _find_heal_target_by_ratio(candidates: Array[Character], my_friendly: bool,
-		threshold: float) -> Character:
-	var best: Character = null
-	var best_ratio := threshold
-	for ch: Character in candidates:
+## 旧 heal モード値を新モードに移行する
+## "leader_first" → "own_party_first"（意図「自パ内の要回復者優先」）
+## "none"         → "lowest_hp_first"（新デフォルト・回復は特殊攻撃でないので必ず撃つ前提）
+func _migrate_heal_mode(mode: String) -> String:
+	match mode:
+		"leader_first":   return "own_party_first"
+		"none":           return "lowest_hp_first"
+		_:                return mode
+
+
+## 期待回復量を返す（装備補正込み・乱数なし・SkillExecutor.execute_heal と同じ式）
+func _calc_expected_heal_amount() -> float:
+	if _member == null or _member.character_data == null:
+		return 0.0
+	var heal_mult: float = _member.character_data.z_heal_mult
+	# SkillExecutor.execute_heal は maxi(1, int(power * heal_mult)) なので最低 1
+	return maxf(1.0, floor(float(_member.power) * heal_mult))
+
+
+## 全 friendly（他パーティー含む）候補リストを返す
+func _collect_all_friendly_candidates(my_friendly: bool) -> Array[Character]:
+	var result: Array[Character] = []
+	for ch: Character in _all_members:
 		if not is_instance_valid(ch) or ch.hp <= 0:
 			continue
 		if ch.is_friendly != my_friendly:
 			continue
-		var ratio := float(ch.hp) / float(maxi(ch.max_hp, 1))
+		result.append(ch)
+	# _player が _all_members に含まれない場合の補完（既存コードのパターン踏襲）
+	if _player != null and is_instance_valid(_player) and _player.hp > 0 \
+			and _player.is_friendly == my_friendly and not result.has(_player):
+		result.append(_player)
+	return result
+
+
+## 候補リストから最も HP 率が低いキャラを返す（全て無効なら null）
+func _pick_lowest_hp_ratio(candidates: Array[Character]) -> Character:
+	var best: Character = null
+	var best_ratio := INF
+	for ch: Character in candidates:
+		if not is_instance_valid(ch) or ch.hp <= 0 or ch.max_hp <= 0:
+			continue
+		var ratio := float(ch.hp) / float(ch.max_hp)
 		if ratio < best_ratio:
 			best_ratio = ratio
 			best = ch
@@ -2337,17 +2390,18 @@ func _find_undead_target() -> Character:
 
 
 ## ヒールポーション / SP・MPポーション自動使用キューを生成する
-## _hp_potion == "use" かつ 瀕死（NEAR_DEATH_THRESHOLD 未満）かつ在庫ありのとき "use_potion" を返す
+## _hp_potion == "use" かつ 状態が "injured" または "critical" かつ在庫ありのとき "use_potion" を返す
+## （2026-04-23 改訂：critical のみ → injured も対象に拡張。HP 1 桁で使用する従来挙動では被弾即死リスクが高いため）
 ## SP/MPポーションは _sp_mp_potion == "use" かつ MP/SP が半分以下のとき使用
 func _generate_potion_queue() -> Array:
 	if _member == null or _member.character_data == null:
 		return []
 	var cd := _member.character_data
 
-	# ヒールポーション
-	if _hp_potion == "use" and _member.max_hp > 0:
-		var hp_ratio := float(_member.hp) / float(_member.max_hp)
-		if hp_ratio < GlobalConstants.NEAR_DEATH_THRESHOLD:
+	# ヒールポーション（状態ラベル経由：injured 以下で使用）
+	if _hp_potion == "use":
+		var cond: String = _member.get_condition()
+		if cond == "injured" or cond == "critical":
 			var potion: Variant = _find_potion_in_inventory(cd, "hp")
 			if potion != null:
 				return [{"action": "use_potion", "item": potion}]
@@ -2422,9 +2476,9 @@ func _determine_effective_action() -> int:
 	if not _can_attack():
 		return 2  # WAIT（MP回復待ち）
 
-	# 4. on_low_hp 条件: メンバー個別の低HP時行動
-	if _member != null and is_instance_valid(_member) and _member.max_hp > 0 \
-			and float(_member.hp) / float(_member.max_hp) < GlobalConstants.NEAR_DEATH_THRESHOLD:
+	# 4. on_low_hp 条件: メンバー個別の低HP時行動（状態ラベル経由：critical でのみ発動）
+	if _member != null and is_instance_valid(_member) \
+			and _member.get_condition() == "critical":
 		match _on_low_hp:
 			"flee":
 				if not _should_ignore_flee():

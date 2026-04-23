@@ -13,7 +13,7 @@ var _next_join_index: int = 0
 ## パーティー全体の方針（OrderWindow の全体方針行が管理。AI の move_policy・各種行動条件に反映）
 ## move:         全員の移動方針（move_policy と対応。follow/same_room/cluster/explore/standby）
 ## target:       全員のデフォルトターゲット方針（nearest/weakest/same_as_leader/support）
-## on_low_hp:    低HP時の行動（keep_fighting/fall_back/flee。NEAR_DEATH_THRESHOLD で判定）
+## on_low_hp:    低HP時の行動（keep_fighting/fall_back/flee。状態ラベル "critical" で発動）
 ##               ※ 2026-04-21 リネーム：retreat → fall_back（battle_policy="retreat" との重複解消）
 ## item_pickup:  アイテム取得方針（aggressive=積極/passive=近くなら(ITEM_PICKUP_RANGE)/avoid=拾わない）
 ## hp_potion:    ヒールポーション自動使用（use=瀕死時に自動使用/never=使わない）

@@ -64,14 +64,15 @@ const VAR_PRIORITY: Dictionary = {
 	"goal_str":                  0,  # 高：get_debug_goal_str の出力
 
 	# UnitAI 指示ライン（中）
-	"move_policy":               1,  # 中：移動方針
-	"combat":                    1,  # 中：戦闘方針
-	"battle_formation":          1,  # 中：戦闘隊形
-	"on_low_hp":                 1,  # 中：低HP時行動
-	"special_skill":             1,  # 中：特殊攻撃指示
-	"hp_potion":                 1,  # 中：HP ポーション自動使用
-	"sp_mp_potion":              1,  # 中：エナジーポーション自動使用
-	"item_pickup":               1,  # 中：アイテム取得指示
+	## 2026-04-23 整理：パーティー全体指示（on_low_hp / hp_potion / sp_mp_potion / item_pickup）は
+	## ヘッダー行と常に一致するため、メンバー行の指示グループから除外し VAR_PRIORITY からも削除。
+	## 残すのは個別指示 or UnitAI で per-member 書き換えされる項目のみ（詳細は _build_orders_field_list）
+	"move_policy":               1,  # 中：移動方針（explore/guard_room で per-member 書き換えあり）
+	"target":                    1,  # 中：ターゲット選択方針（個別変更可）
+	"combat":                    1,  # 中：戦闘方針（個別）
+	"battle_formation":          1,  # 中：戦闘隊形（個別）
+	"special_skill":             1,  # 中：特殊攻撃指示（個別）
+	"heal":                      1,  # 中：ヒーラー回復モード（個別・ヒーラー限定）
 
 	# UnitAI フラグライン（低）
 	"party_fleeing":             2,  # 低：パーティー撤退中
@@ -462,10 +463,10 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 
 	# 全体指示ヒント（combat_situation / power_balance / hp_status / 戦力内訳を取得）
 	var hint: Dictionary = pm.get_global_orders_hint()
-	var sit_str: String = _combat_situation_label(hint.get("combat_situation", 0) as int)
+	var sit_str: String = _combat_situation_label_with_ratio(hint)
 	var pb_str:  String = _power_balance_label(hint.get("power_balance", 0) as int)
 	pb_str += " " + _format_strength_breakdown(hint)
-	var hs_str:  String = _hp_status_label(hint.get("hp_status", 0) as int)
+	var hs_str:  String = _hp_status_label_with_breakdown(hint)
 
 	## ヘッダー：[種別] 生存・戦況・戦力・HP・（味方のみ）全体指示 / （敵のみ）strategy=ENUM_NAME
 	## 2026-04-21 改訂：敵リーダー行の mv/battle/tgt/hp 表示を廃止し、素の _party_strategy を表示。
@@ -580,10 +581,10 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 	var hs_str := "?"
 	if _hero_manager != null and is_instance_valid(_hero_manager):
 		var hint: Dictionary = _hero_manager.get_global_orders_hint()
-		sit_str = _combat_situation_label(hint.get("combat_situation", 0) as int)
+		sit_str = _combat_situation_label_with_ratio(hint)
 		pb_str = _power_balance_label(hint.get("power_balance", 0) as int)
 		pb_str += " " + _format_strength_breakdown(hint)
-		hs_str = _hp_status_label(hint.get("hp_status", 0) as int)
+		hs_str = _hp_status_label_with_breakdown(hint)
 
 	# 分母：プレイヤー Party は死亡してもメンバーリストから削除しないため実サイズで OK
 	# （敵/NPC は PartyManager._on_member_died で erase される・PartyLeader._initial_count を使う）
@@ -723,7 +724,11 @@ func _draw_member_block(font: Font, m: Character, x: float, y: float, w: float,
 	## 参照されない。`_item_pickup` も実質参照されない（`_is_combat_safe()` が敵側で稀に真になる程度）。
 	## 詳細は docs/investigation_enemy_order_system.md / investigation_enemy_order_effective.md
 	if _detail_level >= 1 and ai != null and is_instance_valid(ai) and m.is_friendly:
-		var order_parts: PackedStringArray = _build_orders_field_list(ai)
+		# move_policy は別枠表示（全体指示が UnitAI で per-member 書き換えされうる唯一の項目）
+		var move_part: String = _build_move_policy_part(ai)
+		if not move_part.is_empty():
+			segs.append({"text": "  " + move_part, "color": ORDERS_COLOR})
+		var order_parts: PackedStringArray = _build_orders_field_list(ai, m)
 		if not order_parts.is_empty():
 			segs.append({"text": "  指示:", "color": ORDERS_COLOR})
 			for p: String in order_parts:
@@ -856,29 +861,49 @@ func _format_action_goal(m: Character, pm: PartyManager) -> String:
 	return " " + raw_goal
 
 
-## 指示パーツ（中優先度）：メンバーの order 関連フィールドをパーツ配列で返す
-## 例: ["M:follow", "C:attack", "F:surround", "L:fall_bac", "S:strong", "HP:use", "E:use", "I:passive"]
-## 各フィールドを個別パーツにすることで横一列流しレイアウトでの折返し精度を上げる
-## _shorten() が空文字列 / null を "-" に変換するため、敵の未設定フィールドも "-" で表示される
-func _build_orders_field_list(ai: UnitAI) -> PackedStringArray:
+## 指示パーツ（中優先度）：メンバー固有の個別指示フィールドをパーツ配列で返す
+## 例: ["T:same_as_", "C:attack", "F:surround", "S:strong", "H:lowest_h"]
+##
+## ## 表示対象の方針（2026-04-23 整理）
+## パーティー全体指示はヘッダー行に表示済みのため、メンバー行の「指示:」は個別指示のみに絞る。
+## 個別指示（OrderWindow の MEMBER_COLS / HEALER_COLS で per-member に変更可能）：
+##   → T:target, F:battle_formation, C:combat, S:special_skill, H:heal（ヒーラー）
+##
+## ## 指示グループから外した項目
+##   - M:move_policy ← 別枠 `move:` プレフィックスで表示（`_build_move_policy_part` が担当）。
+##                      全体指示だが UnitAI で per-member に書き換えられうるため（explore/guard_room）
+##                      概念的に「個別指示」とは別物
+##   - L:on_low_hp   ← 常にヘッダーと一致（global から sync）
+##   - HP:hp_potion  ← 常にヘッダーと一致（party_orders 経由で直接渡される）
+##   - E:sp_mp_potion ← 同上
+##   - I:item_pickup ← 常にヘッダーと一致（global から sync）
+func _build_orders_field_list(ai: UnitAI, m: Character) -> PackedStringArray:
 	var parts: PackedStringArray = []
-	if _show_var("move_policy"):
-		parts.append("M:%s" % _shorten(ai.get("_move_policy")))
+	var order: Dictionary = m.current_order if m != null else {}
+	if _show_var("target"):
+		parts.append("T:%s" % _shorten(order.get("target", "-")))
 	if _show_var("combat"):
 		parts.append("C:%s" % _shorten(ai.get("_combat")))
 	if _show_var("battle_formation"):
 		parts.append("F:%s" % _shorten(ai.get("_battle_formation")))
-	if _show_var("on_low_hp"):
-		parts.append("L:%s" % _shorten(ai.get("_on_low_hp")))
 	if _show_var("special_skill"):
 		parts.append("S:%s" % _shorten(ai.get("_special_skill")))
-	if _show_var("hp_potion"):
-		parts.append("HP:%s" % _shorten(ai.get("_hp_potion")))
-	if _show_var("sp_mp_potion"):
-		parts.append("E:%s" % _shorten(ai.get("_sp_mp_potion")))
-	if _show_var("item_pickup"):
-		parts.append("I:%s" % _shorten(ai.get("_item_pickup")))
+	# ヒーラー限定：回復モード（H:）
+	if _show_var("heal") and m != null and m.character_data != null \
+			and m.character_data.class_id == "healer":
+		parts.append("H:%s" % _shorten(order.get("heal", "-")))
 	return parts
+
+
+## 移動方針（move_policy）を別枠のパーツとして返す
+## 全体指示だが UnitAI で per-member に書き換えられうるため、個別指示グループとは独立して表示する
+## 戻り値例：`move:cluster`  — _show_var("move_policy") が false のときは空文字列
+func _build_move_policy_part(ai: UnitAI) -> String:
+	if not _show_var("move_policy"):
+		return ""
+	if ai == null or not is_instance_valid(ai):
+		return ""
+	return "move:%s" % _shorten(ai.get("_move_policy"))
 
 
 ## UnitAI 側フラグパーツ（低優先度）：パーティー状態・種族固有の時系列情報をパーツ配列で返す
@@ -1174,6 +1199,31 @@ func _hp_status_label(hs: int) -> String:
 	return "?"
 
 
+## HP ラベル + 計算内訳（ポーション加算が「満」表示の理由を可視化）
+## 例: "満(4+150/41)" — 実 HP 4 + ポーション回復 150 を max 41 で割った結果が FULL
+func _hp_status_label_with_breakdown(hint: Dictionary) -> String:
+	var label := _hp_status_label(hint.get("hp_status", 0) as int)
+	var hp_real: int = hint.get("hp_real", -1) as int
+	var hp_potion: int = hint.get("hp_potion", 0) as int
+	var hp_max: int = hint.get("hp_max", 0) as int
+	if hp_real < 0 or hp_max <= 0:
+		return label
+	return "%s(%d+%d/%d)" % [label, hp_real, hp_potion, hp_max]
+
+
+## 戦況ラベル + 戦力比の計算内訳（戦況判定の根拠を可視化）
+## 例: "優勢(9.0/5.0=1.80)" — 自軍 9.0 / 敵 5.0 = 1.80 が ADVANTAGE 閾値以上
+## 敵なし or 戦力ゼロ時は比を省略（SAFE ラベルのみ）
+func _combat_situation_label_with_ratio(hint: Dictionary) -> String:
+	var label := _combat_situation_label(hint.get("combat_situation", 0) as int)
+	var ratio: float = float(hint.get("combat_ratio", -1.0))
+	if ratio < 0.0:
+		return label
+	var my_s: float = float(hint.get("my_combat_strength", 0.0))
+	var enemy_s: float = float(hint.get("nearby_enemy_strength", 0.0))
+	return "%s(%.1f/%.1f=%.2f)" % [label, my_s, enemy_s, ratio]
+
+
 ## FLEE 時の避難先情報 suffix を返す（戦況判断ブロック末尾に付加）
 ## 形式:
 ##   通常（FLEE 中・避難先あり）: `  避難先:<area_id>(d:<n>)@(<x>,<y>)`
@@ -1363,10 +1413,10 @@ func _snapshot_player_party_lines(floor_idx: int) -> PackedStringArray:
 	var hs_str:  String = "?"
 	if _hero_manager != null and is_instance_valid(_hero_manager):
 		var hint: Dictionary = _hero_manager.get_global_orders_hint()
-		sit_str = _combat_situation_label(hint.get("combat_situation", 0) as int)
+		sit_str = _combat_situation_label_with_ratio(hint)
 		pb_str  = _power_balance_label(hint.get("power_balance", 0) as int)
 		pb_str += " " + _format_strength_breakdown(hint)
-		hs_str  = _hp_status_label(hint.get("hp_status", 0) as int)
+		hs_str  = _hp_status_label_with_breakdown(hint)
 
 	var header: String = "[プレイヤー]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
 		alive, floor_members.size(), sit_str, pb_str, hs_str,
@@ -1418,10 +1468,10 @@ func _snapshot_party_block_lines(pm: PartyManager, type_label: String,
 	var total: int = _party_initial_count(pm, floor_members.size())
 
 	var hint: Dictionary = pm.get_global_orders_hint()
-	var sit_str: String = _combat_situation_label(hint.get("combat_situation", 0) as int)
+	var sit_str: String = _combat_situation_label_with_ratio(hint)
 	var pb_str:  String = _power_balance_label(hint.get("power_balance", 0) as int)
 	pb_str += " " + _format_strength_breakdown(hint)
-	var hs_str:  String = _hp_status_label(hint.get("hp_status", 0) as int)
+	var hs_str:  String = _hp_status_label_with_breakdown(hint)
 
 	var is_enemy: bool = pm.party_type == "enemy"
 	var header: String
@@ -1479,7 +1529,10 @@ func _build_member_line(m: Character, pm: PartyManager, display_floor: int) -> S
 
 	# 指示グループ（味方メンバーのみ・detail=1 以上）
 	if ai != null and is_instance_valid(ai) and m.is_friendly:
-		var order_parts: PackedStringArray = _build_orders_field_list(ai)
+		var move_part: String = _build_move_policy_part(ai)
+		if not move_part.is_empty():
+			buf.append(move_part)
+		var order_parts: PackedStringArray = _build_orders_field_list(ai, m)
 		if not order_parts.is_empty():
 			buf.append("指示:" + " ".join(order_parts))
 

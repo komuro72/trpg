@@ -197,7 +197,7 @@ func _get_explore_move_policy() -> String:
 
 
 ## NPC パーティーの global_orders ヒントを返す（デバッグウィンドウ表示用）
-## _global_orders が設定されていない場合は NPC デフォルト値＋探索モードを合成して返す
+## NPC 指示部分のヒントを返す（戦況部分は基底の `_append_combat_situation_to_hint` が付与）
 ## NPC 固有差分:
 ##   - デフォルト方針が「follow / same_as_leader / fall_back / passive」（プレイヤー追従前提）
 ##   - sp_mp_potion キーを持つ（ベース版は持たない）
@@ -206,41 +206,34 @@ func _get_explore_move_policy() -> String:
 ## 2026-04-21 改訂：`_party_strategy` は敵専用概念に変更したため、`match _party_strategy` による
 ## ヒント合成を廃止。探索モード判定は `_is_in_explore_mode()` 経由で行う。
 ## CRITICAL 時の FLEE 自動切替はステップ 2 で `battle_policy="retreat"` への自動書き換え方式で復活予定。
-func get_global_orders_hint() -> Dictionary:
-	var hint: Dictionary
-	if not _global_orders.is_empty():
-		hint = _global_orders.duplicate()
-	else:
-		hint = {
-			"move":          "follow",
-			"battle_policy": "attack",
-			"target":        "same_as_leader",
-			"on_low_hp":     "fall_back",
-			"item_pickup":   "passive",
-			"hp_potion":     "use",
-			"sp_mp_potion":  "use",
-		}
-		if _is_in_explore_mode():
-			var pol := _get_explore_move_policy()
-			hint["move"] = pol
-			if pol == "stairs_down" or pol == "stairs_up":
-				hint["target_floor"] = str(_get_target_floor())
-	# 戦況判断（_evaluate_strategic_status() の結果を流し込む）
-	var sit: int = _combat_situation.get("situation", int(GlobalConstants.CombatSituation.SAFE)) as int
-	hint["combat_situation"] = sit
-	hint["power_balance"] = _combat_situation.get("power_balance", 0)
-	hint["hp_status"]     = _combat_situation.get("hp_status", 0)
-	hint["full_party_strength"]    = _combat_situation.get("full_party_strength", 0.0)
-	hint["full_party_rank_sum"]    = _combat_situation.get("full_party_rank_sum", 0)
-	hint["full_party_tier_sum"]    = _combat_situation.get("full_party_tier_sum", 0.0)
-	hint["full_party_hp_ratio"]    = _combat_situation.get("full_party_hp_ratio", 0.0)
-	hint["nearby_allied_strength"] = _combat_situation.get("nearby_allied_strength", 0.0)
-	hint["nearby_allied_rank_sum"] = _combat_situation.get("nearby_allied_rank_sum", 0)
-	hint["nearby_allied_tier_sum"] = _combat_situation.get("nearby_allied_tier_sum", 0.0)
-	hint["nearby_allied_hp_ratio"] = _combat_situation.get("nearby_allied_hp_ratio", 0.0)
-	hint["nearby_enemy_strength"]  = _combat_situation.get("nearby_enemy_strength", 0.0)
-	hint["nearby_enemy_rank_sum"]  = _combat_situation.get("nearby_enemy_rank_sum", 0)
-	hint["nearby_enemy_tier_sum"]  = _combat_situation.get("nearby_enemy_tier_sum", 0.0)
+##
+## 2026-04-23 改訂：`get_global_orders_hint()` の override を廃止し、指示部分だけ `_build_orders_part()`
+## で差分を返す方式に変更。戦況部分のキー追加漏れを根絶する
+##
+## 2026-04-23 追加改訂：NPC デフォルトをベースラインとして常に返し、`_global_orders` の値を
+## その上にマージする方式に変更。従来は `_global_orders` が非空のとき defaults を一切返さず、
+## NpcLeaderAI の CRITICAL 時 battle_policy 書き換え後は `hp_potion` 等の NPC デフォルトが
+## 消え、ポーション自動使用が無効化される不具合があった
+func _build_orders_part() -> Dictionary:
+	# NPC ベースライン（OrderWindow を介さない NPC の既定指示）
+	var hint: Dictionary = {
+		"move":          "follow",
+		"battle_policy": "attack",
+		"target":        "same_as_leader",
+		"on_low_hp":     "fall_back",
+		"item_pickup":   "passive",
+		"hp_potion":     "use",
+		"sp_mp_potion":  "use",
+	}
+	# `_global_orders` の内容を上書きマージ（例：CRITICAL 時の battle_policy="retreat"）
+	for k: Variant in _global_orders.keys():
+		hint[k] = _global_orders[k]
+	# 探索モード（敵未検知）時は move を階段/explore に上書き
+	if _is_in_explore_mode():
+		var pol := _get_explore_move_policy()
+		hint["move"] = pol
+		if pol == "stairs_down" or pol == "stairs_up":
+			hint["target_floor"] = str(_get_target_floor())
 	return hint
 
 
@@ -446,9 +439,9 @@ func _auto_share_potions() -> void:
 		if not is_instance_valid(needer) or needer.character_data == null:
 			continue
 		var cd := needer.character_data
-		# HP ポーション受け渡し
-		var hp_ratio := float(needer.hp) / float(needer.max_hp) if needer.max_hp > 0 else 1.0
-		if hp_ratio < GlobalConstants.NEAR_DEATH_THRESHOLD:
+		# HP ポーション受け渡し（状態ラベル経由：injured/critical のメンバーに配布・auto_use トリガーと揃える）
+		var cond: String = needer.get_condition()
+		if cond == "injured" or cond == "critical":
 			if _find_potion_in_cd(cd, "hp") == null:
 				var pot: Variant = _take_potion_from_party(needer, "hp")
 				if pot != null:
