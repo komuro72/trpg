@@ -133,6 +133,13 @@ var _post_delay_remaining: float = 0.0
 var _auto_cancel_remaining: float = 0.0
 ## AUTO_CANCEL_FLASH は GlobalConstants.AUTO_CANCEL_FLASH（Config Editor 対象）を参照
 
+## 解放時にターゲットが居なかったら以降は攻撃しないフラグ（Option A：2026-04-23 追加）
+## 解放後の AUTO_CANCEL_FLASH 中に敵が射程に入ってきても攻撃を発火させない。
+## 「アウトライン表示されないのに攻撃する」症状の防止。
+## _enter_pre_delay / _exit_targeting / _confirm_target でクリア、_process_targeting の
+## 解放分岐（空リスト）で true にセット。
+var _released_without_target: bool = false
+
 ## _input() で検出したターゲット循環方向（+1=次・-1=前・0=なし）
 ## is_action_just_pressed をポーリングするより確実にボタン1回を捕捉できる
 var _cycle_direction: int = 0
@@ -146,6 +153,16 @@ var _using_v_slot: bool = false
 
 ## 消耗品バー UI（game_map から設定）
 var consumable_bar: ConsumableBar = null
+
+## [DEBUG] world_time_running / debug_targeting_hold の遷移追跡用（前回値）
+## 「TARGETING ホールド中に敵が動く」問題の原因経路を追跡するためのログに使う。
+## 問題解決が確認されたら削除する。
+var _dbg_prev_world_time_running: bool = true
+var _dbg_prev_targeting_hold: bool = false
+var _dbg_prev_valid_target_ids: Array[int] = []
+var _dbg_prev_cursor_target_id: int = 0
+## カーソル対象の直前 grid_pos（同一インスタンスでも位置が変わったら検知するため）
+var _dbg_prev_cursor_grid: Vector2i = Vector2i(-9999, -9999)
 
 ## パーティーリーダー（game_map から設定。LB/RBキャラ切り替えの可否判定に使用）
 ## ゲーム開始時は hero。NPC パーティーに合流してリーダーが変わった場合は更新される
@@ -463,15 +480,13 @@ func _process_guard_and_move(_delta: float) -> void:
 
 	var dir := _get_input_direction()
 
-	# アニメーション中は新たな移動をブロック
-	# キーが押されていればバッファに上書き記録、離されたらバッファをクリア
+	# アニメーション中は新たな移動をブロック（キーが押されていればバッファに上書き記録）
+	# 移動中の攻撃ボタン押下は _process_normal line 450 で先に捕捉されて _enter_pre_delay()
+	# が即呼ばれるため、ここには到達しない（2026-04-23 整理・_attack_buffer=true の代入は
+	# 以前ここにあったが dead code だったので削除）。
+	# 攻撃中の POST_DELAY での攻撃バッファリングは _process_post_delay 側で生きている。
 	if character.is_moving():
 		_move_buffer = dir  # ZERO でも上書き（離したらキャンセル）
-		# 移動中の攻撃ボタン押下をバッファに記録
-		if Input.is_action_just_pressed("attack"):
-			_attack_buffer = true
-		elif Input.is_action_just_released("attack"):
-			_attack_buffer = false
 		return
 
 	# 階段タイルに静止中は移動をブロック（game_map が遷移を処理する）
@@ -533,7 +548,11 @@ func _process_pre_delay(delta: float) -> void:
 	# ターゲット選択・カーソル・アウトラインは TARGETING モード突入時に生成する（マーカー表示）
 	# タイマーは「ゲーム内秒」で持つ（game_speed 倍速時は実時間が短縮される）
 	_pre_delay_remaining -= delta * GlobalConstants.game_speed
-	if _pre_delay_remaining <= 0.0:
+	# TARGETING 突入条件：pre_delay 完了 AND 視覚補間完了（is_moving()==false）
+	# 視覚補間中に突入すると、マス中央でない位置で時間停止する設計原則違反になる。
+	# pre_delay が先に消化されてもキャラが移動中なら待機（射程オーバーレイは表示継続）。
+	# 2026-04-23 追加：移動中攻撃入力の並行消化を明示的に仕様化。
+	if _pre_delay_remaining <= 0.0 and not character.is_moving():
 		_start_targeting()
 
 
@@ -544,15 +563,21 @@ func _process_pre_delay(delta: float) -> void:
 ## 「本来マーカーは pre_delay 完了後にしか出ない」という設計原則を維持しつつ、
 ## タップ操作の視覚フィードバックとして完了後に短時間マーカーを表示する
 func _process_pre_delay_released(delta: float) -> void:
-	# Phase 1: 残り pre_delay を消化（マーカー未生成）
-	if _pre_delay_remaining > 0.0:
-		_pre_delay_remaining -= delta * GlobalConstants.game_speed
-		if _pre_delay_remaining <= 0.0:
+	# Phase 判定は `_cursor != null`（_setup_targeting_cursor で生成・_exit_targeting で破棄）
+	# _cursor == null → Phase 1（pre_delay 消化 + 視覚補間完了待ち・マーカー未生成）
+	# _cursor != null → Phase 2（マーカー表示中・AUTO_CANCEL_FLASH 計測）
+	# 2026-04-23 追加：移動中攻撃入力の並行消化を明示的に仕様化。
+	# Phase 2 突入条件：残り pre_delay 完了 AND 視覚補間完了（is_moving()==false）
+	if _cursor == null:
+		# Phase 1
+		if _pre_delay_remaining > 0.0:
+			_pre_delay_remaining -= delta * GlobalConstants.game_speed
+		if _pre_delay_remaining <= 0.0 and not character.is_moving():
 			_pre_delay_remaining = 0.0
 			# Phase 2 突入：マーカー（カーソル＋アウトライン）を表示し AUTO_CANCEL_FLASH 計測開始
 			_setup_targeting_cursor()
 			_auto_cancel_remaining = GlobalConstants.AUTO_CANCEL_FLASH
-		return
+		return  # Phase 1 継続 または Phase 2 突入フレーム
 
 	# Phase 2: マーカー表示中の AUTO_CANCEL_FLASH 計測（毎フレームターゲット再評価）
 	_refresh_targets()
@@ -583,6 +608,13 @@ func _try_facing_change_from_input() -> void:
 	var target_facing := _compute_facing_for(dir)
 	if target_facing == character.facing:
 		return
+	# [DEBUG] TARGETING ホールド中の向き変更を記録（問題解決後に削除）
+	# ホールド中に敵が射程から外れる要因がプレイヤー回転か敵移動かを切り分けるため
+	if _mode == Mode.TARGETING and GlobalConstants.debug_targeting_hold:
+		DebugLog.log("[PLAYER-TURN] facing %s → %s  (during TARGETING hold)" % [
+			Character.Direction.keys()[character.facing],
+			Character.Direction.keys()[target_facing]
+		])
 	character.face_toward(character.grid_pos + dir)
 	if map_node != null:
 		map_node.queue_redraw()
@@ -601,13 +633,22 @@ func _process_targeting(delta: float) -> void:
 	# 一発一押下のモデルに統一する
 	if holding:
 		_auto_cancel_remaining = 0.0
+		_released_without_target = false
+	elif _released_without_target:
+		# 解放時に射程内ターゲットが無かった場合、以降は auto_cancel のみを消化する。
+		# この間に敵が射程に入ってきても攻撃はしない（アウトライン非表示での攻撃防止）。
+		_auto_cancel_remaining -= delta
+		if _auto_cancel_remaining <= 0.0:
+			_auto_cancel_remaining = 0.0
+			_exit_targeting()
+			return
 	elif not _valid_targets.is_empty():
 		# 解放 + 射程内に標的あり → 即攻撃
 		_confirm_target()
 		return
 	else:
-		# 解放 + 射程内に標的なし → 自動キャンセルカウントダウン
-		# （射程オーバーレイを AUTO_CANCEL_FLASH 秒見せてから解除）
+		# 解放 + 射程内に標的なし → この瞬間を記録し、以降の入り敵は無視（Option A）
+		_released_without_target = true
 		if _auto_cancel_remaining <= 0.0:
 			_auto_cancel_remaining = GlobalConstants.AUTO_CANCEL_FLASH
 		_auto_cancel_remaining -= delta
@@ -680,6 +721,7 @@ func _enter_pre_delay() -> void:
 	_move_buffer         = Vector2i.ZERO
 	_pre_delay_remaining = float(sd.get("pre_delay", 0.0))
 	character.is_targeting_mode = true
+	_released_without_target = false  # 新しい攻撃サイクル開始（Option A のフラグを初期化）
 
 	# PRE_DELAY 中は射程オーバーレイだけを見せる（ターゲット選択・カーソル・アウトラインは TARGETING 以降）
 	_valid_targets = []
@@ -713,6 +755,13 @@ func _start_targeting() -> void:
 		if is_instance_valid(character):
 			character.complete_turn()
 	_set_mode(Mode.TARGETING, "pre_delay complete")
+	# 同一フレーム内 race 防止：mode 遷移直後に world_time_running を再評価する。
+	# フレーム頭で _update_world_time() は mode=PRE_DELAY 前提で wt=true にしている。
+	# ここでもう一度呼ぶことで、以降このフレーム内で走る Character._process / UnitAI._process
+	# が wt=false を見る。これがないと archer の visual_move が半マス確定点を通過し、
+	# 次フレームの _refresh_targets で射程外判定され「一瞬アウトラインが出て消える」症状になる。
+	# 2026-04-23 修正。
+	_update_world_time()
 	_setup_targeting_cursor()
 	# 対象なしなら射程オーバーレイを一瞬見せてから自動キャンセル
 	if _valid_targets.is_empty():
@@ -738,10 +787,15 @@ func _exit_targeting() -> void:
 	_pre_delay_remaining = 0.0
 	_auto_cancel_remaining = 0.0
 	_cycle_direction     = 0
+	_released_without_target = false  # 次のサイクルに残さないようクリア（Option A）
 	character.is_targeting_mode = false
 	if _cursor != null:
 		_cursor.queue_free()
 		_cursor = null
+	# [DEBUG] 次回 TARGETING 突入で確実にログが出るようトラッカーをリセット（問題解決後に削除）
+	_dbg_prev_valid_target_ids.clear()
+	_dbg_prev_cursor_target_id = 0
+	_dbg_prev_cursor_grid = Vector2i(-9999, -9999)
 
 
 ## PRE_DELAY / TARGETING 中の他ボタン入力を処理し、攻撃をキャンセルして
@@ -882,6 +936,48 @@ func _refresh_targets() -> void:
 			t.clear_outline()
 	_valid_targets = new_targets
 
+	# [DEBUG] ターゲット集合の変化をログに残す（TARGETING 中のみ・差分があった時のみ）
+	# 問題解決後に削除
+	if _mode == Mode.TARGETING:
+		var new_ids: Array[int] = []
+		for t: Character in _valid_targets:
+			if is_instance_valid(t):
+				new_ids.append(t.get_instance_id())
+		if new_ids != _dbg_prev_valid_target_ids:
+			# 追加・削除された敵を特定（プレイヤー回転 vs 敵移動の切り分け用）
+			var added: Array[String] = []
+			var removed: Array[String] = []
+			for t: Character in _valid_targets:
+				if is_instance_valid(t) and not _dbg_prev_valid_target_ids.has(t.get_instance_id()):
+					added.append("%s@%s" % [Character._battle_name(t), str(t.grid_pos)])
+			# removed: 前回 ID のうち新リストに無いもの。instance_from_id で現在位置を取得し、
+			# 「射程外に移動した」「死亡・freed」「コーン外に出た」を切り分ける
+			for prev_id: int in _dbg_prev_valid_target_ids:
+				if not new_ids.has(prev_id):
+					var obj: Object = instance_from_id(prev_id)
+					if obj == null or not is_instance_valid(obj):
+						removed.append("id=%d[freed]" % prev_id)
+					else:
+						var rc: Character = obj as Character
+						if rc != null:
+							removed.append("%s@%s" % [Character._battle_name(rc), str(rc.grid_pos)])
+						else:
+							removed.append("id=%d[?]" % prev_id)
+			var names: Array[String] = []
+			for t: Character in _valid_targets:
+				if is_instance_valid(t):
+					names.append("%s@%s" % [Character._battle_name(t), str(t.grid_pos)])
+			var diff_str: String = ""
+			if not added.is_empty():
+				diff_str += "  +[%s]" % ", ".join(added)
+			if not removed.is_empty():
+				diff_str += "  -[%s]" % ", ".join(removed)
+			DebugLog.log("[TGT-SET] size=%d  [%s]%s  player_facing=%s" % [
+				_valid_targets.size(), ", ".join(names), diff_str,
+				Character.Direction.keys()[character.facing] if is_instance_valid(character) else "?"
+			])
+			_dbg_prev_valid_target_ids = new_ids
+
 	if _valid_targets.is_empty():
 		_target_index = 0
 		_update_cursor()
@@ -916,12 +1012,35 @@ func _update_cursor() -> void:
 		return
 	if _valid_targets.is_empty():
 		_cursor.visible = false
+		# [DEBUG] カーソル対象が消えた遷移を記録（問題解決後に削除）
+		if _dbg_prev_cursor_target_id != 0 and _mode == Mode.TARGETING:
+			DebugLog.log("[CURSOR] cleared (no valid targets)  player_facing=%s" % [
+				Character.Direction.keys()[character.facing] if is_instance_valid(character) else "?"
+			])
+			_dbg_prev_cursor_target_id = 0
+			_dbg_prev_cursor_grid = Vector2i(-9999, -9999)
 	else:
 		_cursor.visible = true
 		var tgt := _valid_targets[_target_index]
 		_cursor.position = tgt.position
 		tgt.is_targeted  = true
 		tgt.set_outline(Color.WHITE, GlobalConstants.OUTLINE_WIDTH_FOCUSED)
+		# [DEBUG] カーソル対象の切替・同一インスタンスの位置変化を記録（問題解決後に削除）
+		var id: int = tgt.get_instance_id()
+		if _mode == Mode.TARGETING:
+			if id != _dbg_prev_cursor_target_id:
+				DebugLog.log("[CURSOR] → %s@%s  pos=%s  player_facing=%s" % [
+					Character._battle_name(tgt), str(tgt.grid_pos), str(tgt.position),
+					Character.Direction.keys()[character.facing] if is_instance_valid(character) else "?"
+				])
+				_dbg_prev_cursor_target_id = id
+				_dbg_prev_cursor_grid = tgt.grid_pos
+			elif tgt.grid_pos != _dbg_prev_cursor_grid:
+				# 同一インスタンスの grid_pos が変化した（敵が動いた証拠）
+				DebugLog.log("[CURSOR] ≈ %s  grid %s → %s  (same instance moved!)" % [
+					Character._battle_name(tgt), str(_dbg_prev_cursor_grid), str(tgt.grid_pos)
+				])
+				_dbg_prev_cursor_grid = tgt.grid_pos
 
 
 ## 有効なターゲットを返す（heal/buff_defense は距離→HP昇順、それ以外は前方コーン優先）
@@ -986,38 +1105,67 @@ func _dist_to(target: Character) -> float:
 ## TARGETING 中 → ボタンホールド中は false（時間停止：ターゲット選定）／解放中は true
 ## 無入力待機 → false
 func _update_world_time() -> void:
+	var new_running: bool = false
+	var new_hold: bool = false
+	var reason: String = ""
+
 	# アイテム UI 中は時間停止
 	if _item_ui_phase != _ItemUIPhase.NONE:
-		GlobalConstants.world_time_running = false
-		return
+		new_running = false
+		reason = "item_ui"
 	# TARGETING 判定を turning より先に評価する
 	# （turning 中に攻撃して TARGETING に入った場合、turning ガードが時間停止を上書きしないように）
-	if _mode == Mode.TARGETING:
+	elif _mode == Mode.TARGETING:
 		# ホールド中はじっくり狙うため時間停止、解放中（即発火/AUTO_CANCEL 待機）は時間進行
-		GlobalConstants.world_time_running = not _is_in_attack_hold()
-		return
+		var holding: bool = _is_in_attack_hold()
+		new_running = not holding
+		new_hold = holding
+		reason = "TARGETING hold" if holding else "TARGETING released"
 	# 向き変更ディレイ中は時間進行（turn_timer は _process 本体で並行消化される）
-	if _is_turning:
-		GlobalConstants.world_time_running = true
-		return
-	if _mode == Mode.PRE_DELAY or _mode == Mode.PRE_DELAY_RELEASED \
+	elif _is_turning:
+		new_running = true
+		reason = "turning"
+	elif _mode == Mode.PRE_DELAY or _mode == Mode.PRE_DELAY_RELEASED \
 			or _mode == Mode.POST_DELAY:
-		GlobalConstants.world_time_running = true
-		return
+		new_running = true
+		reason = Mode.keys()[_mode]
 	# NORMAL モード：キャラの状態で判定
 	# _move_buffer に入力が残っている間は「連続移動中」と判断して暗転させない
-	if character != null:
-		if character.is_moving() or character.is_guarding \
-				or character.is_attacking or character.is_sliding \
-				or _move_buffer != Vector2i.ZERO:
-			GlobalConstants.world_time_running = true
-			return
-	GlobalConstants.world_time_running = false
+	elif character != null and (character.is_moving() or character.is_guarding \
+			or character.is_attacking or character.is_sliding \
+			or _move_buffer != Vector2i.ZERO):
+		new_running = true
+		reason = "NORMAL busy"
+	else:
+		new_running = false
+		reason = "NORMAL idle"
+
+	GlobalConstants.world_time_running = new_running
+	GlobalConstants.debug_targeting_hold = new_hold
+
+	# [DEBUG] world_time_running / debug_targeting_hold の遷移をログに残す
+	# （TARGETING ホールド中に敵が動く問題の調査用・問題解決後に削除）
+	if new_running != _dbg_prev_world_time_running:
+		DebugLog.log("[WT] %s → %s  reason=%s  mode=%s  hold=%s" % [
+			str(_dbg_prev_world_time_running), str(new_running), reason,
+			Mode.keys()[_mode], str(new_hold)
+		])
+		_dbg_prev_world_time_running = new_running
+	if new_hold != _dbg_prev_targeting_hold:
+		DebugLog.log("[TGT-HOLD] %s → %s  mode=%s" % [
+			str(_dbg_prev_targeting_hold), str(new_hold), Mode.keys()[_mode]
+		])
+		_dbg_prev_targeting_hold = new_hold
 
 
 ## _mode 代入を一元化するヘルパー。将来 _mode 遷移のトラッキングが必要になったら
 ## この関数内に DebugLog.log を仕込むだけでよい（全代入箇所がここを通るため）
 func _set_mode(new_mode: int, _reason: String) -> void:
+	# [DEBUG] モード遷移トラッキング（TARGETING 問題の調査用・問題解決後に削除）
+	if _mode != new_mode:
+		DebugLog.log("[MODE] %s → %s  reason=%s" % [
+			Mode.keys()[_mode], Mode.keys()[new_mode as Mode], _reason
+		])
 	_mode = new_mode as Mode
 
 

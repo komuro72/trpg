@@ -198,10 +198,16 @@ func _process(delta: float) -> void:
 	if _debug_follow_target != null and not is_instance_valid(_debug_follow_target):
 		set_debug_follow_target(null)
 
-	# 射程オーバーレイの再描画（PRE_DELAY / TARGETING モード切り替わり時）
+	# 射程オーバーレイの再描画
+	# - モード切替時（PRE_DELAY / TARGETING 突入・離脱）に必ず再描画
+	# - windup 中は毎フレーム再描画してキャラの視覚位置移動（grid_pos の変化）に追従させる
+	#   （移動中に攻撃ボタンを押したとき、PRE_DELAY 中に grid_pos が次マスにコミットしても
+	#    オーバーレイが古い位置に残る問題を防ぐ。2026-04-23 修正）
 	var now_windup := player_controller != null and player_controller.is_in_attack_windup()
 	if now_windup != _was_targeting:
 		_was_targeting = now_windup
+		queue_redraw()
+	elif now_windup:
 		queue_redraw()
 
 	# 階段クールダウン
@@ -1338,6 +1344,11 @@ func _load_item_texture(image_path: String) -> Texture2D:
 
 ## 床アイテムの拾得チェック（_process から毎フレーム呼ぶ）
 func _check_item_pickup() -> void:
+	# 時間停止中（TARGETING ホールド・アイテム UI 等）は実行しない。
+	# プレイヤー操作キャラは time stop 中も動きうるが、その間のアイテム拾得は
+	# 時間再開後のフレームで検出されれば十分（副作用より一貫性を優先）。
+	if not GlobalConstants.world_time_running:
+		return
 	if _floor_items.is_empty():
 		return
 	# 収集対象: パーティーメンバー + 全フロアの NPC メンバー
@@ -1419,6 +1430,11 @@ func _rebuild_blocking_characters() -> void:
 
 ## パーティーメンバーが階段にいるかチェックし、hero と別フロアならば遷移させる
 func _check_party_member_stairs() -> void:
+	# 時間停止中（TARGETING ホールド等）はフロア遷移を発火させない。
+	# time stop 中にフロア遷移が走ると新フロアの敵・NPC スポーンが発生し、
+	# sync_position 連打でターゲット位置が変動する原因になる（2026-04-23 判明）。
+	if not GlobalConstants.world_time_running:
+		return
 	if party == null or not is_instance_valid(hero):
 		return
 	# _current_floor_index ではなく hero.current_floor を基準にする。
@@ -1498,6 +1514,12 @@ func _transition_member_floor(ch: Character, direction: int) -> void:
 ## リーダー：move_policy に基づき階段に達したとき _transition_npc_floor() でリーダーのみ遷移
 ## 非リーダー：リーダーと別フロアで、かつリーダー方向の階段に達したとき個別遷移
 func _check_npc_member_stairs() -> void:
+	# 時間停止中（TARGETING ホールド等）はフロア遷移を発火させない。
+	# NPC リーダーが階段タイルに立った状態で TARGETING ホールドに入ると、
+	# time stop 中に _transition_npc_floor が走って新フロアの敵・NPC がスポーンし、
+	# sync_position 連打でターゲット位置が変動する（2026-04-23 ログで確認・今回の犯人）。
+	if not GlobalConstants.world_time_running:
+		return
 	if _member_stair_cooldown > 0.0:
 		return
 	# イテレーション中に _per_floor_npcs が変更されないよう先に収集する
@@ -1785,6 +1807,9 @@ func _collect_friendlies_on_floor(floor_idx: int) -> Array[Character]:
 ## プレイヤー不在フロアで NPC が探索中に新しい部屋に入ったとき、
 ## その部屋の敵をアクティブ化する定期チェック（_process から2秒間隔で呼ばれる）
 func _activate_enemies_on_npc_floors() -> void:
+	# 時間停止中は実行しない（敵アクティブ化は AI 進行が止まっている間に行う意味がない）
+	if not GlobalConstants.world_time_running:
+		return
 	for fi: int in range(_per_floor_npcs.size()):
 		if fi == _current_floor_index:
 			continue  # プレイヤーフロアは VisionSystem が処理する
@@ -1878,6 +1903,11 @@ func _find_free_adjacent_to(center: Vector2i, map_ref: MapData,
 
 ## 階段を踏んでいるかチェックし、踏んでいれば遷移する
 func _check_stairs_step() -> void:
+	# 時間停止中（TARGETING ホールド等）はフロア遷移を発火させない。
+	# 操作キャラが time stop 中に動いて階段に乗るケースは通常ないが、
+	# 念のためガード（他 4 関数と挙動を揃える）。
+	if not GlobalConstants.world_time_running:
+		return
 	if _stair_cooldown > 0.0:
 		return
 	# 遷移直後、階段タイルから一度出るまでは再遷移を抑止する

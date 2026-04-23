@@ -3,6 +3,279 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-23（TARGETING 時間停止リーク修正 + デバッグログ検出機構整備 + 回転 Tween ガード）
+
+### 概要
+
+2026-04-22 夕方以降に持ち越されていた「TARGETING ホールド中にアウトラインされた敵が動く」問題を、デバッグログの再投入 → Komuro による実機再現 → ログ解析で根本原因を特定し、修正。主因は `game_map.gd` の周期処理の未ガードだったが、その修正後に Komuro が「たまに向きだけ変わる敵を見る」と報告 → 2 段目の修正として Godot Tween の time stop 非対応も修正した。あわせて同種バグの再発検知のための永続ログ機構を整備した。
+
+### 1. 原因特定（ログ解析）
+
+`res://logs/runtime.log` に、TARGETING ホールドが始まって約 2.7 秒後に以下が記録された:
+
+- `[08:56:08.555] [TGT-HOLD] false → true mode=TARGETING`（ホールド開始）
+- `[08:56:11.278〜11.062]` の約 0.1 秒間に **100 件の `[CHAR.sync_position] … (during TARGETING hold!)` ログが連続発火**
+- グリッド座標が y=10,19,28,37,46 × x=11,13,22,24,33,35,44,46 の整然とした格子を描く → 新フロアの敵初期配置
+- 各キャラ 2 回ずつ（`Character._ready()` 内の `sync_position()` と、スポーン関数から明示的に呼ぶ `sync_position()` の重複）
+- 敵 ≈ 40 体 + 味方 ≈ 12 体 = 100 件強
+
+この期間中、`[MODE]` / `[WT]` 遷移ログが 1 件も出ていない（3.7 秒の巨大な空白）。これは `_update_world_time` が呼ばれていない = フレームが飛んでいる＝ **time stop 中に game_map の重い処理が走ってフリーズしていた**ことを示す。
+
+### 2. 根本原因
+
+[game_map.gd:_process()](scripts/game_map.gd:196) の以下 5 つの周期処理が `world_time_running` ガードを持たず、time stop 中も走り続けていた:
+
+- `_activate_enemies_on_npc_floors()` — 敵アクティブ化
+- `_check_item_pickup()` — 床アイテム拾得
+- `_check_stairs_step()` — 操作キャラの階段踏み
+- `_check_party_member_stairs()` — パーティーメンバーの階段踏み
+- `_check_npc_member_stairs()` — **未加入 NPC の階段踏み（今回の犯人）**
+
+NPC リーダーが階段タイル上に立った状態で TARGETING ホールドに入ると、`_check_npc_member_stairs` が `_transition_npc_floor` を発火 → 新フロアがまだ初期化されていなければ `_setup_floor_enemies` / `_setup_floor_npcs` 実行 → 各キャラ `add_child` で `Character._ready` → `sync_position()` + 明示 `sync_position()` の 2 回連打 → ターゲットのアウトラインが貼られたキャラ含め位置が再計算される。
+
+### 3. 修正
+
+上記 5 関数の冒頭に `if not GlobalConstants.world_time_running: return` を追加。各関数に「2026-04-23 判明」のコメントを残し、将来また外そうとする人への保険とする。
+
+### 4. デバッグログ検出機構の整備
+
+原因特定のため仕込んだデバッグログを 2 系統に分離:
+
+**永続保持**（回帰防止の検出機構として残す）:
+- `Character` 側 5 系統：`[CHAR.move_to]` / `[CHAR.abort_move]` / `[CHAR.sync_position]` / `[CHAR._update_visual_move]` / `[CHAR.grid_commit(half|end)]`
+- すべて `GlobalConstants.debug_targeting_hold == true` のときだけ発火（通常プレイのログ氾濫なし）
+- 将来 `game_map.gd` 等に新しい未ガード周期処理が追加されると即検知できる
+
+**一時保持**（原因特定用・実機検証完了後に削除）:
+- `PlayerController` 側：`[MODE]` / `[WT]` / `[TGT-HOLD]` / `[TGT-SET]` / `[CURSOR]`
+- 削除時は `_dbg_prev_*` 変数 4 つも一式削除
+- `debug_targeting_hold` フラグの維持ロジックは永続保持組が参照するため残す
+
+新規追加:
+- [global_constants.gd](scripts/global_constants.gd) に `var debug_targeting_hold: bool = false` を追加
+- [player_controller.gd:_update_world_time()](scripts/player_controller.gd) がこのフラグを維持（TARGETING ホールド中は true、それ以外は false）
+
+### 5. 関連する未解決（実機検証項目）
+
+- **「射程表示中に被弾すると攻撃がキャンセルされるように見える」問題**：同根の疑いがあったので、本修正で解消するか実機確認が必要
+- `runtime.log` に `[CHAR.*]` 系の `"during TARGETING hold!"` が 1 件も出ないこと（出たらそれが新たな未ガード経路）
+
+### 6. 2 段目の修正：回転 Tween の time stop ガード（A 案）
+
+**症状**：game_map.gd 側の 5 関数にガードを入れた後、実機再現テストで Komuro から「だいぶ改善したが、たまにアウトライン中の敵が向きだけ変える現象がある」と報告。
+
+**ログ検証**：
+- 166 回の TARGETING ホールド中、`[CHAR.sync_position]` / `[CHAR.move_to]` / `[CHAR.grid_commit]` 等の位置変化ログは **0 件**
+- ホールド中の `[TGT-SET]` / `[CURSOR]` 変化：**0 件**
+- つまり位置・ターゲット集合は完全に凍結しているが、Komuro は「向き変更」を目視している
+
+**原因**：[Character.start_turn_animation()](scripts/character.gd:549) が生成する rotation Tween は Godot の SceneTreeTween。これは `_process` の実行と独立して走るため、`world_time_running` でガードできない。`_update_visual_move` は [character.gd:_process()](scripts/character.gd:216) でガードされて停止するが、Tween だけは継続する。
+
+**タイミング**：
+1. AI が `move_to()` を呼んで移動開始 → 内部で `start_turn_animation` が回転 Tween（duration ≈ 0.4 秒）を生成
+2. 移動開始直後（Tween 進行中）にプレイヤーが攻撃ボタンを押下 → PRE_DELAY → TARGETING 突入
+3. 位置補間は凍結するが、Tween は残り時間分だけ回転し続ける
+4. ユーザー視点：「同じマスに立ったまま向きだけ変わる」
+
+**修正（A 案・侵襲小）**：[character.gd:_process()](scripts/character.gd:216) で以下の分岐を追加
+```gdscript
+var should_process_visuals := GlobalConstants.world_time_running or is_player_controlled
+if _turn_tween != null and _turn_tween.is_valid():
+    if should_process_visuals:
+        if not _turn_tween.is_running():
+            _turn_tween.play()
+    else:
+        if _turn_tween.is_running():
+            _turn_tween.pause()
+```
+
+- 回転 Tween が位置補間 `_update_visual_move` と同じガード条件で動く対称構造になった
+- 回転の新規開始は `move_to()` 経由か PlayerController 経由のみで、どちらも `should_process_visuals == true` のキャラでしか発生しないため、新規 Tween が time stop 中に始まるケースはない。既存実行中 Tween の継続のみ対処すれば十分
+
+**B 案検討**（不採用）：Tween をやめて `_update_visual_rotation()` として `_process` 内で手動補間する案もあったが、コード変更量が多く、Tween の ease/trans 機能を失うため見送り。「時間系二層構造」の整理と合わせた別タスクにするのが綺麗、という判断。
+
+### 7. 3 段目の修正：PRE_DELAY → TARGETING 同一フレーム race
+
+**症状**：turn_tween 修正後もなお「アウトラインが一瞬出て消える」現象が長押しテストで再現された。検出ログ `[CHAR.*]` / `[PLAYER-TURN]` / `[CURSOR] ≈ (same instance moved)` はどれも 0 件で、検出器の死角に潜んでいた。
+
+**検出強化**（診断のため追加）：
+- `[PLAYER-TURN]`：TARGETING ホールド中のプレイヤー向き変更を記録
+- `[TGT-SET]` 差分表示：追加・削除された敵とその現在 grid_pos を記録（`instance_from_id` で freed 判定も）
+- `[CURSOR] ≈ ... (same instance moved!)`：同一インスタンスでカーソル対象の grid_pos が変化したら記録
+- `_exit_targeting` で `_dbg_prev_valid_target_ids` / `_dbg_prev_cursor_target_id` / `_dbg_prev_cursor_grid` をリセット（連続 TARGETING 間で重複抑制されないように）
+
+**診断結果**：追加ログでも `[CHAR.*]` 0 件、`[PLAYER-TURN]` 0 件。ホールド内の mid-hold 変化も 0 件。ただし TARGETING 間で archer が (10, 19) ↔ (9, 19) を往復している事実は判明。
+
+**ログに出ない理由（検出死角）**：
+- `[CHAR.grid_commit]` 等は `GlobalConstants.debug_targeting_hold == true` を条件に発火する
+- `debug_targeting_hold` は `_update_world_time()` が維持（TARGETING ホールド中に true、他で false）
+- PRE_DELAY → TARGETING 遷移のフレーム N では：
+  - フレーム頭で _update_world_time が走る時点では mode=PRE_DELAY → `debug_targeting_hold = false`
+  - `_process_pre_delay` 内で mode=TARGETING に遷移するが、`debug_targeting_hold` の再計算は行われない
+  - 以降このフレーム内で走る Character._process は `debug_targeting_hold == false` を見る → 検出ログは出ない
+- Character._process は `world_time_running` を見て visual_move を実行する。フレーム頭では wt=true だったので visual_move が進む → `grid_pos` を新位置にコミット可能
+- フレーム N+1 の _update_world_time で初めて mode=TARGETING が反映され wt=false になるが、既に commit 済み
+
+**根本原因（race 条件）**：
+1. Character._process 等の他 node が Godot のツリー順で PlayerController._process より**後に**走る場合（今回の実測配置）、同一フレーム内でタイミングが複雑化
+2. 実際の observed ケース：
+   - フレーム N 頭：wt=true（フレーム N-1 末の値・PRE_DELAY 最後のフレーム）
+   - フレーム N：PlayerController._process → _update_world_time (wt=true) → _process_pre_delay → _start_targeting → _set_mode(TARGETING) → _setup_targeting_cursor で archer@(10, 19) をアウトライン
+   - フレーム N 残：wt はまだ true のまま（_update_world_time 再呼出なし）
+   - フレーム N+1 頭：wt=true（フレーム N 末から引き継ぎ）
+   - フレーム N+1：hero/enemies/npcs._process → wt=true → archer の visual_move が進行 → t>=0.5 で grid_pos を (9, 19) にコミット → PlayerController._process → _update_world_time (wt=false) → _refresh_targets で archer 射程外 → アウトライン除去
+3. ユーザー視点：フレーム N でアウトライン出現 → フレーム N+1 で除去（実時間 16ms）→ 「一瞬表示されて消えた」
+
+**修正（侵襲小）**：[_start_targeting()](scripts/player_controller.gd:723) 内で `_set_mode(Mode.TARGETING)` の直後に `_update_world_time()` を**もう一度**呼ぶ:
+
+```gdscript
+_set_mode(Mode.TARGETING, "pre_delay complete")
+# 同一フレーム内 race 防止
+_update_world_time()
+_setup_targeting_cursor()
+```
+
+これによりフレーム N の時点で `world_time_running = false` / `debug_targeting_hold = true` が確定。フレーム N+1 の Character._process が wt=false を見て visual_move を止めるため、grid_pos がコミットされず、_refresh_targets で同じ target が維持される。
+
+**副次効果**：将来、別の race ケースが発生した場合、`debug_targeting_hold` が正しく true になるため `[CHAR.*]` 系検出器が正常機能するようになる。
+
+### 8. 4 段目の修正：解放後の新規入り敵を攻撃しない（Option A）
+
+**症状**：同フレーム race 修正後、「アウトラインが一瞬表示されて消える」問題は解消。しかし別の症状が実機で観測された:「アウトラインが表示されないのに攻撃が発動する」。
+
+**ログから読み解いた原因**（`[CHAR.*]` 検出ログは依然 0 件）:
+
+```
+Line 125  TGT-HOLD false → true         ホールド開始
+Line 126  CURSOR cleared (no valid targets)  archer は射程外・アウトライン非表示
+Line 127  TGT-SET size=0 -[archer@(25, 19)]
+...（hold 1.2 秒）...
+Line 128  WT false → true TARGETING released  リリース・wt=true
+Line 130  TGT-SET size=1 +[archer@(26, 19)]    数フレーム後に archer が射程内へ入る
+Line 131  CURSOR → archer@(26, 19)
+Line 132  MODE TARGETING → POST_DELAY          攻撃発動
+```
+
+ホールド中は archer が (25, 19) で凍結していたが、hold 前の PRE_DELAY / NORMAL 中に archer が move_to を開始しており `_visual_elapsed` が t<0.5 の状態でフリーズされていた。リリース後 wt=true で visual_move 再開 → 数フレーム後に `grid_pos` が (26, 19) にコミット → 射程内に入った → 攻撃発動。
+
+**根本原因（設計レベル）**：[_process_targeting()](scripts/player_controller.gd:608) は解放後も毎フレーム `_refresh_targets()` を走らせ、`_valid_targets` が非空になった瞬間に `_confirm_target()` を発火する構造だった。この結果「リリース時点では射程外だった敵がリリース後に射程内に入る」と攻撃が発動する。
+
+プレイヤー視点では「狙えていない状態で攻撃ボタンを離した＝キャンセルしたつもり」なのに攻撃が発動 → 「アウトライン表示されないのに攻撃する」症状になる。
+
+**修正（Option A）**：`_released_without_target: bool` フラグを [player_controller.gd:133](scripts/player_controller.gd:133) 付近に追加。
+
+`_process_targeting` の解放分岐を以下の順序で評価:
+1. `holding` なら従来通り auto_cancel をリセット + フラグを false に
+2. `_released_without_target == true` なら auto_cancel countdown のみ消化（`_valid_targets` 再評価をスキップ）
+3. `_valid_targets` 非空なら `_confirm_target()`（従来の攻撃発動）
+4. 空なら `_released_without_target = true` にセットして auto_cancel countdown 開始
+
+フラグの初期化：
+- `_enter_pre_delay()`：新攻撃サイクル開始時に false（次の解放判定をフレッシュに）
+- `_exit_targeting()`：TARGETING 抜けに false（次サイクルに残さない）
+
+**セマンティクス**：「プレイヤーがリリースした瞬間に見えていたターゲット（射程内の敵）のみを攻撃対象とする。リリース後に射程に入ってきた敵は無視」。これは「What You See Is What You Attack」の原則。
+
+**対象範囲**：`_process_targeting()` のみ修正。`_process_pre_delay_released()`（クイックタップ経路）は別セマンティクス（「タップしたから早く撃ってほしい、ターゲットは遅れて現れてもよい」）のため変更なし。
+
+### 9. 5 段目の修正：射程オーバーレイが PRE_DELAY 中のキャラ位置変化に追従しない
+
+**症状**：プレイヤーが移動中（`_visual_duration > 0` の視覚補間中）に攻撃ボタンを押すと、射程オーバーレイが攻撃ボタン押下時点のグリッド座標で表示され、PRE_DELAY 中にキャラの `grid_pos` が次マスにコミットしてもオーバーレイが古い位置に残る。
+
+**原因**：[game_map.gd:_process()](scripts/game_map.gd:196) の redraw トリガー:
+
+```gdscript
+var now_windup := player_controller != null and player_controller.is_in_attack_windup()
+if now_windup != _was_targeting:
+    _was_targeting = now_windup
+    queue_redraw()
+```
+
+「`is_in_attack_windup()` の状態切替時のみ再描画」という設計で、windup 中のキャラ位置変化（特に移動中の `grid_pos` コミット）を捕捉していなかった。
+
+[game_map.gd:2358](scripts/game_map.gd:2358) 付近の射程オーバーレイ描画は `ch.grid_pos` を参照しており、`grid_pos` が変わっても `_draw()` が再実行されないため古い位置のままになる。
+
+**修正**：windup 中（PRE_DELAY / PRE_DELAY_RELEASED / TARGETING）は毎フレーム `queue_redraw()` するように変更:
+
+```gdscript
+var now_windup := player_controller != null and player_controller.is_in_attack_windup()
+if now_windup != _was_targeting:
+    _was_targeting = now_windup
+    queue_redraw()
+elif now_windup:
+    queue_redraw()  # windup 中は毎フレーム描画してキャラ位置に追従
+```
+
+**副作用**：windup は短時間（pre_delay 0.15〜0.5 秒 + targeting ホールド）に限定されるため、パフォーマンス影響は無視できる。
+
+### 10. 6 段目の修正：移動中攻撃入力の PRE_DELAY 並行消化を明示的に仕様化
+
+**背景**：
+移動中（`is_moving() == true`）に攻撃ボタンを押下した際の挙動が明示的に設計されていなかった。プロジェクト設計者 Komuro の当初想定は「PRE_DELAY タイマーは移動中から並行消化、TARGETING 突入時はマス中央に静止している」だったが、コードは片手落ちだった:
+- ✅ PRE_DELAY は並行進行（[player_controller.gd:450](scripts/player_controller.gd:450) の `_enter_pre_delay()` が即呼ばれる・`is_moving()` 無関係）
+- ❌ TARGETING 突入は視覚補間と無関係（pre_delay タイマーだけで `_start_targeting()` が走る）
+
+後者の欠落により、pre_delay が短いクラスでは「TARGETING に入ったときキャラがまだマスの途中を動いている」「時間停止中なのにプレイヤー視覚は動く」という設計原則違反が発生しうる状態だった。
+
+**設計原則（本日明文化）**：
+1. PRE_DELAY タイマーは移動中から並行消化（既存）
+2. TARGETING 突入は「タイマー完了 AND 視覚補間完了（`is_moving() == false`）」の両方を要件とする
+3. `abort_move()` による視覚中断は呼ばず、自然完了を待つ（理由：`abort_move` はマス中央へのスナップバックを起こすため視覚的に不自然）
+4. pre_delay タイマー完了後、視覚補間完了までの間は「PRE_DELAY の延長」として扱う（射程オーバーレイは表示継続・マーカー非表示維持）
+
+**実装変更**：
+
+1. [_process_pre_delay()](scripts/player_controller.gd:533) の TARGETING 突入条件:
+   ```gdscript
+   # 修正前
+   if _pre_delay_remaining <= 0.0:
+       _start_targeting()
+   # 修正後
+   if _pre_delay_remaining <= 0.0 and not character.is_moving():
+       _start_targeting()
+   ```
+
+2. [_process_pre_delay_released()](scripts/player_controller.gd:565) の Phase 2 突入条件:
+   Phase 判定ロジックを `_pre_delay_remaining > 0.0` から `_cursor != null` に変更（より明示的）。Phase 2 突入条件に `is_moving()` ガードを追加:
+   ```gdscript
+   if _cursor == null:
+       # Phase 1
+       if _pre_delay_remaining > 0.0:
+           _pre_delay_remaining -= delta * GlobalConstants.game_speed
+       if _pre_delay_remaining <= 0.0 and not character.is_moving():
+           _pre_delay_remaining = 0.0
+           _setup_targeting_cursor()
+           _auto_cancel_remaining = GlobalConstants.AUTO_CANCEL_FLASH
+       return
+   # Phase 2: （既存のマーカー表示 + AUTO_CANCEL_FLASH 計測）
+   ```
+
+3. [_process_guard_and_move()](scripts/player_controller.gd:470) の dead code 削除:
+   ```gdscript
+   # 削除前（dead code）:
+   if Input.is_action_just_pressed("attack"):
+       _attack_buffer = true
+   elif Input.is_action_just_released("attack"):
+       _attack_buffer = false
+   ```
+   攻撃入力は `_process_normal` line 450 で先に捕捉されて `_enter_pre_delay()` が即呼ばれる構造のため、`_process_guard_and_move` 内の `_attack_buffer = true` 設定は到達不能だった（POST_DELAY 中の攻撃バッファリングは `_process_post_delay` 側に別途残存）。
+
+**影響**：
+- pre_delay > 視覚補間残り時間：従来どおり pre_delay 完了 → TARGETING
+- pre_delay < 視覚補間残り時間：pre_delay 完了後、視覚補間完了を待って TARGETING（射程オーバーレイは表示継続）
+- 攻撃ボタン押下から攻撃発動までの総時間：`max(pre_delay, 視覚補間残り時間) + ホールド時間` + POST_DELAY
+
+**CLAUDE.md 更新**：
+- 「攻撃フロー（一発一押下モデル）」セクションの内部ステート記述に「視覚補間と並行進行」を追記
+- 状態遷移の PRE_DELAY → TARGETING 遷移条件に「タイマー完了 AND 視覚補間完了」を明記
+- 設計原則に「TARGETING 突入時はキャラがマス中央に静止」を追加
+
+### 11. 派生タスク（別セッション）
+
+[game_map.gd:_process()](scripts/game_map.gd:196) 内でインラインに減算されているタイマー 3 種（`_stair_cooldown` / `_member_stair_cooldown` / `_npc_enemy_activate_timer`）は time stop 中も進行している。他のキャラタイマー（stun / buff / energy 回復）が `world_time_running` で停止するのと対称性が取れていない。`game_speed` 適用パターンの 4 分類混在問題（[investigation_movement_constants.md](investigation_movement_constants.md)）と合わせて整理するのが自然。今回の TARGETING 問題の主因ではないが、次に手を付けるならここ。
+
+---
+
 ## 2026-04-22 夕方以降（ガード中歩行アニメ修正 + 向き変更バグ修正）
 
 本日夕方以降のセッションで、Step 1-B 実装後に持越しとなっていた 2 件のバグを解決。あわせて「射程表示中に被弾すると攻撃がキャンセルされる」問題の原因調査を実施したが、同時に観察された別問題（TARGETING ホールド中にアウトラインされた敵が動く現象）の原因が完全には特定できず、次回セッションへ持越し。

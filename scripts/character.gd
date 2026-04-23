@@ -215,8 +215,28 @@ func _exit_tree() -> void:
 
 func _process(delta: float) -> void:
 	_update_modulate()
-	# 時間停止中は敵・NPC の移動補間を停止する（プレイヤー操作キャラは常に動かす）
-	if GlobalConstants.world_time_running or is_player_controlled:
+	# 時間停止中は敵・NPC の視覚更新を停止する（プレイヤー操作キャラは常に動かす）
+	# 対象: (1) 位置補間 _update_visual_move, (2) 向き変更 Tween _turn_tween
+	# Godot の Tween は _process 非依存で走り続けるため、time stop 中でも回転が
+	# 継続してしまう問題があった（2026-04-23 修正・A 案）。
+	var should_process_visuals := GlobalConstants.world_time_running or is_player_controlled
+	# 向き変更 Tween の一時停止・再開
+	if _turn_tween != null and _turn_tween.is_valid():
+		if should_process_visuals:
+			if not _turn_tween.is_running():
+				_turn_tween.play()
+		else:
+			if _turn_tween.is_running():
+				_turn_tween.pause()
+	if should_process_visuals:
+		# [DEBUG] TARGETING ホールド中に非プレイヤーが _update_visual_move を実行
+		# したらログ（問題解決後に削除・本来あり得ない経路を捕捉）
+		if GlobalConstants.debug_targeting_hold and not is_player_controlled \
+				and _visual_duration > 0.0:
+			DebugLog.log("[CHAR._update_visual_move] %s  pos=%s  visual_elapsed=%.3f/%.3f  pending=%s  committed=%s  (during TARGETING hold!)" % [
+				_battle_name(self), str(grid_pos), _visual_elapsed, _visual_duration,
+				str(_pending_grid_pos), str(_grid_pos_committed)
+			])
 		_update_visual_move(delta)
 	# タイマー類も停止
 	if not GlobalConstants.world_time_running:
@@ -580,6 +600,11 @@ static func _calc_turn_delta_rad(from_rot: float, to_rot: float, last_dir: Vecto
 func abort_move() -> void:
 	if _visual_duration <= 0.0:
 		return
+	# [DEBUG] TARGETING ホールド中の abort_move は視覚位置変化を起こすのでログ（問題解決後に削除）
+	if GlobalConstants.debug_targeting_hold and not is_player_controlled:
+		DebugLog.log("[CHAR.abort_move] %s  grid=%s  (during TARGETING hold!)" % [
+			_battle_name(self), str(grid_pos)
+		])
 	var gs := GlobalConstants.GRID_SIZE
 	position = Vector2(grid_pos.x * gs + gs * 0.5, grid_pos.y * gs + gs * 0.5)
 	_visual_duration    = 0.0
@@ -594,6 +619,11 @@ func abort_move() -> void:
 ## グリッド座標をワールド座標に即座スナップする（初期配置・テレポート用）
 ## 補間中の場合もキャンセルして確定する
 func sync_position() -> void:
+	# [DEBUG] TARGETING ホールド中に sync_position が呼ばれたらログ（問題解決後に削除）
+	if GlobalConstants.debug_targeting_hold and not is_player_controlled:
+		DebugLog.log("[CHAR.sync_position] %s  grid=%s  (during TARGETING hold!)" % [
+			_battle_name(self), str(grid_pos)
+		])
 	var gs := GlobalConstants.GRID_SIZE
 	position = Vector2(
 		grid_pos.x * gs + gs * 0.5,
@@ -634,6 +664,13 @@ func get_move_duration() -> float:
 
 
 func move_to(new_grid_pos: Vector2i, duration: float = 0.4) -> void:
+	# [DEBUG] TARGETING ホールド中に move_to が呼ばれたらログ
+	# （問題解決後に削除・非プレイヤーが動く経路を捕捉するため）
+	if GlobalConstants.debug_targeting_hold and not is_player_controlled:
+		DebugLog.log("[CHAR.move_to] %s  %s → %s  dur=%.3f  (during TARGETING hold!)" % [
+			_battle_name(self), str(grid_pos), str(new_grid_pos), duration
+		])
+
 	# ガード中は向きを変更しない（facing を維持）
 	if not is_guarding:
 		var d := new_grid_pos - grid_pos
@@ -696,6 +733,11 @@ func _update_visual_move(delta: float) -> void:
 		if conflict:
 			abort_move()
 			return
+		# [DEBUG] grid_pos 確定（半マス到達時）を TARGETING ホールド中のみログ（問題解決後に削除）
+		if GlobalConstants.debug_targeting_hold and not is_player_controlled:
+			DebugLog.log("[CHAR.grid_commit(half)] %s  %s → %s  (during TARGETING hold!)" % [
+				_battle_name(self), str(grid_pos), str(_pending_grid_pos)
+			])
 		grid_pos = _pending_grid_pos
 		_grid_pos_committed = true
 
@@ -714,6 +756,11 @@ func _update_visual_move(delta: float) -> void:
 	if _visual_elapsed >= _visual_duration:
 		# 補間完了時に grid_pos が未確定なら確定する（安全策）
 		if not _grid_pos_committed:
+			# [DEBUG] grid_pos 確定（補間完了時）を TARGETING ホールド中のみログ（問題解決後に削除）
+			if GlobalConstants.debug_targeting_hold and not is_player_controlled:
+				DebugLog.log("[CHAR.grid_commit(end)] %s  %s → %s  (during TARGETING hold!)" % [
+					_battle_name(self), str(grid_pos), str(_pending_grid_pos)
+				])
 			grid_pos = _pending_grid_pos
 			_grid_pos_committed = true
 		_visual_duration = 0.0

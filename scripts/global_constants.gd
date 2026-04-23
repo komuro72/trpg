@@ -21,9 +21,16 @@ var game_speed: float = 1.0
 
 ## 時間進行フラグ（PlayerController が制御）
 ## true の間: キャラクターのタイマー（MP/SP回復・スタン・バフ）・AI の _process が進行する
-## false の間: 上記が停止する（プレイヤーがターゲット選択中など）
+## false の間: 上記が停止する（プレイヤーがターゲット選択中など)
 ## 影響しないもの: テキスト表示・ヒット/バフエフェクト・Projectile
 var world_time_running: bool = false
+
+## [DEBUG] TARGETING ホールド中フラグ（PlayerController._update_world_time が維持）
+## 「TARGETING ホールド中にアウトラインされた敵が動く」問題の原因経路を追跡するための
+## 一時的なデバッグ用フラグ。Character 側のログはこのフラグが true のときだけ
+## DebugLog に流す（通常プレイでのログ氾濫を抑制）。
+## 問題解決が確認されたら削除する。
+var debug_targeting_hold: bool = false
 
 ## クラスIDから日本語名への変換テーブル
 const CLASS_NAME_JP: Dictionary = {
