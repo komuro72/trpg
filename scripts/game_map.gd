@@ -130,6 +130,8 @@ func _input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 			KEY_F5:
 				get_tree().reload_current_scene()
+			KEY_F6:
+				_dev_boost_player_party()
 			KEY_F7:
 				# F7: 全パーティー状態を res://logs/runtime.log にスナップショット出力
 				# PartyStatusWindow の表示・非表示に関わらず動作。
@@ -138,6 +140,9 @@ func _input(event: InputEvent) -> void:
 						and not (config_editor != null and config_editor.visible):
 					party_status_window.snapshot_to_log()
 					get_viewport().set_input_as_handled()
+			KEY_F12:
+				# F12: ゲーム即時終了（開発用）
+				get_tree().quit()
 
 
 ## 手作りダンジョンJSON（dungeon_handcrafted.json）を読み込む
@@ -2273,6 +2278,26 @@ func _toggle_combat_log_window() -> void:
 				vision_system.debug_show_all = false
 				queue_redraw()
 		combat_log_window.visible = true
+
+
+## F6: プレイヤーパーティー全員を一発強化（開発用・トグル無し）
+## ゲーム再起動でリセット。ランク S・統率 100・従順 1.0・HP/MP/SP × 10
+func _dev_boost_player_party() -> void:
+	if _hero_manager == null:
+		return
+	var members := _hero_manager.get_members()
+	if members.is_empty():
+		return
+	for ch: Character in members:
+		if not is_instance_valid(ch) or ch.character_data == null:
+			continue
+		ch.character_data.rank = "S"
+		ch.leadership = 100
+		ch.obedience  = 1.0
+		ch.hp = ch.max_hp * 10
+		if ch.max_energy > 0:
+			ch.energy = ch.max_energy * 10
+	MessageLog.add_system("[DEV] パーティー強化（ランクS・統率100・HP/MP/SP×10）")
 
 
 ## タイル画像をプリロードする（画像がない場合はフォールバック色を使用）

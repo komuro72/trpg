@@ -52,6 +52,10 @@ func _input(event: InputEvent) -> void:
 			_toggle_config_editor()
 			get_viewport().set_input_as_handled()
 			return
+		# F12: ゲーム即時終了（開発用・タイトル画面でも有効）
+		if ke.pressed and not ke.echo and ke.keycode == KEY_F12:
+			get_tree().quit()
+			return
 		# ConfigEditor 表示中は any-key 遷移を抑止
 		if _config_editor != null and _config_editor.visible:
 			return

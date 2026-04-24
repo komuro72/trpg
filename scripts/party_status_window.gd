@@ -156,9 +156,6 @@ func _input(event: InputEvent) -> void:
 		elif key == KEY_F3:
 			_cycle_detail_level()
 			get_viewport().set_input_as_handled()
-		elif key == KEY_F6:
-			_toggle_godmode()
-			get_viewport().set_input_as_handled()
 
 
 ## F3: 詳細度レベルを 3 ステート（高のみ → 高+中 → 高+中+低 → 高のみ …）で循環
@@ -166,73 +163,6 @@ func _input(event: InputEvent) -> void:
 func _cycle_detail_level() -> void:
 	_detail_level = (_detail_level + 1) % 3
 	_control.queue_redraw()
-
-
-## F6: 選択中リーダーのパーティーメンバー全員を無敵化（HP/MP/SP を最大値の10倍に設定）
-## 再度押すと元に戻す（max 値に戻す）。2026-04-21 に F3 から F6 に移動（F3 は詳細度トグルに割り当て）
-func _toggle_godmode() -> void:
-	if _selected_leader == null:
-		print("[DEBUG] 無敵化: リーダー未選択")
-		return
-	# 選択中リーダーの PartyManager を探す
-	var target_pm: PartyManager = null
-	for pm_v: Variant in _get_enemy_managers.call():
-		var pm := pm_v as PartyManager
-		if is_instance_valid(pm):
-			for m: Character in pm.get_members():
-				if m == _selected_leader:
-					target_pm = pm
-					break
-		if target_pm != null:
-			break
-	if target_pm == null:
-		for pm_v: Variant in _get_npc_managers.call():
-			var pm := pm_v as PartyManager
-			if is_instance_valid(pm):
-				for m: Character in pm.get_members():
-					if m == _selected_leader:
-						target_pm = pm
-						break
-			if target_pm != null:
-				break
-	# プレイヤーパーティーの場合
-	if target_pm == null and _party != null:
-		for mv: Variant in _party.members:
-			var ch := mv as Character
-			if is_instance_valid(ch) and ch == _selected_leader:
-				# プレイヤーパーティー全員に適用
-				var godmode := ch.hp <= ch.max_hp  # 現在通常 → 無敵化
-				for mv2: Variant in _party.members:
-					var ch2 := mv2 as Character
-					if is_instance_valid(ch2):
-						_apply_godmode(ch2, godmode)
-				print("[DEBUG] 無敵化 %s: %s（パーティー全員）" % ["ON" if godmode else "OFF", _selected_leader.character_data.character_name if _selected_leader.character_data != null else "?"])
-				return
-
-	if target_pm == null:
-		print("[DEBUG] 無敵化: パーティー未発見")
-		return
-
-	var members := target_pm.get_members()
-	if members.is_empty():
-		return
-	var godmode := members[0].hp <= members[0].max_hp  # 現在通常 → 無敵化
-	for m: Character in members:
-		if is_instance_valid(m):
-			_apply_godmode(m, godmode)
-	var leader_name := _selected_leader.character_data.character_name if _selected_leader.character_data != null else "?"
-	print("[DEBUG] 無敵化 %s: %s（%d人）" % ["ON" if godmode else "OFF", leader_name, members.size()])
-
-
-func _apply_godmode(ch: Character, on: bool) -> void:
-	if on:
-		ch.hp = ch.max_hp * 10
-		if ch.max_energy > 0:
-			ch.energy = ch.max_energy * 10
-	else:
-		ch.hp = mini(ch.hp, ch.max_hp)
-		if ch.max_energy > 0:
-			ch.energy = mini(ch.energy, ch.max_energy)
 
 
 ## リーダー一覧内でカーソルを移動する。_leader_list は前回の描画で構築済み
