@@ -1203,7 +1203,7 @@ func _add_enemy_bonus_slot(parent: HBoxContainer, eid: String, slot_idx: int,
 # ----------------------------------------------------------------------------
 
 ## enemy_list.json 系の変更（rank / stat_type）。エンジン Dirty 立てて再評価
-func _on_enemy_list_field_changed(_idx: int, eid: String, field: String) -> void:
+func _on_enemy_list_field_changed(_idx: int, _eid: String, _field: String) -> void:
 	_enemy_list_dirty = _enemy_list_has_any_diff()
 	_update_enemy_list_tab_indicator()
 	# 視覚フィードバックは OptionButton には付けない（選択されたものが見えるため）
@@ -2594,11 +2594,11 @@ func _show_item_regeneration_notice() -> void:
 
 ## プレースホルダー用のタブを追加する（中身はラベルのみ）
 func _add_placeholder_tab(parent: TabContainer, tab_name: String, message: String) -> void:
-	var wrap := VBoxContainer.new()
-	wrap.name = tab_name
-	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	parent.add_child(wrap)
+	var vbox := VBoxContainer.new()
+	vbox.name = tab_name
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(vbox)
 	parent.set_tab_title(parent.get_tab_count() - 1, tab_name)
 
 	var lbl := Label.new()
@@ -2610,7 +2610,7 @@ func _add_placeholder_tab(parent: TabContainer, tab_name: String, message: Strin
 	lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	wrap.add_child(lbl)
+	vbox.add_child(lbl)
 
 
 ## タブ名に対応する VBox を生成して TabContainer に追加する

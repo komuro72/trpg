@@ -70,6 +70,7 @@ func _update_icon_nodes() -> void:
 	if count == 0:
 		return
 
+	@warning_ignore("integer_division")
 	var card_h := mini(ally_h / maxi(count, 1), MAX_CARD_HEIGHT)
 	for i: int in range(count):
 		var member := members[i] as Character
@@ -81,20 +82,20 @@ func _update_icon_nodes() -> void:
 		var icon_y    := i * card_h + pad
 
 		# ノードを取得または新規作成
-		var tr: TextureRect
+		var icon_node: TextureRect
 		if _icon_nodes.has(member):
-			tr = _icon_nodes[member] as TextureRect
+			icon_node = _icon_nodes[member] as TextureRect
 		else:
-			tr = TextureRect.new()
-			tr.stretch_mode  = TextureRect.STRETCH_SCALE
-			tr.expand_mode   = TextureRect.EXPAND_IGNORE_SIZE
-			tr.mouse_filter  = Control.MOUSE_FILTER_IGNORE
-			_control.add_child(tr)
-			_icon_nodes[member] = tr
+			icon_node = TextureRect.new()
+			icon_node.stretch_mode  = TextureRect.STRETCH_SCALE
+			icon_node.expand_mode   = TextureRect.EXPAND_IGNORE_SIZE
+			icon_node.mouse_filter  = Control.MOUSE_FILTER_IGNORE
+			_control.add_child(icon_node)
+			_icon_nodes[member] = icon_node
 
 		# 位置・サイズを更新
-		tr.position = Vector2(float(icon_x), float(icon_y))
-		tr.size     = Vector2(float(icon_size), float(icon_size))
+		icon_node.position = Vector2(float(icon_x), float(icon_y))
+		icon_node.size     = Vector2(float(icon_size), float(icon_size))
 
 		# テクスチャを更新
 		var icon_path: String = ""
@@ -105,13 +106,13 @@ func _update_icon_nodes() -> void:
 		if not icon_path.is_empty():
 			var tex := load(icon_path) as Texture2D
 			if tex != null:
-				tr.texture = tex
-				tr.visible = true
+				icon_node.texture = tex
+				icon_node.visible = true
 				# HP状態色をフィールドスプライトと同じルールで適用
-				tr.modulate = _hp_modulate(member)
+				icon_node.modulate = _hp_modulate(member)
 				continue
 		# テクスチャなし → 非表示（カスタムドローでプレースホルダー色を描画）
-		tr.visible = false
+		icon_node.visible = false
 
 
 func _on_draw() -> void:
@@ -132,6 +133,7 @@ func _on_draw() -> void:
 	var members := _party.sorted_members()
 	var count   := members.size()
 	if count > 0:
+		@warning_ignore("integer_division")
 		var card_h := mini(int(ally_h) / maxi(count, 1), MAX_CARD_HEIGHT)
 		for i: int in range(count):
 			var member := members[i] as Character
@@ -227,21 +229,21 @@ func _draw_ally_card(c: Character, fx: float, fy: float, fw: float, fh: float) -
 		content_y += bar_h + 4.0
 
 	# 指示状態（current_order から読み込み。move/on_low_hp/item_pickup は全体方針から同期）
-	var ord: Dictionary = c.current_order
+	var order_d: Dictionary = c.current_order
 	var move_a: String  = {"explore": "探索", "same_room": "同じ部屋", "cluster": "密集",
 		"guard_room": "部屋を守る", "standby": "待機"}.get(
-		ord.get("move",             "same_room") as String, "同じ部屋") as String
+		order_d.get("move",             "same_room") as String, "同じ部屋") as String
 	var bform_a: String = {"surround": "包囲", "front": "前衛", "rear": "後衛",
 		"same_as_leader": "リーダーと同じ"}.get(
-		ord.get("battle_formation", "surround")  as String, "包囲") as String
+		order_d.get("battle_formation", "surround")  as String, "包囲") as String
 	var combat_a: String = {"aggressive": "積極攻撃", "support": "援護", "standby": "待機"}.get(
-		ord.get("combat",           "aggressive") as String, "積極攻撃") as String
+		order_d.get("combat",           "aggressive") as String, "積極攻撃") as String
 	var target_a: String = {"nearest": "最近傍", "weakest": "最弱", "same_as_leader": "リーダーと同じ"}.get(
-		ord.get("target",           "nearest")   as String, "最近傍") as String
+		order_d.get("target",           "nearest")   as String, "最近傍") as String
 	var lowh_a: String   = {"keep_fighting": "戦い続ける", "fall_back": "後退", "flee": "逃走"}.get(
-		ord.get("on_low_hp",        "fall_back")   as String, "後退") as String
+		order_d.get("on_low_hp",        "fall_back")   as String, "後退") as String
 	var pickup_a: String = {"aggressive": "積極的に拾う", "passive": "近くのみ", "avoid": "拾わない"}.get(
-		ord.get("item_pickup",      "aggressive") as String, "積極的に拾う") as String
+		order_d.get("item_pickup",      "aggressive") as String, "積極的に拾う") as String
 	var ord_color := Color(0.55, 0.90, 0.65)
 	var fs_ord := 9
 	_control.draw_string(_font,

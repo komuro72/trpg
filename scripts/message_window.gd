@@ -26,8 +26,6 @@ const BUST_SRC_Y: float = 0.0
 const BUST_SRC_W: float = 512.0
 const BUST_SRC_H: float = 512.0
 
-## 会話の選択肢が確定したとき発火する（後方互換用・現在は NpcDialogueWindow が担当）
-signal choice_confirmed(choice_id: String)
 ## 会話がキャンセルされたとき発火する（後方互換用）
 signal dialogue_dismissed()
 
@@ -246,8 +244,8 @@ func _handle_manual_scroll(delta: float) -> void:
 func _calc_max_scroll() -> float:
 	if MessageLog == null or _font == null:
 		return 0.0
-	var visible: Array[Dictionary] = MessageLog.get_visible_entries()
-	if visible.is_empty():
+	var visible_entries: Array[Dictionary] = MessageLog.get_visible_entries()
+	if visible_entries.is_empty():
 		return 0.0
 
 	var gs       := GlobalConstants.GRID_SIZE
@@ -274,7 +272,7 @@ func _calc_max_scroll() -> float:
 	var battle_tw := box_w - 16.0 - icon_col_w
 	var sys_tw    := box_w - 16.0
 
-	var groups := _build_display_groups(visible)
+	var groups := _build_display_groups(visible_entries)
 	var total_h := 0.0
 	for g: Dictionary in groups:
 		total_h += _group_height(g, battle_tw, sys_tw, fs, line_h, icon_sz)
@@ -411,11 +409,11 @@ func _on_scroll_draw() -> void:
 	var battle_text_w := box_w - 16.0 - icon_col_w
 	var sys_text_w    := box_w - 16.0
 
-	var visible: Array[Dictionary] = MessageLog.get_visible_entries()
-	if visible.is_empty():
+	var visible_entries: Array[Dictionary] = MessageLog.get_visible_entries()
+	if visible_entries.is_empty():
 		_should_init_scroll = false
 		return
-	var groups := _build_display_groups(visible)
+	var groups := _build_display_groups(visible_entries)
 
 	# ── 全グループの合計高さを計算
 	var all_total_h := 0.0

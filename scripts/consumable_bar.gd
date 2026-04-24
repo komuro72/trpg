@@ -104,17 +104,17 @@ func _on_draw() -> void:
 
 	# V スロットクールダウン表示（消耗品がなくても表示する）
 	if v_slot_cooldown > 0.0 and _font != null:
-		var gs    := GlobalConstants.GRID_SIZE
-		var pw    := GlobalConstants.PANEL_TILES * gs
-		var by    := float(gs) * 0.35
-		var box_h := float(gs) * 0.65
-		var vw    := _control.size.x
-		var cx    := float(pw) + (float(vw - 2 * pw)) * 0.5
-		var cd_text := "V: %d" % ceili(v_slot_cooldown)
-		var bx    := cx + 80.0
-		_control.draw_rect(Rect2(bx - 4.0, by + 2.0, 54.0, box_h - 4.0),
+		var cd_gs    := GlobalConstants.GRID_SIZE
+		var cd_pw    := GlobalConstants.PANEL_TILES * cd_gs
+		var cd_by    := float(cd_gs) * 0.35
+		var cd_box_h := float(cd_gs) * 0.65
+		var cd_vw    := _control.size.x
+		var cd_cx    := float(cd_pw) + (float(cd_vw - 2 * cd_pw)) * 0.5
+		var cd_text  := "V: %d" % ceili(v_slot_cooldown)
+		var cd_bx    := cd_cx + 80.0
+		_control.draw_rect(Rect2(cd_bx - 4.0, cd_by + 2.0, 54.0, cd_box_h - 4.0),
 				Color(0.1, 0.05, 0.0, 0.75))
-		_control.draw_string(_font, Vector2(bx, by + box_h * 0.72),
+		_control.draw_string(_font, Vector2(cd_bx, cd_by + cd_box_h * 0.72),
 				cd_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 16,
 				Color(1.0, 0.65, 0.2, 0.95))
 
@@ -512,7 +512,6 @@ func _draw_list_menu(entries: Array, sel: int, sel_color: Color) -> void:
 	var box_h := float(gs) * 0.65
 	var by    := float(gs) * 0.35
 	const ENTRY_PAD_X := 10
-	const ENTRY_H     := 22
 
 	# 各エントリの幅を計算
 	var entry_widths: Array[float] = []

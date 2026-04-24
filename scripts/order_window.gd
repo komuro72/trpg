@@ -1403,14 +1403,14 @@ func _draw_option_chips(x: float, y: float, avail_w: float, row_h: float,
 	total_w += chip_gap * float(maxi(0, chip_widths.size() - 1))
 
 	# 利用可能幅を超える場合は均等縮小
-	var scale := 1.0
+	var chip_scale := 1.0
 	if total_w > avail_w and total_w > 0.0:
-		scale = avail_w / total_w
+		chip_scale = avail_w / total_w
 
 	var cx := x
 	for i: int in range(option_labels.size()):
 		var lbl    := option_labels[i] as String
-		var cw     := (chip_widths[i] as float) * scale
+		var cw     := (chip_widths[i] as float) * chip_scale
 		var is_sel := (i == sel_idx)
 
 		# 背景色・文字色の決定
@@ -1443,7 +1443,7 @@ func _draw_option_chips(x: float, y: float, avail_w: float, row_h: float,
 		_control.draw_string(_font, Vector2(tx, chip_y + chip_h * 0.78),
 			lbl, HORIZONTAL_ALIGNMENT_LEFT, cw, fs, txt_col)
 
-		cx += cw + chip_gap * scale
+		cx += cw + chip_gap * chip_scale
 
 
 ## フォーカス中キャラに応じた総列数（名前列1 + 個別指示列）を返す

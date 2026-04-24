@@ -104,7 +104,6 @@ func _process(delta: float) -> void:
 			if not is_instance_valid(spr):
 				continue
 			var phase: float = d["phase"] as float
-			var rot_spd: float = d["rot_speed"] as float
 			var bs: float = d["base_scale"] as float
 			# スケールの脈動（0.85〜1.15）
 			var pulse := sin(t * 3.0 + phase) * 0.15 + 1.0

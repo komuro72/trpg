@@ -496,10 +496,9 @@ func _draw_slot_select(vp: Vector2, is_cont: bool) -> void:
 		var sd    := SaveManager.get_save_data(slot)
 		var y     := start_y + i * slot_h
 		var sel   := (i == _cursor)
-		var empty := (not sd.exists) or (is_cont and not sd.exists)
 
 		var bg_col := Color(0.20, 0.35, 0.55, 0.85) if sel else Color(0.10, 0.10, 0.18, 0.80)
-		_control.draw_rect(Rect2(vp.x * 0.25, y, vp.x * 0.50, slot_h - 6.0), bg_col, true, 1.0)
+		_control.draw_rect(Rect2(vp.x * 0.25, y, vp.x * 0.50, slot_h - 6.0), bg_col, true)
 
 		var text_col := Color.WHITE if sel else Color(0.70, 0.70, 0.80)
 		var line1: String
@@ -606,7 +605,7 @@ func _draw_menu_item(vp: Vector2, y: float, label: String, selected: bool, heigh
 	if selected:
 		_control.draw_rect(
 			Rect2(vp.x * 0.30, y, vp.x * 0.40, height - 4.0),
-			Color(0.20, 0.35, 0.55, 0.85), true, 1.0)
+			Color(0.20, 0.35, 0.55, 0.85), true)
 		_control.draw_string(_font,
 			Vector2(0.0, y + height * 0.68), label,
 			HORIZONTAL_ALIGNMENT_CENTER, vp.x, 22, Color.WHITE)

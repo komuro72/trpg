@@ -344,10 +344,10 @@ func notify_situation_changed() -> void:
 ## デバッグ情報を返す（RightPanel / PartyLeaderAI.get_debug_info() が収集）
 func get_debug_info() -> Dictionary:
 	return {
-		"name":             _member.name if (_member != null and is_instance_valid(_member)) else "?",
+		"name":             String(_member.name) if (_member != null and is_instance_valid(_member)) else "?",
 		"strategy":         _strategy,
 		"combat":           _combat,
-		"target_name":      _target.name if (_target != null and is_instance_valid(_target)) else "-",
+		"target_name":      String(_target.name) if (_target != null and is_instance_valid(_target)) else "-",
 		"current_action":   _current_action.duplicate(),
 		"queue":            _queue.duplicate(),
 		"grid_pos":         _member.grid_pos if (_member != null and is_instance_valid(_member)) else Vector2i.ZERO,
@@ -1040,6 +1040,7 @@ func _find_explore_target() -> Vector2i:
 			continue
 		var non_stair := tiles.filter(func(t: Vector2i) -> bool: return not _is_stair_tile(t))
 		var pool: Array[Vector2i] = non_stair if not non_stair.is_empty() else tiles
+		@warning_ignore("integer_division")
 		var mid := pool[pool.size() / 2]
 		var d   := _manhattan(_member.grid_pos, mid)
 		if d > 0:
@@ -1928,6 +1929,7 @@ func _calc_party_centroid() -> Vector2i:
 		cnt += 1
 	if cnt == 0:
 		return _member.grid_pos if (_member != null and is_instance_valid(_member)) else Vector2i.ZERO
+	@warning_ignore("integer_division")
 	return Vector2i(sx / cnt, sy / cnt)
 
 

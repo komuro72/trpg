@@ -445,9 +445,9 @@ func _create_enemy_leader_ai(leader: Character) -> PartyLeader:
 
 	# goblin-archer, goblin-mage, zombie, harpy, salamander,
 	# dark-knight, dark-mage, dark_priest, dark-priest など
-	var ai := EnemyLeaderAI.new()
-	ai.name = "EnemyLeaderAI"
-	return ai
+	var default_ai := EnemyLeaderAI.new()
+	default_ai.name = "EnemyLeaderAI"
+	return default_ai
 
 
 ## アクティブ状態を返す（デバッグ用）

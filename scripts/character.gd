@@ -569,6 +569,7 @@ func start_turn_animation(target: Direction, duration: float, last_dir: Vector2i
 	_turn_tween = create_tween()
 	_turn_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	_turn_tween.tween_property(self, "rotation", from_rot + delta, duration)
+	_turn_tween.finished.connect(func(): _turn_tween = null)
 
 
 ## 向き変更を確定する（ディレイ完了時に PlayerController から呼ぶ）
@@ -1093,7 +1094,7 @@ static func _weapon_action(attacker: Character, mode: String) -> String:
 ## 自然言語ダメージバトルメッセージを MessageLog.add_battle に送出する
 func _emit_damage_battle_msg(attacker: Character, raw: int, actual: int,
 		is_critical: bool, blocked: int, is_fully_blocked: bool,
-		attack_is_magic: bool) -> void:
+		_attack_is_magic: bool) -> void:
 	if MessageLog == null:
 		return
 	var atk_data: CharacterData = attacker.character_data \

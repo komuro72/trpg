@@ -52,7 +52,7 @@ func _on_draw() -> void:
 	var pw  := GlobalConstants.PANEL_TILES * gs
 	var vh  := _control.size.y
 	var vw  := _control.size.x
-	var px  := vw - pw
+	var px: int = int(vw) - pw
 
 	# パネル背景・左端ライン
 	_control.draw_rect(Rect2(px, 0, pw, vh), Color(0.08, 0.08, 0.12, 0.92))

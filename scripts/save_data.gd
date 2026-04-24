@@ -39,4 +39,5 @@ static func from_dict(d: Dictionary, idx: int) -> SaveData:
 ## プレイ時間を "HH:MM" 形式でフォーマット
 static func format_playtime(seconds: float) -> String:
 	var total: int = int(seconds)
+	@warning_ignore("integer_division")
 	return "%02d:%02d" % [total / 3600, (total % 3600) / 60]

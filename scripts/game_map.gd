@@ -377,8 +377,8 @@ func _setup_floor_enemies(floor_idx: int) -> void:
 		em.setup(members, hero, fmap, items)
 		var fi_capture: int = floor_idx
 		em.party_wiped.connect(
-			func(items: Array, room_id: String) -> void:
-				_on_enemy_party_wiped(items, room_id, fi_capture)
+			func(dropped_items: Array, room_id: String) -> void:
+				_on_enemy_party_wiped(dropped_items, room_id, fi_capture)
 		)
 		em.set_vision_controlled(true)
 		# スポーン時にフロアインデックスをセット（クロスフロア攻撃防止）
@@ -580,7 +580,6 @@ func _setup_time_stop_overlay() -> void:
 func _setup_camera() -> void:
 	RenderingServer.set_default_clear_color(Color.BLACK)
 
-	var gs := GlobalConstants.GRID_SIZE
 	var cam := Camera2D.new()
 	cam.name = "Camera"
 	add_child(cam)
@@ -873,15 +872,15 @@ func _on_debug_leader_selected(leader: Character) -> void:
 
 ## デバッグ表示フロアを設定する（-1 で通常に戻す）
 ## _current_floor_index やゲームロジックは一切変更しない
-func _set_debug_view_floor(floor: int) -> void:
-	_debug_view_floor = floor
+func _set_debug_view_floor(floor_idx: int) -> void:
+	_debug_view_floor = floor_idx
 	# VisionSystem にも伝播（毎フレームの update_visibility で正しいフロアを使用させる）
 	if vision_system != null:
-		vision_system.debug_view_floor = floor
-	if floor >= 0 and floor < _all_map_data.size():
-		_debug_map_data = _all_map_data[floor] as MapData
+		vision_system.debug_view_floor = floor_idx
+	if floor_idx >= 0 and floor_idx < _all_map_data.size():
+		_debug_map_data = _all_map_data[floor_idx] as MapData
 		# タイル画像をデバッグフロア用にロード（現フロアと異なる場合のみ）
-		var dbg_tile_set := (_all_floor_data[floor] as Dictionary).get("tile_set", DEFAULT_TILE_SET) as String
+		var dbg_tile_set := (_all_floor_data[floor_idx] as Dictionary).get("tile_set", DEFAULT_TILE_SET) as String
 		if dbg_tile_set != _tile_set_id:
 			var saved_id := _tile_set_id
 			var saved_tex := _tile_textures.duplicate()
@@ -1535,7 +1534,7 @@ func _transition_member_floor(ch: Character, direction: int) -> void:
 	_update_character_visibility()
 	var dir_str := "下" if direction > 0 else "上"
 	if message_window != null:
-		var cname: String = ch.character_data.character_name if ch.character_data != null else ch.name
+		var cname: String = ch.character_data.character_name if ch.character_data != null else String(ch.name)
 		message_window.show_message("%s が階段を%sに進んだ（%dF）" % [cname, dir_str, new_floor + 1])
 	queue_redraw()
 
@@ -1676,7 +1675,7 @@ func _transition_npc_floor(nm: PartyManager, direction: int) -> void:
 	nm.set_member_map_data(leader_ch, new_map)
 	# ログ
 	var leader_name: String = leader_ch.character_data.character_name \
-		if leader_ch.character_data != null else leader_ch.name
+		if leader_ch.character_data != null else String(leader_ch.name)
 	var dir_str := "↓" if direction > 0 else "↑"
 	MessageLog.add_ai("[NPC遷移] %s(リーダー): F%d %s F%d　残メンバーは個別に追従" \
 		% [leader_name, old_floor, dir_str, new_floor])
@@ -1735,7 +1734,7 @@ func _transition_single_npc_member(nm: PartyManager, member: Character, directio
 	# このメンバーの UnitAI map_data を新フロアのものに更新
 	nm.set_member_map_data(member, new_map)
 	var mname: String = member.character_data.character_name \
-		if member.character_data != null else member.name
+		if member.character_data != null else String(member.name)
 	var dir_str := "↓" if direction > 0 else "↑"
 	MessageLog.add_ai("[NPC遷移] %s: F%d %s F%d" % [mname, old_floor, dir_str, new_floor])
 	# 到着メンバーの周囲の敵をアクティブ化する

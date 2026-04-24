@@ -47,13 +47,13 @@ func add_system(text: String) -> void:
 
 
 ## 戦闘計算メッセージ（黄）— entries には追加しない。debug_log_added シグナルのみ発火
-func add_combat(text: String, grid_pos: Vector2i = Vector2i(-1, -1)) -> void:
+func add_combat(text: String, _grid_pos: Vector2i = Vector2i(-1, -1)) -> void:
 	var color := Color(1.0, 1.0, 0.3)
 	debug_log_added.emit(text, color)
 
 
 ## AI戦略変更メッセージ（水色）— entries には追加しない。debug_log_added シグナルのみ発火
-func add_ai(text: String, grid_pos: Vector2i = Vector2i(-1, -1)) -> void:
+func add_ai(text: String, _grid_pos: Vector2i = Vector2i(-1, -1)) -> void:
 	var color := Color(0.4, 0.9, 1.0)
 	debug_log_added.emit(text, color)
 

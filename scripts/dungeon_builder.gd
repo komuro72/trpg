@@ -140,9 +140,13 @@ static func _apply_room_overlays(data: MapData, room: Dictionary, offset: Vector
 
 ## 2部屋間をL字通路で接続する
 static func _carve_corridor(data: MapData, from_room: Dictionary, to_room: Dictionary, area_id: String, offset: Vector2i) -> void:
+	@warning_ignore("integer_division")
 	var fx: int = int(from_room.get("x", 0)) + int(from_room.get("width",  10)) / 2 + offset.x
+	@warning_ignore("integer_division")
 	var fy: int = int(from_room.get("y", 0)) + int(from_room.get("height", 10)) / 2 + offset.y
+	@warning_ignore("integer_division")
 	var tx: int = int(to_room.get("x",   0)) + int(to_room.get("width",   10)) / 2 + offset.x
+	@warning_ignore("integer_division")
 	var ty: int = int(to_room.get("y",   0)) + int(to_room.get("height",  10)) / 2 + offset.y
 
 	var hw := CORRIDOR_HALF_WIDTH
@@ -194,7 +198,9 @@ static func _build_spawn_data(data: MapData, floor_data: Dictionary, rooms: Arra
 		if not pp_members.is_empty():
 			data.player_parties = [{"party_id": 1, "members": _offset_members(pp_members, offset)}]
 		else:
+			@warning_ignore("integer_division")
 			var px: int = int(er.get("x", 2)) + int(er.get("width",  10)) / 2 + offset.x
+			@warning_ignore("integer_division")
 			var py: int = int(er.get("y", 2)) + int(er.get("height", 10)) / 2 + offset.y
 			data.player_parties = [
 				{"party_id": 1, "members": [{"character_id": "hero", "x": px, "y": py}]}

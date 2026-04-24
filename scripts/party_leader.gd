@@ -837,13 +837,13 @@ func _get_leader_name() -> String:
 			var cname: String = m.character_data.character_name if m.character_data != null else ""
 			if not cname.is_empty():
 				return cname
-			return m.character_data.character_id if m.character_data != null else m.name
+			return m.character_data.character_id if m.character_data != null else String(m.name)
 	for m: Character in _party_members:
 		if is_instance_valid(m):
 			var cname: String = m.character_data.character_name if m.character_data != null else ""
 			if not cname.is_empty():
 				return cname
-			return m.character_data.character_id if m.character_data != null else m.name
+			return m.character_data.character_id if m.character_data != null else String(m.name)
 	return "不明"
 
 
