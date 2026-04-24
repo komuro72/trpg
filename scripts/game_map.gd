@@ -50,7 +50,10 @@ var _member_stair_cooldown: float = 0.0
 ## プレイヤー不在フロアの NPC 近接敵アクティブ化タイマー
 var _npc_enemy_activate_timer: float = 0.0
 ## パーティーメンバー → PartyManager マッピング（フロア遷移時の map_data 更新に使用）
-var _member_to_npc_manager: Dictionary = {}  # Character -> PartyManager
+# 2026-04-24 深夜（Step 3）：`_member_to_npc_manager` は削除。
+# 加入メンバーは `_hero_manager` 管理下に移管される（adopt_member 経由）ため、
+# Character → 元 NpcManager のマッピングは不要。map_data 更新は
+# `_hero_manager.set_member_map_data(ch, new_map)` で直接行う。
 
 var map_data: MapData
 var party: Party
@@ -541,14 +544,9 @@ func _link_all_character_lists() -> void:
 			var nm := nm_v as PartyManager
 			if is_instance_valid(nm):
 				nm.set_all_members(all_combatants)
-	# 合流済み NPC パーティー（npc_managers から除外されている）にも配布する
-	var joined_nms: Dictionary = {}  # PartyManager -> true（重複排除用）
-	for nm_v: Variant in _member_to_npc_manager.values():
-		var jnm := nm_v as PartyManager
-		if is_instance_valid(jnm) and not joined_nms.has(jnm):
-			joined_nms[jnm] = true
-			jnm.set_all_members(all_combatants)
-			jnm.set_enemy_list(all_enemies)
+	# 2026-04-24 深夜（Step 3）：合流済み NPC パーティー向け joined_nms ループを削除。
+	# 加入メンバーは _hero_manager 管理下に移管され、元 nm は queue_free 済みのため
+	# _member_to_npc_manager 経由の配布は不要（freed 参照による cast エラーの原因だった）。
 	# hero マネージャーにも衝突回避リストと攻撃対象リストを渡す
 	if _hero_manager != null:
 		_hero_manager.set_all_members(all_combatants)
@@ -1053,37 +1051,68 @@ func _close_dialogue() -> void:
 
 
 ## NPC 全員をプレイヤーパーティーに加入させる（プレイヤーがリーダー維持）
+## 2026-04-24 深夜改訂：メンバーを nm から _hero_manager に完全移管する方式に変更。
+## 既存 UnitAI を reparent で流用（状態保持・queue / state / flee_recommended_goal 等が維持される）。
+## 旧方式は「Party に add だけで nm からは除去しない」で二重管理が発生していた。
 func _merge_npc_into_player_party(nm: PartyManager) -> void:
-	for member: Character in nm.get_members():
-		if is_instance_valid(member) and member.hp > 0:
-			party.add_member(member)
-			member.visible = true
-			# プレイヤーパーティーの白リングに統一。is_leader は false（hero が維持）
-			member.party_color = Color.WHITE
-			member.party_ring_visible = true
-			member.is_leader = false
-			# フロア遷移時の map_data 更新用マッピングを記録
-			_member_to_npc_manager[member] = nm
-	# 合流済みフラグを立てる（NPC が hero を隊形基準として追従するようになる）
-	nm.set_joined_to_player(true)
-	# Party 参照を渡す（戦況判断で合流後の全員を自軍として評価するため）
-	nm.set_party_ref(party)
-	# Party.global_orders を合流済み NPC パーティー AI に反映する
-	nm.set_global_orders(party.global_orders)
-	# フロアアイテム辞書への参照を渡す（アイテムナビゲーションに使用）
-	nm.set_floor_items(_floor_items)
-	# VisionSystem の管理から外す（常に表示）
+	# iterate 中に _members が変わるためコピーを取る
+	var nm_members: Array = nm.get_members().duplicate()
+
+	for member_v: Variant in nm_members:
+		var member := member_v as Character
+		if member == null or not is_instance_valid(member) or member.hp <= 0:
+			continue
+
+		# 既存 UnitAI を nm から切り離して _hero_manager に移管
+		var unit_ai: UnitAI = nm.release_member(member)
+		if unit_ai == null:
+			push_warning("[_merge] release_member returned null for %s" % member.name)
+			continue
+		_hero_manager.adopt_member(member, unit_ai)
+
+		# Party クラス側にも追加（既存処理の維持）
+		party.add_member(member)
+
+		# 見た目の更新
+		member.visible = true
+		# プレイヤーパーティーの白リングに統一。is_leader は false（hero が維持）
+		member.party_color = Color.WHITE
+		member.party_ring_visible = true
+		member.is_leader = false
+
+	# nm を各種リストから除去して解体
+	var fl := _find_floor_of_nm(nm)
+	if fl >= 0:
+		(_per_floor_npcs[fl] as Array).erase(nm)
 	if vision_system != null:
 		vision_system.remove_npc_manager(nm)
 	# 再会話を防ぐため npc_managers から除外
 	npc_managers.erase(nm)
 	# dialogue_trigger の参照リストも更新
 	dialogue_trigger.setup(hero, npc_managers, enemy_managers, vision_system, map_data)
-	# 全マネージャーの _all_members を再構築（新メンバーを占有チェック対象に含める）
+
+	# _hero_manager に最新の global_orders を設定（参照共有なので実態は新規メンバーへの伝播）
+	_hero_manager.set_global_orders(party.global_orders)
+
+	# 全マネージャーの _all_members を再構築（移管メンバーを占有チェック対象に反映）
 	_link_all_character_lists()
+
+	# nm を解体（Node 削除で _leader_ai / 残った UnitAI も自動クリーンアップ）
+	nm.queue_free()
+
 	# LB/RB キャラ切り替えリストを更新
 	if player_controller != null:
 		player_controller._party_sorted_members.assign(party.sorted_members())
+
+
+## nm が属しているフロアのインデックスを返す。見つからなければ -1。
+## 2026-04-24 深夜追加：_merge_npc_into_player_party で _per_floor_npcs からの erase 用
+func _find_floor_of_nm(nm: PartyManager) -> int:
+	for i in range(_per_floor_npcs.size()):
+		var npcs_on_floor: Array = _per_floor_npcs[i] as Array
+		if npcs_on_floor.has(nm):
+			return i
+	return -1
 
 
 ## プレイヤー側が NPC パーティーに合流する（NPC リーダーがリーダーになる）
@@ -1493,10 +1522,11 @@ func _transition_member_floor(ch: Character, direction: int) -> void:
 	ch.current_floor = new_floor
 	ch.grid_pos      = spawn_pos
 	ch.sync_position()
-	# PartyManager の map_data を更新（UnitAI の pathfinding に反映）
-	var nm := _member_to_npc_manager.get(ch) as PartyManager
-	if nm != null and is_instance_valid(nm):
-		nm.set_map_data(new_map)
+	# 該当メンバーの UnitAI の map_data を更新（UnitAI の pathfinding に反映）
+	# 2026-04-24 深夜（Step 3）：旧 `_member_to_npc_manager.get(ch)` 経由から
+	# `_hero_manager.set_member_map_data()` 経由に変更（加入メンバーは _hero_manager 管理下）
+	if _hero_manager != null and is_instance_valid(_hero_manager):
+		_hero_manager.set_member_map_data(ch, new_map)
 	# blocking_characters を再構築
 	_rebuild_blocking_characters()
 	# 全マネージャーの _all_members を再構築（フロア遷移で占有リストが変わるため）

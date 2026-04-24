@@ -4299,6 +4299,77 @@ if player_controller != null and player_controller.stair_just_transitioned:
 
 ---
 
+## fall_back 個体アクションの実装（2026-04-24 深夜・FLEE 再利用方式） ✅ 完了
+
+### 概要
+`on_low_hp = "fall_back"` で HP が critical になったメンバーが前線から後退する挙動を、**FLEE の計算結果を再利用**し、メンバー層で「射程外判定」による早期停止を加えるだけの軽量実装とした。
+
+当初は「リーダー周辺の候補タイル × 脅威コスト付き A*」方式として実装したが、単発 ~560ms のフリーズが発生したため設計刷新した（経緯は [docs/history.md](history.md) 2026-04-24 深夜エントリ参照）。
+
+### アルゴリズム
+
+**リーダー層**：既存の `_determine_flee_recommended_goal()` を**そのまま再利用**（関数本体は無変更）
+- `_update_flee_recommended_goal()` のガードを緩和：
+  - 敵パーティー：従来どおり FLEE 中のみ（legacy 維持）
+  - 味方パーティー：**敵検知中（`nearby_enemy_rank_sum > 0`）なら FLEE 中か否か問わず常時計算**
+- 配布キーは既存の `flee_recommended_goal` を共用（意味拡張：「撤退方向の推奨出口」）
+- 計算内容は FLEE と完全に同じ（脅威コスト付き A* + 避難先エリア BFS 距離・候補は現エリア出口 2〜6 個のみ）
+
+**メンバー層**（`UnitAI._find_fall_back_goal()`）：FLEE の出口評価を内部で呼ぶラッパー
+```gdscript
+func _find_fall_back_goal(threat) -> Vector2i:
+    if not _member.is_friendly:
+        return _find_flee_goal_legacy(threat)  # 敵は legacy
+    if _is_far_enough_from_threats():
+        return _member.grid_pos  # 射程外 → 停止
+    return _find_flee_goal(threat)  # FLEE と同じ出口評価
+```
+
+### 停止判定（`UnitAI._is_far_enough_from_threats()`）
+- 最近の脅威（同フロア・対立陣営・生存）とのマンハッタン距離が `attack_range + FALL_BACK_MARGIN` 以上で true
+- `_all_members` を早期 continue で反復（~150μs）
+- 敵ステータス直接参照禁止ルール準拠（位置・陣営・フロア・HP>0 のみ参照）
+
+### キューレベルの到達判定
+`_generate_queue(FALL_BACK)` の冒頭で `_is_far_enough_from_threats()` を判定 → true なら `[{wait}]`。FLEE の `_is_in_refuge_area()` 判定と対称の構造。そうでなければ `[{fall_back} × 5]` を積む。
+
+### 再評価タイミング
+- リーダーの `_process()` 内 `_reeval_timer` による REEVAL_INTERVAL = 1.5 秒周期
+- `on_member_area_changed()` での即時再評価（`FLEE_REEVAL_MIN_INTERVAL = 0.3s` クールダウン付き）
+  - 敵パーティーは FLEE 中のみ（legacy 維持）
+  - 味方パーティーは敵検知中なら常時（FLEE/fall_back 問わず）
+- 出口 2〜6 × A* の軽量計算（~数ms）なのでエリア変化による即時再評価のコストは許容範囲
+
+### FLEE との差分比較
+
+| | FLEE | fall_back |
+|---|---|---|
+| 目的 | エリアから完全離脱 | 射程外まで後退（戦闘継続） |
+| 候補集合 | 現エリアの出口タイル（共通） | 現エリアの出口タイル（共通） |
+| 推奨キー | `flee_recommended_goal`（共通） | `flee_recommended_goal`（共通） |
+| メンバー側 A* | あり（推奨バイアス付き） | あり（FLEE に委譲・同じ） |
+| 到達判定 | `_is_in_refuge_area` → `wait` | `_is_far_enough_from_threats` → `wait` |
+
+### 関連定数（Config Editor UnitAI カテゴリ）
+
+| 定数 | 既定値 | 用途 |
+|---|---|---|
+| `FALL_BACK_MARGIN` | 2 | `attack_range` に加算する停止余裕マス数 |
+
+FLEE 系定数（`FLEE_THREAT_RANGE` / `FLEE_THREAT_WEIGHT` / `FLEE_AREA_DISTANCE_WEIGHT` / `FLEE_NON_RECOMMENDED_PENALTY` / `FLEE_REEVAL_MIN_INTERVAL`）は fall_back でも共有される。
+
+### PartyStatusWindow 表示
+- 詳細度「低」・味方メンバーのみ
+- 現在実行中のアクションに応じて `flee→(x,y)` / `fb→(x,y)` のラベルを切り替え
+- 値は共通の `_flee_recommended_goal`（敵検知中の味方なら常時有効）
+
+### スコープ外（派生タスク）
+- 敵パーティーへの適用（FLEE 派生課題 1 と合流予定）
+- `keep_distance` の差別化（射程内を保つ・`flee_recommended_goal` の流用を視野）
+- 「後衛が前に進む問題」の解決（味方クラスへの `keep_distance` 適用・派生課題 3）
+
+---
+
 ## 未接触NPCパーティーのリング非表示 ✅ 完了
 
 ### 仕様

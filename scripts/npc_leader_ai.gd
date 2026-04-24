@@ -228,8 +228,11 @@ func _build_orders_part() -> Dictionary:
 	# `_global_orders` の内容を上書きマージ（例：CRITICAL 時の battle_policy="retreat"）
 	for k: Variant in _global_orders.keys():
 		hint[k] = _global_orders[k]
-	# 探索モード（敵未検知）時は move を階段/explore に上書き
-	if _is_in_explore_mode():
+	# 探索モード（敵未検知）時は move を階段/explore に上書き。
+	# 2026-04-24 深夜：合流済み NPC は除外。合流後はプレイヤーの global_orders の
+	# move_policy（follow/cluster 等）に従うべきで、NPC 固有の explore 上書きが
+	# 効くと追従が壊れる（2026-04-23 のポーション修正 commit 798d3cc の副作用）。
+	if not joined_to_player and _is_in_explore_mode():
 		var pol := _get_explore_move_policy()
 		hint["move"] = pol
 		if pol == "stairs_down" or pol == "stairs_up":

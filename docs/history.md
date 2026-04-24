@@ -3,6 +3,471 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-24（fall_back 個体アクションの二段階協調実装）
+
+### 概要
+
+CLAUDE.md「FLEE 派生課題 4 個体アクションの実行ロジック差別化」のうち `fall_back` 部分を実装。`flee` / `keep_distance` と意味論的に分離されていた `fall_back` に、独自の目標タイル計算ロジック（リーダー推奨集合点への移動）を持たせた。FLEE の二段階協調（リーダー推奨 + メンバー自律選択）と対称な構造を維持しつつ、候補集合とコスト式だけを置き換える形で実装。
+
+### 設計論点：重心方式 → weight 方式への転換
+
+当初は「パーティー全員の重心付近に後退する」案だったが、複数の敵グループに挟まれたときに「重心 = 両グループの中間」という**最も危険な点**を推奨してしまう問題があった。そこで FLEE と同じ「脅威コスト付き A* で各候補を評価し最小コストを選ぶ」 weight 方式に転換。
+
+- 重心は**目標を 1 箇所に集約する引力**として弱く加算する形に降格（重み 0.5）
+- 代わりに**脅威コスト**（既存 `_calc_threat_cost`・敵から近いほど加算）をメインコストに据える
+- リーダー距離はコンパクトな隊形を保つための弱い加算（重み 1.0）
+
+これにより、敵が 2 方向から来る状況でも「脅威から離れつつ味方が集結できる点」が選ばれる。
+
+### FLEE との対称性
+
+| | FLEE | fall_back |
+|---|---|---|
+| 目的 | エリアから完全離脱（避難先まで） | 現エリア内で安全な集合点へ後退（戦闘継続） |
+| 候補集合 | エリア出口タイル群 | リーダー周辺の歩行可能タイル群（マンハッタン半径 R） |
+| 推奨キー | `flee_recommended_goal` | `formation_fallback_goal` |
+| コスト式 | 脅威 A* + エリア距離 × w | 脅威 A* + リーダー距離 × w1 + 味方重心距離 × w2 |
+| メンバー側 | 自律 A* 再評価 + 推奨バイアス | 推奨そのまま採用（軽量化） |
+| 避難先到達後 | `wait` に落ちる | 通常の到達判定で完了 |
+
+メンバー側で脅威コスト A* を再評価しない理由：fall_back は同エリア内の近距離目標なので、リーダー層で 1 回評価すれば十分。FLEE のように「メンバー位置によって最適出口が違う」問題は fall_back では起きない（集合点は共通でよい）。
+
+### 実装ファイル
+
+**新規/改修**:
+- `scripts/global_constants.gd`：UnitAI カテゴリに `FALL_BACK_SEARCH_RADIUS` (6) / `FALL_BACK_LEADER_DISTANCE_WEIGHT` (1.0) / `FALL_BACK_ALLY_CENTROID_WEIGHT` (0.5) を追加。`CONFIG_KEYS` 配列にも追加（当初 `FALL_BACK_REEVAL_MIN_INTERVAL` も追加したが、後述のパフォーマンス修正で削除）
+- `assets/master/config/constants.json` / `constants_default.json`：4 定数のエントリ追加
+- `scripts/party_leader.gd`：
+  - 状態変数 `_fallback_recommended_goal` 追加（当初 `_fallback_last_reeval_time` も追加したが、後述のパフォーマンス修正で削除）
+  - `_update_fallback_recommended_goal()` / `_determine_fallback_recommended_goal()` / `_calc_ally_centroid()` / `get_fallback_recommended_goal()` 新設
+  - `_assign_orders()` から `_update_fallback_recommended_goal()` を呼び、`formation_fallback_goal` キーを配布
+  - `on_member_area_changed()` が FLEE と fall_back の両方を再評価（それぞれ独立クールダウン）
+- `scripts/unit_ai.gd`：
+  - 状態変数 `_formation_fallback_goal` 追加・`receive_order` で受信
+  - `_find_fall_back_goal()` 新設（推奨採用 + legacy フォールバック）
+  - `_start_action` / `_step_toward_goal` の `"flee" / "fall_back" / "keep_distance"` 分岐を分離（`fall_back` だけ別ロジックを呼ぶ）
+- `scripts/party_status_window.gd`：
+  - `VAR_PRIORITY` に `formation_fallback_goal: 2`（低）追加
+  - `_build_ai_flag_parts()` に `fb→(x,y)` 表示追加（味方メンバー限定）
+
+### スコープ外（派生タスク）
+
+- **敵パーティーへの適用**：FLEE 派生課題 1（敵 FLEE の二段階化）と合流して対応予定。敵固有の「縄張り戻り」集合点をどう定義するかの設計が必要
+- **「後衛が前に進む問題」の解決**：味方クラスへの `keep_distance` 適用＝派生課題 3。ATTACK 戦略中 + 敵接近時の自動発火機構は別タスク
+- **`keep_distance` の差別化**：現状ゴブリンアーチャーの挙動が良好なので手を付けない。将来 `attack_range` を参照して「遠ざかりすぎない」ロジックに差別化予定
+
+## 2026-04-24 深夜（fall_back を FLEE 計算結果の再利用方式に刷新：パフォーマンス根治）
+
+### 背景：夕の頻度削減では不十分だった
+
+2026-04-24 夕の修正（`on_member_area_changed` 経由の fall_back 再評価を削除）を適用しても、Komuro の実機確認で **「約 1.5 秒ごとに約 1 秒フリーズ」** が残存。頻度は `REEVAL_INTERVAL = 1.5s` に抑えたのに 1 秒止まる → **単発の計算コストが 1 秒近い**と推測され、前回の見積もり（1〜5ms）が 2 桁以上の過小評価だったことが濃厚に。
+
+### Step A 静的再分析で判明した主因
+
+Claude Code が計測コード埋め込みなしで静的分析に絞って再検証した結果、**`_calc_threat_cost` の A* 内ループ毎回呼び出し**が真のボトルネックと判明:
+
+- `_determine_fallback_recommended_goal()` は 70 候補 × `_astar_with_cost` を実行
+- A* 内で各ノード展開ごとに 4 近傍の `cost_fn.call(neighbor)`（= `_calc_threat_cost`）を呼び出す
+- `_calc_threat_cost` は `_all_members` = **全フロア合計 ~150 体**を線形反復
+- 1 回の `_determine_fallback_recommended_goal` あたり：
+  - 候補 70 × 平均 12 iter × 4 近傍 = **~3,400 回の `_calc_threat_cost` 呼び出し**
+  - 各呼び出しで 150 chars 線形反復 = **~510,000 chars 反復**
+  - GDScript の Callable dispatch 込みで **~560ms / 呼び出し**
+
+前回見積もりで見落としていた点：
+1. `_all_members` は 5 フロア全敵・全 NPC を含む（~150 体・当初「50+」と見ていた）
+2. GDScript の Callable dispatch が重い（1 呼び出し ~1-2μs）
+3. A* の `open_set` が線形スキャン O(N²) 実装
+
+### Step 1 調査で判明した FLEE の本質
+
+対策検討の前に、既存 FLEE 実装を詳しく調査（`docs/investigation_flee_implementation.md` 相当の内容は本履歴と CLAUDE.md で代替）:
+
+**FLEE は「避難先までの経路」を事前計算していない**:
+- `_find_flee_goal()` は常に**現エリアの出口タイル**を返す（避難先内タイルではない）
+- `_step_toward_goal()` で**毎ステップ `_goal` を再計算**する
+- メンバーがエリアを跨ぐと、次ステップでは新エリアの出口が目標になる
+- `_generate_queue` の冒頭で `_is_in_refuge_area()` 判定 → 到達済みなら wait に切替
+
+つまり **FLEE = 「現エリアの最善出口」の局所最適チェイン**。一度の計算は軽量（候補 = エリア出口 2〜6 個のみ）。
+
+### 設計転換：fall_back = FLEE の途中停止バージョン
+
+FLEE 実装の本質を踏まえ、fall_back は **FLEE の計算結果をそのまま再利用し、停止条件だけ差別化**する形に再設計:
+
+| | FLEE | fall_back（刷新後） |
+|---|---|---|
+| リーダー計算関数 | `_determine_flee_recommended_goal()` | **同関数を共用**（無変更） |
+| 配布キー | `flee_recommended_goal` | **同キーを共用** |
+| メンバー出口評価 | `_find_flee_goal()` | **同関数に委譲**（無変更） |
+| 停止条件 | `_is_in_refuge_area()`（避難先エリア到達） | `_is_far_enough_from_threats()`（射程 + MARGIN 外） |
+
+### リーダー層の変更（`scripts/party_leader.gd`）
+
+**核心**：`_update_flee_recommended_goal()` のガードを `_is_party_fleeing()` から「敵パーティーでない + 敵検知中」に緩和。計算結果そのものは同一なので FLEE 挙動は不変。
+
+```gdscript
+# 変更前
+func _update_flee_recommended_goal() -> void:
+    if not _is_party_fleeing():
+        return ...
+    _flee_recommended_goal = _determine_flee_recommended_goal()
+
+# 変更後
+func _update_flee_recommended_goal() -> void:
+    if _is_enemy_party():
+        # 敵は legacy 維持（FLEE 中のみ）
+        ...
+        return
+    # 味方は敵検知中なら FLEE/fall_back 問わず常時計算
+    if _combat_situation.nearby_enemy_rank_sum <= 0:
+        ...
+        return
+    _flee_recommended_goal = _determine_flee_recommended_goal()
+```
+
+同様に `on_member_area_changed()` の FLEE 中ガードも外し、敵検知中の味方で再評価が効くように戻した（夕の修正を部分的に戻す）。推奨出口は 2〜6 × A* の軽量計算なのでコスト許容範囲。
+
+### メンバー層の変更（`scripts/unit_ai.gd`）
+
+**`_find_fall_back_goal()` をラッパー関数に書き換え**:
+
+```gdscript
+func _find_fall_back_goal(threat) -> Vector2i:
+    if not _member.is_friendly:
+        return _find_flee_goal_legacy(safe_threat)  # 敵は legacy
+    if _is_far_enough_from_threats():
+        return _member.grid_pos  # 射程外で停止
+    return _find_flee_goal(safe_threat)  # FLEE と同じ出口評価
+```
+
+**`_is_far_enough_from_threats()` 新設**：`_all_members` 150 体を早期 continue で反復（同フロア対立陣営のみ距離計算）・`attack_range + FALL_BACK_MARGIN` 以上なら true。~150μs / 判定。
+
+**`_generate_queue(FALL_BACK)` の冒頭に wait 判定追加**：FLEE の `_is_in_refuge_area()` と対称の構造。射程外に到達していれば `[{wait}]` を返してキュー消化を終わらせる。
+
+### 削除・追加まとめ
+
+**削除**（計算コスト過大な旧実装を全廃）:
+- 定数 3: `FALL_BACK_SEARCH_RADIUS` / `FALL_BACK_LEADER_DISTANCE_WEIGHT` / `FALL_BACK_ALLY_CENTROID_WEIGHT`
+- PartyLeader 関数 3: `_determine_fallback_recommended_goal()` / `_calc_ally_centroid()` / `_update_fallback_recommended_goal()`
+- PartyLeader state 1: `_fallback_recommended_goal`
+- UnitAI state 1: `_formation_fallback_goal`
+- receive_order キー 1: `formation_fallback_goal`
+- PartyStatusWindow: `VAR_PRIORITY["formation_fallback_goal"]` と専用 fb→ ブランチ
+
+**追加**:
+- 定数 1: `FALL_BACK_MARGIN = 2`（`attack_range` に加算する停止余裕マス数）
+- UnitAI 関数 1: `_is_far_enough_from_threats()`
+- PartyStatusWindow `fb→` 表示：既存 `_flee_recommended_goal` を参照し、現在アクションが `fall_back` のときラベル切替
+
+### 理論効果
+
+- 1 パーティー単発 ~560ms → **~数ms**（FLEE と同等）
+- 1.5 秒周期のパーティー同時発火時のフレームスパイクが解消
+- 100 倍以上の高速化
+
+### 設計原則の明文化
+
+> FLEE と fall_back は「目標」が同じで「停止条件」だけが違う。リーダー層の推奨出口計算は共通化し、メンバー層のラッパー関数で違いを表現する。FLEE 実装を fall_back 用に変更しない（意味拡張はガード緩和のみ）。
+
+### 学び（反省点）
+
+- **見積もりの確信度を過信**：前回「1〜5ms」の見積もりを Komuro に報告しつつ修正方針を進めたが、実機フリーズで **100 倍の過小評価**と判明。定量計測を省略しないほうが良い場面だった
+- **`_all_members` の真のサイズを軽視**：setUp 時点で 5 フロア全キャラを配布していることに気づかず、「50+」と過小評価。大規模データ反復があるコードは**所属データの全量**を確認する
+- **GDScript の Callable dispatch コスト**：C++ 感覚で ops 換算すると 10-50 倍のズレが出る。ループ内 `cost_fn.call(...)` は常に警戒
+- **設計の対称性が常に正しいわけではない**：FLEE と fall_back を「対称に作る」という発想は自然だが、頻度（FLEE は稀・fall_back は常時）や計算単価（出口 2-6 vs 候補 70+）が桁違いに異なる場合、**計算結果の再利用**のほうが対称性より重要
+
+## 2026-04-24 深夜（脅威マップ事前計算による FLEE/fall_back 推奨出口計算の高速化）
+
+### 背景：FLEE 再利用方式でも単発 50 ms のディレイが残った
+
+fall_back を FLEE 再利用方式に刷新した後、Komuro 実機確認で「1 秒フリーズは解消したが、1.5 秒周期に視認できるディレイが残る」と報告。計測コード（`[EXIT_PERF]` / `[EXIT_FRAME]`）を仕込んで実測ログを取ったところ、以下が判明：
+
+**単発 `_determine_flee_recommended_goal()` の実コスト**:
+- 最小 25.6 ms / 最大 76.1 ms / 中央値 **~50 ms**
+- 前回の見積もり「FLEE と同等 ~数 ms」は **10〜15 倍の過小評価**だった
+
+**同時発火パターン**:
+- 12:08:16 の 160 ms 窓に 8 パーティーが時間差発火 → 累積 **172 ms**
+- 12:08:18 の 110 ms 窓に 5 パーティー → 累積 **209 ms**
+- 12:08:19 の 156 ms 窓に 6 パーティー → 累積 **185 ms**
+- 各パーティーの `_reeval_timer` が同位相で進むため、1.5 秒ごとにまとまって発火
+
+→ **体感ディレイ = 単発 50 ms × 複数パーティーの集中発火**
+
+### 原因特定
+
+`_calc_threat_cost` を A* の内ループで毎回呼ぶ設計が主因:
+
+- A* 1 回で 50〜100 ノード展開 × 4 近傍 = 200〜400 回の `_calc_threat_cost` 呼び出し
+- 各呼び出しで `_all_members`（全フロア合計 150 体）を線形反復
+- 出口 3〜4 個評価すると合計 **18〜24 万回のキャラ評価** / `_determine_flee_recommended_goal` 呼び出し
+- GDScript の Callable dispatch コストを含め、単発 ~50 ms が妥当な実測値
+
+### 対策：脅威マップを事前計算して cost_fn は辞書参照だけに
+
+**発想**：同じタイルの脅威コストを何度も計算するのではなく、**敵から影響範囲タイルへの貢献を先に加算**した Dictionary を 1 回だけ構築する。A* は Dictionary 参照するだけ。
+
+### 等価性の証明
+
+`_calc_threat_cost(tile)` と `_build_threat_map(for_member).get(tile, 0.0)` は**数学的に等価**（加算順序の入れ替えのみ）:
+
+- `_calc_threat_cost`: 各敵 e について `manhattan(tile, e.pos) < range_tiles` なら `(range_tiles - d) * weight` を加算
+- `_build_threat_map`: 各敵 e の周囲 `dx,dy ∈ [-R+1, R-1] かつ |dx|+|dy| < R` のタイルに同じ contribution を加算
+
+任意の tile で、集約されるコントリビューションの集合・値が同じことが証明可能（関数 doc に記載）。
+
+### 実装
+
+- 新設：`_build_threat_map(for_member: Character) -> Dictionary`（[party_leader.gd](../scripts/party_leader.gd)）
+  - `_calc_threat_cost` と完全に同じフィルタ条件（陣営・フロア・HP）
+  - 計算量：150 体 × ~41 マス影響範囲 = **~6,150 ops（~2 ms）**
+- `_determine_flee_recommended_goal()` 内：
+  ```gdscript
+  # 旧
+  var threat_fn: Callable = Callable(leader_ai, "_calc_threat_cost")
+  # 新
+  var threat_map: Dictionary = _build_threat_map(leader_char)
+  var threat_fn: Callable = func(tile): return threat_map.get(tile, 0.0)
+  ```
+- `_astar_with_cost` / `_path_cost` は無変更（汎用性保持）
+- `_calc_threat_cost` も無変更（他から呼ばれる可能性があるので残置・現状 PartyLeader 以外の呼び出しはなし）
+
+### 理論効果
+
+| 項目 | 旧方式 | 新方式 |
+|---|---|---|
+| 事前計算 | なし | 1 回 / 6,150 ops / ~2 ms |
+| A* 内 cost_fn 1 回 | ~225 μs（150 体反復） | ~1 μs（辞書参照） |
+| 1 A* の cost_fn 呼び出し | 200〜400 回 × 225 μs = 45〜90 ms | 200〜400 回 × 1 μs = 0.2〜0.4 ms |
+| 3 出口評価の合計 | **~50 ms** | **~5〜10 ms** |
+| **高速化倍率** | — | **40〜80 倍** |
+
+### 副次効果
+
+- FLEE にも自動適用（共通関数のため）。FLEE 連発シナリオでも効く
+- パーティー同時発火の累積負荷も 10 倍以上軽減（210 ms → 20 ms 以下の見込み）
+- 位相分散（`_reeval_timer` ランダム初期化）は**実施せず**。本対策で十分と判断。まだ重ければ次タスクで追加
+
+### 学び
+
+- **`_all_members` の 5 フロア合計 150 体**は見落としがちな大規模データ。ループ内で走査する関数は警戒が必要
+- **GDScript の Callable dispatch は ~1 μs/回のオーバーヘッド**。ホットループ内の `cost_fn.call(...)` は注意
+- **等価性の数学的証明をコメントに残す**：加算順序の入れ替えは見た目の差が大きいので、同じ結果になる根拠を明示しておくとレビュー・保守時の安心材料になる
+- **計測は正義**：前回「FLEE と同等 ~数 ms」の見積もりは 10 倍以上外れていた。想像で判断せず実測する
+
+## 2026-04-24 深夜（合流 NPC 追従バグ修正：explore 上書きに joined_to_player ガード追加）
+
+### 発見経緯
+
+fall_back 動作確認のため実機プレイ中、Komuro が「合流済み NPC がプレイヤーから離れていく」症状を発見。同時に PartyStatusWindow で同一キャラ（クレア）が「プレイヤー」と「NPC」の両セクションに表示される二重表示も見つけた。
+
+### 調査結果（詳細は省略・要点のみ）
+
+仲間システムの実装を調査したところ、2 つの独立した問題があることが判明：
+
+1. **追従バグ（今回修正）**: 2026-04-23 commit `798d3cc`（ポーション修正）で `_assign_orders` が `_build_orders_part()` 経由に統一された際、NpcLeaderAI の `_build_orders_part()` が `_is_in_explore_mode()` 時に `move = "explore"` を上書きする処理が、合流済み NPC にも効くようになっていた
+
+2. **二重表示（次タスク）**: `_merge_npc_into_player_party()` で元 NPC PartyManager を `_per_floor_npcs` から除去せず、メンバーも `_hero_manager._members` に追加しない。そのため Character 実体は 1 つだが、PartyStatusWindow が Party（プレイヤー）と `_per_floor_npcs`（NPC）の両方から列挙して二重表示される
+
+### 修正：1 行ガード
+
+`scripts/npc_leader_ai.gd` の `_build_orders_part()` 内:
+
+```gdscript
+# 旧
+if _is_in_explore_mode():
+    var pol := _get_explore_move_policy()
+    hint["move"] = pol
+    ...
+
+# 新
+if not joined_to_player and _is_in_explore_mode():
+    var pol := _get_explore_move_policy()
+    hint["move"] = pol
+    ...
+```
+
+`joined_to_player` は PartyLeader 基底クラスの既存プロパティ（NpcLeaderAI に継承）。`_merge_npc_into_player_party()` で合流時に `nm.set_joined_to_player(true)` される。
+
+### 効果
+
+- 合流済み NPC：プレイヤーの `global_orders.move`（デフォルト `follow`）に従う → 追従回復
+- 未加入 NPC：従来通り `explore` で自律行動（無回帰）
+- 二重表示は残存（次タスク）
+
+### 判断の根拠
+
+**なぜ 1 行修正で済ませたか**:
+
+- **二重表示はデバッグ表示の見た目問題**：ゲーム挙動には影響しない（管理主体は元 NpcLeaderAI のままだが、プレイヤー指示が `set_global_orders` 参照共有経由で届くので行動は正常）
+- **根本対応（管理主体を `_hero_manager` に移管）は広範囲リファクタ**：PartyLeader.setup 再構築・UnitAI 再生成・戦況判断の `_party_ref` 経路・フロア遷移処理など多数の箇所に影響。今すぐやると fall_back 検証が止まる
+- **最小変更で追従復旧 → fall_back 検証に戻る → その後に管理構造の整理** の順序が健全
+
+### 学び
+
+- **派生仕様の影響範囲を過小評価しない**：`_build_orders_part()` はポーション修正のために導入された後、「既定値の集約点」という位置付けが強化され、move 上書きロジックが結合されていた。後から見ると「joined 時にも効く」のは明白だが、単独の修正を見ている時点では気づきにくい
+- **OrderWindow 配布経路とデバッグ表示の二重責務は事故のもと**：`_build_orders_part()` は当初デバッグ表示用の合成関数だったが、`_assign_orders()` の実動にも使われるようになったため、挙動変更の副作用が広がった
+
+## 2026-04-24 深夜（パーティー加入処理の完全化・Step 1+2）
+
+### 背景
+
+合流 NPC 追従バグを 1 行ガードで応急処置した後、根本問題として残っていた「加入処理が不完全で二重管理になっている」を解消する本丸対応。
+
+### 不完全だった旧実装
+
+[game_map.gd:`_merge_npc_into_player_party`](../scripts/game_map.gd) は:
+- `party.add_member(member)` — Party に追加（正しい）
+- `nm.set_joined_to_player(true)` — フラグ設定（正しい）
+- **しかし nm._members からメンバーを除去しない**（バグ）
+- **nm._leader_ai._unit_ais からも除去しない**（バグ）
+- **_hero_manager._members に追加しない**（バグ）
+- **_per_floor_npcs から nm を erase しない**（バグ）
+
+結果、同一 Character が nm と _hero_manager の両方から参照され、UnitAI は元 NpcLeaderAI 管理下で動き続ける状態だった。
+
+### 設計：動的メンバー管理 API を導入
+
+従来の PartyLeader は「setup() で一括初期化・以降はメンバー不変」想定だった。合流対応のため動的メンバー管理 API を新設:
+
+```gdscript
+# PartyLeader 基底
+func adopt_member(member, unit_ai):
+    _party_members.append(member)
+    _unit_ais[member.name] = unit_ai
+    if unit_ai.get_parent() != self:
+        unit_ai.get_parent().remove_child(unit_ai)
+        add_child(unit_ai)
+    unit_ai._player = _player
+    unit_ai.set_visited_areas(_visited_areas)
+    unit_ai.set_follow_hero_floors(joined_to_player)
+    unit_ai.set_all_members(_all_members)
+    unit_ai.set_map_data(_map_data)
+    for ua in _unit_ais.values():
+        ua.set_party_peers(_party_members)
+    _initial_count = _party_members.size()
+
+func release_member(member) -> UnitAI:
+    var unit_ai = _unit_ais.get(member.name)
+    _party_members.erase(member)
+    _unit_ais.erase(member.name)
+    for ua in _unit_ais.values():
+        ua.set_party_peers(_party_members)
+    return unit_ai
+```
+
+PartyManager に薄いラッパー（Character.died シグナル切断・再接続を含む）。
+
+### UnitAI 流用方式の採用
+
+既存 UnitAI を破棄せず reparent で流用する方針（案 a）を採用:
+
+- **状態保持**：`_queue` / `_state` / `_timer` / `_target` / `_flee_recommended_goal` / `_last_area_id` が維持される → 戦闘中の加入でも行動断絶しない
+- **変更範囲が狭い**：新規生成は UnitAI 生成ロジックの複製になる
+- **味方側は基底 UnitAI のみ使用**：GoblinArcherUnitAI 等のサブクラスが問題になる可能性なし
+- **副作用への対応**：walker コンテキスト（`_player` / `_all_members` / `_map_data` / `_visited_areas`）を adopt 時に再設定
+
+### `_merge_npc_into_player_party` の改修
+
+既存の「add だけ」方式から「release → adopt + nm 解体」方式に変更。nm は `_per_floor_npcs` から erase・`queue_free()` で完全削除。
+
+`_find_floor_of_nm()` ヘルパを新設（`_per_floor_npcs` のどのフロアに nm があるか検索）。
+
+### Step 分割
+
+Step 1（API 新設）と Step 2（merge 改修）を 1 commit で実装。Step 3（`_member_to_npc_manager` クリーンアップ）は別 commit に分離:
+- Step 1 単独は挙動不変で検証価値が低い
+- Step 3 はクリーンアップのみなので分離してロールバック容易性を確保
+
+### Step 3 を前倒し実施（freed cast クラッシュ対応）
+
+Step 1+2 適用後の実機動作確認で、フロア遷移時にクラッシュが発生:
+
+```
+E _link_all_character_lists: Trying to cast a freed object.
+  game_map.gd:547 @ _link_all_character_lists()
+  game_map.gd:2050 @ _transition_floor()
+  game_map.gd:1959 @ _check_stairs_step()
+```
+
+原因：`_member_to_npc_manager` に `queue_free()` 済みの nm 参照が残っていた。`as PartyManager` キャストは freed object に対してはエラーを出す（`is_instance_valid` ガードは cast 後でないと効かない）。
+
+「Step 2 後も `is_instance_valid` ガードで安全」という事前見積もりが甘かった。GDScript 4.x の `as` キャストは freed object に対して例外を投げる仕様で、`is_instance_valid` は cast **後**にしか機能しない。
+
+対応：予定していた Step 3 を前倒しで即実施:
+
+1. `_link_all_character_lists` の joined_nms ループを削除（クラッシュ発生箇所）
+2. `_transition_member_floor` で `_member_to_npc_manager.get(ch)` → `_hero_manager.set_member_map_data(ch, new_map)` に置換
+3. `_member_to_npc_manager` Dictionary 定義と `_merge_npc_into_player_party` 内の代入箇所を削除
+
+全て同一コミット内に含める（ロールバック単位としては Step 1+2+3 が一体化）。
+
+### 学び（追加）
+
+- **GDScript の `as` キャストと freed object**：`is_instance_valid` は cast **前**に行わないと意味がない。cast 後にガードする形（`var x := y as Foo; if is_instance_valid(x):`）は freed object で既にエラーが発生する
+- **Dictionary に Node 参照を保持する設計は退避戦略が必須**：所有者（この場合は nm）が解体されるとき、参照を持つ辞書も同時にクリーンアップしないと freed 参照が残る。`_member_to_npc_manager` のような間接参照マップは特に注意が必要だった
+- **段階分割は理想だが一体化が必要なときもある**：Step 2 と Step 3 の分離は git 履歴の明瞭性のためだったが、Step 2 単体で freed cast が発生したため一体化せざるを得なかった。次回の同種リファクタでは「所有権移転 + 参照クリーンアップ」はセットで行う
+
+### 学び
+
+- **「setup() で全メンバー確定」モデルは動的変化に弱い**：RTS 系・パーティー加入系のゲームでは初期化時の完全確定を前提にしないほうが柔軟
+- **UnitAI reparent 方式は意外に素直**：Godot の Node reparent は signal も維持されるので、状態保持して管理主体だけ変えるパターンが自然
+- **シグナル再接続の idempotent 化**：`is_connected` / `disconnect` / `connect` を毎回ガードすることで二重接続・freed 接続の事故を防ぐ
+
+## 2026-04-24 夕（fall_back パフォーマンス修正：更新頻度の削減）
+
+### 背景
+
+上記 `fall_back` 実装を取り込み直後の動作確認で、ゲーム全体が顕著に重くなる現象が発生した。実装機能としては意図通り動いていたので、**計算コストがフレームタイムに悪影響**という性能問題として切り出した。
+
+### 原因特定プロセス（静的分析のみで完結）
+
+計測コードを埋め込む前に、まず Claude Code が静的分析で以下を確認：
+
+1. **呼び出し経路の grep**：`_determine_fallback_recommended_goal` / `_assign_orders` の呼出チェーンを全て洗い出し
+2. **呼出頻度の整理**：`_assign_orders` の発火源を 4 種類に分類（`_reeval_timer` 定期 / `notify_situation_changed` / `on_member_area_changed` / リーダーフロア変化）
+3. **計算量の上限見積もり**：候補タイル数（R=6 → 最大 85・フィルタ後 40〜70）× `_astar_with_cost`（max_iter=400・open_set 線形スキャンで O(N²) 相当）× `_calc_threat_cost`（`_all_members` 50+ を線形反復）
+
+この時点で**主因がほぼ確定**したため、計測ステップは省略し直接修正方針に進んだ。
+
+### 特定された主因
+
+**`on_member_area_changed()` を味方パーティー全般に広げた改修が頻度を爆発させた**：
+
+- 2026-04-24 の当初実装では「味方パーティーでも `_fallback_last_reeval_time` クールダウン 0.3 秒で `_assign_orders()` を発火」としていた
+- `_notify_area_change_if_needed()` は `UnitAI._process()` 毎フレーム呼ばれ、メンバーがエリア境界を跨ぐたびに発火
+- フロア 0 に 8 NPC パーティー（合計 12 人）＋プレイヤー 1 パが居る状況では、どこかのメンバーが常に部屋↔通路を行き来する → **各パーティーで 0.3 秒ごとに重い計算が連打**される
+- 改修前の `on_member_area_changed` は `_is_party_fleeing()` 中のみ発火していたので問題にならなかった（FLEE は稀な状態）
+
+副因として、単一呼び出しの単価も重い：候補 70 タイル × A*（線形 open_set + 全員スキャン `_calc_threat_cost`） ≈ 数百万 ops。ただし頻度を抑えれば許容範囲。
+
+### 修正方針：頻度のみ下げる（A1 案）
+
+単価側には手を入れず、**頻度だけを改修前の水準に戻す**最小修正を採用。
+
+- `on_member_area_changed()` の fall_back ブランチを削除（FLEE 時のみ再評価する改修前の状態に戻す）
+- `_fallback_last_reeval_time` 状態変数を削除
+- `FALL_BACK_REEVAL_MIN_INTERVAL` 定数を削除（GlobalConstants・constants.json・constants_default.json の 3 箇所）
+- `PartyLeader._process()` の `REEVAL_INTERVAL = 1.5s` 周期だけで fall_back 推奨を更新
+
+### 採用しなかった案
+
+- **推奨 B（発火条件厳格化：HP critical メンバー存在時のみ計算）**：将来 `keep_distance` でも `formation_fallback_goal` を流用する設計のため、HP 状態に依存させない
+- **候補数削減（`FALL_BACK_SEARCH_RADIUS` 6 → 4）**：頻度が主因なので効果限定的。後退範囲を狭めたくない
+- **A2 案（fall_back 専用長周期・例 5 秒）**：A1 で体感確認して、まだ重ければ次タスクで導入
+
+### 設計原則の明文化
+
+> fall_back は「大まかな後退集合点」であり、メンバーがエリア境界を跨いだ瞬間に陳腐化する種類の情報ではない。FLEE のように「リアルタイムな経路追従」が必要な情報とは性質が異なるため、`REEVAL_INTERVAL = 1.5s` の定期再評価のみで十分。`on_member_area_changed` による即時再評価は FLEE 時のみとする。
+
+この判断は fall_back と FLEE の「情報の陳腐化速度」の違いを切り出したもので、将来 `keep_distance` を同じ配布機構に乗せる際も同じ方針（定期のみ）で進める。
+
+### 学び
+
+- **「FLEE と対称に作る」という設計思想は正しいが、呼出頻度まで対称にすべきかは別判断**：出口候補数（2〜6）と集合点候補数（40〜70）の桁違いの差を見落としていた
+- **計測前に静的分析で主因が特定できる場合は、計測を省略して構わない**：ただし「静的分析だけで確信できるか」の判断は慎重に（頻度 × 単価の両方が桁違いに変化している場合は見積もりの確度が高い）
+
 ## 2026-04-23（TARGETING 時間停止リーク修正 + デバッグログ検出機構整備 + 回転 Tween ガード）
 
 ### 概要

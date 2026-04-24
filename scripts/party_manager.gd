@@ -474,6 +474,44 @@ func activate() -> void:
 		_start_ai()
 
 
+# --------------------------------------------------------------------------
+# 動的メンバー管理（2026-04-24 深夜追加・合流処理の完全化）
+# --------------------------------------------------------------------------
+
+## メンバーを他のマネージャーに引き渡すために自パから切り離す。
+## died シグナル切断 → _leader_ai.release_member で UnitAI を取得 → 呼出側が adopt に渡す。
+func release_member(member: Character) -> UnitAI:
+	if member == null or not is_instance_valid(member):
+		push_warning("[PartyManager.release_member] invalid member")
+		return null
+
+	_members.erase(member)
+
+	# Character.died シグナル切断（新 manager 側で繋ぎ直す）
+	if member.died.is_connected(_on_member_died):
+		member.died.disconnect(_on_member_died)
+
+	if _leader_ai != null:
+		return _leader_ai.release_member(member)
+	return null
+
+
+## 他のマネージャーから渡されたメンバーと UnitAI を自分のパーティーに組み入れる。
+func adopt_member(member: Character, unit_ai: UnitAI) -> void:
+	if member == null or not is_instance_valid(member):
+		push_warning("[PartyManager.adopt_member] invalid member")
+		return
+
+	_members.append(member)
+
+	# Character.died シグナルを新 manager の _on_member_died に繋ぐ
+	if not member.died.is_connected(_on_member_died):
+		member.died.connect(_on_member_died)
+
+	if _leader_ai != null:
+		_leader_ai.adopt_member(member, unit_ai)
+
+
 ## AI を生成して起動する（エリア入室またはアクティブ化トリガー時）
 func _start_ai() -> void:
 	if _members.is_empty():

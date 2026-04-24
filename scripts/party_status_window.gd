@@ -78,7 +78,7 @@ const VAR_PRIORITY: Dictionary = {
 	"party_fleeing":             2,  # 低：パーティー撤退中
 	"floor_following":           2,  # 低：フロア追従中
 	"warp_timer":                2,  # 低：DarkLord 固有・次ワープまで残秒
-	"flee_recommended_goal":     2,  # 低：FLEE 時のリーダー推奨出口（味方のみ・2026-04-21 ステップ 3）
+	"flee_recommended_goal":     2,  # 低：撤退方向の推奨出口（味方のみ・FLEE/fall_back 共用・2026-04-24 深夜）
 
 	# 敵固有・動的判断（中）※ 2026-04-21 追加
 	"should_self_flee":          1,  # 中：ゴブリン系 HP 低下時の自己逃走判定
@@ -925,14 +925,23 @@ func _build_ai_flag_parts(ai: UnitAI, m: Character) -> PackedStringArray:
 		var pf_v: Variant = ai.get("_party_fleeing")
 		if pf_v != null and (pf_v as bool):
 			parts.append("P↓")
-	## flee_recommended_goal は味方メンバー限定（敵は現状 FLEE 逃走先の推奨機構なし）
-	## パーティー FLEE 中（有効値 != Vector2i(-1, -1)）のみ表示
+	## flee_recommended_goal は味方メンバー限定（敵は FLEE 逃走先の推奨機構なし）
+	## 2026-04-24 深夜：fall_back も同じ `_flee_recommended_goal` を共用するため、
+	## 現在実行中のアクション種別でラベルを切り替える（flee→ / fb→）。
+	## 値が (-1,-1) でなければ表示（敵検知中の味方パーティー・敵不在時は -1,-1）
 	if _show_var("flee_recommended_goal") and m != null and m.is_friendly:
 		var rg_v: Variant = ai.get("_flee_recommended_goal")
 		if rg_v != null:
 			var rg: Vector2i = rg_v as Vector2i
 			if rg != Vector2i(-1, -1):
-				parts.append("flee→(%d,%d)" % [rg.x, rg.y])
+				var cur_act_v: Variant = ai.get("_current_action")
+				var cur_act_name: String = ""
+				if cur_act_v is Dictionary:
+					cur_act_name = (cur_act_v as Dictionary).get("action", "") as String
+				var label: String = "flee"
+				if cur_act_name == "fall_back":
+					label = "fb"
+				parts.append("%s→(%d,%d)" % [label, rg.x, rg.y])
 	if _show_var("floor_following"):
 		var ff_v: Variant = ai.get("_floor_following")
 		if ff_v != null and (ff_v as bool):
