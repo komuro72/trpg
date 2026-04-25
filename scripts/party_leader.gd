@@ -656,7 +656,7 @@ func get_current_strategy_name() -> String:
 ## 敵パーティー：`_global_orders` は空のままなので、呼出側（party_status_window.gd の
 ## 敵分岐）は move/battle_policy/target/on_low_hp/item_pickup キーを参照せず、
 ## 代わりに `_party_strategy` を直接表示する（docs/investigation_enemy_order_effective.md 参照）
-## どちらのケースでも `combat_situation` / `power_balance` / `hp_status` / 戦力内訳キーは必ず付与する
+## どちらのケースでも `combat_situation` / `power_balance` / 戦力内訳キーは必ず付与する
 ##
 ## 2026-04-21 改訂：旧実装は空の `_global_orders` に対して `_party_strategy` から仮想ラベル
 ## （`{"move": "cluster", "battle_policy": "attack", ...}`）を合成していたが、UnitAI 実動と
@@ -671,8 +671,7 @@ func get_global_orders_hint() -> Dictionary:
 	var sit: int = _combat_situation.get("situation", int(GlobalConstants.CombatSituation.SAFE)) as int
 	hint["combat_situation"] = sit
 	hint["power_balance"] = _combat_situation.get("power_balance", 0)
-	hint["hp_status"]     = _combat_situation.get("hp_status", 0)
-	# HP 内訳（デバッグ表示用・「満」の内部計算を可視化）
+	# HP 内訳（デバッグ表示用・ポーション込み値の可視化）
 	hint["hp_real"]       = _combat_situation.get("hp_real", 0)
 	hint["hp_potion"]     = _combat_situation.get("hp_potion", 0)
 	hint["hp_max"]        = _combat_situation.get("hp_max", 0)
@@ -691,6 +690,7 @@ func get_global_orders_hint() -> Dictionary:
 	hint["nearby_enemy_strength"]  = _combat_situation.get("nearby_enemy_strength", 0.0)
 	hint["nearby_enemy_rank_sum"]  = _combat_situation.get("nearby_enemy_rank_sum", 0)
 	hint["nearby_enemy_tier_sum"]  = _combat_situation.get("nearby_enemy_tier_sum", 0.0)
+	hint["nearby_enemy_hp_ratio"]  = _combat_situation.get("nearby_enemy_hp_ratio", 0.0)
 	return hint
 
 
@@ -1116,7 +1116,6 @@ func _evaluate_strategic_status() -> Dictionary:
 	# ==================== 戦況判断 ====================
 	# HP 充足率は自パーティーのみで算出（他パーティーのポーション所持は把握不可）
 	var hp_breakdown := _calc_hp_breakdown_for(_party_members)
-	var hp_status: int = hp_breakdown.get("status", int(GlobalConstants.HpStatus.CRITICAL)) as int
 
 	var situation: int
 	var power_balance: int
@@ -1163,9 +1162,8 @@ func _evaluate_strategic_status() -> Dictionary:
 		# 戦況判断結果
 		"situation":      situation,
 		"power_balance":  power_balance,
-		"hp_status":      hp_status,
 
-		# HP 充足率の内訳（デバッグ表示用・ポーション込みで「満」表示になる理由を可視化）
+		# HP 充足率の内訳（デバッグ表示用・ポーション込みの値を可視化）
 		"hp_real":        int(hp_breakdown.get("hp", 0)),
 		"hp_potion":      int(hp_breakdown.get("potion", 0)),
 		"hp_max":         int(hp_breakdown.get("max", 0)),
@@ -1190,6 +1188,7 @@ func _evaluate_strategic_status() -> Dictionary:
 		"nearby_enemy_strength": float(nearby_enemy_stats.strength),
 		"nearby_enemy_rank_sum": int(nearby_enemy_stats.rank_sum),
 		"nearby_enemy_tier_sum": float(nearby_enemy_stats.tier_sum),
+		"nearby_enemy_hp_ratio": float(nearby_enemy_stats.hp_ratio),
 	}
 
 
@@ -1212,19 +1211,9 @@ func _get_my_combat_members() -> Array[Character]:
 
 
 
-## 自軍パーティーの HP 充足率の段階を返す
-func _calc_hp_status() -> int:
-	return _calc_hp_status_for(_party_members)
-
-
-## 指定メンバーリストの HP 充足率の段階を返す
-func _calc_hp_status_for(members: Array) -> int:
-	return _calc_hp_breakdown_for(members).get("status", int(GlobalConstants.HpStatus.CRITICAL)) as int
-
-
-## 指定メンバーリストの HP 充足率の内訳を返す（デバッグ表示用）
-## 戻り値: { "hp": int, "potion": int, "max": int, "status": int }
-## status は HP_STATUS_FULL/STABLE/LOW/CRITICAL のいずれか
+## 指定メンバーリストの HP 充足率の内訳を返す（PartyStatusWindow 表示用・ポーション込み）
+## 戻り値: { "hp": int, "potion": int, "max": int }
+## 2026-04-25：HpStatus enum 廃止に伴い "status" キーを削除（呼出側は hp/potion/max のみ参照）
 func _calc_hp_breakdown_for(members: Array) -> Dictionary:
 	var total_hp := 0
 	var total_max := 0
@@ -1239,20 +1228,7 @@ func _calc_hp_breakdown_for(members: Array) -> Dictionary:
 		total_hp += m.hp
 		total_max += m.max_hp
 		total_potion += _calc_total_potion_hp(m)
-	var status: int
-	if total_max <= 0:
-		status = int(GlobalConstants.HpStatus.CRITICAL)
-	else:
-		var ratio := clampf(float(total_hp + total_potion) / float(total_max), 0.0, 1.0)
-		if ratio >= GlobalConstants.HP_STATUS_FULL:
-			status = int(GlobalConstants.HpStatus.FULL)
-		elif ratio >= GlobalConstants.HP_STATUS_STABLE:
-			status = int(GlobalConstants.HpStatus.STABLE)
-		elif ratio >= GlobalConstants.HP_STATUS_LOW:
-			status = int(GlobalConstants.HpStatus.LOW)
-		else:
-			status = int(GlobalConstants.HpStatus.CRITICAL)
-	return {"hp": total_hp, "potion": total_potion, "max": total_max, "status": status}
+	return {"hp": total_hp, "potion": total_potion, "max": total_max}
 
 
 ## 対立するキャラクターのリストを返す（サブクラスでオーバーライド）

@@ -122,7 +122,7 @@ func _is_in_explore_mode() -> bool:
 
 ## 現在の状態に基づく目標フロアを返す（戦力値 + HP 補正）
 ## 戦力値 = 自パのみの strength（装備 tier 込み・HP 充足率込み）
-## full_party の HP 充足率（ポーション込み・平均）が HP_STATUS_STABLE 未満の場合は適正フロア - 1
+## full_party の HP 充足率（ポーション込み・平均）が NPC_FLOOR_DOWNGRADE_HP_RATIO 未満の場合は適正フロア - 1
 ## suppress_floor_navigation = true またはメンバーなしの場合は現在フロアをそのまま返す
 ## 値は _combat_situation から参照（_process 1.5 秒タイマーで更新済み）
 func _get_target_floor() -> int:
@@ -153,7 +153,7 @@ func _get_target_floor() -> int:
 
 	# --- 3. HP 充足率チェック（統合関数の full_party_hp_ratio を参照） ---
 	var hp_ratio: float = float(_combat_situation.get("full_party_hp_ratio", 0.0))
-	var hp_fail: bool = hp_ratio < GlobalConstants.HP_STATUS_STABLE
+	var hp_fail: bool = hp_ratio < GlobalConstants.NPC_FLOOR_DOWNGRADE_HP_RATIO
 
 	# --- 4. 目標フロア決定（HP 充足率が低ければ-1） ---
 	var target_floor := appropriate_floor

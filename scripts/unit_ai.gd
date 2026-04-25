@@ -139,77 +139,62 @@ func set_visited_areas(d: Dictionary) -> void:
 func get_debug_goal_str() -> String:
 	if _member == null or not is_instance_valid(_member):
 		return "?"
+	# 2026-04-25 改訂：表示を「コード上のアクション名そのまま」に統一。
+	# 移動系（move_to_*）は後ろにターゲット/座標を `:` 区切りで付加する。
 	var state_lbl := _state_label(_state)
 	# 攻撃中
 	if _state == _State.ATTACKING_PRE or _state == _State.ATTACKING_POST:
 		if _attack_target != null and is_instance_valid(_attack_target) \
 				and _attack_target.character_data != null:
-			return "攻撃→%s[%s]" % [_attack_target.character_data.character_name, state_lbl]
-		return "攻撃中[%s]" % state_lbl
+			return "attack[%s]:%s" % [state_lbl, _attack_target.character_data.character_name]
+		return "attack[%s]" % state_lbl
 	# キュー先頭の action から推測
 	if _queue.is_empty():
-		# move_policy ベース
+		# move_policy ベース・queue 空状態
 		var pol_str := _move_policy
 		if pol_str in ["cluster", "follow", "same_room"] and _leader_ref != null \
 				and is_instance_valid(_leader_ref) and _leader_ref != _member \
 				and _leader_ref.current_floor != _member.current_floor:
 			var dir_lbl: String = "DOWN" if _leader_ref.current_floor > _member.current_floor \
 				else "UP"
-			return "L追従(%s/キュー空/%s)" % [dir_lbl, state_lbl]
-		return "[%s]キュー空(%s)" % [pol_str, state_lbl]
+			return "follow_leader(%s)/queue_empty(%s)" % [dir_lbl, state_lbl]
+		return "[%s]queue_empty(%s)" % [pol_str, state_lbl]
 	var head := _queue[0] as Dictionary
 	var act: String = head.get("action", "?") as String
 	match act:
 		"move_to_explore":
 			var goal_v: Variant = head.get("goal", Vector2i.ZERO)
 			var g := goal_v as Vector2i
-			# 階段タイルかチェック
+			# 階段タイルかチェック（タイル種別の識別子をそのまま付加）
 			if _map_data != null:
 				var tile := _map_data.get_tile(g)
 				if tile == MapData.TileType.STAIRS_DOWN:
-					return "→↓階段(%d,%d)" % [g.x, g.y]
+					return "move_to_explore:stairs_down(%d,%d)" % [g.x, g.y]
 				if tile == MapData.TileType.STAIRS_UP:
-					return "→↑階段(%d,%d)" % [g.x, g.y]
-			return "→探索(%d,%d)" % [g.x, g.y]
+					return "move_to_explore:stairs_up(%d,%d)" % [g.x, g.y]
+			return "move_to_explore:(%d,%d)" % [g.x, g.y]
 		"move_to_attack":
 			if _target != null and is_instance_valid(_target) \
 					and _target.character_data != null:
-				return "→攻撃%s" % _target.character_data.character_name
-			return "→攻撃位置"
+				return "move_to_attack:%s" % _target.character_data.character_name
+			return "move_to_attack"
 		"move_to_heal", "move_to_buff":
 			var t_v: Variant = head.get("target", null)
 			var t := t_v as Character
 			if t != null and is_instance_valid(t) and t.character_data != null:
-				return "→%s回復" % t.character_data.character_name
-			return "→回復対象"
+				return "%s:%s" % [act, t.character_data.character_name]
+			return act
 		"move_to_formation":
 			if _leader_ref != null and is_instance_valid(_leader_ref):
 				var dir_lbl2: String = ""
 				if _leader_ref.current_floor != _member.current_floor:
 					dir_lbl2 = "↓" if _leader_ref.current_floor > _member.current_floor else "↑"
-				return "→隊形%s" % dir_lbl2
-			return "→隊形"
-		"move_to_home":
-			return "→帰還"
-		"flee":
-			return "逃走"
-		"fall_back":
-			return "後退"
-		"keep_distance":
-			return "距離確保"
-		"wait":
-			return "待機"
-		"attack":
-			return "攻撃準備"
-		"v_attack":
-			return "特殊攻撃"
-		"heal":
-			return "回復実行"
-		"buff":
-			return "バフ実行"
-		"use_potion":
-			return "ポーション"
+				if not dir_lbl2.is_empty():
+					return "move_to_formation%s" % dir_lbl2
+			return "move_to_formation"
 		_:
+			# move_to_home / flee / fall_back / keep_distance / wait / attack /
+			# v_attack / heal / buff / use_potion その他はアクション名そのまま
 			return act
 
 
@@ -492,11 +477,11 @@ func _start_action(action: Dictionary) -> void:
 			_timer = 0.0  ## 最初の1歩は即時開始
 
 		"flee", "fall_back", "keep_distance":
-			# 意味論的に 3 種分離済み（flee=戦闘離脱 / fall_back=前線後退 / keep_distance=射程維持）。
-			# 実行ロジックは 2026-04-24 以降：
-			#   flee          → `_find_flee_goal()`（味方：二段階協調 + 避難先エリア / 敵：legacy 直線）
-			#   fall_back     → `_find_fall_back_goal()`（味方：リーダー推奨集合点 / 敵：legacy 直線）
-			#   keep_distance → `_find_flee_goal()`（ゴブリンアーチャー等の現状挙動維持）
+			# 意味論的に 3 種分離済み（flee=戦闘離脱 / fall_back=前線後退 / keep_distance=ターゲット中心の距離維持）。
+			# 実行ロジック（2026-04-25 改訂）：
+			#   flee          → `_find_flee_goal()`（味方：避難先方向 / 敵：legacy 直線）
+			#   fall_back     → `_find_fall_back_goal()`（味方：避難先方向＋射程外停止 / 敵：legacy 直線）
+			#   keep_distance → `_find_keep_distance_goal()`（ターゲット中心の距離維持・rear 隊形と GoblinArcher 系で使用）
 			# freed オブジェクトはガード：typed Character 引数に freed を渡すと型不一致エラー
 			# （Godot 4.6 では freed Object の `!= null` 比較が false を返すケースがあるため、
 			#  `is_instance_valid()` 単独で判定する）
@@ -506,6 +491,8 @@ func _start_action(action: Dictionary) -> void:
 			var goal: Vector2i
 			if act_name == "fall_back":
 				goal = _find_fall_back_goal(_target)
+			elif act_name == "keep_distance":
+				goal = _find_keep_distance_goal(_target)
 			else:
 				goal = _find_flee_goal(_target)
 			if goal == _member.grid_pos:
@@ -640,12 +627,15 @@ func _step_toward_goal() -> bool:
 	elif action_type == "move_to_attack":
 		if is_instance_valid(_target):
 			_goal = _calc_attack_goal(_target, _get_path_method())
-	elif action_type == "flee" or action_type == "keep_distance":
-		# flee / keep_distance は「脅威から離れる」移動（味方 flee は二段階協調 / 敵は legacy 直線）
-		# 新ロジック（味方）は _target null でも動作する（脅威コストは全対立陣営を自動集計）
+	elif action_type == "flee":
+		# flee は避難先方向への移動（味方：自律出口選択 + 避難先距離 / 敵：legacy 直線）
 		_goal = _find_flee_goal(_target)
+	elif action_type == "keep_distance":
+		# keep_distance はターゲット中心の距離維持（rear 隊形と GoblinArcher 系で使用）
+		# flee とは別ロジック（_find_keep_distance_goal は target 中心・脅威コスト最小タイル）
+		_goal = _find_keep_distance_goal(_target)
 	elif action_type == "fall_back":
-		# fall_back は味方側がリーダー推奨集合点に向かう（_find_flee_goal とは別ロジック）
+		# fall_back は避難先方向への後退（射程外で停止）。_find_flee_goal とは別関数
 		_goal = _find_fall_back_goal(_target)
 
 	if _member.grid_pos == _goal:
@@ -811,10 +801,13 @@ func _generate_queue(strategy: int, target: Character) -> Array:
 			return special_q
 		var atype := _get_attack_type()
 		# ヒーラー（attack_type="heal"）は通常攻撃を持たない
-		# 回復対象なし＋アンデッド敵なしの場合、ターゲットが非アンデッドなら attack を積まず移動方針に従う
+		# 2026-04-25 改訂：rear 指定ヒーラーは keep_distance に入る（後で rear 分岐で処理）
+		# それ以外（rear 以外の formation）のヒーラーで非アンデッド target なら従来通り move_policy へ
 		if atype == "heal":
 			if target.character_data == null or not target.character_data.is_undead:
-				return _generate_move_queue()
+				if _battle_formation != "rear":
+					return _generate_move_queue()
+				# rear ヒーラー：下の rear 分岐に進ませる（距離確保の挙動を継続）
 		# standby: 移動せず射程内のみ攻撃
 		if _move_policy == "standby":
 			if _can_attack_target(target, atype):
@@ -823,9 +816,20 @@ func _generate_queue(strategy: int, target: Character) -> Array:
 		# 戦闘中は battle_formation のみで移動先を決定（move_policy を無視）
 		match _battle_formation:
 			"rear":
-				if _can_attack_target(target, atype):
-					return [{"action": "attack"}, {"action": "attack"}]
-				return [{"action": "move_to_attack"}, {"action": "attack"}]
+				# 2026-04-25 改訂：rear は「ターゲットからの距離維持 → 理想範囲内なら攻撃」
+				# の階層構造に変更。敵接近時は keep_distance で下がり、近接戦闘を回避する。
+				# 旧仕様（射程外なら move_to_attack で接近）は「後衛前進問題」の温床だった。
+				var dist: int = _manhattan(_member.grid_pos, target.grid_pos)
+				var min_d: int = GlobalConstants.KEEP_DISTANCE_MIN
+				var max_d: int = GlobalConstants.KEEP_DISTANCE_MAX
+				if dist >= min_d and dist <= max_d:
+					# 理想範囲内：射程内なら攻撃・射程外なら距離維持
+					# 近接が rear 指定 / ヒーラーで非アンデッド target の場合は理想範囲内でも攻撃不可
+					if _can_attack_target(target, atype):
+						return [{"action": "attack"}, {"action": "attack"}]
+					return [{"action": "keep_distance"}]
+				# 理想範囲外：keep_distance で範囲内に入る
+				return [{"action": "keep_distance"}]
 			_:  # surround / rush / gather
 				var q: Array = []
 				q.append({"action": "move_to_attack"})
@@ -1611,6 +1615,83 @@ func _find_fall_back_goal(threat) -> Vector2i:
 	return goal
 
 
+## keep_distance 目標タイルを返す（2026-04-25 改訂：ターゲット中心の距離維持ロジック）
+##
+## flee / fall_back（避難先方向への移動）とは思想が異なる別ロジック：
+##   - flee / fall_back   = パーティーレベルの方向性（避難先エリア）に従う
+##   - keep_distance      = 個別の戦闘位置（自分の攻撃ターゲット）に従う
+##
+## アルゴリズム：
+##   1. ターゲットからのマンハッタン距離が [KEEP_DISTANCE_MIN, KEEP_DISTANCE_MAX] のタイル群を候補に列挙
+##   2. 各候補について：
+##      - threat_cost = 候補タイルでの脅威累積（_build_threat_map 由来）
+##      - reach_cost  = 自分の現在位置 → 候補タイルの A* 距離
+##      - total_cost  = threat_cost + reach_cost × KEEP_DISTANCE_REACH_WEIGHT
+##   3. 最小 total_cost のタイルを返す
+##   4. 候補がない / target 不在 → 自分の現在位置を返す（IDLE = 動かない）
+##
+## 候補タイルは _is_walkable_for_self() でフィルタ（壁・障害物・占有・敵の安全エリア進入禁止）。
+## 現在位置が理想範囲内なら候補に含まれるため、無駄な移動を避けて自然に停止する。
+func _find_keep_distance_goal(target: Character) -> Vector2i:
+	if _member == null or not is_instance_valid(_member) or _map_data == null:
+		if _member != null and is_instance_valid(_member):
+			return _member.grid_pos
+		return Vector2i.ZERO
+	if target == null or not is_instance_valid(target):
+		_last_flee_goal = _member.grid_pos
+		return _member.grid_pos
+
+	var min_d: int    = GlobalConstants.KEEP_DISTANCE_MIN
+	var max_d: int    = GlobalConstants.KEEP_DISTANCE_MAX
+	var weight: float = GlobalConstants.KEEP_DISTANCE_REACH_WEIGHT
+
+	# 脅威マップを事前計算（候補タイル評価で Dictionary 参照のみに簡略化）
+	var threat_map: Dictionary = _build_threat_map()
+
+	var best: Vector2i = _member.grid_pos
+	var best_cost: float = INF
+	var found_any: bool = false
+
+	# ターゲット中心の同心円帯（マンハッタン距離 [min_d, max_d]）を走査
+	var tx: int = target.grid_pos.x
+	var ty: int = target.grid_pos.y
+	for dx: int in range(-max_d, max_d + 1):
+		for dy: int in range(-max_d, max_d + 1):
+			var d: int = absi(dx) + absi(dy)
+			if d < min_d or d > max_d:
+				continue
+			var tile: Vector2i = Vector2i(tx + dx, ty + dy)
+			# 壁・障害物・占有・安全エリア進入禁止 をフィルタ
+			if not _is_walkable_for_self(tile):
+				continue
+			# 自分の位置 → tile への到達コスト
+			# 2026-04-25：A* 失敗時はマンハッタン距離をフォールバックとして使い、候補から外さない。
+			# 失敗ケース：(a) 真に到達不能（壁で囲まれている）/ (b) max_iter=400 を超える長距離
+			# 長距離 case は遠方の rear メンバーが「動かない」現象の原因だったため、近似評価で
+			# 候補を残し、移動方向のヒントを与える。次フレームで member が近づけば A* 成功へ
+			var reach_cost: float
+			if tile == _member.grid_pos:
+				reach_cost = 0.0
+			else:
+				var path: Array[Vector2i] = _astar(_member.grid_pos, tile)
+				if not path.is_empty():
+					reach_cost = float(path.size())
+				else:
+					reach_cost = float(_manhattan(_member.grid_pos, tile))
+			var threat_cost: float = float(threat_map.get(tile, 0.0))
+			var total_cost: float = threat_cost + reach_cost * weight
+			if total_cost < best_cost:
+				best_cost = total_cost
+				best = tile
+				found_any = true
+
+	if not found_any:
+		_last_flee_goal = _member.grid_pos
+		return _member.grid_pos
+	_last_flee_goal = best
+	return best
+
+
 ## 自分から見た脅威コストマップを構築する（2026-04-25：UnitAI に移管・PartyLeader から削除）
 ##
 ## `_calc_threat_cost(tile)` と完全に同じ意味論だが、計算方向が逆：
@@ -2270,9 +2351,9 @@ func _should_use_special_skill() -> bool:
 				int(GlobalConstants.PowerBalance.OVERWHELMING)) as int
 			return pb >= int(GlobalConstants.PowerBalance.INFERIOR)
 		"disadvantage":
-			var hs: int = _combat_situation.get("hp_status",
-				int(GlobalConstants.HpStatus.FULL)) as int
-			return hs >= int(GlobalConstants.HpStatus.LOW)
+			var hp_ratio: float = float(_combat_situation.get(
+				"nearby_allied_hp_ratio", 1.0))
+			return hp_ratio <= GlobalConstants.SPECIAL_SKILL_DISADVANTAGE_HP_RATIO
 		"never":
 			return false
 	return false
@@ -2443,6 +2524,11 @@ func _is_empty_floor(pos: Vector2i) -> bool:
 ##   "own_party_first"  : HP 減少量 ≥ 回復量 のうち最も HP 率が低い自パ 1 人（他パ対象外）
 ##   "conservative"     : 状態が `wounded` 以下の自パで最も HP 率が低い 1 人（他パ対象外）
 ## 旧 "leader_first" / "none" は廃止（下記 _migrate_heal_mode で自動マップ）
+##
+## 2026-04-25 改訂：すべての heal_mode で `_is_in_heal_range()`（同フロア + 射程内）を
+## 通す。射程外の対象を追って移動しないため、射程内に対象がいなければ null を返す。
+## これにより move 指示・combat 指示が無視される問題（ヒーラー追従しない・撤退しない）が
+## 解消する。詳細は CLAUDE.md「ヒーラーの行動規約」セクション参照。
 func _find_heal_target() -> Character:
 	if _member == null:
 		return null
@@ -2462,12 +2548,16 @@ func _find_heal_target() -> Character:
 	# 期待回復量（装備補正込みの power × z_heal_mult・最低 1）
 	var heal_amount: float = _calc_expected_heal_amount()
 
+	# 2026-04-25 改訂：射程内フィルタを追加。ヒーラーは射程外の対象を追って移動しない
+	# ため、各 heal_mode の対象選定時に同フロア + manhattan ≤ attack_range を必ず通す。
+	# 自分自身は距離 0 で常に射程内。射程内に対象がいなければ null を返し、move 指示・
+	# combat 指示の通常フローに合流する。
 	match heal_mode:
 		"aggressive":
 			# HP が満タン以外・全 friendly（他パ含む）で最低 HP 率
 			var filtered: Array[Character] = []
 			for ch: Character in _collect_all_friendly_candidates(my_friendly):
-				if ch.hp < ch.max_hp:
+				if ch.hp < ch.max_hp and _is_in_heal_range(ch):
 					filtered.append(ch)
 			return _pick_lowest_hp_ratio(filtered)
 		"own_party_first":
@@ -2478,7 +2568,7 @@ func _find_heal_target() -> Character:
 					continue
 				if ch.is_friendly != my_friendly:
 					continue
-				if float(ch.max_hp - ch.hp) >= heal_amount:
+				if float(ch.max_hp - ch.hp) >= heal_amount and _is_in_heal_range(ch):
 					filtered.append(ch)
 			return _pick_lowest_hp_ratio(filtered)
 		"conservative":
@@ -2489,16 +2579,36 @@ func _find_heal_target() -> Character:
 					continue
 				if ch.is_friendly != my_friendly:
 					continue
-				if ch.get_condition() != "healthy":
+				if ch.get_condition() != "healthy" and _is_in_heal_range(ch):
 					filtered.append(ch)
 			return _pick_lowest_hp_ratio(filtered)
 		_:  # "lowest_hp_first"
 			# 全 friendly（他パ含む）で HP 減少量 ≥ 回復量
 			var filtered: Array[Character] = []
 			for ch: Character in _collect_all_friendly_candidates(my_friendly):
-				if float(ch.max_hp - ch.hp) >= heal_amount:
+				if float(ch.max_hp - ch.hp) >= heal_amount and _is_in_heal_range(ch):
 					filtered.append(ch)
 			return _pick_lowest_hp_ratio(filtered)
+
+
+## ヒーラー射程内判定（2026-04-25 追加）
+##
+## 回復対象選定時のフィルタ。同フロア + マンハッタン距離 ≤ `Character.attack_range`
+## （装備補正込み）の対象のみ true を返す。
+##
+## 設計意図：ヒーラーは戦闘行動のために移動しないため、射程外の対象は無視する。
+## これにより `_find_heal_target()` が射程外対象を返さず、回復キューが空になり、
+## 通常メンバーと同じ move/combat フローに合流できるようになる。
+##
+## 自分自身は距離 0 のため常に射程内。
+func _is_in_heal_range(target: Character) -> bool:
+	if _member == null or not is_instance_valid(_member):
+		return false
+	if target == null or not is_instance_valid(target):
+		return false
+	if target.current_floor != _member.current_floor:
+		return false
+	return _manhattan(_member.grid_pos, target.grid_pos) <= _member.attack_range
 
 
 ## 旧 heal モード値を新モードに移行する

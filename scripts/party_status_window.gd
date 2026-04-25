@@ -391,27 +391,25 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 	if leader_member == null and not floor_members.is_empty():
 		leader_member = floor_members[0]
 
-	# 全体指示ヒント（combat_situation / power_balance / hp_status / 戦力内訳を取得）
+	# 全体指示ヒント（combat_situation / power_balance / 戦力内訳を取得）
+	# 2026-04-25 改訂：戦況表示を構造化（戦況比に HP 率を組み込み）・HP 独立表示を廃止
 	var hint: Dictionary = pm.get_global_orders_hint()
 	var sit_str: String = _combat_situation_label_with_ratio(hint)
 	var pb_str:  String = _power_balance_label(hint.get("power_balance", 0) as int)
 	pb_str += " " + _format_strength_breakdown(hint)
-	var hs_str:  String = _hp_status_label_with_breakdown(hint)
 
-	## ヘッダー：[種別] 生存・戦況・戦力・HP・（味方のみ）全体指示 / （敵のみ）strategy=ENUM_NAME
+	## ヘッダー：[種別] 生存・area・戦況・戦力・（味方のみ）全体指示 / （敵のみ）strategy=ENUM_NAME
 	## 2026-04-21 改訂：敵リーダー行の mv/battle/tgt/hp 表示を廃止し、素の _party_strategy を表示。
-	## 背景：敵の `_global_orders` は常に空で、旧表示は `_party_strategy` から仮想合成した
-	## ラベル（UnitAI 実動と連動せず誤解を招いた）。詳細は
-	## docs/investigation_enemy_order_effective.md / docs/investigation_enemy_order_system.md
+	## 2026-04-25 改訂：HP 独立表示を廃止。HP 率は戦況の括弧内に組み込み済み。
 	var is_enemy: bool = pm.party_type == "enemy"
 	var area_s: String = _area_id_at(leader_member)
 	var header: String
 	if is_enemy:
 		## 敵：strategy=<ENUM_NAME>（ATTACK / FLEE / WAIT / DEFEND / EXPLORE / GUARD_ROOM）
 		var strategy_name: String = _strategy_enum_name_for(pm)
-		header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s HP:%s  strategy=%s" % [
+		header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s  strategy=%s" % [
 			type_label, alive, total, area_s,
-			sit_str, pb_str, hs_str, strategy_name]
+			sit_str, pb_str, strategy_name]
 	else:
 		## 味方（NPC パーティー・show_orders=true 想定）：従来通り mv/battle/tgt/hp/item
 		var mv_raw:     String = hint.get("move", "-") as String
@@ -425,13 +423,13 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 		var hp_str:     String = _label("on_low_hp",     hint.get("on_low_hp",     "-") as String)
 		if show_orders:
 			var item_str: String = _label("item_pickup", hint.get("item_pickup", "-") as String)
-			header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
+			header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
 				type_label, alive, total, area_s,
-				sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str, item_str]
+				sit_str, pb_str, mv_str, battle_str, tgt_str, hp_str, item_str]
 		else:
-			header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s" % [
+			header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s  mv=%s  battle=%s  tgt=%s  hp=%s" % [
 				type_label, alive, total, area_s,
-				sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str]
+				sit_str, pb_str, mv_str, battle_str, tgt_str, hp_str]
 
 	# FLEE 中の避難先情報（味方パーティー限定・戦況判断派生情報として戦況ブロック末尾に付加）
 	header += _format_flee_refuge_suffix(pm)
@@ -506,23 +504,21 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 	var tgt_str:    String = _label("target",        go.get("target",        "-") as String)
 	var hp_str:     String = _label("on_low_hp",     go.get("on_low_hp",     "-") as String)
 	var item_str:   String = _label("item_pickup",   go.get("item_pickup",   "-") as String)
-	# 戦況表示（_hero_manager から取得）
+	# 戦況表示（_hero_manager から取得・2026-04-25 改訂：HP 独立表示廃止）
 	var sit_str := "?"
 	var pb_str := "?"
-	var hs_str := "?"
 	if _hero_manager != null and is_instance_valid(_hero_manager):
 		var hint: Dictionary = _hero_manager.get_global_orders_hint()
 		sit_str = _combat_situation_label_with_ratio(hint)
 		pb_str = _power_balance_label(hint.get("power_balance", 0) as int)
 		pb_str += " " + _format_strength_breakdown(hint)
-		hs_str = _hp_status_label_with_breakdown(hint)
 
 	# 分母：プレイヤー Party は死亡してもメンバーリストから削除しないため実サイズで OK
 	# （敵/NPC は PartyManager._on_member_died で erase される・PartyLeader._initial_count を使う）
 	var area_s: String = _area_id_at(leader_member)
-	var header := "[プレイヤー]  生存:%d/%d  area:%s  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
+	var header := "[プレイヤー]  生存:%d/%d  area:%s  戦況:%s 戦力:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
 		alive, floor_members.size(), area_s,
-		sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str, item_str]
+		sit_str, pb_str, mv_str, battle_str, tgt_str, hp_str, item_str]
 	header += _format_flee_refuge_suffix(_hero_manager)
 	header += _format_leader_extras(_hero_manager)
 	if y + LINE_H > bottom:
@@ -577,26 +573,27 @@ func _format_leader_extras(pm: PartyManager) -> String:
 			parts.append("探索:%d" % (va as Dictionary).size())
 
 	# 低優先度（NpcLeaderAI 固有・duck typing で取得）
+	# 2026-04-25 改訂：日本語ラベル → コード上のフィールド名そのままに統一
 	if _show_var("joined_to_player"):
 		var joined_v: Variant = leader.get("joined_to_player")
 		if joined_v != null:
-			parts.append("合流:%s" % _yn(joined_v as bool))
+			parts.append("joined_to_player:%s" % _yn(joined_v as bool))
 	if _show_var("was_refused"):
 		var refused_v: Variant = leader.get("_was_refused")
 		if refused_v != null:
-			parts.append("拒絶:%s" % _yn(refused_v as bool))
+			parts.append("was_refused:%s" % _yn(refused_v as bool))
 	if _show_var("has_fought_together"):
 		var ft_v: Variant = leader.get("has_fought_together")
 		if ft_v != null:
-			parts.append("共闘:%s" % _yn(ft_v as bool))
+			parts.append("has_fought_together:%s" % _yn(ft_v as bool))
 	if _show_var("has_been_healed"):
 		var hh_v: Variant = leader.get("has_been_healed")
 		if hh_v != null:
-			parts.append("回復:%s" % _yn(hh_v as bool))
+			parts.append("has_been_healed:%s" % _yn(hh_v as bool))
 	if _show_var("suppress_floor_navigation"):
 		var sfn_v: Variant = leader.get("suppress_floor_navigation")
-		if sfn_v != null and (sfn_v as bool):
-			parts.append("床固定")
+		if sfn_v != null:
+			parts.append("suppress_floor_navigation:%s" % _yn(sfn_v as bool))
 
 	if parts.is_empty():
 		return ""
@@ -829,20 +826,23 @@ func _format_action_goal(m: Character, pm: PartyManager) -> String:
 ##   - E:sp_mp_potion ← 同上
 ##   - I:item_pickup ← 常にヘッダーと一致（global から sync）
 func _build_orders_field_list(ai: UnitAI, m: Character) -> PackedStringArray:
+	# 2026-04-25 改訂：_shorten による省略形を廃止し、OrderWindow 正規表記に統一。
+	# `_label(key, val)` で OrderWindow 定義の日本語ラベルへ変換する（無定義値は val そのまま）。
+	# 文字数増による表示崩れは F3 詳細度トグルで対応する方針。
 	var parts: PackedStringArray = []
 	var order: Dictionary = m.current_order if m != null else {}
 	if _show_var("target"):
-		parts.append("T:%s" % _shorten(order.get("target", "-")))
+		parts.append("T:%s" % _label("target", str(order.get("target", "-"))))
 	if _show_var("combat"):
-		parts.append("C:%s" % _shorten(ai.get("_combat")))
+		parts.append("C:%s" % _label("combat", str(ai.get("_combat"))))
 	if _show_var("battle_formation"):
-		parts.append("F:%s" % _shorten(ai.get("_battle_formation")))
+		parts.append("F:%s" % _label("battle_formation", str(ai.get("_battle_formation"))))
 	if _show_var("special_skill"):
-		parts.append("S:%s" % _shorten(ai.get("_special_skill")))
+		parts.append("S:%s" % _label("special_skill", str(ai.get("_special_skill"))))
 	# ヒーラー限定：回復モード（H:）
 	if _show_var("heal") and m != null and m.character_data != null \
 			and m.character_data.class_id == "healer":
-		parts.append("H:%s" % _shorten(order.get("heal", "-")))
+		parts.append("H:%s" % _label("heal", str(order.get("heal", "-"))))
 	return parts
 
 
@@ -854,7 +854,7 @@ func _build_move_policy_part(ai: UnitAI) -> String:
 		return ""
 	if ai == null or not is_instance_valid(ai):
 		return ""
-	return "move:%s" % _shorten(ai.get("_move_policy"))
+	return "move:%s" % _label("move", str(ai.get("_move_policy")))
 
 
 ## UnitAI 側フラグパーツ（低優先度）：パーティー状態・種族固有の時系列情報をパーツ配列で返す
@@ -877,22 +877,39 @@ func _build_ai_flag_parts(ai: UnitAI, m: Character) -> PackedStringArray:
 		if pf_v != null and (pf_v as bool):
 			parts.append("P↓")
 	## last_flee_goal は味方メンバー限定（敵は FLEE 逃走先の自律機構なし）
-	## 2026-04-25 改訂：リーダー推奨機構を廃止。`_last_flee_goal` はメンバー本人が
-	## `_find_flee_goal()` / `_find_fall_back_goal()` で直近に選定した目標タイル。
-	## 現在実行中のアクション種別でラベルを切り替える（flee→ / fb→）。
+	## 2026-04-25 改訂：`_last_flee_goal` はメンバー本人が `_find_flee_goal()` /
+	## `_find_fall_back_goal()` / `_find_keep_distance_goal()` で直近に選定した目標タイル。
+	## **現在実行中のアクションが flee / fall_back / keep_distance のいずれかの場合のみ表示**。
+	## それ以外（attack 等）の場合は `_last_flee_goal` が古い値を保持していても表示しない
+	## （前回の rear keep_distance の goal が攻撃中に flee→ として表示される誤解を防ぐ）。
+	## ラベル参照は `_current_action` 優先・空なら `_queue[0]` をフォールバック参照
+	## （IDLE 状態での action 遷移瞬間は `_current_action` が空辞書になるため）
 	if _show_var("last_flee_goal") and m != null and m.is_friendly:
 		var rg_v: Variant = ai.get("_last_flee_goal")
 		if rg_v != null:
 			var rg: Vector2i = rg_v as Vector2i
 			if rg != Vector2i(-1, -1):
-				var cur_act_v: Variant = ai.get("_current_action")
 				var cur_act_name: String = ""
+				var cur_act_v: Variant = ai.get("_current_action")
 				if cur_act_v is Dictionary:
 					cur_act_name = (cur_act_v as Dictionary).get("action", "") as String
-				var label: String = "flee"
-				if cur_act_name == "fall_back":
+				# `_current_action` が空（IDLE 中）なら `_queue[0]` を参照
+				if cur_act_name.is_empty():
+					var queue_v: Variant = ai.get("_queue")
+					if queue_v is Array and not (queue_v as Array).is_empty():
+						var head_v: Variant = (queue_v as Array)[0]
+						if head_v is Dictionary:
+							cur_act_name = (head_v as Dictionary).get("action", "") as String
+				# flee / fall_back / keep_distance 以外（attack 等）は表示しない
+				var label: String = ""
+				if cur_act_name == "flee":
+					label = "flee"
+				elif cur_act_name == "fall_back":
 					label = "fb"
-				parts.append("%s→(%d,%d)" % [label, rg.x, rg.y])
+				elif cur_act_name == "keep_distance":
+					label = "kd"
+				if not label.is_empty():
+					parts.append("%s→(%d,%d)" % [label, rg.x, rg.y])
 	if _show_var("floor_following"):
 		var ff_v: Variant = ai.get("_floor_following")
 		if ff_v != null and (ff_v as bool):
@@ -1098,25 +1115,28 @@ func _strategy_enum_name_for(pm: PartyManager) -> String:
 	return "?"
 
 
-## CombatSituation enum 値を短い日本語ラベルに変換する
+## CombatSituation enum 値を enum 名そのままで返す（2026-04-25 改訂：日本語化を廃止）
+## 表示形式：SAFE / OVERWHELMING / ADVANTAGE / EVEN / DISADVANTAGE / CRITICAL
 func _combat_situation_label(sit: int) -> String:
 	match sit:
-		int(GlobalConstants.CombatSituation.SAFE):          return "安全"
-		int(GlobalConstants.CombatSituation.OVERWHELMING):  return "圧倒"
-		int(GlobalConstants.CombatSituation.ADVANTAGE):     return "優勢"
-		int(GlobalConstants.CombatSituation.EVEN):          return "互角"
-		int(GlobalConstants.CombatSituation.DISADVANTAGE):  return "劣勢"
-		int(GlobalConstants.CombatSituation.CRITICAL):      return "危険"
+		int(GlobalConstants.CombatSituation.SAFE):          return "SAFE"
+		int(GlobalConstants.CombatSituation.OVERWHELMING):  return "OVERWHELMING"
+		int(GlobalConstants.CombatSituation.ADVANTAGE):     return "ADVANTAGE"
+		int(GlobalConstants.CombatSituation.EVEN):          return "EVEN"
+		int(GlobalConstants.CombatSituation.DISADVANTAGE):  return "DISADVANTAGE"
+		int(GlobalConstants.CombatSituation.CRITICAL):      return "CRITICAL"
 	return "?"
 
 
+## PowerBalance enum 値を enum 名そのままで返す（2026-04-25 改訂）
+## 表示形式：OVERWHELMING / SUPERIOR / EVEN / INFERIOR / DESPERATE
 func _power_balance_label(pb: int) -> String:
 	match pb:
-		int(GlobalConstants.PowerBalance.OVERWHELMING):  return "圧倒"
-		int(GlobalConstants.PowerBalance.SUPERIOR):      return "優位"
-		int(GlobalConstants.PowerBalance.EVEN):          return "互角"
-		int(GlobalConstants.PowerBalance.INFERIOR):      return "劣位"
-		int(GlobalConstants.PowerBalance.DESPERATE):     return "絶望"
+		int(GlobalConstants.PowerBalance.OVERWHELMING):  return "OVERWHELMING"
+		int(GlobalConstants.PowerBalance.SUPERIOR):      return "SUPERIOR"
+		int(GlobalConstants.PowerBalance.EVEN):          return "EVEN"
+		int(GlobalConstants.PowerBalance.INFERIOR):      return "INFERIOR"
+		int(GlobalConstants.PowerBalance.DESPERATE):     return "DESPERATE"
 	return "?"
 
 
@@ -1150,38 +1170,29 @@ func _hp_color_for(ch: Character) -> Color:
 	return GlobalConstants.condition_sprite_color(ch.get_condition())
 
 
-func _hp_status_label(hs: int) -> String:
-	match hs:
-		int(GlobalConstants.HpStatus.FULL):     return "満"
-		int(GlobalConstants.HpStatus.STABLE):   return "安"
-		int(GlobalConstants.HpStatus.LOW):      return "低"
-		int(GlobalConstants.HpStatus.CRITICAL): return "危"
-	return "?"
-
-
-## HP ラベル + 計算内訳（ポーション加算が「満」表示の理由を可視化）
-## 例: "満(4+150/41)" — 実 HP 4 + ポーション回復 150 を max 41 で割った結果が FULL
-func _hp_status_label_with_breakdown(hint: Dictionary) -> String:
-	var label := _hp_status_label(hint.get("hp_status", 0) as int)
-	var hp_real: int = hint.get("hp_real", -1) as int
-	var hp_potion: int = hint.get("hp_potion", 0) as int
-	var hp_max: int = hint.get("hp_max", 0) as int
-	if hp_real < 0 or hp_max <= 0:
-		return label
-	return "%s(%d+%d/%d)" % [label, hp_real, hp_potion, hp_max]
-
-
 ## 戦況ラベル + 戦力比の計算内訳（戦況判定の根拠を可視化）
-## 例: "優勢(9.0/5.0=1.80)" — 自軍 9.0 / 敵 5.0 = 1.80 が ADVANTAGE 閾値以上
-## 敵なし or 戦力ゼロ時は比を省略（SAFE ラベルのみ）
+## 2026-04-25 改訂：HpStatus 廃止に伴い、戦況比に HP 率を組み込む構造化表示に変更
+## 例: "EVEN(9.0×1.00 / 9.0×0.85 = 1.18)"
+##   形式：<enum 名>(<自軍戦力>×<自軍 HP 率> / <敵戦力>×<敵 HP 率> = <戦況比>)
+##   `_combat_situation` の strength 値は既に hp_ratio 込みで計算されているため、
+##   表示の「× hp_ratio」は計算過程を明示するための再構成（実際の strength から逆算）
+## 敵なし or 戦力ゼロ時は SAFE ラベルのみ返す（比は省略）
 func _combat_situation_label_with_ratio(hint: Dictionary) -> String:
 	var label := _combat_situation_label(hint.get("combat_situation", 0) as int)
 	var ratio: float = float(hint.get("combat_ratio", -1.0))
 	if ratio < 0.0:
 		return label
+	# strength = base × hp_ratio から base を逆算して表示する
+	# （PartyStatusWindow の趣旨は「計算過程の可視化」のため、構成要素を露出する）
 	var my_s: float = float(hint.get("my_combat_strength", 0.0))
 	var enemy_s: float = float(hint.get("nearby_enemy_strength", 0.0))
-	return "%s(%.1f/%.1f=%.2f)" % [label, my_s, enemy_s, ratio]
+	var ally_hp_ratio: float = float(hint.get("nearby_allied_hp_ratio", 1.0))
+	var enemy_hp_ratio: float = float(hint.get("nearby_enemy_hp_ratio", 1.0))
+	# base = strength / hp_ratio（hp_ratio が 0 なら 0 として扱う）
+	var my_base: float = my_s / ally_hp_ratio if ally_hp_ratio > 0.0 else 0.0
+	var enemy_base: float = enemy_s / enemy_hp_ratio if enemy_hp_ratio > 0.0 else 0.0
+	return "%s(%.1f×%.2f / %.1f×%.2f = %.2f)" % [
+		label, my_base, ally_hp_ratio, enemy_base, enemy_hp_ratio, ratio]
 
 
 ## FLEE 時の避難先情報 suffix を返す（戦況判断ブロック末尾に付加）
@@ -1364,13 +1375,11 @@ func _snapshot_player_party_lines(floor_idx: int) -> PackedStringArray:
 
 	var sit_str: String = "?"
 	var pb_str:  String = "?"
-	var hs_str:  String = "?"
 	if _hero_manager != null and is_instance_valid(_hero_manager):
 		var hint: Dictionary = _hero_manager.get_global_orders_hint()
 		sit_str = _combat_situation_label_with_ratio(hint)
 		pb_str  = _power_balance_label(hint.get("power_balance", 0) as int)
 		pb_str += " " + _format_strength_breakdown(hint)
-		hs_str  = _hp_status_label_with_breakdown(hint)
 
 	# リーダー位置のエリア ID（画面ヘッダーと同じ表記）
 	var leader_member: Character = null
@@ -1383,8 +1392,8 @@ func _snapshot_player_party_lines(floor_idx: int) -> PackedStringArray:
 		leader_member = floor_members[0] as Character
 	var area_s: String = _area_id_at(leader_member)
 
-	var header: String = "[プレイヤー]  生存:%d/%d  area:%s  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
-		alive, floor_members.size(), area_s, sit_str, pb_str, hs_str,
+	var header: String = "[プレイヤー]  生存:%d/%d  area:%s  戦況:%s 戦力:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
+		alive, floor_members.size(), area_s, sit_str, pb_str,
 		mv_str, battle_str, tgt_str, hp_str, item_str]
 	header += _format_flee_refuge_suffix(_hero_manager)
 	header += _format_leader_extras(_hero_manager)
@@ -1436,7 +1445,6 @@ func _snapshot_party_block_lines(pm: PartyManager, type_label: String,
 	var sit_str: String = _combat_situation_label_with_ratio(hint)
 	var pb_str:  String = _power_balance_label(hint.get("power_balance", 0) as int)
 	pb_str += " " + _format_strength_breakdown(hint)
-	var hs_str:  String = _hp_status_label_with_breakdown(hint)
 
 	# リーダー位置のエリア ID
 	var leader_member: Character = null
@@ -1452,9 +1460,9 @@ func _snapshot_party_block_lines(pm: PartyManager, type_label: String,
 	var header: String
 	if is_enemy:
 		var strategy_name: String = _strategy_enum_name_for(pm)
-		header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s HP:%s  strategy=%s" % [
+		header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s  strategy=%s" % [
 			type_label, alive, total, area_s,
-			sit_str, pb_str, hs_str, strategy_name]
+			sit_str, pb_str, strategy_name]
 	else:
 		var mv_raw:     String = hint.get("move", "-") as String
 		var mv_str:     String = _label("move", mv_raw)
@@ -1466,13 +1474,13 @@ func _snapshot_party_block_lines(pm: PartyManager, type_label: String,
 		var hp_str:     String = _label("on_low_hp",     hint.get("on_low_hp",     "-") as String)
 		if show_orders:
 			var item_str: String = _label("item_pickup", hint.get("item_pickup", "-") as String)
-			header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
+			header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
 				type_label, alive, total, area_s,
-				sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str, item_str]
+				sit_str, pb_str, mv_str, battle_str, tgt_str, hp_str, item_str]
 		else:
-			header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s" % [
+			header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s  mv=%s  battle=%s  tgt=%s  hp=%s" % [
 				type_label, alive, total, area_s,
-				sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str]
+				sit_str, pb_str, mv_str, battle_str, tgt_str, hp_str]
 	header += _format_flee_refuge_suffix(pm)
 	header += _format_leader_extras(pm)
 	out.append(header)

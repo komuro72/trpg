@@ -101,6 +101,15 @@ var FLEE_AREA_DISTANCE_WEIGHT: float    = 10.0   ## 出口が属するエリア 
 ## flee 状態の解除ではなく「flee 中の移動先決定」の問題として実装している点に注意。
 var FLEE_SAFE_DISTANCE: int             = 8
 
+## keep_distance（rear 隊形・GoblinArcher / Salamander 用）の理想距離範囲
+## ターゲットからのマンハッタン距離が [MIN, MAX] のタイル群を候補にする
+## クラス非依存・遠距離射程基準の絶対値（実プレイ調整対象）
+var KEEP_DISTANCE_MIN: int              = 3
+var KEEP_DISTANCE_MAX: int              = 4
+## keep_distance goal 選定で「自分の位置 → 候補タイル」の到達コストにかける重み
+## 小さいほど脅威コストが支配的（より安全なタイルを選ぶ）・大きいほど近場優先
+var KEEP_DISTANCE_REACH_WEIGHT: float   = 0.5
+
 ## fall_back 用：
 ## FLEE と同じ出口総合コスト評価（UnitAI._evaluate_exit_costs）を共用し、
 ## 停止条件だけを「射程外判定」（_is_far_enough_from_threats）に差別化する設計。
@@ -120,8 +129,11 @@ var SPECIAL_ATTACK_FIRE_ZONE_RANGE: int = 2
 ## 炎陣（magician-fire）の発動に必要な範囲内の敵数
 ## [ConfigEditor 対象]
 var SPECIAL_ATTACK_FIRE_ZONE_MIN_ENEMIES: int = 2
-## 劣勢判定閾値（特殊攻撃「劣勢なら使う」用の参考値。現在は HpStatus enum で代替されており未使用）
-const DISADVANTAGE_THRESHOLD: float = 0.6
+## 特殊攻撃「劣勢なら使う」（special_skill = "disadvantage"）の発動閾値
+## `_combat_situation["nearby_allied_hp_ratio"]` がこの値以下のとき発動条件を満たす
+## 旧 HpStatus.LOW（HpStatus 廃止前の閾値 0.5 = STABLE/LOW 境界）を踏襲
+## [ConfigEditor 対象・UnitAI カテゴリ]
+var SPECIAL_SKILL_DISADVANTAGE_HP_RATIO: float = 0.5
 
 ## NPC が階段の位置を最初から知っているか（true: 地図持ち / false: 探索して発見）
 ## false の場合、訪問済みエリアにある階段のみ目標にし、未発見なら通常 explore にフォールバック
@@ -271,12 +283,11 @@ var POWER_BALANCE_SUPERIOR:     float = 1.2
 var POWER_BALANCE_EVEN:         float = 0.8
 var POWER_BALANCE_INFERIOR:     float = 0.5
 
-## 自軍HP充足率の段階（ポーション込み）
-enum HpStatus { FULL, STABLE, LOW, CRITICAL }
-## [ConfigEditor 対象・すべて]
-var HP_STATUS_FULL:    float = 0.75
-var HP_STATUS_STABLE:  float = 0.5
-var HP_STATUS_LOW:     float = 0.25
+## NPC フロア降下判定の HP 充足率閾値（旧 HP_STATUS_STABLE を改名・2026-04-25）
+## NPC パーティーが目標フロアの判定で「自パ平均 HP 率（ポーション込み）」がこの値未満なら
+## 適正フロアを 1 つ下げる（npc_leader_ai.gd:_calculate_target_floor）
+## [ConfigEditor 対象]
+var NPC_FLOOR_DOWNGRADE_HP_RATIO: float = 0.5
 
 ## 戦力計算に占める装備 tier の重み係数
 ## strength_base = rank_sum + party_tier_sum × この値
@@ -489,9 +500,8 @@ const CONFIG_KEYS: Array[String] = [
 	"POWER_BALANCE_SUPERIOR",
 	"POWER_BALANCE_EVEN",
 	"POWER_BALANCE_INFERIOR",
-	"HP_STATUS_FULL",
-	"HP_STATUS_STABLE",
-	"HP_STATUS_LOW",
+	"NPC_FLOOR_DOWNGRADE_HP_RATIO",
+	"SPECIAL_SKILL_DISADVANTAGE_HP_RATIO",
 	"ITEM_TIER_STRENGTH_WEIGHT",
 	"COALITION_RADIUS_TILES",
 	# NpcLeaderAI タブ
@@ -510,6 +520,9 @@ const CONFIG_KEYS: Array[String] = [
 	"FLEE_THREAT_WEIGHT",
 	"FLEE_AREA_DISTANCE_WEIGHT",
 	"FLEE_SAFE_DISTANCE",
+	"KEEP_DISTANCE_MIN",
+	"KEEP_DISTANCE_MAX",
+	"KEEP_DISTANCE_REACH_WEIGHT",
 	"FALL_BACK_MARGIN",
 	"SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES",
 	"SPECIAL_ATTACK_FIRE_ZONE_RANGE",
