@@ -401,6 +401,9 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 	## ヘッダー：[種別] 生存・area・戦況・戦力・（味方のみ）全体指示 / （敵のみ）strategy=ENUM_NAME
 	## 2026-04-21 改訂：敵リーダー行の mv/battle/tgt/hp 表示を廃止し、素の _party_strategy を表示。
 	## 2026-04-25 改訂：HP 独立表示を廃止。HP 率は戦況の括弧内に組み込み済み。
+	## 2026-04-26 改訂（再）：敵 `_global_orders.move` は `follow` で固定（種族 AI が書き換え
+	##   ない規約）のためヘッダーには表示しない。動的に変化する個体実値はメンバー行の
+	##   `move:<ラベル>`（_build_move_policy_part）で表示する。
 	var is_enemy: bool = pm.party_type == "enemy"
 	var area_s: String = _area_id_at(leader_member)
 	var header: String
@@ -648,15 +651,18 @@ func _draw_member_block(font: Font, m: Character, x: float, y: float, w: float,
 
 	# 指示グループ（詳細度 >= 1・味方メンバーのみ）
 	## 2026-04-21 改訂：敵メンバーでは本グループを出力しない。
-	## 敵の `_combat` / `_battle_formation` / `_on_low_hp` / `_move_policy` は Character デフォルトから
-	## 変化せず、`_special_skill` / `_hp_potion` / `_sp_mp_potion` は `is_friendly == false` ガードで
+	## 敵の `_combat` / `_battle_formation` / `_on_low_hp` は Character デフォルトから変化せず、
+	## `_special_skill` / `_hp_potion` / `_sp_mp_potion` は `is_friendly == false` ガードで
 	## 参照されない。`_item_pickup` も実質参照されない（`_is_combat_safe()` が敵側で稀に真になる程度）。
 	## 詳細は docs/investigation_enemy_order_system.md / investigation_enemy_order_effective.md
-	if _detail_level >= 1 and ai != null and is_instance_valid(ai) and m.is_friendly:
-		# move_policy は別枠表示（全体指示が UnitAI で per-member 書き換えされうる唯一の項目）
+	##
+	## 2026-04-26 改訂：`_move_policy` は per-member ロジック統一で敵にも実効するため、
+	## 本ガードの外（敵味方共通）で `_build_move_policy_part(ai)` を表示する。
+	if _detail_level >= 1 and ai != null and is_instance_valid(ai):
 		var move_part: String = _build_move_policy_part(ai)
 		if not move_part.is_empty():
 			segs.append({"text": "  " + move_part, "color": ORDERS_COLOR})
+	if _detail_level >= 1 and ai != null and is_instance_valid(ai) and m.is_friendly:
 		var order_parts: PackedStringArray = _build_orders_field_list(ai, m)
 		if not order_parts.is_empty():
 			segs.append({"text": "  指示:", "color": ORDERS_COLOR})
@@ -1085,10 +1091,12 @@ func _build_label_cache() -> void:
 func _label(key: String, val: String) -> String:
 	if val == "-":
 		return "-"
-	# 階段移動方針は OrderWindow 定数に存在しないため個別処理
+	# 階段移動方針・縄張り帰還は OrderWindow 定数に存在しないため個別処理
+	# （これらはリーダーのみ per-member で `_move_policy` に上書きされる固有値）
 	if key == "move":
 		if val == "stairs_down": return "↓階段"
 		if val == "stairs_up":   return "↑階段"
+		if val == "guard_room":  return "部屋を守る"
 	_build_label_cache()
 	var sub := _label_cache.get(key, {}) as Dictionary
 	return sub.get(val, val) as String
@@ -1459,6 +1467,9 @@ func _snapshot_party_block_lines(pm: PartyManager, type_label: String,
 	var is_enemy: bool = pm.party_type == "enemy"
 	var header: String
 	if is_enemy:
+		## 2026-04-26 改訂（再）：敵ヘッダーから `mv=` を撤去（_draw_party_block と同期）。
+		##   敵 `_global_orders.move` は `follow` で固定のためヘッダー表示は冗長。
+		##   個体の動的値はメンバー行の `move:` で表示する。
 		var strategy_name: String = _strategy_enum_name_for(pm)
 		header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s  strategy=%s" % [
 			type_label, alive, total, area_s,
@@ -1510,11 +1521,15 @@ func _build_member_line(m: Character, pm: PartyManager, display_floor: int) -> S
 	if not goal_s.is_empty():
 		buf.append(goal_s.lstrip(" "))
 
-	# 指示グループ（味方メンバーのみ・detail=1 以上）
-	if ai != null and is_instance_valid(ai) and m.is_friendly:
+	# move_policy（敵味方共通・detail=1 以上）
+	## 2026-04-26 改訂：敵にも `move:` を表示（_draw_member_block と同期）
+	if ai != null and is_instance_valid(ai):
 		var move_part: String = _build_move_policy_part(ai)
 		if not move_part.is_empty():
 			buf.append(move_part)
+
+	# 指示グループ（味方メンバーのみ・detail=1 以上）
+	if ai != null and is_instance_valid(ai) and m.is_friendly:
 		var order_parts: PackedStringArray = _build_orders_field_list(ai, m)
 		if not order_parts.is_empty():
 			buf.append("指示:" + " ".join(order_parts))

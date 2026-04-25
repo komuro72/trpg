@@ -3,6 +3,341 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-26 セッションサマリー：`mv=` 不整合調査 → per-member ロジック統一 → 敵 GUARD_ROOM の area_id ベース実装
+
+本セッションは「PartyStatusWindow の `mv=追従` と非リーダー `move:密集` 不整合」の観察から始まり、調査・設計議論を経て、3 つの実装変更と複数の残タスク化につながった。各実装の詳細は本サマリー以降の個別エントリ（per-member ロジック統一 / 敵指示表示再構成 / 敵 GUARD_ROOM 再実装）を参照。
+
+### 調査の発端
+
+PartyStatusWindow / F7 スナップショットで観察された不整合：ヘッダー `mv=追従` と非リーダー個別行 `move:密集` の食い違い。
+
+### 調査結果（仮説 B：規約準拠の正常動作）
+
+`docs/investigation_mv_move_mismatch.md` 参照。
+
+- ヘッダー `mv=` は `_global_orders.move`（パーティー全体指示）を表示
+- メンバー行 `move:` は `UnitAI._move_policy`（per-member 実値）を直読み
+- 4/25 NPC 階段ナビ修正の規約「`_global_orders.move` を `stairs_*` で汚染しない」を遵守した結果として、両者は別フィールドを見ている → 不整合ではなく規約準拠の正常動作
+
+### 設計改善：per-member ロジック統一
+
+仕様レベルの整理：
+
+- リーダーはモード固有値（`stairs_*` / `explore` / `guard_room`）に上書きされる
+- 非リーダーは常に `_global_orders.move` を継承する（リーダー追従）
+- 階段ナビ・explore・guard_room の各モードで非リーダーが `cluster` ハードコードされていた挙動を廃止し、思想と整合させた
+
+### 副産物：敵デフォルト `spread` 問題の発見
+
+本修正の過程で、敵パーティーの `_global_orders.move` デフォルトが `"spread"` だったことが判明。これが「敵がばらけやすい・縄張りを守ろうとしない」挙動の温床になっていた。`"follow"` に初期化する処置を追加。
+
+### PartyStatusWindow 表示の整理
+
+当初は敵ヘッダーに `mv=` を追加表示する方針だったが、議論の結果：
+
+- 動的に変化するのは個体の `_move_policy` のみ（ベースラインは固定）
+- 敵指示グループは 4/21 改訂で非表示化されており、その精神と整合させる
+
+として、敵ヘッダー `mv=` を撤去・敵メンバー行に `move:` を追加表示する方針に変更。`guard_room` の日本語ラベル「部屋を守る」も追加。
+
+### 敵 `_party_strategy` 遷移の調査
+
+`docs/investigation_party_strategy_transition.md` 参照。戦闘中の敵が常に `strategy=ATTACK` 固定で、`GUARD_ROOM` / `EXPLORE` / `FLEE` への遷移がほぼ起きない問題を確認。原因は複数：
+
+- `_evaluate_party_strategy()` が戦況を一切参照しない
+- `territory_range = 50` で大半の敵が縄張り外に出ない
+- `EXPLORE` / `DEFEND` は敵向けに未実装
+
+### 設計議論：`_party_strategy` の将来廃止方向
+
+以下の方針で合意：
+
+- `ATTACK` / `FLEE` は `_global_orders.battle_policy` で統一可能
+- `WAIT` は処理停止フラグで別管理
+- `GUARD_ROOM` はリーダーの `_move_policy` に移管
+- `EXPLORE` / `DEFEND` は使わない
+
+ただし今回は影響範囲を抑えるため、`_party_strategy` 廃止は将来課題に残し、最小工数で `GUARD_ROOM` だけ機能させる方針を採用。
+
+### 敵 GUARD_ROOM の area_id ベース実装
+
+「縄張り = 部屋（area_id）」に概念変更。`EnemyLeaderAI` に `_home_area_id` を保持し、新メソッド `_decide_leader_move_override()` でリーダーの `_move_policy` を `"guard_room"` に直接上書きする実装。`_party_strategy.GUARD_ROOM` を経由しないため、将来の `_party_strategy` 廃止と分離可能。
+
+### 動作確認
+
+- per-member ロジック統一：階段ナビ中の表示が `move:↓階段` / `move:追従` に分かれて表示されることを確認
+- 敵 GUARD_ROOM：縄張り部屋にいる敵リーダーが `move:部屋を守る` を表示することを確認
+
+### 残タスクとして残した論点
+
+CLAUDE.md「残タスク」に追加済み：
+
+- `_party_strategy` の全面廃止（優先度：中）
+- `territory_range` の物理削除（優先度：中）
+- 敵 FLEE 戦略の方針決定（優先度：中・案 A/B/C）
+- `same_room` 指示の廃止検討（優先度：低）
+- `_is_in_explore_mode()` フック廃止検討（優先度：低）
+- 戦闘モードの可視化議論（結論：アクション名から読み取れるため追加表示は不要）
+
+---
+
+## 2026-04-26（per-member `_move_policy` 決定ロジック統一・3 層構造化）
+
+### 観察された現象
+
+PartyStatusWindow / F7 スナップショットで以下の不整合：
+
+```
+[NPC] ... mv=追従 ...
+  クレア[A](剣士) ... move:↓階段 ... leader
+  ヴィオラ[B](斥候) ... move:密集 ...
+```
+
+ヘッダー `mv=追従`（`_global_orders.move == "follow"`）に対し、非リーダーの個別行 `move:密集`（`_move_policy == "cluster"`）が矛盾しているように見える。
+
+### 調査結果（仮説 B 当たり・規約準拠の正常動作）
+
+調査ログ：[`docs/investigation_mv_move_mismatch.md`](investigation_mv_move_mismatch.md)。
+
+- ヘッダー `mv=` は `_global_orders.move`（規約準拠ベースライン値・`"follow"`）を読む
+- メンバー行 `move:` は `UnitAI._move_policy`（per-member 実値）を読む
+- `PartyLeader._assign_orders()` の explore モード分岐が非リーダーを `"cluster"` ハードコードで上書きしていたため、両者が乖離する
+
+設計上の規約（4/25 NPC 階段ナビ修正で確立した「`_global_orders.move` の値域は OrderWindow 5 値に限定」）には準拠しているが、「per-member 上書きで非リーダーを `cluster` 固定化する」というロジック自体が思想と乖離していた。
+
+### 設計意図の明確化（3 層構造）
+
+per-member `_move_policy` の決定階層：
+
+```
+層 1：ベースライン（_global_orders.move・全メンバー共通）
+  ↓
+層 2：リーダー上書き（モード固有値・stairs_* / explore / guard_room）
+  ↓
+層 3：種族固有上書き（敵 AI 種族別フック・本修正のスコープ外）
+```
+
+- 非リーダーは層 1 のみ適用（モード固有の移動目的を持たない）
+- 階段ナビ・探索・縄張り帰還といった**リーダーの判断結果**を非リーダーに伝播させない。非リーダーは全体方針 `_global_orders.move` をそのまま継承する
+- `_global_orders.move` は固定値ではなく可変（OrderWindow / NPC ベースライン / 敵ベースラインで決まる）。将来 `"cluster"` 等に切り替えても 3 層構造は同じ思想で動作する
+
+### 本修正の内容
+
+1. **`PartyLeader._assign_orders()` の `cluster` ハードコード廃止**（[`scripts/party_leader.gd`](../scripts/party_leader.gd)）
+   - 旧：explore モードで非リーダー → `"cluster"` 固定 / guard_room モードで全員 → `"guard_room"`
+   - 新：リーダーのみ `_get_explore_move_policy()` / `"guard_room"` で上書き。非リーダーは層 1 ベースラインを継承
+   - `joined_to_player` のリーダーは上書き対象外（プレイヤー global_orders に従うため）
+2. **`EnemyLeaderAI._build_orders_part()` で `move: "follow"` ベースライン初期化**（[`scripts/enemy_leader_ai.gd`](../scripts/enemy_leader_ai.gd)）
+   - 旧：敵パーティーは `_global_orders` が空 → `_assign_orders()` の `is_friendly` ガードで `move_policy = "spread"` 固定
+   - 新：`{"move": "follow"}` を baseline として返し `_global_orders` をマージ（NpcLeaderAI と同じパターン）
+   - `_assign_orders()` の `is_friendly` ガードを除去し、敵味方共通で `party_orders.get("move", ...)` を読む
+
+### 影響範囲（行動変化の可能性）
+
+- **敵パーティーのデフォルト隊形**：`"spread"`（formation 常時満足）→ `"follow"`（リーダー後方密集）に変化。`UnitAI._formation_satisfied()` / `_target_in_formation_zone()` / `_formation_move_goal()` の挙動が変わる可能性あり。実プレイで観察し、必要なら EnemyLeaderAI ベースラインを `"spread"` に戻すか別の値に調整する
+- **NPC パーティーの探索モード時の非リーダー**：従来の `"cluster"` から `"follow"`（NPC ベースライン）に変化。リーダー追従の密度が増す方向
+- **NPC パーティーの guard_room モード時の非リーダー**：味方は `_is_in_guard_room_mode()` が常に false なので影響なし
+- **敵パーティーの GUARD_ROOM 戦略時の非リーダー**：従来の `"guard_room"`（部屋に戻る挙動）から `"follow"`（リーダーに付いて行く）に変化。リーダーが帰還すれば自然に部屋に戻る
+
+### 動作確認項目
+
+CLAUDE.md「実装状況」項目に追加。実機で以下を確認：
+
+1. NPC パーティーの階段降下時：リーダー = `move:↓階段` / 非リーダー = `move:追従`
+2. NPC パーティーの探索モード時：リーダー = `move:探索` / 非リーダー = `move:追従`
+3. 敵パーティーの GUARD_ROOM 時：リーダー = `move:guard_room` / 非リーダー = `move:追従`
+4. プレイヤーパーティーで OrderWindow から `cluster` 指定 + 階段降下：リーダー = `move:↓階段` / 非リーダー = `move:密集`（プレイヤーの場合は階段ナビが UnitAI 側で判定されるため、`_assign_orders()` の上書きとは別経路）
+5. 敵パーティーで種族固有ロジック（GoblinLeaderAI 等）の per-member 上書きが効くケース：既存挙動が変わっていないこと
+
+### 規約
+
+- `_global_orders.move` の値域は OrderWindow の 5 値（`follow / cluster / same_room / standby / explore`）に限定する規約は維持
+- `stairs_down` / `stairs_up` / `guard_room` を `_global_orders.move` に書き込まない
+- 種族固有ロジックの per-member 上書き経路は本修正の対象外（層 3 は既存のまま）
+
+---
+
+## 2026-04-26（敵パーティーヘッダーに `mv=` 追加表示・4/21 調査結論の再検証タスク化）
+
+### 経緯：敵デフォルト `"spread"` 問題の発見
+
+per-member `_move_policy` 決定ロジック統一（同日先行修正）の過程で、`PartyLeader._assign_orders()` の `is_friendly` ガードを除去した結果、それまで気づかれていなかった「敵のデフォルト `move_policy` が `"spread"` 固定」という構造的問題が表面化した。
+
+旧コード:
+```gdscript
+var move_policy: String = "spread"
+if member.is_friendly:
+    move_policy = party_orders.get("move", ...)
+```
+
+つまり敵は `_global_orders.move` を読まず、常に `"spread"`（散開）になっていた。これは `UnitAI._formation_satisfied()` が `"spread"` で常時満足を返すことと組み合わさり、敵が縄張りを守らずバラけやすい挙動の温床になっていた。
+
+### 構造的問題：4/21 改訂が発見を遅らせた
+
+2026-04-21 の改訂で「敵指示グループは PartyStatusWindow に出力しない」と決めた根拠は、`docs/investigation_enemy_order_system.md` / `docs/investigation_enemy_order_effective.md` の調査結論「敵では全 8 項目が参照されない」だった。しかしこの結論は当時の `_assign_orders()` の `is_friendly` ガードを前提にしており、**ガード除去後は前提が崩れる**ものだった。
+
+調査結果がデバッグ表示の非表示判断と直結していたため、敵の `_global_orders.move` がベースラインとして可視化されない状態が続き、`"spread"` 固定問題の発見が遅れた。
+
+### 本修正の内容
+
+1. **敵パーティーヘッダーに `mv=` を追加**（[`scripts/party_status_window.gd`](../scripts/party_status_window.gd)）
+   - `_draw_party_block` / `_build_snapshot_party_block` の両方で同期
+   - `_global_orders.move` を `_label("move", ...)` 経由でラベル化（味方と完全に共通の経路を使用・重複実装を作らない）
+   - 表示位置：`strategy=<ENUM>` の前に挿入
+   - 例：`[敵] 生存:3/3 area:r2_5 戦況:EVEN(...) 戦力:EVEN F(...) C(...) E(...) mv=追従 strategy=GUARD_ROOM`
+2. **CLAUDE.md ヘッダー記述更新**：敵ヘッダー仕様に `mv=<ラベル>` を明記。「敵の行動は UnitAI 指示フィールドではなく…で決まる（ただし `_global_orders.move` は per-member 配布で実質的に効く）」と補足
+3. **CLAUDE.md 4/21 改訂記述への補足**：「2026-04-21 改訂：敵メンバーでは本グループを出力しない」記述の末尾に、4/26 ロジック統一以降の例外（`_global_orders.move` は実質的に効く・他フィールドは再調査残タスク）を追記
+
+### 残タスク化：4/21 調査結論の再検証
+
+`_global_orders` の他フィールド（`battle_policy` / `target` / `on_low_hp` / `hp_potion` / `sp_mp_potion` / `item_pickup`）について、per-member 配布経路で敵に効く可能性を再調査する。調査結果を踏まえて敵指示グループ表示方針（A: 厳選表示 / B: 完全表示 / C: `mv=` のみ）を決定する。
+
+CLAUDE.md「残タスク > 優先度：中」に「4/21 調査結論「敵では参照されない指示」の再検証」項目を追加。
+
+### スコープ外
+
+- 敵指示グループ全体の表示復活（中長期で再調査してから決定）
+- ヘッダーに表示するのは `_global_orders.move` のみ（他フィールドは再調査結果を待つ）
+- 敵デフォルト `"follow"` ベースラインの妥当性検証（実プレイで観察。必要なら `"spread"` に戻すか別の値に調整）
+
+---
+
+## 2026-04-26（敵 GUARD_ROOM の area_id ベース再実装・`_party_strategy` 廃止方針確定）
+
+### 調査結果（先行調査による現状把握）
+
+`docs/investigation_party_strategy_transition.md` で判明した戦略遷移の現状：
+
+- **`ATTACK` 固定**：基底 `EnemyLeaderAI._evaluate_party_strategy()` が `_has_alive_friendly()` のみ判定し `_combat_situation` を完全無視（仮説 C）
+- **`GUARD_ROOM` 未発火**：実装は `_apply_range_check()` にあるが「全メンバーが territory 外」AND「ターゲットが chase 外」の AND 条件で実プレイ到達不能（仮説 B）
+- **`territory_range = 50`**：多くの敵がフロアサイズ超過の値で固定 → 縄張り判定が事実上無効化
+- **`EXPLORE` / `DEFEND`**：敵では未実装（仮説 A）
+- **`FLEE`**：Goblin / Wolf のみ「生存比率 < 0.5」で発火（HP・戦況非依存）
+
+戦闘中の敵パーティーが常に `move:追従` のままで縄張り守備行動が観察できない原因は上記の組み合わせ。
+
+### 設計議論の経緯
+
+`_party_strategy` の根本的な問題：
+
+- 敵専用の概念だが、戦況情報（`_combat_situation`）を活用していない
+- `territory_range` の数値半径は調整困難・部屋の形状に追従しない
+- 4/21 改訂で味方側の `_party_strategy` は既に廃止済み（`global_orders.battle_policy` 経由に移行）。敵側もその対称作業として将来廃止する方向で合意
+
+本タスクの位置づけ：
+- `_party_strategy` 全面廃止は中期的タスク（残タスク化）
+- 短期的に「縄張り守備」だけは可視化・機能させたい → area_id ベースで個別実装
+- `_party_strategy` を経由せず、リーダー個別判断としてリーダーの `_move_policy` を直接上書きする経路を新設
+
+### 設計方針の確立
+
+1. **「縄張り = 部屋（area_id）」に概念変更**：マンハッタン距離による `territory_range` ではなく、初代リーダーのスポーン位置の area_id を縄張りとする。リーダー交代時も維持（縄張りはパーティー単位で固定）
+2. **`chase_range` は活用**：縄張り外でも視認範囲内の敵は追跡対象とする（マンハッタン距離・壁越し判定は将来課題）
+3. **リーダー個別判断**：リーダーの `_move_policy` を直接上書き。`_party_strategy.GUARD_ROOM` 経由は使わない（`_party_strategy` 廃止との結合を避ける）
+4. **非リーダーは触らない**：既存の `_global_orders.move` 継承通り（= リーダー追従）。リーダーが部屋を守れば自然と部屋に集まり、追えば追従する
+
+### 本修正の内容
+
+1. **`PartyLeader._decide_leader_move_override()` フック追加**（[`scripts/party_leader.gd`](../scripts/party_leader.gd)）
+   - 基底実装は空文字を返す（味方では使用しない）
+   - `_assign_orders()` のリーダー上書き優先順に挿入：`override → _is_in_explore_mode → _is_in_guard_room_mode → _global_orders.move 継承`
+2. **`EnemyLeaderAI._home_area_id` メンバー追加**（[`scripts/enemy_leader_ai.gd`](../scripts/enemy_leader_ai.gd)）
+   - `setup()` を override し、初代リーダーのスポーン位置の area_id を保持・固定
+3. **`EnemyLeaderAI._decide_leader_move_override()` 実装**
+   - 発火条件 3 つ全て満たすと `"guard_room"` を返す：
+     1. リーダーが `_home_area_id` 内にいる
+     2. 縄張り部屋内に敵（friendly）がいない
+     3. `chase_range` 内（マンハッタン距離・同フロア）に敵がいない
+   - いずれか満たさなければ `""` を返してフォールスルー（既存挙動維持）
+4. **`_label("move", "guard_room")` 日本語ラベル追加**（先行修正で対応済み・本タスクで動作）：「部屋を守る」
+
+### 変更しないもの（スコープ外）
+
+- `territory_range`（個別敵 JSON）：将来 `_party_strategy` 廃止と一緒に整理
+- `_apply_range_check()` および関連メソッド（`_all_members_out_of_range` 等）：同上
+- `_party_strategy.GUARD_ROOM` の遷移ロジック：同上
+- `_is_in_guard_room_mode()` フック：基底に残置（フォールスルー先として）・同時整理予定
+- 非リーダーの `_move_policy` 決定：既存通り `_global_orders.move` 継承
+
+### 残タスク化
+
+CLAUDE.md「優先度：中」に「`_party_strategy` 廃止検討」を追加。廃止時の整理対象を列挙：
+- `territory_range` / `_apply_range_check` 関連メソッド群の物理削除
+- `party_fleeing` ブールフラグの再設計（`battle_policy == "retreat"` で代替）
+- `_is_in_explore_mode()` / `_is_in_guard_room_mode()` フック廃止
+- 種族 AI の FLEE ロジック統合方針決定
+- CRITICAL 時自動 FLEE を全種族共通化するか opt-out 方式にするか
+
+### 動作確認項目
+
+実機で以下を確認：
+
+1. 敵パーティーが縄張り部屋にいて敵未検知 → リーダー `move:部屋を守る`
+2. プレイヤーが部屋に侵入 → リーダー `move:追従` に戻る（部屋内で戦う）
+3. プレイヤーが部屋外に逃げて chase_range 内 → リーダー `move:追従`（追跡継続）
+4. プレイヤーが chase_range 外まで逃げる → リーダーが部屋に戻り `move:部屋を守る` 復帰
+5. リーダー追従中の非リーダー → `move:追従`（既存挙動）
+
+---
+
+## 2026-04-26（敵指示表示を「個体 `_move_policy`」中心に再構成・直前修正の方針再検討）
+
+### 直前修正からの方針転換
+
+同日先行で「敵パーティーヘッダーに `mv=` を追加表示」する修正を入れたが、議論の結果、表示すべきは全体指示の `mv=` ではなく**個体の `_move_policy`（per-member 実値）** であることが判明した。直前修正を撤回し、敵メンバー行に `move:` を追加する方向に再構成する。
+
+### 方針転換の根拠
+
+指示項目の現状の実態として：
+
+- **全体指示はほぼ静的**（プレイヤーが OrderWindow で一度設定したらあまり変えない・NPC は `follow` 固定・敵は `follow` 固定）
+- **状況に応じて動的に変化するのは個体の `_move_policy` のみ**（ベースラインを上書きする形）
+  - リーダーが状況で `stairs_*` / `explore` / `guard_room` に上書きされる（層 2）
+  - 種族 AI が必要に応じて per-member 上書き（層 3・敵のみ）
+  - 非リーダーは全体指示を継承（層 1）
+- 敵専用の `guard_room`（部屋を守る）も per-member の `_move_policy` レベルで存在するため、メンバー行の `move:` でこそ可視化される
+
+ヘッダーに `mv=` を表示しても、敵では「`mv=追従` で固定・動かない」状態になるため情報量がゼロ。むしろ「動的値はメンバー行で観察する」という運用方針を確立すべき。
+
+### `guard_room` の位置づけ確定
+
+`stairs_*` と同じ「リーダー固有モード固有値」として位置づけを明確化：
+
+- 全体指示としては設定不能（OrderWindow に出さない）
+- per-member の `_move_policy` でのみ存在（リーダーのみ上書きされる）
+- `_global_orders.move` には書き込まない（`stairs_*` と同じ規約）
+
+### 敵 `_global_orders.move` ベースラインの規約確定
+
+- 敵 `_global_orders.move` は `follow` で固定する（`EnemyLeaderAI._build_orders_part()` で初期化）
+- 種族 AI が書き換えない・将来も書き換えない方針
+- 敵の動的挙動は per-member `_move_policy` 上書き経路（層 2 / 層 3）で実現する
+
+### 本修正の内容
+
+1. **敵ヘッダー `mv=` を撤去**（[`scripts/party_status_window.gd`](../scripts/party_status_window.gd)）
+   - `_draw_party_block` / `_build_snapshot_party_block` 両方で同期して撤去
+   - 直前修正の追加を取り消す形
+2. **敵メンバー行に `move:` を追加**（同上）
+   - `_build_move_policy_part(ai)` の呼び出しを `m.is_friendly` ガードの外に出す
+   - 味方と完全に共通のコード経路（重複実装なし）
+   - 表示位置：味方の `move:` と同じ位置（指示グループの直前）
+3. **`guard_room` の日本語ラベル追加**：`_label("move", ...)` の個別処理に `guard_room → "部屋を守る"` を追加
+4. **CLAUDE.md 値域規約セクション**：「per-member `_move_policy` 決定ロジック（3 層構造）」セクションに `_global_orders.move` と `_move_policy` の値域・`guard_room` の位置づけ・動的値の観察ポイントを明記
+5. **CLAUDE.md ヘッダー記述更新**：敵ヘッダーから `mv=` 表記を削除・「敵 `_global_orders.move` は `follow` 固定」を明記
+6. **CLAUDE.md メンバー行記述更新**：「味方メンバーのみ」→「敵味方共通」に変更
+
+### 残タスク化
+
+「優先度：低」に「`same_room` 指示の廃止検討」を追加。OrderWindow の `move` 値「リーダーと同じ部屋に行く」は実用度が低く、廃止して 4 値にスリム化する案。廃止時の影響範囲（値域・`UnitAI._formation_satisfied` の分岐・セーブデータ互換・フォールバックチェーン）を要洗い。
+
+### スコープ外
+
+- `same_room` 廃止の実施（残タスク化のみ）
+- 敵 `_global_orders` の他フィールド（`battle_policy` / `target` / `on_low_hp` 等）の per-member 配布で効くか再調査（先行修正で残タスク化済み・「4/21 調査結論「敵では参照されない指示」の再検証」）
+
+---
+
 ## 2026-04-24（fall_back 個体アクションの二段階協調実装）
 
 ### 概要

@@ -354,11 +354,18 @@ func _assign_orders() -> void:
 		var tgt_policy     : String = order.get("target",          "same_as_leader")
 		var battle_form    : String = order.get("battle_formation", "surround")
 
-		# ── 移動方針設定 ──────────────────────────────────────────────────
-		var move_policy  : String    = "spread"
+		# ── 移動方針設定（3 層構造：ベースライン → リーダー上書き → 種族固有） ────
+		## 層 1：ベースライン（`_global_orders.move`）。敵味方共通で全メンバーに適用する。
+		##   - 味方（player / NPC）：`_build_orders_part()` 経由で OrderWindow / NPC デフォルト値
+		##   - 敵：`EnemyLeaderAI._build_orders_part()` の baseline `"follow"` を継承
+		## 層 2：リーダー上書き（モード固有値）。リーダー本人のみ・joined_to_player では適用しない。
+		##   - 階段ナビ中：`stairs_down` / `stairs_up`
+		##   - explore モード：`explore`
+		##   - guard_room モード：`guard_room`（敵専用）
+		## 層 3：種族固有上書き（敵のみ・本関数のスコープ外）
+		var move_policy: String = party_orders.get("move", order.get("move", "same_room")) as String
 		var formation_ref: Character = null
 		if member.is_friendly:
-			move_policy = party_orders.get("move", order.get("move", "same_room")) as String
 			if leader_char == null or leader_char == member:
 				if _player != null and is_instance_valid(_player) \
 						and (leader_char == _player or joined_to_player):
@@ -366,25 +373,22 @@ func _assign_orders() -> void:
 			else:
 				formation_ref = leader_char
 
-		# ── 探索モード / 帰還モードに応じた移動方針の上書き ────────────────
-		## _is_in_explore_mode() / _is_in_guard_room_mode() はサブクラスが override する
-		## 敵：`_party_strategy == EXPLORE / GUARD_ROOM` で判定（PartyLeader 基底実装）
-		## NPC：敵検知フラグで explore を判定（NpcLeaderAI.override）
-		## GUARD_ROOM は敵専用（縄張り範囲外から帰還する）ので味方では常に false
-		if _is_in_explore_mode():
-			if not joined_to_player:
-				var pol := _get_explore_move_policy()
-				if pol == "stairs_down" or pol == "stairs_up":
-					if member == leader_char:
-						move_policy = pol
-					else:
-						move_policy = "cluster"
-				elif member == leader_char:
-					move_policy = "explore"
-				else:
-					move_policy = "cluster"
-		elif _is_in_guard_room_mode():
-			move_policy = "guard_room"
+		# ── 層 2：リーダーのみモード固有値で上書き ─────────────────────────
+		## 非リーダーは層 1 のベースラインを継承する（cluster ハードコード廃止）
+		## joined_to_player のリーダーは上書きしない（プレイヤー global_orders に従うため）
+		##
+		## 優先順（敵リーダーで該当する経路）：
+		##   1. `_decide_leader_move_override()`（敵のみ・area_id ベース guard_room 等）
+		##   2. `_is_in_explore_mode()`（NPC の探索モード分岐・敵では発火しない）
+		##   3. `_is_in_guard_room_mode()`（旧 `_party_strategy.GUARD_ROOM` 経由・将来廃止予定）
+		if member == leader_char and not joined_to_player:
+			var override_policy: String = _decide_leader_move_override()
+			if not override_policy.is_empty():
+				move_policy = override_policy
+			elif _is_in_explore_mode():
+				move_policy = _get_explore_move_policy()
+			elif _is_in_guard_room_mode():
+				move_policy = "guard_room"
 
 		# 注：2026-04-21 以前は `on_low_hp=retreat + HP低下 → move_policy=cluster` 上書きがここにあったが、
 		# on_low_hp=fall_back は UnitAI 側で `_STRATEGY_FALL_BACK` を返し `fall_back` アクションキューを
@@ -888,6 +892,21 @@ func _is_in_explore_mode() -> bool:
 ## 味方では常に false（味方は縄張り概念を持たない）
 func _is_in_guard_room_mode() -> bool:
 	return _party_strategy == Strategy.GUARD_ROOM
+
+
+## リーダーの `_move_policy` を直接上書きする値を返す（敵 AI 用フック・2026-04-26 追加）
+## 戻り値が "" のときは上書きせず、後続の `_is_in_explore_mode()` /
+## `_is_in_guard_room_mode()` / 全体指示継承にフォールスルーする。
+##
+## 基底 `PartyLeader` は空文字を返す（味方では使用しない）。
+## `EnemyLeaderAI` が override し、area_id ベースの縄張り判断（home_area_id /
+## chase_range）でリーダーの個別判断結果（例：`"guard_room"`）を返す。
+##
+## 設計意図：将来 `_party_strategy` を廃止する際、`_is_in_guard_room_mode()` /
+## `_is_in_explore_mode()` フックも一緒に削除する想定。本フックは `_party_strategy`
+## と独立したリーダー個別判断経路として、敵の縄張り守備を実装する。
+func _decide_leader_move_override() -> String:
+	return ""
 
 
 ## このパーティーが敵パーティーかを判定する（先頭生存メンバーの is_friendly で判別）
