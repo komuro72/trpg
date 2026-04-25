@@ -95,15 +95,15 @@ var SELF_FLEE_HP_THRESHOLD: float = 0.3
 ## [ConfigEditor 対象・UnitAI カテゴリ]
 var FLEE_THREAT_RANGE: int              = 5      ## 敵から何マス以内を危険とみなすか
 var FLEE_THREAT_WEIGHT: float           = 3.0    ## 危険マス 1 つあたりのコスト加算量
-var FLEE_AREA_DISTANCE_WEIGHT: float    = 10.0   ## 出口 → 避難先の部屋単位 BFS 距離係数
-var FLEE_NON_RECOMMENDED_PENALTY: float = 15.0   ## リーダー推奨外出口のペナルティ
-var FLEE_REEVAL_MIN_INTERVAL: float     = 0.3    ## エリア変化による強制再評価の最小インターバル（秒）
+var FLEE_AREA_DISTANCE_WEIGHT: float    = 10.0   ## 出口が属するエリア → 避難先の BFS 距離係数
+## flee 中の移動先決定で「前進不要」と判断する最近接脅威との距離（タイル）
+## メンバーが脅威からこの距離以上離れていれば移動先 = 現在地となり停止する。
+## flee 状態の解除ではなく「flee 中の移動先決定」の問題として実装している点に注意。
+var FLEE_SAFE_DISTANCE: int             = 8
 
-## fall_back 用（2026-04-24 深夜・FLEE 再利用方式）：
-## fall_back は FLEE の推奨出口計算（`_flee_recommended_goal`）を再利用し、
-## メンバー側の停止条件だけを「射程外判定」に差別化する設計。
-## 当初の候補タイル × A* 方式は単発 ~560ms かかっていたため設計刷新した。
-## 詳細：docs/history.md 2026-04-24 深夜エントリ
+## fall_back 用：
+## FLEE と同じ出口総合コスト評価（UnitAI._evaluate_exit_costs）を共用し、
+## 停止条件だけを「射程外判定」（_is_far_enough_from_threats）に差別化する設計。
 ## [ConfigEditor 対象・UnitAI カテゴリ]
 var FALL_BACK_MARGIN: int = 2  ## attack_range + これ以上離れたら fall_back 停止
 ## パーティー逃走の生存率閾値（goblin/wolf リーダー：生存メンバー率がこれ未満で FLEE 戦略に切り替え）
@@ -509,8 +509,7 @@ const CONFIG_KEYS: Array[String] = [
 	"FLEE_THREAT_RANGE",
 	"FLEE_THREAT_WEIGHT",
 	"FLEE_AREA_DISTANCE_WEIGHT",
-	"FLEE_NON_RECOMMENDED_PENALTY",
-	"FLEE_REEVAL_MIN_INTERVAL",
+	"FLEE_SAFE_DISTANCE",
 	"FALL_BACK_MARGIN",
 	"SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES",
 	"SPECIAL_ATTACK_FIRE_ZONE_RANGE",

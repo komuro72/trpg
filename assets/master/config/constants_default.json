@@ -343,23 +343,14 @@
     "type": "float",
     "value": 10.0
   },
-  "FLEE_NON_RECOMMENDED_PENALTY": {
+  "FLEE_SAFE_DISTANCE": {
     "category": "UnitAI",
-    "description": "FLEE 逃走コスト：リーダー推奨外出口のペナルティ（メンバー自律選択時の推奨バイアス）",
-    "max": 100.0,
-    "min": 0.0,
+    "description": "flee 中の前進不要判定：最近接脅威との距離がこの値以上なら移動先 = 現在地（flee 状態は維持・移動だけ停止）",
+    "max": 30.0,
+    "min": 1.0,
     "step": 1.0,
-    "type": "float",
-    "value": 15.0
-  },
-  "FLEE_REEVAL_MIN_INTERVAL": {
-    "category": "UnitAI",
-    "description": "エリア変化による推奨出口の強制再評価の最小インターバル（秒・過剰再計算抑制）",
-    "max": 10.0,
-    "min": 0.05,
-    "step": 0.05,
-    "type": "float",
-    "value": 0.3
+    "type": "int",
+    "value": 8
   },
   "FALL_BACK_MARGIN": {
     "category": "UnitAI",

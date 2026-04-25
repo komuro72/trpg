@@ -40,24 +40,12 @@ var _visited_areas:  Dictionary = {}  ## 訪問済みエリアID集合（全 Uni
 var _global_orders:  Dictionary = {}
 var _party_ref: Party = null  ## プレイヤーパーティー参照（合流済みNPC含む。戦況判断の自軍メンバー評価に使用）
 
-## FLEE 時の推奨出口タイル（2026-04-21 ステップ 3 追加）
-## パーティー FLEE 時にリーダーが決定し、`_assign_orders()` 経由で全メンバーに配布する。
-## 各メンバーはこの座標を軽いバイアスで優先しつつ、自分の位置から最適な出口を選ぶ。
-## Vector2i(-1, -1) = 推奨なし（パーティー FLEE でない・計算失敗）
-var _flee_recommended_goal: Vector2i = Vector2i(-1, -1)
-
-## 選ばれた避難先エリア ID（2026-04-21 追加・PartyStatusWindow 表示用）
-## 空文字 = 避難先未決定 or フォールバック
+## 避難先エリア ID（2026-04-25 改訂：リーダー推奨出口機構を廃止し、避難先エリアのみ配布する設計に）
+## リーダーが「自分の現エリアから最も近い避難先エリア（フロア 0 = 安全部屋 / フロア 1 以降 =
+## 上り階段エリア）」を BFS ホップ距離で決定し、`_assign_orders()` 経由で全メンバーに配布。
+## 各メンバーは `UnitAI._evaluate_exit_costs()` でこの避難先までの BFS 距離を出口コストに加算する。
+## "" = 避難先未決定（敵不在・MapData 不在・敵パーティー）
 var _flee_refuge_area_id: String = ""
-## 出口 → 避難先エリアまでの BFS ホップ数（-1 = 未決定）
-var _flee_refuge_distance: int = -1
-## フォールバック経路を通ったか（避難先エリア不明・到達不能で脅威コスト最小の出口を選んだ）
-var _flee_is_fallback: bool = false
-
-## 前回 `_flee_recommended_goal` を再評価した時刻（Time.get_ticks_msec()/1000.0 ベース）
-## エリア変化時の強制再評価のクールダウン管理に使用
-## 2026-04-24 深夜：fall_back も同じ推奨出口を共用するため、FLEE 中以外でも利用する
-var _flee_last_reeval_time: float = -INF
 
 
 ## プレイヤーパーティー参照を設定する（プレイヤー・合流済みNPCパーティー両方で使用）
@@ -101,7 +89,7 @@ func setup(members: Array[Character], player: Character, map_data: MapData,
 # --------------------------------------------------------------------------
 
 ## 既存 UnitAI を流用して外部から受け取ったメンバーを自パーティーに組み入れる。
-## UnitAI の `_queue` / `_state` / `_flee_recommended_goal` 等の状態は保持される（reparent のみ）。
+## UnitAI の `_queue` / `_state` / `_flee_refuge_area_id` 等の状態は保持される（reparent のみ）。
 ## 呼出側（PartyManager.adopt_member）が Character 側のシグナル接続を管理する。
 func adopt_member(member: Character, unit_ai: UnitAI) -> void:
 	if member == null or not is_instance_valid(member):
@@ -322,10 +310,10 @@ func _assign_orders() -> void:
 	# パーティーレベルの撤退判断（敵専用フラグ・味方は常に false）
 	var party_fleeing := is_enemy_party and _party_strategy == Strategy.FLEE
 
-	# 撤退方向の推奨出口を更新（2026-04-24 深夜改訂：FLEE/fall_back 共用）：
-	# 味方は敵検知中ならつねに算出・FLEE なら避難先エリアまでの完全離脱・fall_back なら
-	# 射程外到達で途中停止、と同じ出口を異なる停止条件で使う
-	_update_flee_recommended_goal()
+	# 避難先エリア ID を更新（2026-04-25 改訂：リーダー推奨出口機構を廃止）
+	# 各メンバーが UnitAI._evaluate_exit_costs() で出口コストの距離項に使う。
+	# 味方は敵検知中ならつねに算出・敵パーティーは現状未対応（_find_flee_goal_legacy 経由）
+	_update_flee_refuge_area_id()
 
 	# リーダーのターゲットを先に決定（same_as_leader ポリシー用）
 	var leader_target: Character = null
@@ -440,7 +428,7 @@ func _assign_orders() -> void:
 			"item_pickup":       member.current_order.get("item_pickup", "passive") as String,
 			"special_skill":     order.get("special_skill", "strong_enemy") as String,
 			"combat_situation":  _combat_situation,
-			"flee_recommended_goal": _flee_recommended_goal,
+			"flee_refuge_area_id": _flee_refuge_area_id,
 		})
 
 
@@ -474,13 +462,8 @@ func get_initial_count() -> int:
 	return _initial_count
 
 
-## 推奨出口タイルを返す（PartyStatusWindow 表示用・パーティー FLEE 中のみ有効値）
-func get_flee_recommended_goal() -> Vector2i:
-	return _flee_recommended_goal
-
-
 # --------------------------------------------------------------------------
-# FLEE 推奨出口決定ロジック（2026-04-21 ステップ 3 追加）
+# FLEE 避難先エリア決定ロジック（2026-04-25 改訂：リーダー推奨出口機構を廃止）
 # --------------------------------------------------------------------------
 
 ## 現在のパーティーが FLEE 状態か判定する
@@ -492,240 +475,66 @@ func _is_party_fleeing() -> bool:
 	return _global_orders.get("battle_policy", "") == "retreat"
 
 
-## 撤退方向の推奨出口を計算する。FLEE 中は避難先エリアまでの完全離脱経路、
-## fall_back 中は同じ出口までの途中停止経路として共用される。
-## 敵検知中の味方パーティーで常時計算・Vector2i(-1,-1) は敵不在または敵パーティー。
-##
-## 2026-04-24 深夜：ガードを `_is_party_fleeing()` から
-## 「敵パーティーでない + 敵検知中」に緩和。fall_back が同じ出口推奨を使うため。
-## 計算結果そのものは従来と同一（`_determine_flee_recommended_goal()` 無変更）なので、
-## FLEE 挙動には影響しない。
-func _update_flee_recommended_goal() -> void:
-	# 敵パーティーは従来通り：FLEE 中のみ算出（legacy 動作維持）
-	if _is_enemy_party():
-		if not _is_party_fleeing():
-			_flee_recommended_goal = Vector2i(-1, -1)
-			_flee_refuge_area_id   = ""
-			_flee_refuge_distance  = -1
-			_flee_is_fallback      = false
-			return
-		# === PERF_MEASUREMENT_START (2026-04-24 調査用・削除予定) ===
-		var _perf_t_enemy := Time.get_ticks_usec()
-		# === PERF_MEASUREMENT_END ===
-		_flee_recommended_goal = _determine_flee_recommended_goal()
-		# === PERF_MEASUREMENT_START (2026-04-24 調査用・削除予定) ===
-		var _perf_dt_enemy: int = Time.get_ticks_usec() - _perf_t_enemy
-		if _perf_dt_enemy > 1000:
-			DebugLog.log("[EXIT_PERF] party=enemy/%s pos=%s took=%d us goal=%s" % [
-				_get_leader_name(), str(_perf_leader_pos_safe()),
-				_perf_dt_enemy, str(_flee_recommended_goal)
-			])
-		# === PERF_MEASUREMENT_END ===
-		return
-
-	# 味方パーティー：敵検知中なら FLEE/fall_back 問わず常時計算
-	var enemy_rank_sum: int = _combat_situation.get("nearby_enemy_rank_sum", 0) as int
-	if enemy_rank_sum <= 0:
-		_flee_recommended_goal = Vector2i(-1, -1)
-		_flee_refuge_area_id   = ""
-		_flee_refuge_distance  = -1
-		_flee_is_fallback      = false
-		return
-	# === PERF_MEASUREMENT_START (2026-04-24 調査用・削除予定) ===
-	var _perf_t_ally := Time.get_ticks_usec()
-	# === PERF_MEASUREMENT_END ===
-	_flee_recommended_goal = _determine_flee_recommended_goal()
-	# === PERF_MEASUREMENT_START (2026-04-24 調査用・削除予定) ===
-	var _perf_dt_ally: int = Time.get_ticks_usec() - _perf_t_ally
-	if _perf_dt_ally > 1000:
-		DebugLog.log("[EXIT_PERF] party=ally/%s pos=%s took=%d us goal=%s" % [
-			_get_leader_name(), str(_perf_leader_pos_safe()),
-			_perf_dt_ally, str(_flee_recommended_goal)
-		])
-	# === PERF_MEASUREMENT_END ===
-
-
-# === PERF_MEASUREMENT_START (2026-04-24 調査用・削除予定) ===
-## パフォーマンス計測ログ用にリーダー位置を取得する（リーダー不在時は (-1,-1)）
-func _perf_leader_pos_safe() -> Vector2i:
-	for m: Character in _party_members:
-		if is_instance_valid(m) and m.is_leader and m.hp > 0:
-			return m.grid_pos
-	for m: Character in _party_members:
-		if is_instance_valid(m) and m.hp > 0:
-			return m.grid_pos
-	return Vector2i(-1, -1)
-# === PERF_MEASUREMENT_END ===
-
-
-## パーティー FLEE 時の推奨出口タイルを決定する
+## 避難先エリア ID を更新する（2026-04-25 改訂）
 ##
 ## アルゴリズム：
-##   1. リーダーの現在位置とエリアを取得
-##   2. 現フロアの避難先エリア一覧（フロア 0 = 安全部屋 / フロア 1 以降 = 上り階段エリア）を取得
-##   3. 現エリアの全内側出口タイルを列挙
-##   4. 各出口について：
-##      a. リーダー UnitAI の `_astar_with_cost()` で脅威コスト付き到達コストを計算
-##      b. 出口の向こう側エリアから最近い避難先エリアまでの BFS 距離を計算（選ばれた refuge_area も併記録）
-##      c. 総合コスト = 到達コスト + BFS距離 × FLEE_AREA_DISTANCE_WEIGHT
-##   5. 最小コストの出口を選び、対応する避難先エリア ID / BFS 距離を `_flee_refuge_*` フィールドに記録
+##   1. リーダーの現エリアと現フロアの避難先エリア一覧を取得
+##   2. 現エリアから各避難先までの BFS ホップ距離を計算し、最も近い避難先を採用
+##   3. 全避難先が到達不能なら "" を残す
 ##
-## フォールバック条件（`_flee_is_fallback = true`）:
-##   - 避難先エリア一覧が空（フロア 0 で安全部屋なし・フロア 1+ で上り階段なし）
-##   - 選ばれた出口から避難先に到達不能（BFS 経路なし）
-##   - 全出口が A* 失敗で到達不能
+## 敵検知中の味方パーティーで常時計算（FLEE / fall_back のいずれでも使うため）
+## 敵パーティー・敵不在・MapData 不在は ""（リセット）
 ##
-## A* 呼び出しは「リーダーの UnitAI」経由で行う（walker コンテキスト = is_friendly / is_flying 等が必要なため）
-func _determine_flee_recommended_goal() -> Vector2i:
-	# 毎回リセット（クリーンな状態で始める）
-	_flee_refuge_area_id  = ""
-	_flee_refuge_distance = -1
-	_flee_is_fallback     = false
-
+## 各メンバーは UnitAI._evaluate_exit_costs() でこの ID と現エリアの距離項を出口コストに加算する。
+## 出口の選定はメンバー側で完結するため、リーダー側で出口候補を計算する必要はない。
+func _update_flee_refuge_area_id() -> void:
+	# 敵パーティーは未対応（legacy 直線実装が動く・派生課題で対応予定）
+	if _is_enemy_party():
+		_flee_refuge_area_id = ""
+		return
+	# 敵不在ならリセット（FLEE / fall_back のどちらも発動しない）
+	# ただし battle_policy="retreat"（撤退指示中）は敵不在でも維持し、
+	# メンバーが避難先まで到達できるように refuge_area_id を継続提供する
+	# （2026-04-25 改訂：撤退中に敵が視界外に消えると refuge が空になり、メンバーが
+	# WAIT 切替後に refuge を見失って戻ってくる現象を防ぐ）
+	var enemy_rank_sum: int = _combat_situation.get("nearby_enemy_rank_sum", 0) as int
+	var is_retreating: bool = _global_orders.get("battle_policy", "") == "retreat"
+	if enemy_rank_sum <= 0 and not is_retreating:
+		_flee_refuge_area_id = ""
+		return
 	if _map_data == null:
-		_flee_is_fallback = true
-		return Vector2i(-1, -1)
+		_flee_refuge_area_id = ""
+		return
 	var leader_char: Character = _get_first_alive_leader()
 	if leader_char == null:
-		_flee_is_fallback = true
-		return Vector2i(-1, -1)
-	var leader_pos: Vector2i = leader_char.grid_pos
-	var leader_floor: int    = leader_char.current_floor
-	var current_area: String = _map_data.get_area(leader_pos)
+		_flee_refuge_area_id = ""
+		return
+	var current_area: String = _map_data.get_area(leader_char.grid_pos)
 	if current_area.is_empty():
-		_flee_is_fallback = true
-		return Vector2i(-1, -1)
-
-	var exit_tiles: Array[Vector2i] = _map_data.get_exit_tiles_from(current_area)
-	if exit_tiles.is_empty():
-		_flee_is_fallback = true
-		return Vector2i(-1, -1)
-
-	# A* 呼び出し用にリーダーの UnitAI インスタンスを取得（walker コンテキスト）
-	var leader_ai: UnitAI = _unit_ais.get(leader_char.name) as UnitAI
-	if leader_ai == null:
-		_flee_is_fallback = true
-		return Vector2i(-1, -1)
-
-	# 2026-04-24 深夜（パフォーマンス対策）：脅威コストを事前計算マップに展開する。
-	# 従来は A* の展開ごとに `_calc_threat_cost()` が `_all_members`（~150 体）を線形反復
-	# していたため単発 50 ms かかっていた。事前計算方式では敵位置から影響範囲に貢献を加算
-	# する形で 1 回だけ走査（~6000 ops）し、A* の cost_fn は Dictionary 参照のみにする。
-	# 数値結果は完全一致（計算順序の入れ替えのみ）。
-	var threat_map: Dictionary = _build_threat_map(leader_char)
-	var threat_fn: Callable = func(tile: Vector2i) -> float:
-		return threat_map.get(tile, 0.0)
-
-	var refuge_area_ids: Array[String] = _map_data.get_refuge_area_ids(leader_floor)
+		_flee_refuge_area_id = ""
+		return
+	var refuge_area_ids: Array[String] = _map_data.get_refuge_area_ids(leader_char.current_floor)
 	if refuge_area_ids.is_empty():
-		# 避難先エリアが存在しない（通常はフロア仕様のバグ想定）→ 脅威コスト最小の出口にフォールバック
-		_flee_is_fallback = true
+		_flee_refuge_area_id = ""
+		return
 
-	var best_exit: Vector2i = Vector2i(-1, -1)
-	var best_cost: float = INF
-	var best_refuge_area: String = ""
-	var best_refuge_dist: int = -1
-	for exit_tile: Vector2i in exit_tiles:
-		var path: Array[Vector2i] = leader_ai._astar_with_cost(
-				leader_pos, exit_tile, threat_fn, current_area)
-		if path.is_empty() and exit_tile != leader_pos:
+	# リーダー位置から最も近い避難先エリアを BFS ホップ距離で選ぶ
+	var best_area: String = ""
+	var best_dist: int = 999999
+	for refuge_area: String in refuge_area_ids:
+		var d: int = _map_data.get_area_distance(current_area, refuge_area)
+		if d < 0:
 			continue
-		var reach_cost: float = leader_ai._path_cost(path, threat_fn)
-		var refuge_cost: float = 0.0
-		var exit_refuge_area: String = ""
-		var exit_refuge_dist: int = -1
-		if not refuge_area_ids.is_empty():
-			var min_refuge_dist: int = 999999
-			var adj_areas: Array[String] = _map_data.get_adjacent_area_ids_of_exit(exit_tile)
-			for adj_area: String in adj_areas:
-				for refuge_area: String in refuge_area_ids:
-					var d: int = _map_data.get_area_distance(adj_area, refuge_area)
-					if d >= 0 and d < min_refuge_dist:
-						min_refuge_dist = d
-						exit_refuge_area = refuge_area
-						exit_refuge_dist = d
-			if min_refuge_dist == 999999:
-				# この出口からは避難先に到達不能 → 大ペナルティ（フォールバック候補として残す）
-				refuge_cost = 9999.0
-			else:
-				refuge_cost = float(min_refuge_dist) * GlobalConstants.FLEE_AREA_DISTANCE_WEIGHT
-		var total: float = reach_cost + refuge_cost
-		if total < best_cost:
-			best_cost = total
-			best_exit = exit_tile
-			best_refuge_area = exit_refuge_area
-			best_refuge_dist = exit_refuge_dist
-
-	if best_exit == Vector2i(-1, -1):
-		# 全出口が到達不能 → フォールバック状態として返す
-		_flee_is_fallback = true
-		return Vector2i(-1, -1)
-
-	# 選ばれた出口に避難先情報があれば記録・なければフォールバック扱い（到達不能な出口を採用した場合）
-	if best_refuge_area.is_empty():
-		_flee_is_fallback = true
-	else:
-		_flee_refuge_area_id  = best_refuge_area
-		_flee_refuge_distance = best_refuge_dist
-	return best_exit
-
-
-## 現在の敵位置から脅威コストマップを構築する（2026-04-24 深夜追加・パフォーマンス対策）
-##
-## UnitAI._calc_threat_cost() と完全に同じ意味論だが、計算方向が逆：
-##   - `_calc_threat_cost(tile)`：タイルから各敵への距離を計算して総和
-##   - `_build_threat_map(for_member)`：各敵から影響範囲タイルに貢献を加算
-##
-## 数学的に等価（加算順序の入れ替えのみ）。数値結果は完全一致。
-## 計算量：150 体 × 影響範囲 ~41 タイル = 6,150 ops（~2 ms）
-## 対して旧方式は A* 内で 1600 回 × 150 体 = 240,000 ops（~50 ms）
-##
-## `for_member` は「自分自身を除外する」ため（_calc_threat_cost の `other == _member` 判定と
-## 同じ）。walker コンテキスト（同フロア・対立陣営判定）もここで決まる。
-func _build_threat_map(for_member: Character) -> Dictionary:
-	var threat_map: Dictionary = {}
-	if for_member == null or not is_instance_valid(for_member):
-		return threat_map
-	var range_tiles: int = GlobalConstants.FLEE_THREAT_RANGE
-	var weight: float    = GlobalConstants.FLEE_THREAT_WEIGHT
-	for mv: Variant in _all_members:
-		if not is_instance_valid(mv):
-			continue
-		var other: Character = mv as Character
-		# _calc_threat_cost と同じフィルタ条件
-		if other == null or other == for_member or other.hp <= 0:
-			continue
-		if other.is_friendly == for_member.is_friendly:
-			continue
-		if other.current_floor != for_member.current_floor:
-			continue
-		# この敵の脅威範囲（マンハッタン d < range_tiles）内の全タイルに貢献を加算
-		var enemy_pos: Vector2i = other.grid_pos
-		for dx: int in range(-range_tiles + 1, range_tiles):
-			for dy: int in range(-range_tiles + 1, range_tiles):
-				var d: int = absi(dx) + absi(dy)
-				if d >= range_tiles:
-					continue
-				var tile: Vector2i = Vector2i(enemy_pos.x + dx, enemy_pos.y + dy)
-				var contribution: float = float(range_tiles - d) * weight
-				threat_map[tile] = float(threat_map.get(tile, 0.0)) + contribution
-	return threat_map
+		if d < best_dist:
+			best_dist = d
+			best_area = refuge_area
+	_flee_refuge_area_id = best_area  # 全避難先が到達不能なら "" のまま
 
 
 ## 選ばれた避難先エリア ID を返す（PartyStatusWindow 表示用）
-## 空文字 = 未決定 / フォールバック
+## 空文字 = 未決定（敵不在・敵パーティー・避難先到達不能）
 func get_flee_refuge_area_id() -> String:
 	return _flee_refuge_area_id
-
-
-## 出口から選ばれた避難先エリアまでの BFS ホップ数（-1 = 未決定）
-func get_flee_refuge_distance() -> int:
-	return _flee_refuge_distance
-
-
-## FLEE がフォールバック経路（避難先エリア不明・到達不能で脅威コスト最小の出口採用）か
-func is_flee_fallback() -> bool:
-	return _flee_is_fallback
 
 
 ## 先頭の生存メンバー（リーダー優先）を返す
@@ -737,26 +546,6 @@ func _get_first_alive_leader() -> Character:
 		if is_instance_valid(m) and m.hp > 0:
 			return m
 	return null
-
-
-## メンバーがエリアをまたいだときに UnitAI から呼ばれる通知
-## 敵検知中の味方パーティーで推奨出口を即時再計算・再配布する
-## FLEE_REEVAL_MIN_INTERVAL で最小インターバルを強制（過剰再計算防止）
-##
-## 2026-04-24 深夜：FLEE 中ガードを外し、fall_back でも即時再評価が効くようにした。
-## 推奨出口は候補 2〜6 出口 × A* の軽量計算（~数ms）なので再評価コスト許容範囲。
-## 敵パーティーは legacy 維持（FLEE 中のみ）：敵は現状 `_find_flee_goal_legacy`
-## しか使わないので推奨出口配布の意味が薄い
-func on_member_area_changed(_member: Character, _new_area_id: String) -> void:
-	# 敵パーティーは FLEE 中のみ（legacy 維持）
-	if _is_enemy_party():
-		if not _is_party_fleeing():
-			return
-	var now: float = Time.get_ticks_msec() / 1000.0
-	if now - _flee_last_reeval_time < GlobalConstants.FLEE_REEVAL_MIN_INTERVAL:
-		return
-	_flee_last_reeval_time = now
-	_assign_orders()  # 内部で _update_flee_recommended_goal を呼ぶ
 
 
 ## 戦闘方針プリセットをパーティーメンバー全員に適用する（2026-04-21 追加・ステップ 2）

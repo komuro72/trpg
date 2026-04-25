@@ -285,37 +285,57 @@ func get_area_distance(from_area_id: String, to_area_id: String) -> int:
 	return -1
 
 
-## エリアの内側出口タイル一覧を返す
-## 定義: そのエリア内のタイルのうち、4 近傍に異なるエリア ID（非空）を持つタイルがあるタイル
-## A* のゴールとして使い、そのエリア内で完結する経路を探索させる
+## エリアの外側出口タイル一覧を返す（2026-04-25 改訂：内側 → 外側へ定義変更）
+##
+## 定義: area_id とは異なるエリアに属するタイルのうち、4 近傍に area_id のタイルが
+##       あるもの。すなわち「area_id から見て一歩踏み出した先」のタイル。
+##
+## 採用理由（FLEE 立ち往生バグ修正）:
+##   旧定義（内側）では、メンバーが goal（出口タイル）に到達してもエリア ID が変わらず
+##   連鎖再評価が走らなかった。外側定義に変えると goal 到達 = エリア境界跨ぎになる。
+##   2026-04-25 後にリーダー推奨機構自体を廃止し、メンバー自律判断に統一したが、
+##   外側出口の意味はそのまま（メンバーの `_evaluate_exit_costs()` が直接利用）。
+##
+## A* との関係:
+##   `_astar_with_cost(..., area_limit_id=area_id)` は中間タイルが area_id 外なら
+##   スキップするが、ゴール自体は例外的に許可するため（unit_ai.gd の neighbor != goal
+##   分岐）、外側 goal でも経路探索は成立する。
+##
+## 1 つの内側タイルから複数の外側タイル（複数の隣接エリア方向）が出る場合、それぞれ
+## 個別に列挙する。逆に同一の外側タイルは 1 度だけ含まれる（break で重複防止）。
 func get_exit_tiles_from(area_id: String) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
 	if area_id.is_empty():
 		return result
 	for pos_var: Variant in _area_map.keys():
-		if _area_map[pos_var] != area_id:
+		var pos_area: String = _area_map[pos_var] as String
+		if pos_area == area_id or pos_area.is_empty():
 			continue
 		var pos := pos_var as Vector2i
 		for offset: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0),
 				Vector2i(0, 1), Vector2i(0, -1)]:
 			var neighbor_area: String = _area_map.get(pos + offset, "") as String
-			if not neighbor_area.is_empty() and neighbor_area != area_id:
+			if neighbor_area == area_id:
 				result.append(pos)
 				break
 	return result
 
 
-## 内側出口タイルから隣接する別エリアの ID 一覧を返す
-## 1 つの出口タイルが複数の別エリアに接することもあり得るので Array[String] を返す
-## （通路タイルがちょうど 3 エリアの交点にいるようなケースを想定）
+## 外側出口タイルが属するエリア ID を返す（2026-04-25 改訂：外側前提に変更）
+##
+## 引数 exit_tile は `get_exit_tiles_from()` が返す外側タイル（既に隣接エリア側）。
+## そのタイルが属するエリア ID = 「向こう側エリア」をそのまま返す。
+##
+## 戻り値が `Array[String]` なのは旧 API 互換のため。外側前提では常に 0 または 1 要素：
+##   - exit_tile にエリア ID が割り当たっていれば `[area_id]`
+##   - エリア未割当（タイル外・未マーク）なら空配列
+##
+## 旧定義（内側）では同一の内側タイルから複数の隣接エリアに接するケースに対応するため
+## 配列で返していた。外側定義では各外側タイルが 1 つのエリアにのみ属するので、
+## 配列内要素数は最大 1 だが、呼び出し側の互換性維持のため Array[String] を継続使用。
 func get_adjacent_area_ids_of_exit(exit_tile: Vector2i) -> Array[String]:
 	var result: Array[String] = []
-	var own_area: String = _area_map.get(exit_tile, "") as String
-	for offset: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0),
-			Vector2i(0, 1), Vector2i(0, -1)]:
-		var neighbor_area: String = _area_map.get(exit_tile + offset, "") as String
-		if neighbor_area.is_empty() or neighbor_area == own_area:
-			continue
-		if not result.has(neighbor_area):
-			result.append(neighbor_area)
+	var area: String = _area_map.get(exit_tile, "") as String
+	if not area.is_empty():
+		result.append(area)
 	return result

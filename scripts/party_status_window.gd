@@ -25,7 +25,7 @@ var _party:               Party     = null
 var _get_enemy_managers:  Callable           ## () -> Array
 var _get_npc_managers:    Callable           ## () -> Array
 var _get_floor:           Callable           ## () -> int
-var _get_map_data:        Callable           ## () -> MapData
+var _get_map_data:        Callable           ## (floor_id: int) -> MapData
 var _hero:                Character = null
 var _hero_manager:        PartyManager = null  ## プレイヤーパーティーの戦況表示用
 
@@ -78,7 +78,7 @@ const VAR_PRIORITY: Dictionary = {
 	"party_fleeing":             2,  # 低：パーティー撤退中
 	"floor_following":           2,  # 低：フロア追従中
 	"warp_timer":                2,  # 低：DarkLord 固有・次ワープまで残秒
-	"flee_recommended_goal":     2,  # 低：撤退方向の推奨出口（味方のみ・FLEE/fall_back 共用・2026-04-24 深夜）
+	"last_flee_goal":            2,  # 低：メンバー本人が直近に選定した FLEE/fall_back 目標タイル（味方のみ）
 
 	# 敵固有・動的判断（中）※ 2026-04-21 追加
 	"should_self_flee":          1,  # 中：ゴブリン系 HP 低下時の自己逃走判定
@@ -404,12 +404,13 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 	## ラベル（UnitAI 実動と連動せず誤解を招いた）。詳細は
 	## docs/investigation_enemy_order_effective.md / docs/investigation_enemy_order_system.md
 	var is_enemy: bool = pm.party_type == "enemy"
+	var area_s: String = _area_id_at(leader_member)
 	var header: String
 	if is_enemy:
 		## 敵：strategy=<ENUM_NAME>（ATTACK / FLEE / WAIT / DEFEND / EXPLORE / GUARD_ROOM）
 		var strategy_name: String = _strategy_enum_name_for(pm)
-		header = "[%s]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  strategy=%s" % [
-			type_label, alive, total,
+		header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s HP:%s  strategy=%s" % [
+			type_label, alive, total, area_s,
 			sit_str, pb_str, hs_str, strategy_name]
 	else:
 		## 味方（NPC パーティー・show_orders=true 想定）：従来通り mv/battle/tgt/hp/item
@@ -424,12 +425,12 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 		var hp_str:     String = _label("on_low_hp",     hint.get("on_low_hp",     "-") as String)
 		if show_orders:
 			var item_str: String = _label("item_pickup", hint.get("item_pickup", "-") as String)
-			header = "[%s]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
-				type_label, alive, total,
+			header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
+				type_label, alive, total, area_s,
 				sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str, item_str]
 		else:
-			header = "[%s]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s" % [
-				type_label, alive, total,
+			header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s" % [
+				type_label, alive, total, area_s,
 				sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str]
 
 	# FLEE 中の避難先情報（味方パーティー限定・戦況判断派生情報として戦況ブロック末尾に付加）
@@ -518,8 +519,9 @@ func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 
 	# 分母：プレイヤー Party は死亡してもメンバーリストから削除しないため実サイズで OK
 	# （敵/NPC は PartyManager._on_member_died で erase される・PartyLeader._initial_count を使う）
-	var header := "[プレイヤー]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
-		alive, floor_members.size(),
+	var area_s: String = _area_id_at(leader_member)
+	var header := "[プレイヤー]  生存:%d/%d  area:%s  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
+		alive, floor_members.size(), area_s,
 		sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str, item_str]
 	header += _format_flee_refuge_suffix(_hero_manager)
 	header += _format_leader_extras(_hero_manager)
@@ -722,6 +724,24 @@ func _draw_member_block(font: Font, m: Character, x: float, y: float, w: float,
 	return cur_y + LINE_H
 
 
+## キャラクターが現在いるエリア ID を返す（取得失敗時は "?"）
+## 当該キャラの所属フロアの MapData から `get_area(grid_pos)` で引く。
+## 別フロアにいるメンバーでも `_get_map_data(floor_id)` 経由で正しく取得できる。
+func _area_id_at(m: Character) -> String:
+	if m == null or not is_instance_valid(m):
+		return "?"
+	if not _get_map_data.is_valid():
+		return "?"
+	var md_v: Variant = _get_map_data.call(m.current_floor)
+	if md_v == null:
+		return "?"
+	var md := md_v as MapData
+	if md == null:
+		return "?"
+	var area: String = md.get_area(m.grid_pos)
+	return area if not area.is_empty() else "?"
+
+
 ## 行動ライン本体部分（HP 色で描画される部分・2026-04-21 にクラス名を追加）
 ## 形式: [Fx]★名前[ランク](クラス) HP:x/y MP|SP:x/y mv=0.40s [ス][ガ]
 ##   Fx      = 別フロア時のみ
@@ -752,8 +772,9 @@ func _format_action_body(m: Character, display_floor: int) -> String:
 	if _show_var("energy") and m.max_energy > 0:
 		var label: String = "MP" if (cd != null and cd.is_magic_class()) else "SP"
 		energy_s = " %s:%d/%d" % [label, m.energy, m.max_energy]
-	return "%s%s%s[%s]%s HP:%d/%d%s mv=%.2fs%s" % [
-		floor_s, star_s, name_s, rank_s, class_s, m.hp, m.max_hp, energy_s, move_dur, status]
+	var area_s: String = " @%s" % _area_id_at(m)
+	return "%s%s%s[%s]%s HP:%d/%d%s mv=%.2fs%s%s" % [
+		floor_s, star_s, name_s, rank_s, class_s, m.hp, m.max_hp, energy_s, move_dur, area_s, status]
 
 
 ## 行動ラインの目的部分（シアン色で描画）
@@ -855,12 +876,12 @@ func _build_ai_flag_parts(ai: UnitAI, m: Character) -> PackedStringArray:
 		var pf_v: Variant = ai.get("_party_fleeing")
 		if pf_v != null and (pf_v as bool):
 			parts.append("P↓")
-	## flee_recommended_goal は味方メンバー限定（敵は FLEE 逃走先の推奨機構なし）
-	## 2026-04-24 深夜：fall_back も同じ `_flee_recommended_goal` を共用するため、
+	## last_flee_goal は味方メンバー限定（敵は FLEE 逃走先の自律機構なし）
+	## 2026-04-25 改訂：リーダー推奨機構を廃止。`_last_flee_goal` はメンバー本人が
+	## `_find_flee_goal()` / `_find_fall_back_goal()` で直近に選定した目標タイル。
 	## 現在実行中のアクション種別でラベルを切り替える（flee→ / fb→）。
-	## 値が (-1,-1) でなければ表示（敵検知中の味方パーティー・敵不在時は -1,-1）
-	if _show_var("flee_recommended_goal") and m != null and m.is_friendly:
-		var rg_v: Variant = ai.get("_flee_recommended_goal")
+	if _show_var("last_flee_goal") and m != null and m.is_friendly:
+		var rg_v: Variant = ai.get("_last_flee_goal")
 		if rg_v != null:
 			var rg: Vector2i = rg_v as Vector2i
 			if rg != Vector2i(-1, -1):
@@ -1166,8 +1187,11 @@ func _combat_situation_label_with_ratio(hint: Dictionary) -> String:
 ## FLEE 時の避難先情報 suffix を返す（戦況判断ブロック末尾に付加）
 ## 形式:
 ##   通常（FLEE 中・避難先あり）: `  避難先:<area_id>(d:<n>)@(<x>,<y>)`
-##   フォールバック（避難先不明）: `  避難先:!fb@(<x>,<y>)`
-##   FLEE でない / 敵パーティー / 情報なし: `""`（空文字列）
+##   通常: `  避難先:<area_id>`（リーダーが選定した最寄り避難先エリア ID）
+##   敵検知なし / 敵パーティー / 避難先未決定: `""`（空文字列）
+##
+## 2026-04-25 改訂：リーダー推奨出口機構を廃止したため、座標部分（@(x,y)）と距離（d:N）の
+## 表示を撤廃。各メンバー個別の出口は本人の `_last_flee_goal` から flee→(x,y) として表示。
 ## 味方パーティー限定。敵パーティーは FLEE 実装が別タスクのため、将来同様の表示を検討する
 func _format_flee_refuge_suffix(pm: PartyManager) -> String:
 	if pm == null or not is_instance_valid(pm):
@@ -1177,21 +1201,12 @@ func _format_flee_refuge_suffix(pm: PartyManager) -> String:
 	var leader: PartyLeader = pm.get_party_leader()
 	if leader == null or not is_instance_valid(leader):
 		return ""
-	if not leader.has_method("get_flee_recommended_goal"):
+	if not leader.has_method("get_flee_refuge_area_id"):
 		return ""
-	var goal: Vector2i = leader.get_flee_recommended_goal()
-	if goal == Vector2i(-1, -1):
+	var area_id: String = leader.get_flee_refuge_area_id()
+	if area_id.is_empty():
 		return ""
-	if leader.has_method("is_flee_fallback") and leader.is_flee_fallback():
-		return "  避難先:!fb@(%d,%d)" % [goal.x, goal.y]
-	var area_id: String = leader.get_flee_refuge_area_id() \
-			if leader.has_method("get_flee_refuge_area_id") else ""
-	var dist: int = leader.get_flee_refuge_distance() \
-			if leader.has_method("get_flee_refuge_distance") else -1
-	if area_id.is_empty() or dist < 0:
-		# 何らかの理由で情報欠損 → フォールバック扱い
-		return "  避難先:!fb@(%d,%d)" % [goal.x, goal.y]
-	return "  避難先:%s(d:%d)@(%d,%d)" % [area_id, dist, goal.x, goal.y]
+	return "  避難先:%s" % area_id
 
 
 ## 「生存:X/Y」の分母 Y を算出する
@@ -1357,8 +1372,19 @@ func _snapshot_player_party_lines(floor_idx: int) -> PackedStringArray:
 		pb_str += " " + _format_strength_breakdown(hint)
 		hs_str  = _hp_status_label_with_breakdown(hint)
 
-	var header: String = "[プレイヤー]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
-		alive, floor_members.size(), sit_str, pb_str, hs_str,
+	# リーダー位置のエリア ID（画面ヘッダーと同じ表記）
+	var leader_member: Character = null
+	for m_v: Variant in floor_members:
+		var m := m_v as Character
+		if is_instance_valid(m) and m.is_leader:
+			leader_member = m
+			break
+	if leader_member == null and not floor_members.is_empty():
+		leader_member = floor_members[0] as Character
+	var area_s: String = _area_id_at(leader_member)
+
+	var header: String = "[プレイヤー]  生存:%d/%d  area:%s  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
+		alive, floor_members.size(), area_s, sit_str, pb_str, hs_str,
 		mv_str, battle_str, tgt_str, hp_str, item_str]
 	header += _format_flee_refuge_suffix(_hero_manager)
 	header += _format_leader_extras(_hero_manager)
@@ -1412,12 +1438,22 @@ func _snapshot_party_block_lines(pm: PartyManager, type_label: String,
 	pb_str += " " + _format_strength_breakdown(hint)
 	var hs_str:  String = _hp_status_label_with_breakdown(hint)
 
+	# リーダー位置のエリア ID
+	var leader_member: Character = null
+	for m: Character in floor_members:
+		if is_instance_valid(m) and m.is_leader:
+			leader_member = m
+			break
+	if leader_member == null and not floor_members.is_empty():
+		leader_member = floor_members[0]
+	var area_s: String = _area_id_at(leader_member)
+
 	var is_enemy: bool = pm.party_type == "enemy"
 	var header: String
 	if is_enemy:
 		var strategy_name: String = _strategy_enum_name_for(pm)
-		header = "[%s]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  strategy=%s" % [
-			type_label, alive, total,
+		header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s HP:%s  strategy=%s" % [
+			type_label, alive, total, area_s,
 			sit_str, pb_str, hs_str, strategy_name]
 	else:
 		var mv_raw:     String = hint.get("move", "-") as String
@@ -1430,12 +1466,12 @@ func _snapshot_party_block_lines(pm: PartyManager, type_label: String,
 		var hp_str:     String = _label("on_low_hp",     hint.get("on_low_hp",     "-") as String)
 		if show_orders:
 			var item_str: String = _label("item_pickup", hint.get("item_pickup", "-") as String)
-			header = "[%s]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
-				type_label, alive, total,
+			header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s  item=%s" % [
+				type_label, alive, total, area_s,
 				sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str, item_str]
 		else:
-			header = "[%s]  生存:%d/%d  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s" % [
-				type_label, alive, total,
+			header = "[%s]  生存:%d/%d  area:%s  戦況:%s 戦力:%s HP:%s  mv=%s  battle=%s  tgt=%s  hp=%s" % [
+				type_label, alive, total, area_s,
 				sit_str, pb_str, hs_str, mv_str, battle_str, tgt_str, hp_str]
 	header += _format_flee_refuge_suffix(pm)
 	header += _format_leader_extras(pm)

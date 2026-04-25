@@ -4753,3 +4753,514 @@ AI ヒーラーの過剰回復（3.4 倍）が解消され、Player と完全一
 - `grep -c "behavior_description" assets/master/enemies/*.json` → 16 件（全て残存）
 - Godot `--check-only` exit 0
 
+## FLEE 立ち往生バグ修正：出口タイル定義を内側 → 外側に変更（2026-04-25）
+
+### 現象
+味方パーティーの FLEE 挙動で「部屋の出口に到達した時点で立ち往生する」現象が発生。
+リーダーは避難先エリア（フロア 0 の安全部屋 `r0_10`）と推奨出口タイルを正しく選定し、
+全メンバーに配布するところまでは機能していたが、メンバーが配布された goal タイルに
+到達した時点で逃走が完了扱いになり、次のエリアへ向かう新しい goal が配布されずに
+キュー消化で停止していた。
+
+スナップショット例（フロア 0・操作キャラはベルナール）：
+```
+[プレイヤー]  生存:2/2  area:r0_5  戦況:優勢(11.0/6.0=1.83) ...
+              避難先:r0_10(d:3)@(13,22)
+  ★ベルナール ... @r0_5 ... 状態:flee→(13,22)
+  ヴィクター  ... @r0_5 ... 状態:flee→(13,22)
+```
+
+期待挙動：(13,22) 到達 → エリア変化検知 → 隣エリアから r0_10 への次の出口を再計算
+→ 新 goal を配布 → r0_10 まで連鎖。
+実挙動：(13,22) 到達後に逃走停止し再配布なし。
+
+### 原因調査の流れ
+
+#### 第 1 次調査（クールダウン仮説）
+PartyLeader の `on_member_area_changed()` が `FLEE_REEVAL_MIN_INTERVAL = 0.3s` の
+クールダウンに引っかかってスキップされている可能性を疑った。確かにクールダウンが効く
+経路はあるが、それは付随的な問題。
+
+#### 第 2 次調査（出口タイル定義の不整合）
+真の原因を特定。`MapData.get_exit_tiles_from()` の出口タイルが「**そのエリアの内側**で
+隣接エリアに接しているタイル」と定義されていた。このため：
+- メンバーが goal（出口タイル）に到達してもエリア ID が変わらない
+- `UnitAI._notify_area_change_if_needed()` が発火しない（エリア ID 不変なので）
+- リーダーの再計算 → 新 goal 配布の連鎖が走らない
+- `_is_in_refuge_area()` も false のまま（現エリア = 元エリアのまま）
+- キュー消化後の IDLE 分岐で古い `_order` が使われ立ち往生
+
+つまり「エリア境界のタイル」をどこに置くかという設計選択が、エリア変化通知機構と
+噛み合っていなかった。
+
+### 採用した修正方針
+
+**出口タイル定義を「外側」（隣接エリアに踏み込んだ最初のタイル）に変更**。
+
+代替案（FLEE 専用 API 新設・goal 補正・エリア ID 変化での到達判定）も検討したが、
+- `get_exit_tiles_from()` の呼び出し元が **FLEE 系の 2 箇所のみ**（事前調査で確認）
+- 他用途（explore / 階段ナビ / NPC 合流判定 / デバッグ表示）では未使用
+- A* 側に既に「ゴール例外」ロジックが実装済み（`unit_ai.gd:1726-1727` の
+  `neighbor != goal` 分岐）で、外側 goal でも経路探索が成立する
+という条件が揃っていたため、**既存 API を直接書き換える**方式が最もクリーンと判断。
+
+### 修正内容
+
+#### 1. `MapData.get_exit_tiles_from(area_id)` の定義変更
+- **旧**：そのエリア内のタイルのうち、4 近傍に異なるエリア ID を持つタイルがあるもの
+- **新**：area_id とは異なるエリアに属するタイルのうち、4 近傍に area_id のタイルが
+  あるもの（= area_id から見て一歩踏み出した先のタイル）
+- 走査方向を反転（旧：内側タイル列挙 → 隣接が外なら採用 / 新：外側タイル列挙 → 隣接が
+  area_id なら採用）
+
+#### 2. `MapData.get_adjacent_area_ids_of_exit(exit_tile)` の意味調整
+- **旧**：内側タイルから見た「向こう側エリア」を 4 近傍走査で探す（複数エリアに接する
+  通路タイルでは複数返す）
+- **新**：外側タイル前提なので、そのタイルが属するエリア ID をそのまま返す（最大 1 要素）
+- 戻り値型 `Array[String]` は呼び出し側互換のため維持
+
+#### 3. A* 関連
+- 修正不要。既に `unit_ai.gd:1725-1727` で `neighbor != goal` のとき `area_limit_id`
+  チェックをスキップする実装になっており、外側 goal でも経路探索が成立する。
+- `unit_ai.gd:1696-1697` の start ガード（start も goal も area_limit_id 外なら諦める）
+  も、start = current_area・goal = 外側エリア の組み合わせでは発火しないため問題なし。
+
+#### 4. 推奨バイアス
+- リーダー（`_determine_flee_recommended_goal`）とメンバー（`_find_flee_goal`）の
+  双方が同じ `get_exit_tiles_from()` を起点にするため、両者とも外側タイル基準で計算。
+- 座標一致判定（`unit_ai.gd:1482` の `exit_tile != recommended`）は外側タイル同士で
+  比較されるので破綻しない。
+
+#### 5. fall_back への波及
+- `_find_fall_back_goal()` は `_find_flee_goal()` の軽量ラッパーなので、自動的に外側
+  goal を返すようになる。
+- 停止条件 `_is_far_enough_from_threats()` は座標距離（マンハッタン）ベースで、
+  エリア ID 依存なし。外側 goal でも機能維持。
+
+### 影響を与えなかったもの（変更なし）
+- 敵パーティーの FLEE（`_find_flee_goal_legacy` 直線ロジック・既知の派生課題）
+- explore モード・階段ナビ・NPC 合流判定（`get_exit_tiles_from()` を呼ばない）
+- `_is_in_refuge_area()` の判定ロジック
+- `_notify_area_change_if_needed()` の発火条件（毎フレーム実行）
+- PartyStatusWindow の表示文言（座標値が外側になるだけで表示形式は不変）
+
+### 想定される副次効果・観察ポイント
+- **通路エリア（c0_*）の扱い**：通路は複数の部屋に接続するハブなので、通路から見た
+  外側出口は「通路の端 → 隣接部屋に踏み込んだタイル」になる。1 つの通路に対して
+  複数の隣接部屋方向の外側タイルが返される（FLEE 評価では各方向を個別に評価する）
+- **階段タイル境界**：稀なケースだが、外側出口がたまたま階段タイルに位置する場合、
+  到達と同時にフロア遷移が発火する可能性がある。階段タイル中継禁止ルール
+  （`unit_ai.gd:1730-1731`）は中間地点のみに適用されるため、ゴール = 階段は許可される
+- **クールダウン抑制**：`FLEE_REEVAL_MIN_INTERVAL = 0.3s` のクールダウンは引き続き
+  効くが、外側 goal 化で「出口手前の連続エリア変化」が起きなくなったため、実害は
+  顕在化しない見込み（要観察）
+
+### 動作確認手順
+1. フロア 0 でプレイヤーパーティーの `battle_policy = "retreat"` または HP critical で
+   `on_low_hp = "flee"` に設定して FLEE 発動
+2. F7 でスナップショット取得
+3. 確認項目：
+   - `避難先:r0_10(d:N)@(x,y)` の `(x,y)` がリーダー現在エリアの**外側**タイルになっている
+   - メンバー行の `状態:flee→(x,y)` が同様に外側タイル
+   - メンバーが (x,y) に到達したらエリア ID が変わり、新しい goal が配布される
+   - 連鎖して r0_10 まで到達する
+   - r0_10 到達後は `_is_in_refuge_area() == true` で待機状態になる
+
+### 確認
+- Godot `--check-only` exit 0
+- `get_exit_tiles_from` / `get_adjacent_area_ids_of_exit` の呼び出し元 grep で 3 箇所
+  すべてレビュー済み（party_leader.gd:599 / unit_ai.gd:1467 / party_leader.gd:639）
+- CLAUDE.md「FLEE 時の逃走先決定ロジック」内 MapData 側 API 表を更新・経緯セクション追加
+- 「実装状況」AI システム配下に 1 行追加
+
+## FLEE/fall_back 出口選択ロジック統一・リーダー推奨機構の廃止（2026-04-25）
+
+### 現象
+出口タイル外側化（同日朝）で連鎖走行が動くようになったが、実プレイ検証で
+**「逃走中のキャラが部屋の境界を往復する」**現象が発覚。避難先や各キャラの状態
+（逃走）は変わらないまま、メンバーが出口タイルと前のエリアの間を行き来する。
+
+### 原因（リーダー推奨機構と先行メンバーの座標不一致）
+
+旧設計はリーダーが推奨出口タイル座標を全メンバーに配布する二段階構造だった：
+
+1. リーダー（r0_5 にいる）の推奨出口 = c0_4 内の境界タイル（外側出口）
+2. メンバーが境界を跨ぎ c0_4 に入る
+3. リーダーは依然 r0_5 にいるので推奨は不変
+4. メンバーの `_find_flee_goal()` で `get_exit_tiles_from(c0_4)` を呼ぶ → 戻り値は **c0_4 の外側タイル**（= r0_5 内 / r0_10 内 / 他部屋）
+5. リーダーの推奨 c0_4 内タイルはメンバーの `exit_tiles` 配列に**含まれない**
+6. `if exit_tile != recommended:` がすべての候補で真 → **全候補に同じ
+   FLEE_NON_RECOMMENDED_PENALTY** が乗り、バイアスが事実上中立化
+7. メンバーは純粋に reach_cost（= ステップ数 + 脅威コスト）だけで選択 → r0_5 への
+   1 歩戻りが最も近い → r0_5 に戻る → 振動
+
+問題の本質：旧設計はリーダーとメンバーが**同じエリアにいる前提**で書かれていた。
+メンバーがリーダーより先行した瞬間、推奨タイルが概念的に「メンバーから見て手前」に
+位置するため、座標一致判定が破綻する。
+
+### 採用した修正方針
+
+**リーダー推奨機構を廃止し、メンバー自律判断に統一**。
+
+設計選択の理由：
+1. メンバー先行時の破綻を根本解決
+2. 「敵がいないなら全員同じ出口に収束（パーティー分散防止）」「敵がいれば各自が
+   別出口を選べる（脅威回避）」の両立を `FLEE_AREA_DISTANCE_WEIGHT` のウェイト
+   バランス 1 つで実現できる
+3. リーダーの A* 評価（出口数 × walker コンテキスト）を削除でき、計算量が単純化
+4. fall_back / 将来の `keep_distance` も同じコア関数で動く統一感
+
+検討した代替案：
+- **案 B（出口チェーン全体配布）**：実装複雑・データ構造変更大
+- **案 C（座標一致 → 方向一致）**：単独では不十分・案 A の追加バイアスが必要
+- **案 D（来た方向ペナルティ）**：往復には効くが「狭間で詰まる」副作用懸念
+
+→ **案 A（メンバー自律 + refuge_dist バイアス）**を採用。実装最小・意味論明快。
+
+### 修正内容
+
+#### 1. UnitAI に共通コア関数を新設
+
+```
+_evaluate_exit_costs() -> Array[Dictionary]
+  各外側出口について:
+    reach_cost       = メンバー位置 → exit_tile の脅威コスト付き A* 距離
+    refuge_dist_cost = get_area_distance(area_of(exit_tile), _flee_refuge_area_id)
+                       × FLEE_AREA_DISTANCE_WEIGHT
+                       避難先未設定なら 0・到達不能なら 999.0
+    total_cost       = reach_cost + refuge_dist_cost
+  到達可能な候補配列を返す。空なら呼出側 legacy フォールバック
+```
+
+`_find_flee_goal()` / `_find_fall_back_goal()` の双方が同じ関数を共用。
+fall_back は停止条件 `_is_far_enough_from_threats()` だけが追加で違う。
+
+#### 2. PartyLeader 側の役割を「避難先エリア ID 決定のみ」に削減
+
+`_update_flee_refuge_area_id()`（新設）がリーダー現エリアから **BFS ホップ距離**で
+最も近い避難先エリアを選び、`_flee_refuge_area_id` に格納。`receive_order` 経由で
+全メンバーに配布。出口タイル選定は完全にメンバー側で完結する。
+
+#### 3. 大規模削除
+
+**PartyLeader**：
+- `_flee_recommended_goal` / `_flee_refuge_distance` / `_flee_is_fallback` /
+  `_flee_last_reeval_time` フィールド
+- `_determine_flee_recommended_goal()` / `_update_flee_recommended_goal()` /
+  `_build_threat_map()`（UnitAI に移管）/ `_perf_leader_pos_safe()`
+- `get_flee_recommended_goal()` / `get_flee_refuge_distance()` / `is_flee_fallback()`
+- `on_member_area_changed()`（推奨再計算機構ごと不要に）
+
+**UnitAI**：
+- `_flee_recommended_goal` / `_last_area_id` フィールド
+- `_notify_area_change_if_needed()`（リーダーへの通知不要に）
+- `_process()` 冒頭の `_notify_area_change_if_needed()` 呼び出し
+
+**GlobalConstants / constants.json / constants_default.json**：
+- `FLEE_NON_RECOMMENDED_PENALTY`（推奨外ペナルティ・推奨機構ごと廃止）
+- `FLEE_REEVAL_MIN_INTERVAL`（推奨再計算クールダウン・廃止）
+
+**receive_order ペイロード**：
+- `flee_recommended_goal: Vector2i` → `flee_refuge_area_id: String` に置換
+
+#### 4. UnitAI 側の追加フィールド
+- `_flee_refuge_area_id: String`（receive_order 経由で配布）
+- `_last_flee_goal: Vector2i`（PartyStatusWindow `flee→(x,y)` 表示用に
+  メンバー本人が選定した直近 goal を保持）
+
+#### 5. PartyStatusWindow 表示の単純化
+- ヘッダー：`避難先:r0_10(d:3)@(13,22)` → **`避難先:r0_10`** のみ（座標・距離・
+  フォールバック表示を削除）
+- メンバー行：`flee→(x,y)` / `fb→(x,y)` は維持。ただし参照先を
+  `_flee_recommended_goal`（リーダー配布値）から `_last_flee_goal`（メンバー本人の
+  選定値）に変更。各メンバーごとに異なる出口が表示されるようになる
+- F7 スナップショットも同様
+
+### パーティー分散防止と脅威回避の両立
+
+`FLEE_AREA_DISTANCE_WEIGHT`（既定 10.0）の値で挙動が連続的に変わる：
+- **大きい**（例 20.0）：避難先方向に強く収束。脅威があっても突っ込みやすい
+- **小さい**（例 5.0）：脅威回避を優先。パーティーが分散しやすい
+- 既定 10.0 はバランス値。`reach_cost` のスケール（1 ステップ ≒ 1.0 + 脅威コスト
+  最大 ~15）と概ね釣り合う
+
+### 影響範囲外
+- **敵パーティーの FLEE**：従来通り `_find_flee_goal_legacy`（直線実装）。派生課題で対応
+- **`keep_distance`**：現状の `_find_flee_goal()` 流用のままに保持。将来の派生課題で
+  `_evaluate_exit_costs()` 経由に切り替える際、距離確保の意味（射程維持・後退ではなく
+  脇に退避）に合わせたロジック差別化を併せて入れる
+
+### 確認
+- Godot `--check-only` exit 0
+- 旧 API シンボル（`_flee_recommended_goal` / `FLEE_NON_RECOMMENDED_PENALTY` /
+  `FLEE_REEVAL_MIN_INTERVAL` / `_notify_area_change_if_needed` /
+  `on_member_area_changed` / `_determine_flee_recommended_goal` /
+  `_update_flee_recommended_goal` / `get_flee_recommended_goal` /
+  `get_flee_refuge_distance` / `is_flee_fallback` / `_flee_is_fallback` /
+  `_flee_refuge_distance` / `_flee_last_reeval_time` / `_last_area_id`）の grep で
+  scripts/ 配下に残存なし（map_data.gd / game_map.gd の comment 文言は更新済み）
+- CLAUDE.md 「FLEE 時の逃走先決定ロジック」セクションを大幅改訂（二段階構造の節を
+  廃止し「メンバー自律出口選択」「リーダー側の役割」「fall_back との関係」「keep_distance
+  との関係」を新設）
+- 「実装状況」AI システム配下に 1 行追加
+- 「残タスク」の `fall_back 実機動作確認` を「FLEE / fall_back 動作確認」に統合・
+  リーダー推奨機構廃止後の検証項目に書き換え
+- 「FLEE 派生課題」を新仕様に合わせて再整理（`keep_distance` を `_evaluate_exit_costs()`
+  経由に切り替える項を派生課題 4 として明記）
+
+### 後追い修正（同日・避難先到達後の境界往復）
+
+リーダー推奨機構廃止の実機検証で「避難先に到達した後、避難先と隣接通路の間で振動する」
+現象が発覚。状態は「逃走」のまま。
+
+#### 原因
+
+`_generate_queue(FLEE)` は `_is_in_refuge_area()` が true なら `[{wait}]` を返すが、
+これはキュー**生成時**にしか働かない。FLEE 戦略中はキューが `[flee × 5]` で生成され、
+各アクションが `_step_toward_goal()` 内で `_find_flee_goal()` を呼んで goal を都度
+再計算する。
+
+メンバーが避難先 r0_10 に入った時点で `_find_flee_goal()` が呼ばれると：
+- `_evaluate_exit_costs()` が r0_10 の外側出口（隣接通路 c0_X 内のタイル）を返す
+- 避難先 = 現エリアなので refuge_dist_cost = 0 ではなく、出口エリア c0_X から見た
+  refuge までの距離 = 1 ホップ → `1 × FLEE_AREA_DISTANCE_WEIGHT(10) = 10.0`
+- それでもメンバーは外へ出てしまう（最小コストに従うため）
+- 通路に出た瞬間、再評価で r0_10 が refuge_dist_cost = 0 → 戻る → 振動
+
+#### 修正
+
+`_find_flee_goal()` の冒頭に「避難先到達済みなら現在位置を返す」早期停止を追加。
+旧キューに残った flee アクションは grid_pos == goal で即完了し、次のキュー生成で
+wait 分岐に入る。状態表示も即座に「逃走」→「待機」に切り替わる。
+
+#### 確認
+
+- Godot `--check-only` exit 0
+- `_find_fall_back_goal()` には影響なし（fall_back は `_is_far_enough_from_threats()`
+  による独自停止条件があり、避難先に居れば脅威との距離が大きく自然停止する）
+- `keep_distance`（敵専用）には影響なし（is_friendly == false で legacy 経路に分岐）
+
+### 後追い修正 2（同日・撤退途中の WAIT 切替→巻き戻り）
+
+リーダー推奨機構廃止後、避難先から離れた地点で battle_policy="retreat" を指示した
+場合の検証で発覚：「避難先到達前にメンバーが WAIT に切り替わり、戻ってくる」現象。
+
+#### 原因
+
+撤退中、メンバーが敵から十分離れると `nearby_enemy_rank_sum` が 0 になり：
+
+1. `PartyLeader._update_flee_refuge_area_id()` が `_flee_refuge_area_id = ""` にリセット
+   （旧仕様：「敵検知中のみ refuge を計算」）
+2. `_combat_situation.situation` が SAFE になる
+3. `UnitAI._determine_effective_action()` の line 2632 `if _is_combat_safe(): return WAIT`
+   が `_combat == "flee"` より優先され、戦略が **FLEE → WAIT** に切替
+4. メンバー停止。Avoid 表示も消える
+5. しばらく経つと敵が再接近 / 視界に入って SAFE 解除 → 再び FLEE
+6. ループ
+
+つまり「敵が見えなくなった瞬間に retreat が中断される」設計バグ。プレイヤーが明示的に
+撤退を指示している以上、敵の有無に関係なく避難先まで退却すべき。
+
+#### 修正
+
+**1. `UnitAI._determine_effective_action()`**：`_combat == "flee"` を SAFE 判定より
+**前**にチェックする項目として独立させた。
+
+```
+if _combat == "flee":
+    if _should_ignore_flee():
+        return ATTACK  # 逃げない種族
+    if _is_in_refuge_area():
+        return WAIT    # 避難先到達済み → 自然停止
+    return FLEE        # 避難先未到達 → SAFE でも継続
+```
+
+避難先到達後は自然に WAIT に切り替わる（`_is_in_refuge_area()` 経由）ので、無限に
+逃げ続けることはない。
+
+**2. `PartyLeader._update_flee_refuge_area_id()`**：`battle_policy == "retreat"` の
+ときは敵不在でも refuge_area_id を維持する。
+
+```
+var is_retreating := _global_orders.get("battle_policy", "") == "retreat"
+if enemy_rank_sum <= 0 and not is_retreating:
+    _flee_refuge_area_id = ""
+    return
+```
+
+これでメンバーは敵が見えなくなっても refuge を見失わず、`_evaluate_exit_costs()` が
+正しく避難先方向の出口を選び続ける。
+
+#### 設計思想の変化
+
+旧：「敵が見えてれば FLEE、見えなければ WAIT」（自動応答型）
+新：「`combat == flee` 指示中は敵の有無に関係なく避難先まで退却」（明示指示尊重型）
+
+NpcLeaderAI の自動 battle_policy 切替（CRITICAL → retreat / SAFE → attack）は維持。
+SAFE 検知でクールダウン後に "attack" に戻れば `_combat` が "attack" に更新され、
+通常モードに復帰する。撤退途中（クールダウン中）は新仕様で確実に refuge へ向かう。
+
+#### 確認
+- Godot `--check-only` exit 0
+- 敵パーティーは `_is_enemy_party()` 早期リターンで影響なし
+- battle_policy != "retreat" の通常戦闘では従来どおり SAFE → WAIT が動作
+
+### 後追い修正 3（同日・避難先到達後の隊形戻り）
+
+撤退指示の修正後（後追い修正 2）の検証で発覚：「メンバーが避難先（r0_10）に到達した
+あと、`→隊形` アクションでリーダー方向に戻ってしまう」現象。
+
+#### 原因
+
+メンバーが避難先に到達すると、修正 2 のロジックで `_determine_effective_action()` が
+WAIT を返す。WAIT の queue 生成は `_generate_move_queue()` を呼ぶ：
+
+```
+_:  # cluster / follow / same_room
+    if not _formation_satisfied():
+        # move_to_formation × 3 → wait
+```
+
+リーダー（操作キャラ）がまだ通路 c0_4 にいる間、メンバーから見ると `_formation_satisfied()`
+は false（リーダーが避難先内ではないため）→ `move_to_formation` がキューに積まれる
+→ メンバーがリーダーのいる通路方向に戻る。
+
+#### 修正
+
+`_generate_queue()` の WAIT 分岐に「撤退中で避難先到達済みなら隊形を組まずに待機」を
+明示的に追加：
+
+```
+# WAIT: 移動方針に従って行動
+if _member.is_friendly and _combat == "flee" and _is_in_refuge_area():
+    return [{"action": "wait"}]
+return _generate_move_queue()
+```
+
+これにより避難先内のメンバーは move_policy=cluster/follow/same_room であってもその場に
+留まる。リーダーが追いつくのを待つ設計に統一。
+
+#### 設計意図
+
+撤退中の `_combat == "flee"` は「避難先まで退却する」だけでなく「避難先到達後は
+リーダーを待つ」という意味も含む。隊形維持より避難先確保を優先する。
+
+リーダーも同じく flee で動いているので、最終的にはリーダーも避難先に到達し、
+全員が refuge 内で待機する形に収束する。
+
+#### 確認
+- Godot `--check-only` exit 0
+- 平常時（_combat != "flee"）の WAIT は従来どおり formation 維持が動作
+- 避難先未到達のメンバーは FLEE 戦略のままなので影響なし
+- 敵パーティーは `_combat` を持たないので影響なし
+
+### 後追い修正 4（同日・flee 中の前進不要判定追加 + `combat == flee` 意味論の明文化）
+
+ここまでの修正で「border 往復」「WAIT 切替戻り」「隊形戻り」を順に解消したが、実プレイで
+「敵から十分離れた後も避難先まで前進し続ける」状態が依然として残ることが分かった。
+これは追加の改修とドキュメント整備で対応した。
+
+#### `combat == flee` 意味論の変遷
+
+旧仕様：「敵が見えれば flee・見えなければ wait」（自動応答型）
+- → 敵検知が部屋単位で動作するため、境界往復や前進中断の温床
+- → 後追い修正 2 で「明示指示尊重型」に変更（`_combat == "flee"` 中は敵の有無に
+  関わらず避難先まで退却）
+
+ただし新仕様では「敵から離れた後も避難先まで進み続ける」状態が発生したため、追加で
+**flee 中の移動先決定**として前進不要判定を導入した。
+
+#### 設計判断のポイント：「flee 解除」と「flee 中の移動先 = 現在地」の区別
+
+検討段階で「FLEE_RELEASE_RANGE を新設して flee 状態を解除する」案も挙がったが、
+**flee 解除トリガーは外部要因（HP critical 解除 / battle_policy 切替）に委ね、メンバー側
+では能動的に解除しない設計**とした。
+
+理由：
+- メンバーが flee 状態を能動的に解除すると、敵が再接近したときの再 flee 発動条件が
+  複雑化する（解除した瞬間に攻撃モードになり、また敵接近で flee に戻ると振動）
+- 「flee 状態は維持したまま、移動先 = 現在地」のほうがシンプル：
+  - 敵が再接近 → 次回 `_find_flee_goal()` で前進不要判定が外れ、再び避難先方向へ前進
+  - 敵が離れたまま → 移動先 = 現在地のまま静止
+  - HP critical 解除や battle_policy 切替で flee 状態自体が終了 → 通常モード復帰
+- 解除条件と移動先決定を**異なるレイヤー**として分離することで、ロジックの直交性を
+  確保
+
+これは「停止条件」ではなく「移動先決定の自然な帰結」。flee 状態は維持される点が
+「flee 解除」とは決定的に違う。
+
+#### 修正内容
+
+**1. `GlobalConstants` に `FLEE_SAFE_DISTANCE: int = 8` を追加**
+- 意味：flee 中、最近接脅威との距離がこの値以上なら移動先 = 現在地
+- placeholder 値：8 タイル（実プレイ調整対象）。`FLEE_THREAT_RANGE`（5）より大きく
+  しないと脅威コスト計算範囲との整合が取れない
+- Config Editor の UnitAI カテゴリに追加（既存 FLEE 系定数と同列）
+
+**2. `UnitAI._calc_nearest_threat_distance()` を新設**
+```
+func _calc_nearest_threat_distance() -> int:
+    # 同フロア・対立陣営・生存中のキャラクターの中で、
+    # 自分の grid_pos から最近接のマンハッタン距離を返す
+    # 該当なしは 999999（INT_MAX 相当）
+```
+- 既存の `_calc_threat_cost()`（per-tile コスト計算用）/ `_build_threat_map()`
+  （事前計算用）/ `_is_far_enough_from_threats()`（fall_back 停止判定）とは用途が
+  異なるため独立に保つ
+- 敵ステータス直接参照禁止ルール準拠（位置と is_friendly / current_floor / hp のみ参照）
+
+**3. `_find_flee_goal()` の冒頭に前進不要判定を追加**
+```
+func _find_flee_goal(threat) -> Vector2i:
+    # ...既存ガード（味方限定・敵 legacy フォールバック）...
+    if _is_in_refuge_area():
+        return _member.grid_pos  # 既存：避難先到達済み
+    # 新規：脅威から十分離れていれば前進不要
+    if _calc_nearest_threat_distance() >= FLEE_SAFE_DISTANCE:
+        return _member.grid_pos
+    # 既存：_evaluate_exit_costs() で出口総合コスト評価
+    ...
+```
+
+`_member.grid_pos` を返すと `_step_toward_goal()` が `goal == grid_pos` で false を
+返してアクション完了 → 次のアクションも同じ → キュー消化が瞬時に進む。次の
+queue 生成で `_generate_queue(FLEE)` が走るが、`_is_in_refuge_area()` が false で
+かつ `_combat == "flee"` なので、未到達時は引き続き flee アクションが積まれる
+（ただし実行時に再び前進不要判定で stop）。
+
+#### fall_back への影響
+
+なし。fall_back は別関数（`_find_fall_back_goal`）で独自の停止条件
+（`_is_far_enough_from_threats() = attack_range + FALL_BACK_MARGIN`）を持つ。
+両者は別関数・別定数で独立しているため、新たな前進不要判定は fall_back に波及しない。
+
+意味論的にも：
+- fall_back：「戦闘継続しつつ射程外まで下がる」（射程確保が目的）
+- FLEE：「戦闘から離脱して安全な距離まで下がる」（安全距離確保が目的）
+
+設計が独立しているため別 API として維持する。
+
+#### CLAUDE.md 更新
+
+「FLEE / fall_back の逃走先決定ロジック」セクションに以下を追加：
+- `combat == "flee"` 指示の意味論小節（明示指示尊重型・解除条件は外部要因のみ）
+- 「flee 中の移動先決定（前進不要判定）」小節（`FLEE_SAFE_DISTANCE` 経由の停止）
+- fall_back との関係小節を更新（両者の停止条件の独立性を明記）
+- 関連定数表に `FLEE_SAFE_DISTANCE` を追加
+
+「実装状況」AI システム配下に 1 行追加。
+
+#### 動作確認
+
+- Godot `--check-only` exit 0
+- `_calc_nearest_threat_distance()` の閾値判定は既存 `_calc_threat_cost()` などと
+  独立しているため互いに干渉しない
+- 平常時（`_combat != "flee"`）の挙動は変更なし
+
+#### スコープ外
+
+- 敵パーティーの flee（既存 `_find_flee_goal_legacy` のまま・別タスク）
+- `keep_distance` の共通コア関数経由化（既存派生課題のまま）
+- PartyStatusWindow に「前進不要中」フラグの追加表示（現状 `状態:flee→(grid_pos)` で
+  「目標 = 現在地」が読み取れるため十分・必要なら別タスク）
+

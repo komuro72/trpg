@@ -696,7 +696,10 @@ func _setup_panels() -> void:
 				all_nms.append_array(fl_v as Array)
 			return all_nms,
 		func() -> int: return _current_floor_index,
-		func() -> MapData: return _all_map_data[_current_floor_index] if _current_floor_index < _all_map_data.size() else null,
+		func(floor_id: int) -> MapData:
+			if floor_id < 0 or floor_id >= _all_map_data.size():
+				return null
+			return _all_map_data[floor_id] as MapData,
 		hero,
 		_hero_manager
 	)
@@ -1056,7 +1059,7 @@ func _close_dialogue() -> void:
 
 ## NPC 全員をプレイヤーパーティーに加入させる（プレイヤーがリーダー維持）
 ## 2026-04-24 深夜改訂：メンバーを nm から _hero_manager に完全移管する方式に変更。
-## 既存 UnitAI を reparent で流用（状態保持・queue / state / flee_recommended_goal 等が維持される）。
+## 既存 UnitAI を reparent で流用（状態保持・queue / state / flee_refuge_area_id 等が維持される）。
 ## 旧方式は「Party に add だけで nm からは除去しない」で二重管理が発生していた。
 func _merge_npc_into_player_party(nm: PartyManager) -> void:
 	# iterate 中に _members が変わるためコピーを取る
