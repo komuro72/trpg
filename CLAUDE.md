@@ -135,16 +135,17 @@ Phase 1〜13 完了・Phase 14（Steam 配布準備）未着手。
 - **move_speed 二層構造**：`character_data.move_speed`（0-100）× `BASE_MOVE_DURATION × 50 / move_speed`。`enemy_class_stats.json` の値が初めて挙動に反映（4/20 Step 1-B）
 
 ### 参照順序の推奨
-1. CLAUDE.md「アーキテクチャ方針」「設計原則」「パーティーシステムのアーキテクチャ」「AI と実処理の責務分離方針」
-2. CLAUDE.md「次セッションで検討するタスク」→「最優先：2026-04-22 の調整を踏まえた実プレイ再検証」「FLEE 実装の完了状況 / FLEE 派生課題」
-3. CLAUDE.md「要調査・要整理項目」→「優先度別インデックス」で FLEE 以外の未完了タスクを俯瞰
-4. `docs/history.md` の 2026-04-22 / 2026-04-21 / 2026-04-20 / 2026-04-19 エントリ群で直近の経緯
-5. `docs/` 配下の `investigation_*.md` で詳細な背景情報：
+1. 本ファイル冒頭「編集方針」で CLAUDE.md の編集ルール・docs/history.md との役割分担を確認
+2. 「実装状況」（直上）で最近の仕様変更を把握
+3. 「アーキテクチャ方針」「設計原則」「パーティーシステムのアーキテクチャ」「AI と実処理の責務分離方針」で現行仕様の本体を確認
+4. 「残タスク」（後半）で次に着手するタスクを優先度順に確認
+5. `docs/history.md` の 2026-04-22 / 2026-04-21 / 2026-04-20 / 2026-04-19 エントリ群で直近の経緯（必要時のみ）
+6. `docs/` 配下の `investigation_*.md` で詳細な背景情報：
    - ダメージ計算表記：`investigation_damage_formula_skill_label.md`
    - FLEE / 戦略系：`investigation_party_strategy_ally_removal.md` / `investigation_receive_order_keys.md` / `investigation_unit_ai_actions.md`
    - デバッグ変数・敵指示：`investigation_debug_variables.md` / `investigation_enemy_order_system.md` / `investigation_enemy_order_effective.md`
    - 移動・時間系：`investigation_turn_cost.md` / `investigation_movement_constants.md` / `investigation_enemy_class_stats.md`
-6. 実装前に `docs/spec.md` で仕様詳細を確認
+7. 実装前に `docs/spec.md` で仕様詳細を確認
 
 ### コードベースの主要ファイル
 - `scripts/skill_executor.gd` — スキル計算の集約（Player/AI 共通ロジック）
