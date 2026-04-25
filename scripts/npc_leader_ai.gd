@@ -228,15 +228,18 @@ func _build_orders_part() -> Dictionary:
 	# `_global_orders` の内容を上書きマージ（例：CRITICAL 時の battle_policy="retreat"）
 	for k: Variant in _global_orders.keys():
 		hint[k] = _global_orders[k]
-	# 探索モード（敵未検知）時は move を階段/explore に上書き。
-	# 2026-04-24 深夜：合流済み NPC は除外。合流後はプレイヤーの global_orders の
-	# move_policy（follow/cluster 等）に従うべきで、NPC 固有の explore 上書きが
-	# 効くと追従が壊れる（2026-04-23 のポーション修正 commit 798d3cc の副作用）。
+	# 探索モード（敵未検知）時の move 上書き。
+	# 2026-04-24 深夜：合流済み NPC は除外（プレイヤーの global_orders に従うべき）。
+	# 2026-04-25 改訂：`stairs_down` / `stairs_up` / `target_floor` は `_global_orders.move`
+	# （パーティー全体指示）に書き込まない方針に変更。これらは OrderWindow 定義外の値であり、
+	# パーティー全体の指示ではなく「リーダー個人の動的目標」として扱う。階段ナビへの per-member
+	# 配布は `_assign_orders()` 側で `_get_explore_move_policy()` を直接呼ぶ既存ロジック
+	# （リーダー → stairs_* / 非リーダー → cluster）が担当する。本関数では OrderWindow 定義値
+	# の範囲内（`explore`）のみ hint["move"] に反映し、ヘッダー行の表示が規約に準拠するようにする。
 	if not joined_to_player and _is_in_explore_mode():
 		var pol := _get_explore_move_policy()
-		hint["move"] = pol
-		if pol == "stairs_down" or pol == "stairs_up":
-			hint["target_floor"] = str(_get_target_floor())
+		if pol == "explore":
+			hint["move"] = pol
 	return hint
 
 

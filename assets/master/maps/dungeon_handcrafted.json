@@ -304,7 +304,7 @@
                   {
                     "character_id": "npc_healer_0",
                     "class_id": "healer",
-                    "image_set": "healer_male_young_slim_00009",
+                    "image_set": "healer_male_young_slim_00021",
                     "x": 12,
                     "y": 20,
                     "items": [
@@ -320,7 +320,7 @@
                   {
                     "character_id": "npc_fighter_sword_10",
                     "class_id": "fighter-sword",
-                    "image_set": "fighter-sword_female_young_slim_00002",
+                    "image_set": "fighter-sword_female_young_slim_00003",
                     "x": 15,
                     "y": 20,
                     "items": [
@@ -337,7 +337,7 @@
                   {
                     "character_id": "npc_fighter_axe_20",
                     "class_id": "fighter-axe",
-                    "image_set": "fighter-axe_female_young_slim_00004",
+                    "image_set": "fighter-axe_female_young_slim_00007",
                     "x": 18,
                     "y": 20,
                     "items": [
@@ -354,7 +354,7 @@
                   {
                     "character_id": "npc_fighter_axe_30",
                     "class_id": "fighter-axe",
-                    "image_set": "fighter-axe_male_young_slim_00003",
+                    "image_set": "fighter-axe_male_young_slim_00005",
                     "x": 21,
                     "y": 20,
                     "items": [
@@ -371,7 +371,7 @@
                   {
                     "character_id": "npc_magician_fire_40",
                     "class_id": "magician-fire",
-                    "image_set": "magician-fire_female_young_slim_00008",
+                    "image_set": "magician-fire_female_young_slim_00015",
                     "x": 12,
                     "y": 22,
                     "items": [
@@ -387,7 +387,7 @@
                   {
                     "character_id": "npc_scout_50",
                     "class_id": "scout",
-                    "image_set": "scout_male_young_slim_00011",
+                    "image_set": "scout_male_young_slim_00025",
                     "x": 22,
                     "y": 22,
                     "items": [
@@ -398,7 +398,7 @@
                   {
                     "character_id": "npc_healer_51",
                     "class_id": "healer",
-                    "image_set": "healer_female_young_slim_00010",
+                    "image_set": "healer_female_young_slim_00023",
                     "x": 12,
                     "y": 24,
                     "items": [
@@ -426,7 +426,7 @@
                   {
                     "character_id": "npc_scout_61",
                     "class_id": "scout",
-                    "image_set": "scout_female_young_slim_00012",
+                    "image_set": "scout_female_young_slim_00027",
                     "x": 18,
                     "y": 24,
                     "items": [
@@ -442,7 +442,7 @@
                   {
                     "character_id": "npc_archer_70",
                     "class_id": "archer",
-                    "image_set": "archer_male_young_slim_00005",
+                    "image_set": "archer_male_young_slim_00009",
                     "x": 21,
                     "y": 24,
                     "items": [
@@ -453,7 +453,7 @@
                   {
                     "character_id": "npc_magician_fire_71",
                     "class_id": "magician-fire",
-                    "image_set": "magician-fire_male_young_slim_00007",
+                    "image_set": "magician-fire_male_young_slim_00013",
                     "x": 13,
                     "y": 26,
                     "items": [
@@ -464,8 +464,72 @@
                   {
                     "character_id": "npc_magician_fire_72",
                     "class_id": "magician-fire",
-                    "image_set": "magician-fire_female_young_slim_00008",
+                    "image_set": "magician-fire_female_young_slim_00015",
                     "x": 16,
+                    "y": 26,
+                    "items": [
+                      "staff",
+                      "armor_robe"
+                    ]
+                  }
+                ]
+              },
+              {
+                "party_id": 9,
+                "members": [
+                  {
+                    "character_id": "npc_magician_water_80",
+                    "class_id": "magician-water",
+                    "image_set": "magician-water_male_adult_medium_00018",
+                    "x": 15,
+                    "y": 22,
+                    "items": [
+                      "staff",
+                      "armor_robe"
+                    ]
+                  }
+                ]
+              },
+              {
+                "party_id": 10,
+                "members": [
+                  {
+                    "character_id": "npc_magician_water_90",
+                    "class_id": "magician-water",
+                    "image_set": "magician-water_female_adult_medium_00020",
+                    "x": 18,
+                    "y": 22,
+                    "items": [
+                      "staff",
+                      "armor_robe"
+                    ]
+                  }
+                ]
+              },
+              {
+                "party_id": 11,
+                "members": [
+                  {
+                    "character_id": "npc_archer_100",
+                    "class_id": "archer",
+                    "image_set": "archer_female_adult_medium_00012",
+                    "x": 19,
+                    "y": 26,
+                    "items": [
+                      "bow",
+                      "armor_cloth"
+                    ]
+                  }
+                ]
+              },
+              {
+                "party_id": 12,
+                "members": [
+                  {
+                    "character_id": "npc_healer_110",
+                    "class_id": "healer",
+                    "image_set": "healer_male_adult_medium_00022",
+                    "x": 22,
                     "y": 26,
                     "items": [
                       "staff",

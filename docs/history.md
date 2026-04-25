@@ -5739,3 +5739,207 @@ PartyStatusWindow と同じ `_format_*` / `_build_*` 関数を共有するため
 - mv=↓階段(F2) の特殊表記（現状維持）
 - 個体 HP 段階（healthy/wounded/injured/critical）の閾値・命名（設計原則として維持）
 
+
+## 2026-04-25 NPC 階段ナビの per-member 配布化（`_global_orders.move` 規約違反の解消）
+
+### 背景・問題
+
+PartyStatusWindow / F7 スナップショットで NPC パーティーのヘッダー行に `mv=↓階段(F1)`
+が表示されていた。CLAUDE.md 規約上、ヘッダー行の `mv=` は `_global_orders.move`
+（パーティー全体指示）を表示する場所であり、想定値域は OrderWindow の 5 値
+（follow / cluster / same_room / standby / explore）のみ。`stairs_down` / `stairs_up`
+が出るのは設計違反。
+
+```
+[NPC]  生存:2/2  area:r0_10  ... mv=↓階段(F1)  battle=攻撃 ...
+  ジョルダン[A](斥候) ... | move:↓階段 |
+  エドワード[C](ヒーラー) ... | move:密集 |
+```
+
+### 調査結果（2 段階）
+
+#### 第 1 段階：階段ナビ実装の調査
+
+- `_global_orders.move` への書き込み箇所は `npc_leader_ai.gd:_build_orders_part()`
+  のみ（探索モード時に `hint["move"] = "stairs_down/stairs_up/explore"`、`hint["target_floor"]`
+  も同時に書き込み）
+- `party_leader.gd:_assign_orders()` には**既に正しい per-member 上書きロジックが
+  存在**（line 374-388）：`_is_in_explore_mode()` 時にリーダー → `_get_explore_move_policy()`
+  の戻り値（stairs_*/explore）/ 非リーダー → `cluster` で per-member 配布
+- 問題は「内部処理は正しいが、`_build_orders_part()` の戻り値が `get_global_orders_hint()`
+  経由で PartyStatusWindow ヘッダーに直接表示される」という二重役割の汚染
+- CLAUDE.md 規約「リーダー→stairs_down / 非リーダー→cluster に差し替え」は実装済み（実際は
+  per-member 配布が機能していた）
+
+#### 第 2 段階：合流済みパーティーの実態確認
+
+修正前に「合流済みパーティー（`joined_to_player == true`）が独立実体として存在するか」
+を確認。結論：
+
+- 2026-04-24 改修（commit 0bf8c9c）で `_merge_npc_into_player_party` がメンバーを
+  `_hero_manager` に**完全移管**する方式に変更
+- 元の NPC PartyManager は `queue_free()` で削除される（`game_map.gd:1108`）
+- ただし `_merge_npc_into_player_party` で `_hero_manager.set_joined_to_player(true)`
+  が呼ばれていない → 独立した「合流済み NPC パーティー」は実態として存在しない
+- CLAUDE.md の「合流済みパーティーは別途 `_generate_floor_follow_queue()` が...」
+  記述は旧実装ベース（commit 6d4e2d5 以前）で乖離
+- 階段ナビ修正は合流済みパーティー対応を考慮する必要なし
+
+非対称な発見：`_merge_player_into_npc_party`（プレイヤーが NPC パーティーに加入する
+逆パターン）では NPC 側に `set_joined_to_player(true)` がセットされる。逆パターンの
+発火経路の有無は要確認（残タスクに追加）。
+
+### 修正内容
+
+#### 1. `npc_leader_ai.gd:_build_orders_part()` — `stairs_*` / `target_floor` の hint 書き込み廃止
+
+旧：
+```gdscript
+if not joined_to_player and _is_in_explore_mode():
+    var pol := _get_explore_move_policy()
+    hint["move"] = pol  # stairs_down/stairs_up/explore
+    if pol == "stairs_down" or pol == "stairs_up":
+        hint["target_floor"] = str(_get_target_floor())
+```
+
+新：
+```gdscript
+if not joined_to_player and _is_in_explore_mode():
+    var pol := _get_explore_move_policy()
+    if pol == "explore":
+        hint["move"] = pol
+    # stairs_down / stairs_up / target_floor は hint に書き込まない
+    # （_assign_orders 側の per-member 配布ロジックがリーダー個人にのみ伝達する）
+```
+
+#### 2. CLAUDE.md 更新
+
+- 「実装状況」AI システムに新項目を追加（NPC 階段ナビの per-member 配布化）
+- 「フロア間メンバー追従」セクションを更新：`_global_orders.move` への書き込みを
+  禁ずる旨と、合流済みパーティー実態の修正を反映
+- PartyStatusWindow セクションの「移動方針プレフィックス」記述を更新：per-member の
+  実体が `_move_policy` であること、`_global_orders.move` の値域は OrderWindow 5 値
+  限定であることを明記
+- 「残タスク」優先度：中 に「合流済みパーティー周辺の実装整理」を追加
+
+### 設計上の決定
+
+#### `explore` の扱い（スコープ外）
+
+`explore` は OrderWindow 定義値の範囲内（5 値の 1 つ）なので、`_build_orders_part()`
+が `hint["move"] = "explore"` と書き込むのは規約準拠。ただし「全体指示として `explore`
+を配布する」という意味で、OrderWindow の他値（`follow` 等）と意味的にやや異質
+（NPC ベースラインからの上書き）。これは別議論・スコープ外として今回は触らない。
+
+#### `battle_policy` の自動切替（OrderWindow 定義値の範囲内なので問題なし）
+
+`npc_leader_ai.gd:_evaluate_and_update_battle_policy()` が CRITICAL 時に
+`_global_orders["battle_policy"] = "retreat"` と書き換える挙動は、OrderWindow 定義値
+の範囲内（attack / defense / retreat）なので規約違反ではない。今回の修正対象外。
+
+### 動作確認・スコープ外
+
+- 動作確認：実機での挙動確認は次セッション
+- 期待挙動：
+  - NPC ヘッダー行 `mv=` が OrderWindow 定義値（追従/密集/同じ部屋/待機/探索）になる
+    （`↓階段(F1)` は出ない）
+  - メンバー行：リーダーは `move:↓階段` / 非リーダーは `move:密集`（`_move_policy`
+    直読みなので per-member の値が出る）
+  - 階段ナビ動作自体は変化なし（リーダーが階段に向かい、他は追従系で続く）
+
+### スコープ外（残タスク化）
+
+- `explore` の `_global_orders.move` への書き込み（同種の問題だが OrderWindow 定義値内なので
+  実害なし）
+- 合流済みパーティー周辺の整理（`_merge_npc_into_player_party` で
+  `set_follow_hero_floors()` が呼ばれない・`_generate_floor_follow_queue()` のデッド
+  コード判定・`joined_to_player` フラグの存在意義整理）
+- `_generate_floor_follow_queue()` 自体の現状の発動経路の確認
+- 階段ナビの ヘッダー目標フロア表示（`(F1)` 部分）が消えるが、これはパーティー全体
+  ではなくリーダー個人の動的目標として扱う方針なので意図通り。リーダー側のメンバー行に
+  `(F1)` を出すかは別議論
+
+## 2026-04-25 セッション総括（派生課題と次セッションへの引継ぎ）
+
+### このセッションで実施した修正（時系列）
+
+1. **FLEE / fall_back 出口選択ロジック統一・リーダー推奨機構廃止**
+   - 境界往復バグ（メンバー先行時に推奨タイル座標が exit_tiles に含まれず、座標一致判定が常に偽になる現象）の根本対策
+   - 共通コア `UnitAI._evaluate_exit_costs()`（reach_cost + refuge_dist × WEIGHT）でメンバー自律判断に統一
+   - リーダーは避難先エリア ID のみ配布（推奨出口タイル機構を物理削除）
+   - 関連定数 `FLEE_NON_RECOMMENDED_PENALTY` / `FLEE_REEVAL_MIN_INTERVAL` / `_notify_area_change_if_needed` / `on_member_area_changed` を物理削除
+   - 出口タイル定義を内側 → 外側に変更（`MapData.get_exit_tiles_from()` が「area_id 内のタイル」から「隣接エリアに踏み込んだ最初のタイル」を返す形へ）。goal 到達 = エリア境界跨ぎになり連鎖走行が自律的に成立
+
+2. **`combat == "flee"` 意味論変更 + flee 中の前進不要判定追加**
+   - 旧「敵検知 → flee / 未検知 → wait」の自動応答型ロジックが境界往復・WAIT 切替で前進中断する温床だったため、明示指示尊重型に変更
+   - 敵の有無に関わらず指示中は避難先まで退却する仕様に
+   - `_calc_nearest_threat_distance() >= FLEE_SAFE_DISTANCE` なら移動先 = 現在地（前進不要判定）を `_find_flee_goal()` 冒頭に追加
+   - これは flee 解除ではなく移動先決定ロジックの拡張で、flee 状態自体は維持される
+
+3. **ヒーラーの回復対象選定に射程内フィルタ追加**
+   - 旧実装では `_find_heal_target()` に射程チェックがなく、ヒーラーは常に最遠の対象を追って移動 → move 指示・`combat == "flee"` 指示が無視されていた（追従しない・撤退しない）
+   - 射程内フィルタ追加で「射程内対象あれば回復・なければ move 指示に従う」のシンプルな対称性を確立
+   - 通常メンバーと同じ move/combat フローに合流
+
+4. **rear 隊形を keep_distance ベースに変更・keep_distance 実装をターゲット中心ロジックに刷新**
+   - 旧 rear は「背後を取る位置取り」のみで敵接近時の退避ロジックなし（後衛前進問題）
+   - 新仕様：rear メンバーは「理想範囲（`KEEP_DISTANCE_MIN`〜`MAX`）内に入ってから攻撃」の階層構造
+   - `keep_distance` アクションを `_find_flee_goal()` 流用から `_find_keep_distance_goal()`（ターゲット中心・脅威コスト最小タイル選定）に刷新
+   - GoblinArcher / Salamander も新ロジックで動作
+
+5. **PartyStatusWindow 表記整理 + HpStatus 廃止 + 戦況表示構造化**
+   - 日本語/英語混在の表示を方針に従って整理（OrderWindow 由来は日本語・コード内部値はコード上の名前）
+   - 短縮形（`T:same_as_` / `S:積極` 等）を廃止し OrderWindow 正規表記に統一
+   - NPC フラグ（合流/拒絶/共闘/回復/床固定）をコード識別子表記に変更
+   - `HpStatus` enum は用途が `_should_use_special_skill()` の "disadvantage" モード 1 箇所のみで段階表現の意味が薄れていたため廃止し、`SPECIAL_SKILL_DISADVANTAGE_HP_RATIO` 定数（ConfigEditor 調整可能）に置換
+   - `HP_STATUS_STABLE`（NPC フロア降下判定で使用）は `NPC_FLOOR_DOWNGRADE_HP_RATIO` に改名
+   - 戦況表示を構造化（`戦況:EVEN(9.0×1.00 / 9.0×0.85 = 1.18)`）し計算過程を可視化
+   - `HP:` 独立表示は廃止
+   - アクション表示（→攻撃/距離確保/逃走 等）をコード識別子（move_to_attack/keep_distance/flee 等）に統一
+
+6. **NPC 階段ナビの per-member 配布化**
+   - 旧実装は NpcLeaderAI が `_global_orders.move = "stairs_down"` を書き込み全メンバーに配布
+   - PartyStatusWindow ヘッダーに OrderWindow 定義外の `mv=↓階段(F1)` が表示される規約違反だった
+   - 調査で `_assign_orders()` 側に既に正しい per-member 配布ロジックが存在することが判明（リーダー → stairs_* / 非リーダー → cluster）
+   - 修正は `_build_orders_part()` で `stairs_*` と `target_floor` の hint 書き込みを廃止するだけで完結（最小修正）
+   - 詳細は同日付別エントリ参照
+
+### このセッションで発見した派生課題（次セッションへ）
+
+1. **`mv=` と `move:` の不整合**：ヘッダー `mv=追従` に対し非リーダー個別行が `move:密集` のケース観察。NPC ベースラインの実値 / 探索モード分岐の影響 / ヘッダー表示のいずれかに原因。要調査。
+2. **`tgt=リーダーと同じ` の挙動確認**：観察対象として記録（具体的な違和感シナリオは次セッションで確定）
+3. **`_global_orders.move` への `explore` 書き込み**：4/25 の階段ナビ修正でスコープ外とした残課題。同種の設計問題
+4. **後衛キャラがリーダーで先陣を切る問題**：keep_distance/rear 隊形修正の議論で「後回し」と判断
+5. **ヒーラーの ATTACK strategy 時の挙動確認**：射程フィルタ追加で `_can_attack_target` がヒーラーで「攻撃可能」と判定される場面の検証
+6. **壁越し攻撃の禁止**：本来の正しい仕様への修正
+7. **`battle_policy` 自動切替の設計再考**：NPC リーダー判断結果を `_global_orders` に書き込む構造の整理（将来の方針整理タスク）
+
+これらは [CLAUDE.md](CLAUDE.md) の「残タスク」セクションに優先度別に追加済み。
+
+### 採用しなかった案・経緯メモ
+
+- **FLEE 出口選定をリーダー推奨機構で続けるべきだったか？**：境界往復バグの再発リスクと
+  メンバー先行時の推奨座標不一致問題があり、リーダー推奨機構の維持は不可能と判断。
+  per-member 自律判断 + 避難先エリア ID 配布の現方式を採用
+- **NPC 階段ナビ修正で per-member 専用フィールド `_dynamic_move_state` を新設すべきだったか？**：
+  調査で `_assign_orders()` 側に既に per-member 配布ロジックがあることが判明したため不要。
+  最小修正で完結（`_build_orders_part()` の hint 書き込みを廃止するだけ）
+- **HpStatus enum を残して `disadvantage` モードのみ閾値定数化すべきだったか？**：
+  enum の用途が 1 箇所のみで段階表現の意味が希薄化していたため、enum ごと廃止し
+  用途別 float 定数に分解する方針を採用
+
+### 想定外の発見
+
+1. **CLAUDE.md 規約「リーダー → stairs_down / 非リーダー → cluster に差し替え」が実装は済んでいた**
+   - 調査時に `_assign_orders()` 内（party_leader.gd:374-388）に該当ロジックが存在
+   - 「規約と実装が乖離している」のではなく「規約は実装済みだが、別経路で違反が起きている」
+     という構造の問題だった
+2. **`_merge_npc_into_player_party` で `_hero_manager.set_joined_to_player(true)` が呼ばれていない**
+   - 2026-04-24 改修でメンバー移管方式に変わった際、フラグの扱いが整理されていない
+   - 「合流済みパーティー」という独立実体は存在しないことが判明
+3. **`_merge_player_into_npc_party`（逆パターン）の存在**
+   - プレイヤーが NPC パーティーに加入するパターンのコードが残っている
+   - 実プレイで発火する経路があるか不明（要確認）
+4. **`_generate_floor_follow_queue()` がデッドコードの可能性**
+   - 形式的には実装されているが、実際の発動経路が `_follow_hero_floors=true` のセット
+     依存で、その経路自体が不透明
