@@ -134,11 +134,136 @@ Phase 1〜13 完了・Phase 14（Steam 配布準備）未着手。
 - **bonus / tier 概念分離**：`ITEM_BONUS_*_RATIO`（強さ）と `tier`（格付け整数）を分離。tier=0 は初期装備専用（4/19）
 - **move_speed 二層構造**：`character_data.move_speed`（0-100）× `BASE_MOVE_DURATION × 50 / move_speed`。`enemy_class_stats.json` の値が初めて挙動に反映（4/20 Step 1-B）
 
+### 残タスク
+
+優先度別にタスクを管理する。完了したタスクは削除（履歴は docs/history.md 側で残る）。
+新規実装の派生タスクや棚卸しで発見した課題はここに追記する。
+
+#### 🔥 最優先
+
+##### 実プレイ再検証（4/22 ダメージ調整・4/23 ヒーラー再設計の継続検証）
+
+4/22 の 3 変更（ATTACK_TYPE_MULT 0.3/0.2→0.2/0.1・HP ゲージ 100 スケール化・ログラベル修正）と 4/23 の 4 変更（ヒーラー回復 4 モード再設計・ポーション INJURED 拡張・HP 状態ラベル閾値リネーム・TARGETING 修正）の継続検証。
+
+検証項目：
+- 戦闘テンポ（敵を倒すのが冗長でないか・1 戦の所要時間）
+- Floor 0 のアーチャー問題（遠距離倍率半減後の許容性）
+- FLEE システム動作（NPC が CRITICAL 時に正しく逃げるか・避難先表示が実挙動と一致するか）
+- 最低保証 1 張り付き（多くの攻撃が「最終 1」になっていないか・耐性差がダメージに反映されるか）
+- 味方側の火力バランス（弓使い・魔法使いの火力が半減して間延びしないか）
+- ヒーラー回復モード 4 種の挙動（aggressive / lowest_hp_first / own_party_first / conservative）
+- ヒーラー強すぎ／弱すぎ問題
+- INJURED ポーション拡張後のバランス（過剰生存で間延びしないか）
+
+調整候補：HP ベース値・`damage_mult`・耐性カーブ・FLEE 閾値（`COMBAT_RATIO_DISADVANTAGE`）・脅威コスト重み（`FLEE_THREAT_WEIGHT` 等）・`NPC_POLICY_CHANGE_COOLDOWN`・`FLOOR_*_RANK_THRESHOLD`。
+
+##### fall_back 実機動作確認
+
+`on_low_hp = fall_back` メンバーが critical 状態で推奨出口方向に下がる挙動を観察。
+- 射程外（`attack_range + FALL_BACK_MARGIN`）で停止することを確認
+- PartyStatusWindow の `fb→(x,y)` 表示が正しいこと
+- 必要に応じて `FALL_BACK_MARGIN`（既定 2）を調整
+
+##### Step 1-B（move_speed 二層構造）実装後の観察事項
+
+Step 2 に進む前の切り分け調査：
+1. **人間キャラの動作が遅くなった**（高）：旧式 0.50s → 新式 0.40s のはずなのに遅い。move_speed の保存値・生成経路を要確認
+2. **人間キャラが死にやすくなった**（中）：項目 1 の副次効果か独立要因か
+3. **ガード中の歩行アニメが切替らない**（高）：`GUARD_MOVE_DURATION_WEIGHT` 倍化と歩行アニメ周期が連動していない疑い
+4. **射程表示中に被弾で攻撃キャンセル**（低）：4/20 の 1 発 1 押下化の残存バグの可能性。仕様化要決定
+
+#### 優先度：中
+
+##### 一時デバッグログ・トラッカーの削除（4/23 持越し）
+
+TARGETING 系バグ調査で仕込んだ `[WT]` / `[MODE]` / `[TGT-HOLD]` / `[TGT-SET]` / `[CURSOR]` / `[PLAYER-TURN]` ログ（PlayerController 側）を削除。`_dbg_prev_*` 変数 5 個も同時に削除。Komuro が「TARGETING 系の挙動は全て安定」と確認したタイミングで実施。
+
+`Character` 側の `[CHAR.*]` 系（5 系統）は防御検出器として**永続保持**（削除しない）。
+
+##### TARGETING ホールド中の残存問題調査
+
+4/23 で 5 関数（`_check_npc_member_stairs` 等）に `world_time_running` ガードを追加し主因は解消したが、Komuro 実機で「向き変更を伴わないケースでもアウトラインされた敵が動く」現象が残っている可能性あり。実機検証で `[CHAR.*]` ログに "during TARGETING hold!" が出たら新たな未ガード経路の証拠。
+
+##### 移動関連の二層構造（Step 2〜5）
+
+Step 1-A・1-B 完了後の継続実装。各 Step は順序依存。
+- **Step 2**：時間系定数の `GlobalConstants` 化（`WAIT_DURATION` / `REEVAL_INTERVAL` / `AUTO_ITEM_INTERVAL` / `WARP_INTERVAL` / `FLAME_DURATION`）+ `DarkLordUnitAI._warp_timer` の game_speed 逆方向バグ修正
+- **Step 3**：`game_speed` 適用パターンの統一(現状 4 パターン混在：pre-scaled / post-scaled / 未適用 / 逆方向)。「全タイマーは `delta * game_speed` で減算する」を設計原則として明文化
+- **Step 4**：向き変更コストの完全対称化（プレイヤー通常移動のみ TURN_DELAY=0.15s の非対称を解消）。`BASE_TURN_DURATION` を新設し `move_speed` で補正
+- **Step 5**：近接攻撃範囲拡大（前方 5 マス化）
+
+##### インラインタイマー減算の time stop 対応
+
+`game_map.gd:_process()` の `_stair_cooldown` / `_member_stair_cooldown` / `_npc_enemy_activate_timer` が time stop 中も減算進行している。他タイマー（stun / buff / energy 回復）との対称性が取れていない。Step 3（game_speed 適用パターン統一）と合わせて整理が自然。
+
+##### FLEE 派生課題
+
+FLEE システムは 4/21 にステップ 1〜3 + 4/24 fall_back 完了。残課題：
+1. **敵パーティーへの FLEE 二段階化**：現状 `_find_flee_goal_legacy`（脅威から 5 タイル離れる）のまま。味方と同じ二段階ロジック適用。避難先は敵種族ごとに異なる可能性（縄張り戻り・階段逃走）の設計検討必要
+2. **敵側の `_party_strategy` enum 直接配布**：現状 `party_fleeing = (strategy == FLEE)` でブール化している。enum 値そのものを配布し `party_fleeing` ブールフラグを廃止。味方側 `_party_strategy` 廃止（4/21）の対称作業
+3. **味方クラスへの `keep_distance` 適用**：現状は GoblinArcher / Salamander 専用。味方の弓使い・魔法使いにも適用(後衛前進問題の解決)
+4. **`keep_distance` の実行ロジック差別化**：`flee_recommended_goal` の流用を視野に挙動を意味に合わせる。派生課題 3 と合わせて対応
+5. **戦況判断と避難先計算の関数統合**：`_evaluate_strategic_status()` と `_determine_flee_recommended_goal()` を統合し、避難先情報を `combat_situation` 辞書に含める
+
+##### フロア基準値の実プレイ調整
+
+`FLOOR_*_RANK_THRESHOLD` / `FLOOR_RETREAT_RATIO` の調整。装備 tier 戦力反映（4/19）により同じ基準値でも降下しやすくなっている。PartyStatusWindow の `F(R+T)s` 表示で観察しながら調整。
+
+##### NPC フロア遷移判定の戦況判断拡張
+
+旧 `NPC_HP_THRESHOLD` / `NPC_ENERGY_THRESHOLD` 廃止により、現在は HpStatus のパーティー平均HP率で判定している。元の「最低HP率」「エネルギー率」ベースの判定は NPC 行動として意味があるため、戦況判断（`_evaluate_strategic_status()`）の副情報として最低HP指標・エネルギー指標を追加することを検討。別系統の判定を走らせず、戦況判断に一元化する設計方針を維持する。
+
+#### 優先度：低
+
+##### コード・データ整理
+
+- **legacy フィールドの棚卸し継続**：`hero.json` の扱い整理（CharacterGenerator のテンプレート化 or 削除）/ `assets/master/classes/*.json` の未参照定義 / クラス JSON / ステータス JSON / 個別敵 JSON の未参照キー
+- **`PlayerController._spawn_heal_effect` の実態確認**：未使用デッドコードの可能性
+- **画像フォルダ名パース関数の共通化**：`_parse_folder_name`（味方）と `_parse_enemy_folder_name`（敵）が別実装
+- **`_find_friendly_retreat_goal` 関数削除**：FLEE 新ロジック適用で呼び出し元なし
+- **dark-lord のワープ・炎陣を SkillExecutor 経由へ**：現状キュー外の例外的実装
+- **エフェクト生成の一系統化**：「Character 経由」と「SkillExecutor 内 `.new()`」の 2 系統混在を統一
+- **`stat_bonus` の負値対応**：`enemy_list.json` の `stat_bonus` は加算のみ。敵個別調整で「base から減らしたい」要望が出たら負値許容を検討（現状は class_stats / enemy_class_stats のベース値を直接いじるしかない）
+- **`energy_recovery` の個体差対応**：現状は `ENERGY_RECOVERY_RATE` 全キャラ共通定数。クラス・種族・ランクで個体差を出したくなったら二層構造化（`BASE_ENERGY_RECOVERY × status / 50`）を検討
+
+##### 命名・概念整理
+
+- **「敵クラス」vs「種族」**：仕様書は「敵クラス」、コードは「種族」（GoblinLeaderAI 等）。用語整理
+- **ファイル名のハイフン/アンダースコア統一**：個別敵 JSON は `dark_lord.json`、クラス JSON は `dark-lord.json`
+- **`enemy_list.json` と `enemies_list.json` の紛らわしい命名**：役割が違うのに酷似
+- **`PartyLeader.get_global_orders_hint()` 改名**：実態が「戦況判断の配信 API」になっており命名乖離
+- **`UnitAI.obedience` の状態変数扱い再検討**：事実上の定数なら `const` 化または `character_data.obedience` と統合
+
+##### 解像度・画像系
+
+- **`BUST_SRC_*` の比率化**：`message_window.gd` で 1024x1024 前提のハードコード。2048x2048 アセット追加時に問題化
+- **エフェクト線幅の GRID_SIZE 連動**：`HitEffect.RING_WIDTH = 2.5` 等の固定 px。4K で相対的に細くなる
+
+##### デバッグ・運用
+
+- **敵 UnitAI 指示フィールドの物理削除**：8 項目（`_combat` / `_battle_formation` 等）が敵では Character デフォルト固定。`is_friendly` 分岐で早期リターン
+- **味方 UnitAI 指示ライン表示妥当性再点検**：`_hp_potion` / `_sp_mp_potion` / `_item_pickup` 等の単純フィールドの表示価値再評価
+- **敵メンバーへの `leader` 配布検討**：隊形計算等で必要なら検討
+- **生存数表示（x/y）の仕様確認**：プレイヤー Party は adoption で動的変動
+- **敵ヒーラー（dark_priest）回復動作確認**：4/18 energy 統合後に正しく機能しているか実機確認
+- **Config Editor 全タブの棚卸し**：(a) 表示フィールドの網羅性（味方クラス・敵クラス・ステータス各タブ）、(b) hidden 候補（PartyLeader / NpcLeaderAI / SkillExecutor / Effect / Item 等）を定期確認
+- **Config Editor やツール類での設定変更の git 反映方針**：JSON・画像バイナリの自動 commit/push 運用
+
+##### バランス・体験
+
+- **敵パーティーの FLEE 避難先情報表示**：派生課題 1 と同時対応
+- **ヒーラー lowest_hp_first「満タンにしてくれない」現象の再評価**：体験違和感が出るなら判定条件緩和を検討
+- **回復量計算の乱数・クリティカル対応**：将来回復にバラつきを入れる場合の判定側扱い
+- **ログ参照の改善（OrderWindow のログ）**：現在は最新 50 件をそのまま表示するだけ。フィルタリング・検索・スクロール操作の改善を検討
+- **NpcLeaderAI のアイテム収集動的切り替え**：目標フロアに到達している場合（余裕がある状態）、`item_pickup` を "passive"（近くなら拾う）から "aggressive"（積極的に拾う）に切り替える。装備強化のために能動的にアイテム回収する行動
+- **ポーション自動使用（プレイヤー操作キャラ）**：現状は AI 操作キャラ向けのみ自動使用機構あり。プレイヤー操作キャラにも同等の自動使用を導入（操作中も `on_low_hp` / `sp_mp_potion` 指示に従う）
+- **装備品による `move_speed` 補正**：現状 `move_speed` は装備補正の対象外。将来「重装で遅くなる」「素足で速くなる」等の追加余地
+
 ### 参照順序の推奨
 1. 本ファイル冒頭「編集方針」で CLAUDE.md の編集ルール・docs/history.md との役割分担を確認
-2. 「実装状況」（直上）で最近の仕様変更を把握
+2. 「実装状況」「残タスク」（共に直上）で最近の仕様変更と次の作業を把握
 3. 「アーキテクチャ方針」「設計原則」「パーティーシステムのアーキテクチャ」「AI と実処理の責務分離方針」で現行仕様の本体を確認
-4. 「残タスク」（後半）で次に着手するタスクを優先度順に確認
+4. 「将来構想」（末尾近く）で長期検討事項を確認（必要時のみ）
 5. `docs/history.md` の 2026-04-22 / 2026-04-21 / 2026-04-20 / 2026-04-19 エントリ群で直近の経緯（必要時のみ）
 6. `docs/` 配下の `investigation_*.md` で詳細な背景情報：
    - ダメージ計算表記：`investigation_damage_formula_skill_label.md`
@@ -939,6 +1064,33 @@ game_map
 - アイテム入手：過去の冒険者の装備をモンスターがため込んでいる設定
 - ダンジョン攻略は国からの要請、複数パーティーが競争・協力して攻略
 - 攻略成功で褒美・名誉が得られる
+
+### バランス調整の前提
+
+Phase 14（Steam 配布準備）でバランス調整を本格化する前に認識しておくべき、リファクタリング由来の影響と観察事項：
+
+#### 敵が盾で防御するようになった
+- SkillExecutor 統一（4/18 完了）により、Player 側でしか機能していなかった防御判定ロジックが AI 側でも正しく機能するようになった
+- 結果として**敵が盾で攻撃を防ぐケースが増加** → 敵の生存率が上昇している可能性
+- **バランス調整候補**：
+  - 敵の `defense_accuracy`（防御判定成功率）を下げる
+  - 敵の `block_*`（防御強度）を下げる
+  - 味方の `power`（攻撃力）を上げる
+  - 盾装備の補正値を見直す
+
+#### Player / AI の計算式統一完了
+- 4/18 より前に調整した値は、片方でしか機能していない可能性がある（`damage_mult` / `duration` / `heal_mult` / AI の水弾未判定 等）
+- **バランス調整は「統一後の値」を正として行う**
+- 同じ条件で Player と AI で同じダメージが出ることを前提にできる
+
+#### Config Editor で編集可能な主要定数（バランス調整の起点）
+- **クラス単位**：各クラス JSON の `power` / `skill` / 各スロットの `damage_mult` / `heal_mult` / `duration` / `tick_interval` / `range` / `cost` 等（「味方クラス」「敵クラス」タブ）
+- **`ATTACK_TYPE_MULT[melee/ranged/magic/dive]`**：定数タブ > Character カテゴリ
+- **`CRITICAL_RATE_DIVISOR`**：定数タブ > SkillExecutor カテゴリ（`skill ÷ 300` が既定）
+- **`PROJECTILE_SPEED`**：定数タブ > SkillExecutor カテゴリ（飛翔体演出速度）
+- **`ENERGY_RECOVERY_RATE`**：定数タブ > Character カテゴリ（MP/SP 回復速度）
+- **戦況評価閾値**：`HP_STATUS_*` / `COMBAT_RATIO_*` / `POWER_BALANCE_*`（定数タブ > PartyLeader カテゴリ）
+- **属性・個別ステータス**：`assets/master/stats/class_stats.json` / `enemy_class_stats.json` / `attribute_stats.json` / `enemy_list.json`（味方ステータス・敵ステータス・属性補正・敵一覧タブ）
 
 ## クラスシステム
 
@@ -1965,180 +2117,16 @@ AI の HP 基準行動判定（ポーション自動使用・on_low_hp 発動・
   ```
 - 典型的な修正パターン：`:=` による型推論 → `var x: 型 =` または戻り値に `as 型` を付けて明示
 
-## 将来実装項目（未フェーズ）
-- お金の概念・商店：アイテムシステム完成後に改めて設計
-- 複数パーティーによるアイテム分配：現在は部屋制圧時にフィールドに散らばったアイテムを早い者勝ちで取得
-- BGM
-- 巻き添え（`friendly_fire`）：範囲攻撃（炎陣など）が味方・他パーティーにも当たる仕様。`CharacterData.friendly_fire: bool`（当面 false 固定）で管理し、将来切り替え可能にする
-- 大型ボスの即死耐性設計：`instant_death_immune: bool`（ボス級は true）。ヘッドショット無効・無力化水魔法持続短縮。敵 JSON でフラグを設定できる設計にする
-- ログ参照の改善（OrderWindowのログをより使いやすく）：現在は最新50件をそのまま表示するだけ。フィルタリング・検索・スクロール操作の改善を検討
-- パーティーシステムの残作業：
-  - [x] 戦況判断ルーチン（`_evaluate_strategic_status()`）の実装（PartyLeader の統合メソッド。3 集合 × 距離フィルタで戦力・戦況を返す）
-  - [x] NpcLeaderAI の撤退ロジック追加（CombatSituation.CRITICAL 時に FLEE に切り替え。SAFE 復帰で EXPLORE に戻る）
-  - [x] special_skill 指示のAI接続（strong_enemy / disadvantage 等の条件判定。PowerBalance / HpStatus で判定。_generate_special_attack_queue で発動）
-- NpcLeaderAI のアイテム収集方針の動的切り替え：目標フロアに到達している場合（余裕がある状態）、item_pickup を "passive"（近くなら拾う）から "aggressive"（積極的に拾う）に切り替える。装備強化のために能動的にアイテムを回収する行動
-- ✅ **アイテムのランダム生成機構**：2026-04-19 に完了（詳細は [docs/history.md](docs/history.md) 参照）
-  - 最終採用方式：**定数ベース事前生成（総当たり 9 パターン）× フロア重み選択**
-  - 各装備 9 パターン（盾は 3）を `assets/master/items/generated/*.json` に事前定義（計 75 エントリ）
-  - `scripts/item_generator.gd` がフロアに応じた重み付き選択を実装
-  - Config Editor「Item」カテゴリで 11 定数（bonus 比率・フロア基準 tier・距離重み・tier policy・初期ポーション個数）を調整可能
-  - `effect` キー名の不整合（`restore_mp`/`restore_sp` 旧キー）も同時に一掃完了
-- ✅ **Config Editor のアイテムタブ**：2026-04-19 に完了。ただし当初設計した「`generated/*.json` の個別エントリ編集 UI」から「タイプ別のルール（`base_stats`）編集 UI」に設計変更。個別アイテムは Claude Code が手動生成する運用（命名の整合性を保つため）。詳細は [docs/history.md](docs/history.md) 参照
-- ✅ **「無」段階の導入**：2026-04-19 に完了。詳細は [docs/history.md](docs/history.md) 参照
-  - 3 段階（low / mid / high）→ 4 段階（none / low / mid / high）に拡張。tier=0（none）エントリを各装備 9 タイプに 1 個ずつ追加（計 +9 エントリ）
-  - 主人公初期装備（`game_map.gd:_dbg_items`）・NPC 初期装備（`dungeon_handcrafted.json:npc_parties_multi`）を `item_type` 文字列リスト化し、`ItemGenerator.generate_initial()` で統合生成
-  - `dungeon_handcrafted.json:player_party.members[].items` は死にコードだったため物理削除
-  - 初期ポーション個数（ヒール 5・エナジー 5）を Config Editor 化（`INITIAL_POTION_HEAL_COUNT` / `INITIAL_POTION_ENERGY_COUNT`）
-  - **bonus / tier 概念分離**：`ITEM_TIER_*_RATIO` → `ITEM_BONUS_*_RATIO` リネーム。`FLOOR_X_Y_BASE_TIER` を String（"low/mid/high"）→ int（0〜3）に型変更
-- **NPC フロア遷移判定のための戦況判断拡張（検討）**：`NPC_HP_THRESHOLD` / `NPC_ENERGY_THRESHOLD` 廃止により、現在は HpStatus のパーティー平均HP率で判定している。ただし元の「最低HP率」ベースや「エネルギー率」ベースの判定は NPC 行動として意味があるため、戦況判断（`_evaluate_combat_situation`）の副情報として最低HP指標・エネルギー指標を追加することを検討。別系統の判定を走らせず、戦況判断に一元化する設計方針を維持する。
+## 将来構想
+
+直近では取り組まないが、長期的に検討したい大型機能・ゲームデザイン上の構想。
+着手判断が出た時点で「残タスク」へ移動する。
+
+- **お金の概念・商店**：アイテムシステム完成後に改めて設計
+- **複数パーティーによるアイテム分配**：現在は部屋制圧時にフィールドに散らばったアイテムを早い者勝ちで取得
+- **BGM**
+- **巻き添え（`friendly_fire`）**：範囲攻撃（炎陣など）が味方・他パーティーにも当たる仕様。`CharacterData.friendly_fire: bool`（当面 false 固定）で管理し、将来切り替え可能にする
 - **完全リアルタイム化の検討**：当初は完全リアルタイム構想だったが操作が追いつかず半リアルタイムに後退した経緯がある。2026-04-20 の操作シンプル化（1 発 1 押下モデル）により障壁が下がったため再検討の余地あり。検討項目：プレイヤー待機中の時間停止廃止 / アイテム UI 中の時間停止扱い / NPC AI の再評価タイミングへの影響 / 学習曲線への配慮 / `game_speed` との関係整理
-- **ポーション自動使用（プレイヤー操作キャラ）**：現状は AI 操作キャラ向けのみ自動使用機構あり。プレイヤー操作キャラにも同等の自動使用を導入（操作中も on_low_hp / sp_mp_potion 指示に従う）
-- **他タブの hidden 候補棚卸し**：本日 Character タブの色定義 12 個を hidden 化したが、他タブ（PartyLeader / NpcLeaderAI / SkillExecutor / Effect / Item 等）にも非表示候補がないか棚卸し
-- **装備品による `move_speed` 補正**：現状 `move_speed` は装備補正の対象外。将来「重装で遅くなる」「素足で速くなる」等の追加余地あり
-- **`stat_bonus` の負値対応**：`enemy_list.json` の `stat_bonus` は加算のみ。敵個別調整で「base から減らしたい」要望が出たら負値許容を検討（現状は class_stats / enemy_class_stats のベース値を直接いじるしかない）
-- **`energy_recovery` の個体差対応**：現状は `ENERGY_RECOVERY_RATE` 全キャラ共通定数。クラス・種族・ランクで個体差を出したくなったら二層構造化（`BASE_ENERGY_RECOVERY × status / 50`）を検討
-
-### Phase 14 バランス調整の事前情報
-
-バランス調整を開始する前に認識しておくべき、本日（2026-04-18）までのリファクタリングによる影響と観察事項：
-
-#### 敵が盾で防御するようになった
-- SkillExecutor 統一（2026-04-18 完了）により、Player 側でしか機能していなかった防御判定ロジックが AI 側でも正しく機能するようになった
-- 結果として**敵が盾で攻撃を防ぐケースが増加** → 敵の生存率が上昇している可能性
-- **バランス調整候補**：
-  - 敵の `defense_accuracy`（防御判定成功率）を下げる
-  - 敵の `block_*`（防御強度）を下げる
-  - 味方の `power`（攻撃力）を上げる
-  - 盾装備の補正値を見直す
-
-#### Player / AI の計算式統一完了
-- 2026-04-18 より前に調整した値は、片方でしか機能していない可能性がある（`damage_mult` / `duration` / `heal_mult` / AI の水弾未判定 等）
-- **バランス調整は「統一後の値」を正として行う**
-- 同じ条件で Player と AI で同じダメージが出ることを前提にできる
-
-#### Config Editor で編集可能な主要定数（バランス調整の起点）
-- **クラス単位**：各クラス JSON の `power` / `skill` / 各スロットの `damage_mult` / `heal_mult` / `duration` / `tick_interval` / `range` / `cost` 等（「味方クラス」「敵クラス」タブ）
-- **`ATTACK_TYPE_MULT[melee/ranged/magic/dive]`**：定数タブ > Character カテゴリ
-- **`CRITICAL_RATE_DIVISOR`**：定数タブ > SkillExecutor カテゴリ（`skill ÷ 300` が既定）
-- **`PROJECTILE_SPEED`**：定数タブ > SkillExecutor カテゴリ（飛翔体演出速度）
-- **`ENERGY_RECOVERY_RATE`**：定数タブ > Character カテゴリ（MP/SP 回復速度）
-- **戦況評価閾値**：`HP_STATUS_*` / `COMBAT_RATIO_*` / `POWER_BALANCE_*`（定数タブ > PartyLeader カテゴリ）
-- **属性・個別ステータス**：`assets/master/stats/class_stats.json` / `enemy_class_stats.json` / `attribute_stats.json` / `enemy_list.json`（味方ステータス・敵ステータス・属性補正・敵一覧タブ）
-
-## 残タスク
-
-優先度別にタスクを管理する。完了したタスクは削除（履歴は docs/history.md 側で残る）。
-新規実装の派生タスクや棚卸しで発見した課題はここに追記する。
-
-### 🔥 最優先
-
-#### 実プレイ再検証（4/22 ダメージ調整・4/23 ヒーラー再設計の継続検証）
-
-4/22 の 3 変更（ATTACK_TYPE_MULT 0.3/0.2→0.2/0.1・HP ゲージ 100 スケール化・ログラベル修正）と 4/23 の 4 変更（ヒーラー回復 4 モード再設計・ポーション INJURED 拡張・HP 状態ラベル閾値リネーム・TARGETING 修正）の継続検証。
-
-検証項目：
-- 戦闘テンポ（敵を倒すのが冗長でないか・1 戦の所要時間）
-- Floor 0 のアーチャー問題（遠距離倍率半減後の許容性）
-- FLEE システム動作（NPC が CRITICAL 時に正しく逃げるか・避難先表示が実挙動と一致するか）
-- 最低保証 1 張り付き（多くの攻撃が「最終 1」になっていないか・耐性差がダメージに反映されるか）
-- 味方側の火力バランス（弓使い・魔法使いの火力が半減して間延びしないか）
-- ヒーラー回復モード 4 種の挙動（aggressive / lowest_hp_first / own_party_first / conservative）
-- ヒーラー強すぎ／弱すぎ問題
-- INJURED ポーション拡張後のバランス（過剰生存で間延びしないか）
-
-調整候補：HP ベース値・`damage_mult`・耐性カーブ・FLEE 閾値（`COMBAT_RATIO_DISADVANTAGE`）・脅威コスト重み（`FLEE_THREAT_WEIGHT` 等）・`NPC_POLICY_CHANGE_COOLDOWN`・`FLOOR_*_RANK_THRESHOLD`。
-
-#### fall_back 実機動作確認
-
-`on_low_hp = fall_back` メンバーが critical 状態で推奨出口方向に下がる挙動を観察。
-- 射程外（`attack_range + FALL_BACK_MARGIN`）で停止することを確認
-- PartyStatusWindow の `fb→(x,y)` 表示が正しいこと
-- 必要に応じて `FALL_BACK_MARGIN`（既定 2）を調整
-
-#### Step 1-B（move_speed 二層構造）実装後の観察事項
-
-Step 2 に進む前の切り分け調査：
-1. **人間キャラの動作が遅くなった**（高）：旧式 0.50s → 新式 0.40s のはずなのに遅い。move_speed の保存値・生成経路を要確認
-2. **人間キャラが死にやすくなった**（中）：項目 1 の副次効果か独立要因か
-3. **ガード中の歩行アニメが切替らない**（高）：`GUARD_MOVE_DURATION_WEIGHT` 倍化と歩行アニメ周期が連動していない疑い
-4. **射程表示中に被弾で攻撃キャンセル**（低）：4/20 の 1 発 1 押下化の残存バグの可能性。仕様化要決定
-
-### 優先度：中
-
-#### 一時デバッグログ・トラッカーの削除（4/23 持越し）
-
-TARGETING 系バグ調査で仕込んだ `[WT]` / `[MODE]` / `[TGT-HOLD]` / `[TGT-SET]` / `[CURSOR]` / `[PLAYER-TURN]` ログ（PlayerController 側）を削除。`_dbg_prev_*` 変数 5 個も同時に削除。Komuro が「TARGETING 系の挙動は全て安定」と確認したタイミングで実施。
-
-`Character` 側の `[CHAR.*]` 系（5 系統）は防御検出器として**永続保持**（削除しない）。
-
-#### TARGETING ホールド中の残存問題調査
-
-4/23 で 5 関数（`_check_npc_member_stairs` 等）に `world_time_running` ガードを追加し主因は解消したが、Komuro 実機で「向き変更を伴わないケースでもアウトラインされた敵が動く」現象が残っている可能性あり。実機検証で `[CHAR.*]` ログに "during TARGETING hold!" が出たら新たな未ガード経路の証拠。
-
-#### 移動関連の二層構造（Step 2〜5）
-
-Step 1-A・1-B 完了後の継続実装。各 Step は順序依存。
-- **Step 2**：時間系定数の `GlobalConstants` 化（`WAIT_DURATION` / `REEVAL_INTERVAL` / `AUTO_ITEM_INTERVAL` / `WARP_INTERVAL` / `FLAME_DURATION`）+ `DarkLordUnitAI._warp_timer` の game_speed 逆方向バグ修正
-- **Step 3**：`game_speed` 適用パターンの統一(現状 4 パターン混在：pre-scaled / post-scaled / 未適用 / 逆方向)。「全タイマーは `delta * game_speed` で減算する」を設計原則として明文化
-- **Step 4**：向き変更コストの完全対称化（プレイヤー通常移動のみ TURN_DELAY=0.15s の非対称を解消）。`BASE_TURN_DURATION` を新設し `move_speed` で補正
-- **Step 5**：近接攻撃範囲拡大（前方 5 マス化）
-
-#### インラインタイマー減算の time stop 対応
-
-`game_map.gd:_process()` の `_stair_cooldown` / `_member_stair_cooldown` / `_npc_enemy_activate_timer` が time stop 中も減算進行している。他タイマー（stun / buff / energy 回復）との対称性が取れていない。Step 3（game_speed 適用パターン統一）と合わせて整理が自然。
-
-#### FLEE 派生課題
-
-FLEE システムは 4/21 にステップ 1〜3 + 4/24 fall_back 完了。残課題：
-1. **敵パーティーへの FLEE 二段階化**：現状 `_find_flee_goal_legacy`（脅威から 5 タイル離れる）のまま。味方と同じ二段階ロジック適用。避難先は敵種族ごとに異なる可能性（縄張り戻り・階段逃走）の設計検討必要
-2. **敵側の `_party_strategy` enum 直接配布**：現状 `party_fleeing = (strategy == FLEE)` でブール化している。enum 値そのものを配布し `party_fleeing` ブールフラグを廃止。味方側 `_party_strategy` 廃止（4/21）の対称作業
-3. **味方クラスへの `keep_distance` 適用**：現状は GoblinArcher / Salamander 専用。味方の弓使い・魔法使いにも適用(後衛前進問題の解決)
-4. **`keep_distance` の実行ロジック差別化**：`flee_recommended_goal` の流用を視野に挙動を意味に合わせる。派生課題 3 と合わせて対応
-5. **戦況判断と避難先計算の関数統合**：`_evaluate_strategic_status()` と `_determine_flee_recommended_goal()` を統合し、避難先情報を `combat_situation` 辞書に含める
-
-#### フロア基準値の実プレイ調整
-
-`FLOOR_*_RANK_THRESHOLD` / `FLOOR_RETREAT_RATIO` の調整。装備 tier 戦力反映（4/19）により同じ基準値でも降下しやすくなっている。PartyStatusWindow の `F(R+T)s` 表示で観察しながら調整。
-
-### 優先度：低
-
-#### コード・データ整理
-
-- **legacy フィールドの棚卸し継続**：`hero.json` の扱い整理（CharacterGenerator のテンプレート化 or 削除）/ `assets/master/classes/*.json` の未参照定義 / クラス JSON / ステータス JSON / 個別敵 JSON の未参照キー
-- **`PlayerController._spawn_heal_effect` の実態確認**：未使用デッドコードの可能性
-- **画像フォルダ名パース関数の共通化**：`_parse_folder_name`（味方）と `_parse_enemy_folder_name`（敵）が別実装
-- **`_find_friendly_retreat_goal` 関数削除**：FLEE 新ロジック適用で呼び出し元なし
-- **dark-lord のワープ・炎陣を SkillExecutor 経由へ**：現状キュー外の例外的実装
-- **エフェクト生成の一系統化**：「Character 経由」と「SkillExecutor 内 `.new()`」の 2 系統混在を統一
-
-#### 命名・概念整理
-
-- **「敵クラス」vs「種族」**：仕様書は「敵クラス」、コードは「種族」（GoblinLeaderAI 等）。用語整理
-- **ファイル名のハイフン/アンダースコア統一**：個別敵 JSON は `dark_lord.json`、クラス JSON は `dark-lord.json`
-- **`enemy_list.json` と `enemies_list.json` の紛らわしい命名**：役割が違うのに酷似
-- **`PartyLeader.get_global_orders_hint()` 改名**：実態が「戦況判断の配信 API」になっており命名乖離
-- **`UnitAI.obedience` の状態変数扱い再検討**：事実上の定数なら `const` 化または `character_data.obedience` と統合
-
-#### 解像度・画像系
-
-- **`BUST_SRC_*` の比率化**：`message_window.gd` で 1024x1024 前提のハードコード。2048x2048 アセット追加時に問題化
-- **エフェクト線幅の GRID_SIZE 連動**：`HitEffect.RING_WIDTH = 2.5` 等の固定 px。4K で相対的に細くなる
-
-#### デバッグ・運用
-
-- **敵 UnitAI 指示フィールドの物理削除**：8 項目（`_combat` / `_battle_formation` 等）が敵では Character デフォルト固定。`is_friendly` 分岐で早期リターン
-- **味方 UnitAI 指示ライン表示妥当性再点検**：`_hp_potion` / `_sp_mp_potion` / `_item_pickup` 等の単純フィールドの表示価値再評価
-- **敵メンバーへの `leader` 配布検討**：隊形計算等で必要なら検討
-- **生存数表示（x/y）の仕様確認**：プレイヤー Party は adoption で動的変動
-- **敵ヒーラー（dark_priest）回復動作確認**：4/18 energy 統合後に正しく機能しているか実機確認
-- **Config Editor 全タブの表示フィールド棚卸し**：味方クラス・敵クラス・ステータス各タブの表示対象網羅性を定期確認
-- **Config Editor やツール類での設定変更の git 反映方針**：JSON・画像バイナリの自動 commit/push 運用
-
-#### バランス・体験
-
-- **敵パーティーの FLEE 避難先情報表示**：派生課題 1 と同時対応
-- **ヒーラー lowest_hp_first「満タンにしてくれない」現象の再評価**：体験違和感が出るなら判定条件緩和を検討
-- **回復量計算の乱数・クリティカル対応**：将来回復にバラつきを入れる場合の判定側扱い
 
 ## 参照ファイル
 - docs/spec.md：詳細仕様書（実装前に参照すること）
