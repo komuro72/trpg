@@ -691,10 +691,11 @@ OrderWindow・サブメニュー・アイテム一覧・アクションメニュ
 
 詳細度ごとに横一列に追加される情報群：
 
-1. **行動ボディ**（常時・HP 色）：`[Fx]★名前[ランク](クラス) HP:x/y MP|SP:x/y mv=0.40s [ス][ガ]`
+1. **行動ボディ**（常時・HP 色）：`[Fx]★名前[ランク](クラス) HP:x/y MP|SP:x/y mv=0.40s @<area_id>(<x>,<y>) [ス][ガ]`
    - `(クラス)` は `CLASS_NAME_JP`（例：ヒーラー・剣士）。2026-04-21 にリーダー行から移動
    - `★` は `is_player_controlled`（操作中マーカー）
    - MP/SP は `CharacterData.is_magic_class()` でクラス分岐（`max_energy == 0` のキャラでは省略）
+   - `@<area_id>(<x>,<y>)`：現在エリア ID + グローバル座標（2026-04-26 追加）。area_id だけだとキャラ間の距離・FLEE 進行度・パーティー集結度が読めなかったため、`Character.grid_pos` の x/y を併記する。例：`@r0_10(40,25)`
 2. **目的**（常時・シアン）：` attack[ATKp]:Goblin[0.34s q3]` のように `UnitAI._state` / `_timer` / `_queue.size()` を付加。**2026-04-25 改訂**：日本語アクションラベル（`→攻撃` / `攻撃準備` / `逃走` / `距離確保` 等）はコード上のアクション名（`move_to_attack` / `attack` / `flee` / `keep_distance` 等）に統一。`get_debug_goal_str()` の戻り値が「コード上の識別子そのまま」になる方針
 3. **移動方針プレフィックス**（詳細度 >= 1・黄緑・**敵味方共通**）：`  move:cluster`
    - 全体指示だが、リーダーのみ `PartyLeader._assign_orders()` でモード固有値（`stairs_*` / `explore` / `guard_room`）に上書きされる。非リーダーは常に `_global_orders.move` を継承する（2026-04-26 per-member ロジック統一・3 層構造）

@@ -775,7 +775,8 @@ func _format_action_body(m: Character, display_floor: int) -> String:
 	if _show_var("energy") and m.max_energy > 0:
 		var label: String = "MP" if (cd != null and cd.is_magic_class()) else "SP"
 		energy_s = " %s:%d/%d" % [label, m.energy, m.max_energy]
-	var area_s: String = " @%s" % _area_id_at(m)
+	# area_id の直後にグローバル座標を併記（FLEE 進行度・距離追跡・パーティー集結度の観察用・2026-04-26）
+	var area_s: String = " @%s(%d,%d)" % [_area_id_at(m), m.grid_pos.x, m.grid_pos.y]
 	return "%s%s%s[%s]%s HP:%d/%d%s mv=%.2fs%s%s" % [
 		floor_s, star_s, name_s, rank_s, class_s, m.hp, m.max_hp, energy_s, move_dur, area_s, status]
 
