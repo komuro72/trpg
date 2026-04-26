@@ -120,6 +120,26 @@ func _is_in_explore_mode() -> bool:
 	return not _has_visible_enemy()
 
 
+## リーダー本人の `_move_policy` 上書き（`follow` 退化挙動の解消・2026-04-26 追加）
+##
+## NPC リーダーの層 2 上書き経路：
+##   - 探索モード（敵未検知）：本フックは `""` を返す → `_is_in_explore_mode()` が true →
+##     `_get_explore_move_policy()` が `stairs_*` / `explore` を返す（既存経路を維持）
+##   - 戦闘モード（敵検知中）：本フックは `"explore"` を返す → 層 1 の `follow` 継承を防ぐ
+##
+## NPC リーダーの `formation_ref` は null（player でも leader_char でもない）になるため
+## 自己参照ではないが、`_move_policy = "follow"` だと UnitAI の `_formation_satisfied()`
+## が `_leader_ref == null` 経路で常に true を返し、リーダーが立ち止まる退化挙動になる。
+##
+## 戦闘中の `_move_policy` は ATTACK strategy + target 存在時には `_battle_formation`
+## ベースで動くため実質バイパスされるが、ターゲット切替・戦闘ラル時の挙動を
+## 安定させるため explore フォールバックを入れる。
+func _decide_leader_move_override() -> String:
+	if _is_in_explore_mode():
+		return ""  # 既存の `_get_explore_move_policy()` 経路に委ねる
+	return "explore"
+
+
 ## 現在の状態に基づく目標フロアを返す（戦力値 + HP 補正）
 ## 戦力値 = 自パのみの strength（装備 tier 込み・HP 充足率込み）
 ## full_party の HP 充足率（ポーション込み・平均）が NPC_FLOOR_DOWNGRADE_HP_RATIO 未満の場合は適正フロア - 1

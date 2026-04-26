@@ -54,6 +54,29 @@ func _decide_leader_target_policy_override() -> String:
 	return "nearest"
 
 
+## リーダー本人の `_move_policy`：常に "explore"（`follow` 自己参照解消・2026-04-26 追加）
+##
+## プレイヤーパーティーは `_party_strategy` を持たないため、層 2 の他のフック
+## （`_is_in_explore_mode` / `_is_in_guard_room_mode`）はすべて false を返す。
+## 結果、層 1 の `_global_orders.move = "follow"` がリーダーに継承され、`formation_ref`
+## 構築ロジックで hero リーダー時に `_leader_ref = self`（自己参照）になる。
+##
+## UnitAI 側の防御コード（`_leader_ref == _member` チェック）でクラッシュは
+## しないが、`_formation_satisfied()` が常に true を返すためリーダーが立ち止まり、
+## 隣接敵だけ叩く退化挙動になる。本フックで `"explore"` を返すことで AI 操作時の
+## hero が能動的に動くようにする。
+##
+## **階段判断は行わない**：プレイヤーパーティーの階段移動はプレイヤーの意思で
+## 行うため、NPC のような `_get_explore_move_policy()` 経由の `stairs_*` 判定は
+## 入れない。`explore` 固定で「フロアを歩き回る」挙動のみ。
+##
+## プレイヤー操作中の hero では `UnitAI._process()` が `is_player_controlled` で
+## 早期リターンするため、本 override の値は AI 動作に反映されない（PlayerController
+## と競合しない）。
+func _decide_leader_move_override() -> String:
+	return "explore"
+
+
 ## 最もHPが少ない敵を返す（target="weakest" 用）
 func _select_weakest_target(member: Character) -> Character:
 	var weakest: Character = null
