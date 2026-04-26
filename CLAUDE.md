@@ -1610,6 +1610,100 @@ rank値: C=0, B=1, A=2, S=3
 | 体格（build_bonus） | attribute_stats.json の build セクション | 筋肉質=威力・物理耐性高め、細身=技量高め |
 | ランダム（random_max） | attribute_stats.json の random_max セクション | ステータスごとに乱数幅を設定（0〜N） |
 
+### NPC パーティーの分類ベース自動編成（2026-04-26 確立）
+
+`assets/master/maps/dungeon_handcrafted.json` の NPC パーティーは座標のみを指定し、各メンバーの `class_id` / `image_set` / `items` は**ランタイムで自動割り当て**される。マップごとの固定構成を排し、リプレイ性とクラス分布の柔軟性を確保する。
+
+#### 役割分類（RoleCategory）
+
+[`scripts/party_composer.gd`](scripts/party_composer.gd) で定義する `enum RoleCategory`：
+
+| 分類 | 含まれるクラス |
+|---|---|
+| `MELEE`  | `fighter-sword` / `fighter-axe` / `scout` |
+| `RANGED` | `archer` / `magician-fire` / `magician-water` |
+| `HEALER` | `healer` |
+
+クラス → 分類のマッピングは `MELEE_CLASSES` / `RANGED_CLASSES` / `HEALER_CLASSES` 定数に集約。新クラスを追加する場合はこれらを更新する。
+
+#### パーティー人数別の構成パターン
+
+**1 人パーティー**：フロア単位でシャッフルし、固定スロット順 `[MELEE, MELEE, RANGED, RANGED, HEALER]` で割り当てる（`SOLO_PARTY_SLOTS` 定数）。フロア 0 の規定数 5 に最適化。それ以外の数の場合はサイクル繰り返し。
+
+各分類内のクラス選択：
+- `MELEE` 2 枠：3 クラス（sword/axe/scout）から重複なしで 2 つランダム選択
+- `RANGED` 2 枠：3 クラス（archer/fire/water）から重複なしで 2 つランダム選択
+- `HEALER` 枠：単一クラス固定
+
+**2 人パーティー**：重み付き 3 パターン（`DUO_PATTERNS`）。ヒーラー入りは合計 25%（1/4）に抑制し、希少性を確保する：
+
+| パターン | 構成 | 確率 |
+|---|---|---|
+| 近 + 遠 | `MELEE` + `RANGED` | 75% |
+| 近 + 癒 | `MELEE` + `HEALER` | 12.5% |
+| 遠 + 癒 | `RANGED` + `HEALER` | 12.5% |
+
+**3 人パーティー**：等確率 3 パターン（`TRIO_PATTERNS`）。前衛 + 後衛が必須（純後衛・純前衛のパターンは設けない）：
+
+| パターン | 構成 | 確率 |
+|---|---|---|
+| A | 近 + 遠 + 癒 | 33% |
+| B | 近 + 近 + 遠 | 33% |
+| C | 近 + 遠 + 遠 | 33% |
+
+パターン B / C 内のクラス重複は禁止（同分類内で異なる 2 クラスを選ぶ）。
+
+#### クラス分布の保証
+
+各分類内のクラス選択は完全ランダム（パーティー内重複なし制約のみ）。**マップ全体での均等分布は保証しない**。「水魔ゼロ・斧戦士 4 人」のような偏りは仕様として許容する。
+
+#### JSON スキーマ
+
+新スキーマ：座標のみ指定する。
+
+```json
+{
+  "party_id": 1,
+  "members": [
+    { "x": 12, "y": 20 }
+  ]
+}
+```
+
+旧スキーマで使われていたフィールド（`character_id` / `class_id` / `image_set` / `items`）は廃止。`party_id` は内部用途で残す。
+
+#### 画像（image_set）のランダム化
+
+NPC は JSON で image_set を指定せず、`CharacterGenerator.generate_character(class_id)` 内のロジック（28 種から「未使用優先」でランダム選択）にすべて委ねる。これにより 28 画像が満遍なく使われる。
+
+#### 装備の自動割り当て
+
+クラスごとの初期装備は `PartyComposer.CLASS_DEFAULT_EQUIPMENT` に集約：
+
+```
+fighter-sword:  [sword, armor_plate, shield]
+fighter-axe:    [axe, armor_plate, shield]
+archer:         [bow, armor_cloth]
+scout:          [dagger, armor_cloth]
+magician-fire:  [staff, armor_robe]
+magician-water: [staff, armor_robe]
+healer:         [staff, armor_robe]
+```
+
+消耗品（ヒールポーション・エナジーポーション）は `PartyManager._build_npc_initial_items()` が `INITIAL_POTION_*_COUNT` 定数に基づいて全 NPC に一律付与する（既存仕様）。
+
+#### 名前と性別の整合性
+
+`CharacterGenerator.generate_character()` 内でランダム選択した画像セットの `sex` から `_random_unused_name(sex)` で名前を抽選するため、自動編成経路では常に整合する。
+
+将来 `apply_image_set_override()` で sex が書き換わる経路が復活した場合に備えた予防コードとして、同関数内で「sex が変化したら旧名前を未使用に戻して新性別の未使用名を再抽選」する処理を入れている（2026-04-26 追加）。
+
+### プレイヤー（hero）生成の暫定仕様
+
+`game_map.gd:_setup_hero()` は `assets/master/maps/dungeon_handcrafted.json` の `player_party` から x/y のみを読み取る。`class_id` フィールドは記述されていても**ランタイムで上書きされて無視される**（[game_map.gd:280](scripts/game_map.gd:280) の `class_id = all_classes[randi() % 7]`）。`image_set` フィールドも読み取られない（`CharacterGenerator.generate_character` 内のランダム選択に委ねる）。
+
+これは UI でクラス選択ができるようになるまでの**暫定仕様**。将来「主人公クラス選択画面」を実装する際に、この上書きロジックを撤去する想定。
+
 ## NPC仕様
 
 - ダンジョン内にNPCがパーティー単位で配置される

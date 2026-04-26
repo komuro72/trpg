@@ -166,6 +166,12 @@ static func generate_character(class_id: String = "") -> CharacterData:
 
 ## JSON の image_set フィールドで指定されたフォルダ名を CharacterData に適用する
 ## folder_name: 例 "fighter-sword_male_young_slim_00001"（res://... プレフィックスなし）
+##
+## 2026-04-26：性別が変わった場合に名前を再抽選する処理を追加。
+## 旧実装は `generate_character()` 内のランダム選択で確定した sex から名前を抽選した
+## 後、本関数で sex のみ書き換えていたため、画像と名前の sex が 1/2 で不整合になる
+## バグがあった。現状 NPC スポーン経路では本関数は呼ばれない（class_id ベース自動
+## 編成への移行後）が、将来 image_set 指定が復活した際の予防コードとして残置する。
 static func apply_image_set_override(data: CharacterData, folder_name: String) -> void:
 	if data == null or folder_name.is_empty():
 		return
@@ -181,9 +187,17 @@ static func apply_image_set_override(data: CharacterData, folder_name: String) -
 	data.sprite_face       = folder + "/face.png"
 	var info := _parse_folder_name(folder_name)
 	if not info.is_empty():
-		data.sex   = str(info.get("sex",   data.sex))
+		var old_sex: String = data.sex
+		var new_sex: String = str(info.get("sex", data.sex))
+		data.sex   = new_sex
 		data.age   = str(info.get("age",   data.age))
 		data.build = str(info.get("build", data.build))
+		# 性別が変わったら名前を再抽選（不整合防止）
+		if old_sex != new_sex and not data.character_name.is_empty():
+			# 旧名前を未使用に戻してから新性別の未使用名を抽選
+			_used_names.erase(data.character_name)
+			data.character_name = _random_unused_name(new_sex)
+			_used_names[data.character_name] = true
 	_used_image_sets[folder_name] = true
 
 

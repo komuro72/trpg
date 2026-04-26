@@ -429,12 +429,34 @@ func _setup_floor_npcs(floor_idx: int) -> void:
 	for em: PartyManager in (_per_floor_enemies[floor_idx] as Array):
 		all_enemies.append_array(em.get_enemies())
 
+	# パーティーごとのメンバー数を集計し、PartyComposer で分類ベース編成を実施
+	# JSON から class_id / image_set / items 直書きを廃止した代わりに、ここで
+	# 各メンバーへ class_id とデフォルト装備を動的割り当てする（2026-04-26）。
+	var party_member_counts: Array = []
+	for np_v: Variant in fmap.npc_parties:
+		var members_raw: Array = (np_v as Dictionary).get("members", [])
+		party_member_counts.append(members_raw.size())
+	var class_assignments: Array = PartyComposer.compose_floor_classes(party_member_counts)
+
 	var fnms: Array = _per_floor_npcs[floor_idx] as Array
 	var idx := floor_idx * 100
-	for np: Variant in fmap.npc_parties:
-		var members: Array = (np as Dictionary).get("members", [])
-		if members.is_empty():
+	for np_idx: int in range(fmap.npc_parties.size()):
+		var np: Dictionary = fmap.npc_parties[np_idx] as Dictionary
+		var members_raw: Array = np.get("members", [])
+		if members_raw.is_empty():
 			continue
+		var class_ids: Array = class_assignments[np_idx] as Array
+		# 座標のみ持つ raw メンバーに class_id と items を補完する
+		var members: Array = []
+		for m_idx: int in range(members_raw.size()):
+			var m_raw: Dictionary = members_raw[m_idx] as Dictionary
+			var class_id: String = "fighter-sword"
+			if m_idx < class_ids.size():
+				class_id = class_ids[m_idx] as String
+			var augmented: Dictionary = m_raw.duplicate()
+			augmented["class_id"] = class_id
+			augmented["items"]    = PartyComposer.get_default_equipment(class_id)
+			members.append(augmented)
 		var nm := PartyManager.new()
 		nm.name = "NpcManager%d" % idx
 		nm.party_type = "npc"
