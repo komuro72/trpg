@@ -39,14 +39,33 @@ const CLASS_DEFAULT_EQUIPMENT: Dictionary = {
 }
 
 
-## 1 人パーティーのスロット配分（仕様：近接 2 + 遠距離 2 + ヒーラー 1）
-## 1 人パーティーリストをシャッフルして上から本配列の順序で割り当てる。
-## 5 を超える場合はサイクル繰り返し（フロア 0 の規定数は 5）。
-const SOLO_PARTY_SLOTS: Array = [
-	RoleCategory.MELEE, RoleCategory.MELEE,
-	RoleCategory.RANGED, RoleCategory.RANGED,
-	RoleCategory.HEALER,
-]
+## 主人公分類に応じた 1 人パーティーのスロット配分（合計 4 枠）
+##
+## 主人公と同じ分類を 1 つ減らすことで、味方陣営全体での分類バランスを保ち、
+## NPC を 14 人（4 + 2×2 + 2×3）に抑えて右パネルに収める設計。
+##
+## - 主人公 MELEE  → 近 1 + 遠 2 + 癒 1
+## - 主人公 RANGED → 近 2 + 遠 1 + 癒 1
+## - 主人公 HEALER → 近 2 + 遠 2 + 癒 0
+##
+## JSON 側の 1 人パーティーエントリは 5 個のまま維持し、コード側で 1 つを
+## ランダムにスキップする（毎起動でスキップ位置が変わる）。
+const SOLO_PARTY_SLOTS_BY_HERO_CATEGORY: Dictionary = {
+	RoleCategory.MELEE:  [
+		RoleCategory.MELEE,
+		RoleCategory.RANGED, RoleCategory.RANGED,
+		RoleCategory.HEALER,
+	],
+	RoleCategory.RANGED: [
+		RoleCategory.MELEE, RoleCategory.MELEE,
+		RoleCategory.RANGED,
+		RoleCategory.HEALER,
+	],
+	RoleCategory.HEALER: [
+		RoleCategory.MELEE, RoleCategory.MELEE,
+		RoleCategory.RANGED, RoleCategory.RANGED,
+	],
+}
 
 
 ## 2 人パーティーの構成パターン（重み付き）
@@ -73,14 +92,27 @@ const TRIO_PATTERNS: Array = [
 
 ## フロア単位で全 NPC パーティーのクラス割り当てを決定する。
 ## party_member_counts: 各パーティーのメンバー数の配列（入力順は維持）
+## hero_category: 主人公の役割分類（`RoleCategory` enum 値）。1 人パーティーの
+##   スロット配分を主人公分類に応じて決めるために使用する
 ## 戻り値: 各パーティーごとの class_id 配列のリスト（入力順）
-##   例：[1, 2, 3] -> [["healer"], ["fighter-sword","archer"], ["fighter-axe","magician-fire","healer"]]
+##   - 1 人パーティーで主人公分類に応じてスキップされたエントリは **空配列 `[]`**
+##     を返す（呼出側で空配列ならスポーンしない）
+##   例：hero_category=MELEE で party_member_counts=[1,1,1,1,1,2,3]
+##     → [["fighter-sword"], [], ["archer"], ["magician-fire"], ["healer"], [...], [...]]
 ##
-## 1 人パーティー：全体をシャッフルしてから SOLO_PARTY_SLOTS の順序で枠を割り当てる。
+## 1 人パーティー：全体をシャッフルしてから先頭 1 つをスキップ・残りに
+## `SOLO_PARTY_SLOTS_BY_HERO_CATEGORY[hero_category]`（4 枠）の順序で割り当てる。
+## 1 人パーティーが 5 個未満の場合は枠を順番に消費（スキップなし）。
 ## 2/3 人パーティー：パーティー単位で個別に重み抽選 + 同分類内重複なしでクラス選択。
-static func compose_floor_classes(party_member_counts: Array) -> Array:
+static func compose_floor_classes(party_member_counts: Array, hero_category: int) -> Array:
 	var result: Array = []
 	result.resize(party_member_counts.size())
+
+	# 主人公分類に応じたスロット配分を取得（不正値は MELEE 扱いでフォールバック）
+	var slots: Array = SOLO_PARTY_SLOTS_BY_HERO_CATEGORY.get(hero_category, []) as Array
+	if slots.is_empty():
+		push_warning("PartyComposer: unknown hero_category %d, falling back to MELEE" % hero_category)
+		slots = SOLO_PARTY_SLOTS_BY_HERO_CATEGORY[RoleCategory.MELEE] as Array
 
 	# 1 人パーティーのインデックスを集めてシャッフル
 	var solo_indices: Array[int] = []
@@ -89,16 +121,22 @@ static func compose_floor_classes(party_member_counts: Array) -> Array:
 			solo_indices.append(i)
 	solo_indices.shuffle()
 
-	# 1 人パーティーへの枠分配（5 枠を超える場合はサイクル）
+	# 1 人パーティー数 > スロット数なら先頭 (solo_indices.size() - slots.size()) 個を
+	# スキップ（空配列を入れる）。シャッフル済みなのでスキップ位置はランダム。
+	var skip_count: int = max(0, solo_indices.size() - slots.size())
+	for skip_i: int in range(skip_count):
+		result[solo_indices[skip_i]] = []
+
+	# 残った 1 人パーティーへの枠分配（4 枠想定・足りない場合はスロット先頭から消費）
 	var melee_pool:  Array = MELEE_CLASSES.duplicate()
 	var ranged_pool: Array = RANGED_CLASSES.duplicate()
 	melee_pool.shuffle()
 	ranged_pool.shuffle()
 	var melee_used: int = 0
 	var ranged_used: int = 0
-	for n: int in range(solo_indices.size()):
-		var party_idx: int = solo_indices[n]
-		var slot_role: int = SOLO_PARTY_SLOTS[n % SOLO_PARTY_SLOTS.size()]
+	for slot_i: int in range(solo_indices.size() - skip_count):
+		var party_idx: int = solo_indices[skip_count + slot_i]
+		var slot_role: int = slots[slot_i % slots.size()] as int
 		var class_id: String = ""
 		match slot_role:
 			RoleCategory.MELEE:

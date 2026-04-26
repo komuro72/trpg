@@ -432,11 +432,19 @@ func _setup_floor_npcs(floor_idx: int) -> void:
 	# パーティーごとのメンバー数を集計し、PartyComposer で分類ベース編成を実施
 	# JSON から class_id / image_set / items 直書きを廃止した代わりに、ここで
 	# 各メンバーへ class_id とデフォルト装備を動的割り当てする（2026-04-26）。
+	#
+	# 主人公分類を取得して composer に渡す。1 人パーティーの枠割が主人公分類に
+	# 応じて 4 枠に決まり、JSON の 5 個ある 1 人パーティーから 1 つがランダム
+	# スキップされる（味方陣営での分類バランス + UI 収容数 14 の確保）。
+	var hero_category: int = PartyComposer.RoleCategory.MELEE
+	if hero.character_data != null:
+		hero_category = PartyComposer.get_role_category(hero.character_data.class_id)
 	var party_member_counts: Array = []
 	for np_v: Variant in fmap.npc_parties:
 		var members_raw: Array = (np_v as Dictionary).get("members", [])
 		party_member_counts.append(members_raw.size())
-	var class_assignments: Array = PartyComposer.compose_floor_classes(party_member_counts)
+	var class_assignments: Array = PartyComposer.compose_floor_classes(
+		party_member_counts, hero_category)
 
 	var fnms: Array = _per_floor_npcs[floor_idx] as Array
 	var idx := floor_idx * 100
@@ -446,6 +454,9 @@ func _setup_floor_npcs(floor_idx: int) -> void:
 		if members_raw.is_empty():
 			continue
 		var class_ids: Array = class_assignments[np_idx] as Array
+		# composer がスキップ判定したパーティー（class_ids が空）はスポーンしない
+		if class_ids.is_empty():
+			continue
 		# 座標のみ持つ raw メンバーに class_id と items を補完する
 		var members: Array = []
 		for m_idx: int in range(members_raw.size()):

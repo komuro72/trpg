@@ -113,8 +113,11 @@ func _draw_content(px: int, pw: int, clip_y: float, gs: int) -> void:
 	if _player_controller != null:
 		current_target = _player_controller.get_current_target()
 
-	var row_h := int(gs * 0.80)
-	var row_y := 6.0
+	# row_h = gs * 0.74：14 行収容を確保（gs * 0.80 だと 13 行が上限だった）
+	# row_y = 4.0：上端余白を 6→4 に詰めて余裕を確保
+	# 14 NPC 同室時の必要高さ：14 × 0.74gs + 4_top + 4_bottom ≈ 10.36gs + 8 ≤ 11gs
+	var row_h := int(gs * 0.74)
+	var row_y := 4.0
 
 	for enemy: Character in visible_enemies:
 		if row_y + float(row_h) > clip_y - 4.0:
