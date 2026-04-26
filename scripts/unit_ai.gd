@@ -256,6 +256,30 @@ func receive_order(order: Dictionary) -> void:
 	# 現在の行動決定結果を算出（キュー補充判定用）
 	var new_effective := _determine_effective_action()
 
+	# target 死亡後の即時再選定（2026-04-26 追加）
+	#
+	# 経緯：attack 中に target が死亡 → キュー消化 → キュー空 → receive_order(_order)
+	# 再発火 で raw_target が freed → ordered_target=null となり、ATTACK 戦略のまま
+	# `_generate_queue(0, null)` が `_generate_move_queue` に流れて `_move_policy="explore"`
+	# 経路で move_to_explore を発行 → 同部屋の他の敵を素通りしてリーダーが部屋を出る
+	# 現象が発生していた（PartyLeader._assign_orders の次サイクル＝最大 1.5 秒の窓）。
+	#
+	# 対策：ATTACK 戦略 (new_effective == 0) で ordered_target が null のとき、
+	# 親 PartyLeader の `select_target_for(_member)` 公開 API を呼んで即時再選定する。
+	# 再選定で null が返れば（本当に敵不在）従来通り `_generate_move_queue` に流れる。
+	# FLEE / FALL_BACK / WAIT などの非 ATTACK 戦略では再選定しない（target 不要 or 既に
+	# null を許容するロジックが組まれているため）。
+	if ordered_target == null and new_effective == 0:
+		var leader_node := get_parent()
+		if leader_node != null and leader_node.has_method("select_target_for"):
+			var fresh_target_v: Variant = leader_node.call("select_target_for", _member)
+			if fresh_target_v != null and is_instance_valid(fresh_target_v):
+				ordered_target = fresh_target_v as Character
+				_target = ordered_target
+				# `_order` キャッシュも更新（次の receive_order(_order) 再発火で
+				# 同じ stale target を拾うのを防ぐ）
+				_order["target"] = ordered_target
+
 	# 階段タイルに乗っているときはキューを強制再生成する（階段回避コードを確実に走らせる）
 	var on_stair := _member != null and is_instance_valid(_member) \
 			and _is_stair_tile(_member.grid_pos) \

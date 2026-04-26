@@ -976,6 +976,23 @@ func _select_target_for(_member: Character) -> Character:
 	return _player
 
 
+## UnitAI から呼び出せる target 選定の公開ラッパー（2026-04-26 追加）
+##
+## 用途：UnitAI.receive_order() で `_order["target"]` が freed/null になった
+## ATTACK 状態のとき、即時再選定するためのコールバック経路。
+##
+## 経緯：target 死亡 → attack キュー消化 → キュー空 → receive_order(_order)
+## 再発火 で stale な target を null として受け取り、`_generate_queue` の
+## `target == null` 経路で `_generate_move_queue` → "explore" に流れて
+## 同部屋の他の敵を素通りしてリーダーが部屋を出る現象が起きていた
+## （PartyLeader._assign_orders の次サイクル = 最大 1.5 秒の窓）。
+##
+## 内部実装は `_select_target_for`（サブクラスで override 可能・基底 / NPC /
+## 敵 / プレイヤーで個別実装）に委譲する。
+func select_target_for(member: Character) -> Character:
+	return _select_target_for(member)
+
+
 ## 最もHPが少ない攻撃ターゲットを選択する
 func _select_weakest_target(member: Character) -> Character:
 	return _select_target_for(member)
