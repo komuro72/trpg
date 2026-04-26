@@ -113,11 +113,15 @@ func _draw_content(px: int, pw: int, clip_y: float, gs: int) -> void:
 	if _player_controller != null:
 		current_target = _player_controller.get_current_target()
 
-	# row_h = gs * 0.74：14 行収容を確保（gs * 0.80 だと 13 行が上限だった）
-	# row_y = 4.0：上端余白を 6→4 に詰めて余裕を確保
-	# 14 NPC 同室時の必要高さ：14 × 0.74gs + 4_top + 4_bottom ≈ 10.36gs + 8 ≤ 11gs
-	var row_h := int(gs * 0.74)
-	var row_y := 4.0
+	# 行高を動的計算して TARGET_TOTAL_ROWS（14）行をパネル高に対してぴったり収める
+	# vh = 11 × gs（TILES_VERTICAL = 11）の前提で、上下マージンを差し引いた残りを 14 等分する
+	# 例：gs=98 → vh=1080 → row_h = (1080 - 4) / 14 = 76 px
+	# 解像度（gs）が変わっても 14 行ぴったりに自動追従する
+	var row_y_start: float = 2.0
+	var row_bottom_margin: float = 2.0
+	var available_height: float = clip_y - row_y_start - row_bottom_margin
+	var row_h: int = int(available_height / float(TARGET_TOTAL_ROWS))
+	var row_y: float = row_y_start
 
 	for enemy: Character in visible_enemies:
 		if row_y + float(row_h) > clip_y - 4.0:
@@ -219,6 +223,11 @@ func _draw_char_row(c: Character, px: int, pw: int, row_y: float, row_h: int,
 # --------------------------------------------------------------------------
 
 const MAX_ROWS: int = 12
+
+## NPC + 敵を合わせた行数のターゲット（パネル全高をこの数で等分する）
+## NPC 14 人 + プレイヤー 1 人 = 16 だが、プレイヤーはパネル左に表示されるため
+## 同室で表示しうる最大は 14 NPC（安全部屋）。それに合わせて 14 行ぴったりにする
+const TARGET_TOTAL_ROWS: int = 14
 
 
 func _get_face_texture(c: Character) -> Texture2D:
