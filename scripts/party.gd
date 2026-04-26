@@ -23,7 +23,7 @@ var global_orders: Dictionary = {
 	"battle_policy": "attack",
 	"target":        "same_as_leader",
 	"on_low_hp":     "fall_back",
-	"item_pickup":   "passive",
+	"item_pickup":   "aggressive",
 	"hp_potion":     "use",
 	"sp_mp_potion":  "use",
 }

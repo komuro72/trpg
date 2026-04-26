@@ -289,8 +289,17 @@ var POWER_BALANCE_INFERIOR:     float = 0.5
 ## [ConfigEditor 対象]
 var NPC_FLOOR_DOWNGRADE_HP_RATIO: float = 0.5
 
+## メンバー 1 人あたりのランク基本値（戦力集計・合流交渉スコアに加算するオフセット）
+## 集計用 rank 値 = RANK_BASE_OFFSET + CharacterGenerator.RANK_VALUE[rank]
+##   → C ランク = RANK_BASE_OFFSET + 0、B = +1、A = +2、S = +3
+## C ランクでも rank_sum に非ゼロ寄与させるための「ベース値」
+## ステータス生成側の `base + rank × rank_amount` の `base` 相当
+## [ConfigEditor 対象]
+var RANK_BASE_OFFSET: int = 3
+
 ## 戦力計算に占める装備 tier の重み係数
 ## strength_base = rank_sum + party_tier_sum × この値
+##   ※ rank_sum は Σ(RANK_BASE_OFFSET + RANK_VALUE[rank]) で算出
 ## 装備 1 セット ≒ ランク 1 段階となる 0.33 が既定
 ## [ConfigEditor 対象]
 var ITEM_TIER_STRENGTH_WEIGHT: float = 0.33
@@ -423,6 +432,19 @@ var INITIAL_POTION_HEAL_COUNT:   int = 5
 ## [ConfigEditor 対象]
 var INITIAL_POTION_ENERGY_COUNT: int = 5
 
+## 敵パーティー全滅時のドロップポーション数（最小値）
+## ランタイムで装備ドロップとは別経路で生成される
+## [ConfigEditor 対象]
+var POTION_DROP_MIN_PER_PARTY: int = 1
+## 敵パーティー全滅時のドロップポーション数（最大値）
+## 実際のドロップ数は [MIN, MAX] の一様乱数
+## [ConfigEditor 対象]
+var POTION_DROP_MAX_PER_PARTY: int = 2
+## ドロップポーションのヒール比率（0.0 = 全てエナジー / 1.0 = 全てヒール）
+## 各ポーション 1 個ごとに乱数判定
+## [ConfigEditor 対象]
+var POTION_DROP_HEAL_RATIO: float = 0.5
+
 ## ダメージ段階の閾値（battle メッセージの「小/中/大/特大ダメージ」判定に使用）
 const DAMAGE_LEVEL_SMALL:  int = 5   ## 小ダメージの上限（これ以下）
 const DAMAGE_LEVEL_MEDIUM: int = 15  ## 中ダメージの上限（これ以下）
@@ -502,6 +524,7 @@ const CONFIG_KEYS: Array[String] = [
 	"POWER_BALANCE_INFERIOR",
 	"NPC_FLOOR_DOWNGRADE_HP_RATIO",
 	"SPECIAL_SKILL_DISADVANTAGE_HP_RATIO",
+	"RANK_BASE_OFFSET",
 	"ITEM_TIER_STRENGTH_WEIGHT",
 	"COALITION_RADIUS_TILES",
 	# NpcLeaderAI タブ
@@ -559,6 +582,9 @@ const CONFIG_KEYS: Array[String] = [
 	"ITEM_TIER_POLICY",
 	"INITIAL_POTION_HEAL_COUNT",
 	"INITIAL_POTION_ENERGY_COUNT",
+	"POTION_DROP_MIN_PER_PARTY",
+	"POTION_DROP_MAX_PER_PARTY",
+	"POTION_DROP_HEAL_RATIO",
 ]
 
 ## 最後のセーブ／書き込み結果（ConfigEditor がエラー表示に使う）

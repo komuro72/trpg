@@ -39,7 +39,8 @@ func _get_floor_threshold(floor_index: int) -> int:
 # --------------------------------------------------------------------------
 # 合流承諾判定スコア定数（調整しやすいよう定数化）
 # --------------------------------------------------------------------------
-## RANK_VALUES は PartyLeader 基底クラスに定義（C=3, B=4, A=5, S=6）
+## ランク集計値は GlobalConstants.RANK_BASE_OFFSET + CharacterGenerator.RANK_VALUE[rank]
+##   → C=+0, B=+1, A=+2, S=+3（C ランクでも RANK_BASE_OFFSET 分だけ加算）
 ## ランク和への乗数
 const RANK_SCORE_PER_RANK: float = 10.0
 ## 共闘フラグによるボーナス
@@ -241,7 +242,7 @@ func _build_orders_part() -> Dictionary:
 		"battle_policy": "attack",
 		"target":        "same_as_leader",
 		"on_low_hp":     "fall_back",
-		"item_pickup":   "passive",
+		"item_pickup":   "aggressive",
 		"hp_potion":     "use",
 		"sp_mp_potion":  "use",
 	}
@@ -615,7 +616,7 @@ func will_accept_with_reason(offer_type: String, player_party: Party) -> Diction
 			## Character.leadership は装備補正込みの最終値
 			leader_leadership = ch.leadership
 		if ch.character_data != null:
-			player_rank_sum += RANK_VALUES.get(ch.character_data.rank, 3) as int
+			player_rank_sum += GlobalConstants.RANK_BASE_OFFSET + (CharacterGenerator.RANK_VALUE.get(ch.character_data.rank, 0) as int)
 
 	var player_score := float(leader_leadership) \
 		+ float(player_rank_sum) * RANK_SCORE_PER_RANK
@@ -636,7 +637,7 @@ func will_accept_with_reason(offer_type: String, player_party: Party) -> Diction
 		if m.character_data != null:
 			## Character.obedience は装備補正込みの最終値
 			npc_obedience_sum += m.obedience
-			npc_rank_sum += RANK_VALUES.get(m.character_data.rank, 3) as int
+			npc_rank_sum += GlobalConstants.RANK_BASE_OFFSET + (CharacterGenerator.RANK_VALUE.get(m.character_data.rank, 0) as int)
 		npc_hp_sum     += m.hp
 		npc_max_hp_sum += m.max_hp
 		npc_count += 1

@@ -1330,8 +1330,9 @@ func _on_enemy_party_wiped(items: Array, room_id: String, floor_idx: int) -> voi
 		if all_wiped:
 			_trigger_game_clear()
 
-	if items.is_empty():
-		return
+	# 2026-04-27 改訂：items が空でもポーションランタイム生成のため処理を継続。
+	# 旧仕様では items 空 → 早期リターン。新仕様ではポーションは JSON でなく
+	# POTION_DROP_*_PER_PARTY 定数からランタイム生成するため、items 空でも下流処理が必要
 	if room_id.is_empty():
 		return
 	if floor_idx < 0 or floor_idx >= _all_map_data.size():
@@ -1357,6 +1358,21 @@ func _on_enemy_party_wiped(items: Array, room_id: String, floor_idx: int) -> voi
 		if item_dict.is_empty():
 			continue
 		floor_dict[candidates[placed]] = item_dict
+		placed += 1
+	# ランタイムでポーションを追加生成（JSON 側は装備のみ持つ・ポーションはここで動的に追加）
+	# 個数 = [POTION_DROP_MIN_PER_PARTY, POTION_DROP_MAX_PER_PARTY] の一様乱数
+	# 種別 = 各ポーション 1 個ごとに POTION_DROP_HEAL_RATIO で heal/energy を判定
+	var pot_min: int = GlobalConstants.POTION_DROP_MIN_PER_PARTY
+	var pot_max: int = GlobalConstants.POTION_DROP_MAX_PER_PARTY
+	var pot_count: int = pot_min if pot_min >= pot_max else (pot_min + (randi() % (pot_max - pot_min + 1)))
+	for _i: int in range(pot_count):
+		if placed >= candidates.size():
+			break
+		var pot_type: String = "potion_heal" if randf() < GlobalConstants.POTION_DROP_HEAL_RATIO else "potion_energy"
+		var pot_item := ItemGenerator.generate_consumable(pot_type)
+		if pot_item.is_empty():
+			continue
+		floor_dict[candidates[placed]] = pot_item
 		placed += 1
 	if placed > 0:
 		queue_redraw()

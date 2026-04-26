@@ -127,7 +127,7 @@ var current_order: Dictionary = {
 	"combat":           "attack",
 	"target":           "same_as_leader",
 	"on_low_hp":        "fall_back",
-	"item_pickup":      "passive",
+	"item_pickup":      "aggressive",
 	"special_skill":    "strong_enemy",
 	"heal":             "lowest_hp_first",
 }

@@ -19,9 +19,6 @@ enum Strategy { ATTACK, FLEE, WAIT, DEFEND, EXPLORE, GUARD_ROOM }
 
 const REEVAL_INTERVAL := 1.5  ## 定期再評価の間隔（秒）
 
-## ランク文字列 → スコア数値の変換テーブル（C=3, B=4, A=5, S=6）
-const RANK_VALUES: Dictionary = { "C": 3, "B": 4, "A": 5, "S": 6 }
-
 var _party_members: Array[Character] = []
 var _player:        Character
 var _map_data:      MapData
@@ -1051,6 +1048,7 @@ func _calc_total_potion_hp(member: Character) -> int:
 ## use_estimated_hp = false: 実 HP + ポーション回復量
 ## use_estimated_hp = true:  状態ラベル（condition）からHP%を推定（敵ステータス直接参照禁止ルール）
 ## 戻り値: { "rank_sum": int, "tier_sum": float, "hp_ratio": float, "strength": float, "alive_count": int }
+##   rank_sum = Σ(RANK_BASE_OFFSET + RANK_VALUE[rank])  ← C=+0, B=+1, A=+2, S=+3
 ##   strength = (rank_sum + tier_sum × ITEM_TIER_STRENGTH_WEIGHT) × avg_hp_ratio
 func _calc_stats(members: Array, use_estimated_hp: bool) -> Dictionary:
 	var rank_sum := 0
@@ -1065,7 +1063,7 @@ func _calc_stats(members: Array, use_estimated_hp: bool) -> Dictionary:
 		if m == null or m.hp <= 0:
 			continue
 		if m.character_data != null:
-			rank_sum += RANK_VALUES.get(m.character_data.rank, 3) as int
+			rank_sum += GlobalConstants.RANK_BASE_OFFSET + (CharacterGenerator.RANK_VALUE.get(m.character_data.rank, 0) as int)
 			tier_sum += _character_tier_avg(m)
 		alive_count += 1
 		if use_estimated_hp:

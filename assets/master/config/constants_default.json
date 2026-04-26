@@ -220,9 +220,18 @@
     "type": "float",
     "value": 0.5
   },
+  "RANK_BASE_OFFSET": {
+    "category": "PartyLeader",
+    "description": "メンバー 1 人あたりのランク基本値。集計用 rank 値 = RANK_BASE_OFFSET + RANK_VALUE[rank]（C=+0, B=+1, A=+2, S=+3）。C ランクでも rank_sum に非ゼロ寄与させるためのベース値。戦力計算と NPC 合流交渉スコアの両方で使用",
+    "max": 10,
+    "min": 0,
+    "step": 1,
+    "type": "int",
+    "value": 3
+  },
   "ITEM_TIER_STRENGTH_WEIGHT": {
     "category": "PartyLeader",
-    "description": "戦力計算に占める装備 tier の重み係数。strength_base = rank_sum + party_tier_sum × この値。0.33 で「装備 1 セット ≒ ランク 1 段階」に相当",
+    "description": "戦力計算に占める装備 tier の重み係数。strength_base = rank_sum + party_tier_sum × この値。rank_sum は Σ(RANK_BASE_OFFSET + RANK_VALUE[rank])。0.33 で「装備 1 セット ≒ ランク 1 段階」に相当",
     "max": 2.0,
     "min": 0.0,
     "step": 0.1,
@@ -661,5 +670,32 @@
     "step": 1,
     "type": "int",
     "value": 5
+  },
+  "POTION_DROP_MIN_PER_PARTY": {
+    "category": "Item",
+    "description": "敵パーティー全滅時のドロップポーション数（最小値）。ランタイムで装備ドロップとは別経路で生成。実際のドロップ数は [MIN, MAX] の一様乱数",
+    "max": 10,
+    "min": 0,
+    "step": 1,
+    "type": "int",
+    "value": 1
+  },
+  "POTION_DROP_MAX_PER_PARTY": {
+    "category": "Item",
+    "description": "敵パーティー全滅時のドロップポーション数（最大値）。実際のドロップ数は [MIN, MAX] の一様乱数",
+    "max": 10,
+    "min": 0,
+    "step": 1,
+    "type": "int",
+    "value": 2
+  },
+  "POTION_DROP_HEAL_RATIO": {
+    "category": "Item",
+    "description": "ドロップポーションのヒール比率（0.0 = 全てエナジー / 1.0 = 全てヒール）。各ポーション 1 個ごとに乱数判定",
+    "max": 1.0,
+    "min": 0.0,
+    "step": 0.05,
+    "type": "float",
+    "value": 0.5
   }
 }
