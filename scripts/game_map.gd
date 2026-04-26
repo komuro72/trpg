@@ -303,6 +303,11 @@ func _setup_hero() -> void:
 	hero.party_color = Color.WHITE
 	hero.is_leader = true
 	hero.is_player_controlled = true  # 起動時は hero がプレイヤー操作
+	# リーダー個体の target 初期値は "nearest"（同種の自己参照回避・2026-04-26）
+	# 実体は `_decide_leader_target_policy_override()` のランタイム上書きで担保しているが、
+	# OrderWindow を開いた時の初期表示が "リーダーと同じ" だと意味が伝わりにくいため
+	# 二重保険として preset でも nearest にしておく
+	hero.current_order["target"] = "nearest"
 	add_child(hero)
 	hero.sync_position()
 

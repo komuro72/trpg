@@ -315,14 +315,7 @@ func _assign_orders() -> void:
 	# 味方は敵検知中ならつねに算出・敵パーティーは現状未対応（_find_flee_goal_legacy 経由）
 	_update_flee_refuge_area_id()
 
-	# リーダーのターゲットを先に決定（same_as_leader ポリシー用）
-	var leader_target: Character = null
-	for lm: Character in _party_members:
-		if is_instance_valid(lm):
-			leader_target = _select_target_for(lm)
-			break
-
-	# リーダーキャラクター（UnitAI の formation 計算に使用）
+	# リーダーキャラクター（UnitAI の formation 計算 + リーダー本人のターゲット決定に使用）
 	var leader_char: Character = null
 	for lm: Character in _party_members:
 		if is_instance_valid(lm) and lm.is_leader:
@@ -333,6 +326,41 @@ func _assign_orders() -> void:
 			if is_instance_valid(lm):
 				leader_char = lm
 				break
+
+	# リーダー本人のターゲット方針を確定（自己参照解消・2026-04-26 追加）
+	## 旧実装は `_party_members[0]` の `_select_target_for()` を直叩きで `leader_target`
+	## を算出していた。policy lookup を経由しない構造のためリーダー本人の
+	## `target = same_as_leader` でも循環せずに済んでいたが、
+	## (a) リーダー個別の OrderWindow 値が無視される / (b) `_party_members[0]` ≠
+	## 実リーダーの場合に非リーダーの `same_as_leader` が別人を参照する、という
+	## 未定義経路を抱えていた。
+	## ここでは `_decide_leader_target_policy_override()` で個別判断を経由させ、
+	## `leader_target` も実リーダー基準で算出する。
+	var leader_tgt_policy: String = "nearest"
+	if leader_char != null:
+		if joined_to_player:
+			# 合流済み NPC パーティーは _global_orders をプレイヤー側が管理する
+			# （実運用では _party_members 自体が空のはずだが念のためフォールバック）
+			leader_tgt_policy = leader_char.current_order.get("target", "nearest")
+		else:
+			var override_target_policy: String = _decide_leader_target_policy_override()
+			if not override_target_policy.is_empty():
+				leader_tgt_policy = override_target_policy
+			else:
+				leader_tgt_policy = leader_char.current_order.get("target", "nearest")
+
+	# リーダー本人のターゲットを先に決定（非リーダーの `same_as_leader` が参照する値）
+	var leader_target: Character = null
+	if leader_char != null:
+		match leader_tgt_policy:
+			"nearest":
+				leader_target = _select_target_for(leader_char)
+			"weakest":
+				leader_target = _select_weakest_target(leader_char)
+			"support":
+				leader_target = _select_support_target(leader_char)
+			_:
+				leader_target = _select_target_for(leader_char)
 
 	# パーティーレベルの指示参照（hp_potion / sp_mp_potion / move 等）
 	## 2026-04-23：NPC（未加入）は `_global_orders` が空なので、`_build_orders_part()` の
@@ -396,6 +424,13 @@ func _assign_orders() -> void:
 		# move_policy を無視して fall_back 実行に進むため）。
 
 		# ── ターゲット選択 ────────────────────────────────────────────────
+		## リーダー本人は `_decide_leader_target_policy_override()` 由来の
+		## `leader_tgt_policy`（既定 "nearest"）で上書きし、`current_order.target` の
+		## `same_as_leader` による自己参照を回避する。`_move_policy` の 4/26 改修と同じ
+		## 「リーダー個別判断」パターン。joined_to_player のリーダーは上書きしない。
+		if member == leader_char and not joined_to_player:
+			tgt_policy = leader_tgt_policy
+
 		var target: Character
 		match tgt_policy:
 			"nearest":
@@ -894,7 +929,7 @@ func _is_in_guard_room_mode() -> bool:
 	return _party_strategy == Strategy.GUARD_ROOM
 
 
-## リーダーの `_move_policy` を直接上書きする値を返す（敵 AI 用フック・2026-04-26 追加）
+## リーダーの `_move_policy` を直接上書きする値を返す(敵 AI 用フック・2026-04-26 追加)
 ## 戻り値が "" のときは上書きせず、後続の `_is_in_explore_mode()` /
 ## `_is_in_guard_room_mode()` / 全体指示継承にフォールスルーする。
 ##
@@ -906,6 +941,24 @@ func _is_in_guard_room_mode() -> bool:
 ## `_is_in_explore_mode()` フックも一緒に削除する想定。本フックは `_party_strategy`
 ## と独立したリーダー個別判断経路として、敵の縄張り守備を実装する。
 func _decide_leader_move_override() -> String:
+	return ""
+
+
+## リーダー本人のターゲット方針を上書きする値を返す（自己参照解消・2026-04-26 追加）
+## 戻り値が非空のとき：リーダーの `tgt_policy` をその値で上書きする
+## 戻り値が空のとき：上書きせず `current_order.target` をそのまま使う
+##
+## 基底 `PartyLeader` は空文字を返す（純粋 PartyLeader を直接使うパスはないが、
+## 派生で override 漏れがあった場合は素の `current_order.target` 経由になる）。
+## `PartyLeaderPlayer` / `PartyLeaderAI` がそれぞれ "nearest" を返し、味方・敵の
+## 既定挙動とする。種族固有 AI（EnemyLeaderAI 派生）は必要に応じて再 override する
+## （4/26 の `_decide_leader_move_override()` と同じ拡張パターン）。
+##
+## 設計意図：リーダー本人に `target = "same_as_leader"` が割り当たると自己参照
+## （precomputation 経路に依存して silently nearest 相当に落ちる未定義経路）に
+## なるため、明示的に方針を上書きする。`_global_orders.target` のリーダー継承を
+## 廃止する形で `_move_policy` の per-member 決定ロジック統一（4/26）と同じ思想に揃える。
+func _decide_leader_target_policy_override() -> String:
 	return ""
 
 

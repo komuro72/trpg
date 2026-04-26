@@ -555,6 +555,13 @@ const BATTLE_POLICY_PRESET: Dictionary = {
 
 ## global_orders の変更を全メンバーの current_order に反映する（AI 互換キーのみ）
 ## global_orders の全 sync キーを一括で全メンバーに反映する（初回セットアップ用）
+##
+## 2026-04-26：`target` キーはリーダー本人を sync 対象外にする。
+##   理由：リーダーの target は `PartyLeader._decide_leader_target_policy_override()`
+##   でランタイム上書き（既定 "nearest"）されるため、`current_order.target` の値は
+##   表示用にしか使われない。ここで global の "same_as_leader" を leader にコピー
+##   すると、PartyStatusWindow 等の表示でリーダー個別行が「リーダーと同じ」になり
+##   ランタイム挙動（実際は nearest）と乖離する。非リーダーは従来通り sync する。
 func _sync_all_global_to_members() -> void:
 	if _party == null:
 		return
@@ -566,6 +573,9 @@ func _sync_all_global_to_members() -> void:
 		for m_v: Variant in _party.members:
 			var ch := m_v as Character
 			if not is_instance_valid(ch):
+				continue
+			# target キーのみリーダー除外（runtime override で常に "nearest" になるため）
+			if key == "target" and ch.is_leader:
 				continue
 			ch.current_order[key] = val
 	# battle_policy のプリセットも初期値に基づいて適用する
@@ -588,6 +598,9 @@ func _sync_global_to_members(key: String, val: String) -> void:
 	for m_v: Variant in _party.members:
 		var ch := m_v as Character
 		if not is_instance_valid(ch):
+			continue
+		# target キーのみリーダー除外（_sync_all_global_to_members と同理由）
+		if key == "target" and ch.is_leader:
 			continue
 		ch.current_order[key] = val
 

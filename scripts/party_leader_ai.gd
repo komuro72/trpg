@@ -19,3 +19,9 @@ func _evaluate_party_strategy() -> Strategy:
 ## 指定メンバーの攻撃ターゲットを選択する（サブクラスがオーバーライドする）
 func _select_target_for(_member: Character) -> Character:
 	return _player
+
+
+## リーダー本人のターゲット方針：基底実装は "nearest"（自己参照解消・2026-04-26 追加）
+## 種族固有 AI（EnemyLeaderAI 派生）は必要に応じて再 override する。
+func _decide_leader_target_policy_override() -> String:
+	return "nearest"

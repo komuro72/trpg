@@ -122,6 +122,7 @@ Phase 1〜13 完了・Phase 14（Steam 配布準備）未着手。
 - **per-member `_move_policy` 決定ロジック統一**：リーダーはモード固有値（`stairs_*` / `explore` / `guard_room`）/ 非リーダーは `_global_orders.move` を継承する設計に統一。従来は階段ナビ・explore・guard_room モードで非リーダーが `cluster` ハードコードだったが、「リーダーだけがモード固有の移動目的を持ち、他メンバーは全体方針の `move` 指示に従う」という思想と乖離していたため修正。決定階層は 3 層（層 1 = ベースライン `_global_orders.move`・層 2 = リーダー上書き・層 3 = 種族固有上書き）。敵パーティーの `_global_orders.move` ベースライン `"follow"` も `EnemyLeaderAI._build_orders_part()` で初期化（旧仕様の `"spread"` から変更・素の挙動を「リーダー追従」に統一）（4/26）
 - **PartyStatusWindow 敵指示表示の整理**：敵メンバー行に `move:<ラベル>` を追加表示（`UnitAI._move_policy` 直読み・味方と完全に共通の経路を使用）。敵ヘッダーから `mv=` は撤去（敵の `_global_orders.move` は `follow` で固定のため表示価値なし）。動的に変化する個体実値（リーダーの `guard_room` 上書き・種族 AI の per-member 上書き）はメンバー行で可視化される。`guard_room` の日本語ラベル「部屋を守る」を `_label("move", ...)` の個別処理に追加（4/26）
 - **敵 GUARD_ROOM の area_id ベース実装**：従来の数値半径（`territory_range`）ベースから部屋単位（`area_id`）ベースに概念変更。`EnemyLeaderAI` が初代リーダーのスポーン位置 area_id を `_home_area_id` として保持し、`_decide_leader_move_override()` フックで「リーダーが縄張り部屋内 + 部屋内に敵なし + chase_range 内に敵なし」のときリーダーの `_move_policy = "guard_room"` に上書き。`_party_strategy.GUARD_ROOM` を経由しない実装にし、将来の `_party_strategy` 廃止と分離可能にした。非リーダーは触らない（`_global_orders.move` 継承 = リーダー追従）。`territory_range` および `_apply_range_check()` は将来の `_party_strategy` 廃止と一緒に整理予定（4/26）
+- **リーダーの `target = same_as_leader` 自己参照解消**：`same_as_leader` がリーダー本人に配布されると自己参照（precomputation 経路に依存して silently nearest 相当に落ちる未定義経路）になる問題を解消。`_decide_leader_target_policy_override()` フックを新設し、リーダーの `tgt_policy` を `nearest` で上書き（味方は `PartyLeaderPlayer` / `PartyLeaderAI` の基底実装で固定・敵は種族固有 AI で再上書き可能）。プレイヤーパーティーのプリセットも、`game_map.gd` の hero スポーン時 + `PartyManager._update_leader_flags()` でリーダー本人の `current_order["target"]` を `nearest` に揃える（OrderWindow 表示と runtime 挙動を一致させるため）。OrderWindow の `_sync_*_global_to_members()` は `target` キーのみリーダーを sync 対象外にする（global の `same_as_leader` がリーダーに伝播するのを防止）。4/26 per-member `_move_policy` 統一の「リーダー個別判断で上書きする」思想と対称な構造（4/26）
 
 #### パーティーシステム
 - **加入処理の完全化**：`adopt_member` / `release_member` API で AI 管理主体を `_hero_manager` に一本化（4/24）
@@ -184,15 +185,6 @@ Step 2 に進む前の切り分け調査：
 2. **人間キャラが死にやすくなった**（中）：項目 1 の副次効果か独立要因か
 3. **ガード中の歩行アニメが切替らない**（高）：`GUARD_MOVE_DURATION_WEIGHT` 倍化と歩行アニメ周期が連動していない疑い
 4. **射程表示中に被弾で攻撃キャンセル**（低）：4/20 の 1 発 1 押下化の残存バグの可能性。仕様化要決定
-
-##### `tgt=リーダーと同じ` の挙動確認
-
-OrderWindow の `tgt=` 値「リーダーと同じ」（`same_as_leader`）でメンバーが攻撃ターゲットを選ぶ際の挙動が想定通りか要確認。観察対象：
-- リーダーがターゲット未選定時（戦闘外）の非リーダー挙動
-- リーダーのターゲットが射程外になった時の追従の仕方
-- 「リーダーと同じ」と「最近傍」「最弱優先」「援護」の挙動差
-
-実機検証 → 必要なら実装調査・修正。
 
 #### 優先度：中
 
@@ -1046,6 +1038,46 @@ OrderWindow 5 値 ＋ `stairs_down / stairs_up / guard_room`
 **`guard_room` の位置づけ**：`stairs_*` と同じ扱い。リーダー固有のモード固有値・全体指示としては設定不能・per-member の `_move_policy` でのみ存在。
 
 **動的値の観察ポイント**：実態として全体指示はほぼ静的（プレイヤーが OrderWindow で設定したらあまり変えない）。**状況に応じて動的に変化するのは個体の `_move_policy` のみ**。デバッグ時はパーティーヘッダーの `mv=` ではなくメンバー行の `move:` を見ることで、リーダーの `stairs_*` / `guard_room` 上書きや種族 AI の per-member 上書きが観察できる。
+
+### リーダー本人のターゲット方針上書き（2026-04-26 確立）
+
+`target = same_as_leader` がリーダー本人に配布されると自己参照になるため、`_move_policy` の 3 層構造と対称な「リーダー個別判断で上書き」パターンを採用する。
+
+#### 仕組み
+
+- 基底フック `PartyLeader._decide_leader_target_policy_override() -> String` を新設（既定 ""）
+- `PartyLeaderPlayer` / `PartyLeaderAI` でそれぞれ `"nearest"` を返す override を実装。種族固有 AI（`EnemyLeaderAI` 派生）は必要に応じて再 override 可能（4/26 の `_decide_leader_move_override()` と同じ拡張パターン）
+- `PartyLeader._assign_orders()` 内で、リーダー本人の `tgt_policy` をフック戻り値で上書き（`joined_to_player` のリーダーは上書きしない）
+- `leader_target`（非リーダーの `same_as_leader` が参照する値）も実リーダー基準で算出（旧実装は `_party_members[0]` を参照していたが `is_leader` フラグ非考慮の不整合があった）
+
+#### 表示と runtime の一致
+
+ランタイム挙動（`tgt_policy` 上書き）だけでは `current_order.target` フィールドの値は変わらず、PartyStatusWindow の表示と乖離する。これを防ぐため：
+
+- **`PartyManager._update_leader_flags()` でリーダー本人の `current_order["target"] = "nearest"` をセット**（リーダー昇格時に自動適用・全パーティー種別で共通）
+- **`OrderWindow._sync_*_global_to_members()` は `target` キーのみリーダーを sync 対象外**にする（global の `same_as_leader` がリーダーに伝播しないようガード）
+
+これにより runtime 挙動と display が一致し、OrderWindow を開いた時の表示も自然になる。プレイヤーがリーダーの `target` を OrderWindow で個別に変更しても、フック上書きで silently `nearest` に戻る（仕様）。
+
+### per-member 指示の合流時引き継ぎ規約（2026-04-26 確立）
+
+他パーティーのメンバー（リーダー含む）がプレイヤーパーティーに合流した場合、**元の per-member 指示値はそのまま保持される**。`PartyManager.adopt_member()` は Character の `current_order` を書き換えない。
+
+具体的には：
+
+- 元 NPC リーダーの `target = "nearest"`（`_update_leader_flags()` で設定済み）→ 合流後も `"nearest"` のまま（リーダー降格しても値は維持）
+- 元 NPC メンバーの `battle_formation` / `combat` / `target` 等の per-member 値 → そのまま継承
+- 全体指示（`_global_orders`）はプレイヤーパーティーのものに切り替わるが、`current_order` は触らない
+
+#### 設計意図
+
+1. **個別カスタマイズの保護**：合流前にプレイヤーが意図的に設定した per-member 値を、合流時にリセットしない
+2. **合流時の例外コード抑制**：`adopt_member()` で `current_order` を書き換えない方が単純で副作用がない
+3. **per-member 値継承の一貫したルール**：`_update_leader_flags()` 等の「リーダーになった時に値を揃える」経路以外では、`current_order` を強制上書きしない
+
+#### プリセットに揃えたい場合
+
+合流したメンバーの per-member 指示を全体指示のプリセットに合わせたいときは、OrderWindow で**全体指示を再発行**する（プレイヤーが移動方針 / 戦闘方針 / ターゲット等を改めて設定）。`_sync_global_to_members()` 経由で全メンバー（リーダー以外）の `current_order` がプリセットに収束する。
 
 ### PartyLeader（意思決定層の基底クラス）
 - パーティー全体の戦略を決定し、各メンバーの UnitAI に指示を伝達する

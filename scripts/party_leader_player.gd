@@ -48,6 +48,12 @@ func _select_target_for(member: Character) -> Character:
 	return closest
 
 
+## リーダー本人のターゲット方針：常に "nearest"（自己参照解消・2026-04-26 追加）
+## 普段はプレイヤー操作中だが、操作キャラ切替で AI 操作になった際の自己参照を回避する。
+func _decide_leader_target_policy_override() -> String:
+	return "nearest"
+
+
 ## 最もHPが少ない敵を返す（target="weakest" 用）
 func _select_weakest_target(member: Character) -> Character:
 	var weakest: Character = null

@@ -400,10 +400,21 @@ func _elect_leader() -> void:
 
 
 ## 全メンバーの is_leader フラグを _leader に合わせて更新する
+##
+## 2026-04-26：リーダー本人の `current_order.target` を `"nearest"` プリセットに揃える。
+##   ランタイムでは `PartyLeader._decide_leader_target_policy_override()` が "nearest" に
+##   上書きするが、`current_order.target` の値も表示用途で同期する（PartyStatusWindow /
+##   OrderWindow が直読みするため）。プレイヤー / NPC / 敵すべてのリーダーに適用される
+##   （敵では `指示:T:` 表示自体が抑止されるが、preset 自体は無害）。
+##   リーダー交代時にも自動的に新リーダーへ適用される。降格された旧リーダーの
+##   `current_order.target` は "nearest" のまま残るが、ランタイム挙動上は無害（個別非
+##   リーダーが nearest を選んでいる状態と等価）。
 func _update_leader_flags() -> void:
 	for member: Character in _members:
 		if is_instance_valid(member):
 			member.is_leader = (member == _leader)
+			if member.is_leader:
+				member.current_order["target"] = "nearest"
 
 
 ## パーティー種別・キャラ種に応じた PartyLeader サブクラスを生成するファクトリ
