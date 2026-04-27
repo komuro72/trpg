@@ -229,14 +229,14 @@
     "type": "int",
     "value": 3
   },
-  "ITEM_TIER_STRENGTH_WEIGHT": {
+  "ITEM_BONUS_STRENGTH_WEIGHT": {
     "category": "PartyLeader",
-    "description": "戦力計算に占める装備 tier の重み係数。strength_base = rank_sum + party_tier_sum × この値。rank_sum は Σ(RANK_BASE_OFFSET + RANK_VALUE[rank])。0.33 で「装備 1 セット ≒ ランク 1 段階」に相当",
+    "description": "戦力計算に占める装備 bonus 段階の重み係数。strength_base = rank_sum + party_bonus_sum × この値。bonus_sum はメンバーごとの装備 bonus 合計の平均をパーティー全員で合計。既定 0.165 ≒ 旧 ITEM_TIER_STRENGTH_WEIGHT=0.33 と互換",
     "max": 2.0,
     "min": 0.0,
-    "step": 0.1,
+    "step": 0.05,
     "type": "float",
-    "value": 0.33
+    "value": 0.165
   },
   "COALITION_RADIUS_TILES": {
     "category": "PartyLeader",
@@ -249,7 +249,7 @@
   },
   "FLOOR_0_RANK_THRESHOLD": {
     "category": "NpcLeaderAI",
-    "description": "フロア 0 の基準ランク和。NPC はこれ以上の戦力ならフロア 0 滞在可能（戦力 = rank_sum + tier_sum × ITEM_TIER_STRENGTH_WEIGHT × HP率）",
+    "description": "フロア 0 の基準ランク和。NPC はこれ以上の戦力ならフロア 0 滞在可能（戦力 = rank_sum + bonus_sum × ITEM_BONUS_STRENGTH_WEIGHT × HP率）",
     "max": 100,
     "min": 0,
     "step": 1,

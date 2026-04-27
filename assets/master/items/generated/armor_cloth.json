@@ -1,14 +1,14 @@
 {
   "armor_cloth": [
-    { "name": "擦り切れた布服", "stats": {}, "tier": 0 },
-    { "name": "旅人の服",       "stats": { "physical_resistance": 5,  "magic_resistance": 5  }, "tier": 1 },
-    { "name": "魔除けの服",     "stats": { "physical_resistance": 5,  "magic_resistance": 10 }, "tier": 2 },
-    { "name": "精霊の外套",     "stats": { "physical_resistance": 5,  "magic_resistance": 15 }, "tier": 3 },
-    { "name": "斥候の服",       "stats": { "physical_resistance": 10, "magic_resistance": 5  }, "tier": 2 },
-    { "name": "疾風の装束",     "stats": { "physical_resistance": 10, "magic_resistance": 10 }, "tier": 2 },
-    { "name": "巡礼の外套",     "stats": { "physical_resistance": 10, "magic_resistance": 15 }, "tier": 3 },
-    { "name": "忍びの装束",     "stats": { "physical_resistance": 15, "magic_resistance": 5  }, "tier": 3 },
-    { "name": "戦鬼の装束",     "stats": { "physical_resistance": 15, "magic_resistance": 10 }, "tier": 3 },
-    { "name": "英雄の装束",     "stats": { "physical_resistance": 15, "magic_resistance": 15 }, "tier": 3 }
+    { "name": "擦り切れた布服", "stats": {}, "bonuses": {} },
+    { "name": "旅人の服",       "stats": { "physical_resistance": 5,  "magic_resistance": 5  }, "bonuses": { "physical_resistance": 1, "magic_resistance": 1 } },
+    { "name": "魔除けの服",     "stats": { "physical_resistance": 5,  "magic_resistance": 10 }, "bonuses": { "physical_resistance": 1, "magic_resistance": 2 } },
+    { "name": "精霊の外套",     "stats": { "physical_resistance": 5,  "magic_resistance": 15 }, "bonuses": { "physical_resistance": 1, "magic_resistance": 3 } },
+    { "name": "斥候の服",       "stats": { "physical_resistance": 10, "magic_resistance": 5  }, "bonuses": { "physical_resistance": 2, "magic_resistance": 1 } },
+    { "name": "疾風の装束",     "stats": { "physical_resistance": 10, "magic_resistance": 10 }, "bonuses": { "physical_resistance": 2, "magic_resistance": 2 } },
+    { "name": "巡礼の外套",     "stats": { "physical_resistance": 10, "magic_resistance": 15 }, "bonuses": { "physical_resistance": 2, "magic_resistance": 3 } },
+    { "name": "忍びの装束",     "stats": { "physical_resistance": 15, "magic_resistance": 5  }, "bonuses": { "physical_resistance": 3, "magic_resistance": 1 } },
+    { "name": "戦鬼の装束",     "stats": { "physical_resistance": 15, "magic_resistance": 10 }, "bonuses": { "physical_resistance": 3, "magic_resistance": 2 } },
+    { "name": "英雄の装束",     "stats": { "physical_resistance": 15, "magic_resistance": 15 }, "bonuses": { "physical_resistance": 3, "magic_resistance": 3 } }
   ]
 }

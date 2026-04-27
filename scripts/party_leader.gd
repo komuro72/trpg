@@ -717,15 +717,15 @@ func get_global_orders_hint() -> Dictionary:
 	# full_party / nearby_allied / nearby_enemy の 3 系統（PartyStatusWindow 表示用）
 	hint["full_party_strength"]    = _combat_situation.get("full_party_strength", 0.0)
 	hint["full_party_rank_sum"]    = _combat_situation.get("full_party_rank_sum", 0)
-	hint["full_party_tier_sum"]    = _combat_situation.get("full_party_tier_sum", 0.0)
+	hint["full_party_bonus_sum"]    = _combat_situation.get("full_party_bonus_sum", 0.0)
 	hint["full_party_hp_ratio"]    = _combat_situation.get("full_party_hp_ratio", 0.0)
 	hint["nearby_allied_strength"] = _combat_situation.get("nearby_allied_strength", 0.0)
 	hint["nearby_allied_rank_sum"] = _combat_situation.get("nearby_allied_rank_sum", 0)
-	hint["nearby_allied_tier_sum"] = _combat_situation.get("nearby_allied_tier_sum", 0.0)
+	hint["nearby_allied_bonus_sum"] = _combat_situation.get("nearby_allied_bonus_sum", 0.0)
 	hint["nearby_allied_hp_ratio"] = _combat_situation.get("nearby_allied_hp_ratio", 0.0)
 	hint["nearby_enemy_strength"]  = _combat_situation.get("nearby_enemy_strength", 0.0)
 	hint["nearby_enemy_rank_sum"]  = _combat_situation.get("nearby_enemy_rank_sum", 0)
-	hint["nearby_enemy_tier_sum"]  = _combat_situation.get("nearby_enemy_tier_sum", 0.0)
+	hint["nearby_enemy_bonus_sum"]  = _combat_situation.get("nearby_enemy_bonus_sum", 0.0)
 	hint["nearby_enemy_hp_ratio"]  = _combat_situation.get("nearby_enemy_hp_ratio", 0.0)
 	return hint
 
@@ -995,13 +995,15 @@ func _select_weakest_target(member: Character) -> Character:
 	return _select_target_for(member)
 
 
-## キャラクターの装備中 tier の平均を返す（装備なしなら 0.0）
+## キャラクターの装備 bonus 段階合計の平均を返す（装備なしなら 0.0）
 ## 対象: equipped_weapon / equipped_armor / equipped_shield のうち実装備のみ
-## 各アイテムに tier フィールドがない場合は 0 扱い（セーブデータ互換・敵は装備を持たない）
-func _character_tier_avg(m: Character) -> float:
+## 各アイテムの bonuses（各ステータスの 0/1/2/3 段階）の合計を求め、装備本数で割る
+##   設計意図：剣士（剣+盾の 2 装備）と魔法使い（杖のみ 1 装備）でクラス間の装備寄与をフラットにするため
+## 各アイテムに bonuses フィールドがない場合は 0 扱い（セーブデータ互換・敵は装備を持たない）
+func _character_bonus_sum_avg(m: Character) -> float:
 	if m.character_data == null:
 		return 0.0
-	var total_tier := 0
+	var total_bonus := 0
 	var equipped_count := 0
 	var slots := [
 		m.character_data.equipped_weapon,
@@ -1012,11 +1014,13 @@ func _character_tier_avg(m: Character) -> float:
 		var it := it_v as Dictionary
 		if it.is_empty():
 			continue
-		total_tier += int(it.get("tier", 0))
+		var bonuses := it.get("bonuses", {}) as Dictionary
+		for v: Variant in bonuses.values():
+			total_bonus += int(v)
 		equipped_count += 1
 	if equipped_count <= 0:
 		return 0.0
-	return float(total_tier) / float(equipped_count)
+	return float(total_bonus) / float(equipped_count)
 
 
 ## 状態ラベルからHP割合を推定する（敵の戦力を過大評価する安全側に倒す）
@@ -1044,15 +1048,16 @@ func _calc_total_potion_hp(member: Character) -> int:
 	return total
 
 
-## メンバーリストの統計（rank_sum / tier_sum / hp_ratio / strength）を返す
+## メンバーリストの統計（rank_sum / bonus_sum / hp_ratio / strength）を返す
 ## use_estimated_hp = false: 実 HP + ポーション回復量
 ## use_estimated_hp = true:  状態ラベル（condition）からHP%を推定（敵ステータス直接参照禁止ルール）
-## 戻り値: { "rank_sum": int, "tier_sum": float, "hp_ratio": float, "strength": float, "alive_count": int }
+## 戻り値: { "rank_sum": int, "bonus_sum": float, "hp_ratio": float, "strength": float, "alive_count": int }
 ##   rank_sum = Σ(RANK_BASE_OFFSET + RANK_VALUE[rank])  ← C=+0, B=+1, A=+2, S=+3
-##   strength = (rank_sum + tier_sum × ITEM_TIER_STRENGTH_WEIGHT) × avg_hp_ratio
+##   bonus_sum = Σ(member の装備 bonus 段階合計の平均)  ← 装備本数差をクラス間でフラットに吸収
+##   strength = (rank_sum + bonus_sum × ITEM_BONUS_STRENGTH_WEIGHT) × avg_hp_ratio
 func _calc_stats(members: Array, use_estimated_hp: bool) -> Dictionary:
 	var rank_sum := 0
-	var tier_sum := 0.0
+	var bonus_sum := 0.0
 	var hp_ratio_sum := 0.0
 	var alive_count := 0
 	for mv: Variant in members:
@@ -1064,7 +1069,7 @@ func _calc_stats(members: Array, use_estimated_hp: bool) -> Dictionary:
 			continue
 		if m.character_data != null:
 			rank_sum += GlobalConstants.RANK_BASE_OFFSET + (CharacterGenerator.RANK_VALUE.get(m.character_data.rank, 0) as int)
-			tier_sum += _character_tier_avg(m)
+			bonus_sum += _character_bonus_sum_avg(m)
 		alive_count += 1
 		if use_estimated_hp:
 			hp_ratio_sum += _estimate_hp_ratio_from_condition(m.get_condition())
@@ -1075,12 +1080,12 @@ func _calc_stats(members: Array, use_estimated_hp: bool) -> Dictionary:
 			var cur := m.hp + _calc_total_potion_hp(m)
 			hp_ratio_sum += clampf(float(cur) / float(total_max), 0.0, 1.0)
 	if alive_count <= 0:
-		return {"rank_sum": 0, "tier_sum": 0.0, "hp_ratio": 0.0, "strength": 0.0, "alive_count": 0}
+		return {"rank_sum": 0, "bonus_sum": 0.0, "hp_ratio": 0.0, "strength": 0.0, "alive_count": 0}
 	var avg_hp_ratio := hp_ratio_sum / float(alive_count)
-	var base := float(rank_sum) + tier_sum * GlobalConstants.ITEM_TIER_STRENGTH_WEIGHT
+	var base := float(rank_sum) + bonus_sum * GlobalConstants.ITEM_BONUS_STRENGTH_WEIGHT
 	return {
 		"rank_sum":    rank_sum,
-		"tier_sum":    tier_sum,
+		"bonus_sum":   bonus_sum,
 		"hp_ratio":    avg_hp_ratio,
 		"strength":    base * avg_hp_ratio,
 		"alive_count": alive_count,
@@ -1094,17 +1099,17 @@ func _calc_stats_mixed(self_members: Array, other_members: Array) -> Dictionary:
 	var self_stats := _calc_stats(self_members, false)
 	var other_stats := _calc_stats(other_members, true)
 	var rank_sum: int = int(self_stats.rank_sum) + int(other_stats.rank_sum)
-	var tier_sum: float = float(self_stats.tier_sum) + float(other_stats.tier_sum)
+	var bonus_sum: float = float(self_stats.bonus_sum) + float(other_stats.bonus_sum)
 	var alive: int = int(self_stats.alive_count) + int(other_stats.alive_count)
 	var avg_hp_ratio: float = 0.0
 	if alive > 0:
 		# HP 率は生存メンバー加重平均（rank_sum 側を重みにしない）
 		avg_hp_ratio = (float(self_stats.hp_ratio) * float(self_stats.alive_count)
 				+ float(other_stats.hp_ratio) * float(other_stats.alive_count)) / float(alive)
-	var base := float(rank_sum) + tier_sum * GlobalConstants.ITEM_TIER_STRENGTH_WEIGHT
+	var base := float(rank_sum) + bonus_sum * GlobalConstants.ITEM_BONUS_STRENGTH_WEIGHT
 	return {
 		"rank_sum":    rank_sum,
-		"tier_sum":    tier_sum,
+		"bonus_sum":   bonus_sum,
 		"hp_ratio":    avg_hp_ratio,
 		"strength":    base * avg_hp_ratio,
 		"alive_count": alive,
@@ -1262,20 +1267,20 @@ func _evaluate_strategic_status() -> Dictionary:
 		# full_party（自パ全員・下層判定用・絶対戦力）
 		"full_party_strength":  float(full_stats.strength),
 		"full_party_rank_sum":  int(full_stats.rank_sum),
-		"full_party_tier_sum":  float(full_stats.tier_sum),
+		"full_party_bonus_sum": float(full_stats.bonus_sum),
 		"full_party_hp_ratio":  float(full_stats.hp_ratio),
 
 		# nearby_allied（自パ近接 + 同陣営他パ近接・連合戦力）
-		"nearby_allied_strength": float(nearby_allied_stats.strength),
-		"nearby_allied_rank_sum": int(nearby_allied_stats.rank_sum),
-		"nearby_allied_tier_sum": float(nearby_allied_stats.tier_sum),
-		"nearby_allied_hp_ratio": float(nearby_allied_stats.hp_ratio),
+		"nearby_allied_strength":  float(nearby_allied_stats.strength),
+		"nearby_allied_rank_sum":  int(nearby_allied_stats.rank_sum),
+		"nearby_allied_bonus_sum": float(nearby_allied_stats.bonus_sum),
+		"nearby_allied_hp_ratio":  float(nearby_allied_stats.hp_ratio),
 
 		# nearby_enemy（近接敵）
-		"nearby_enemy_strength": float(nearby_enemy_stats.strength),
-		"nearby_enemy_rank_sum": int(nearby_enemy_stats.rank_sum),
-		"nearby_enemy_tier_sum": float(nearby_enemy_stats.tier_sum),
-		"nearby_enemy_hp_ratio": float(nearby_enemy_stats.hp_ratio),
+		"nearby_enemy_strength":  float(nearby_enemy_stats.strength),
+		"nearby_enemy_rank_sum":  int(nearby_enemy_stats.rank_sum),
+		"nearby_enemy_bonus_sum": float(nearby_enemy_stats.bonus_sum),
+		"nearby_enemy_hp_ratio":  float(nearby_enemy_stats.hp_ratio),
 	}
 
 

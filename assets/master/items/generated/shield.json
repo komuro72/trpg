@@ -1,8 +1,8 @@
 {
   "shield": [
-    { "name": "朽ちた木盾",     "stats": {}, "tier": 0 },
-    { "name": "木の盾",         "stats": { "block_left_front": 10 }, "tier": 1 },
-    { "name": "鋼の盾",         "stats": { "block_left_front": 20 }, "tier": 2 },
-    { "name": "守護の鉄盾",     "stats": { "block_left_front": 30 }, "tier": 3 }
+    { "name": "朽ちた木盾",     "stats": {}, "bonuses": {} },
+    { "name": "木の盾",         "stats": { "block_left_front": 10 }, "bonuses": { "block_left_front": 1 } },
+    { "name": "鋼の盾",         "stats": { "block_left_front": 20 }, "bonuses": { "block_left_front": 2 } },
+    { "name": "守護の鉄盾",     "stats": { "block_left_front": 30 }, "bonuses": { "block_left_front": 3 } }
   ]
 }

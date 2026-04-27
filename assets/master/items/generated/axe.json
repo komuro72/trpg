@@ -1,14 +1,14 @@
 {
   "axe": [
-    { "name": "欠けた斧",       "stats": {}, "tier": 0 },
-    { "name": "兵士の斧",       "stats": { "power": 10, "block_right_front": 10 }, "tier": 1 },
-    { "name": "守りの斧",       "stats": { "power": 10, "block_right_front": 20 }, "tier": 2 },
-    { "name": "守護の戦斧",     "stats": { "power": 10, "block_right_front": 30 }, "tier": 3 },
-    { "name": "荒削りの斧",     "stats": { "power": 20, "block_right_front": 10 }, "tier": 2 },
-    { "name": "武人の斧",       "stats": { "power": 20, "block_right_front": 20 }, "tier": 2 },
-    { "name": "重装の斧",       "stats": { "power": 20, "block_right_front": 30 }, "tier": 3 },
-    { "name": "鮮血の戦斧",     "stats": { "power": 30, "block_right_front": 10 }, "tier": 3 },
-    { "name": "粉砕の鉄斧",     "stats": { "power": 30, "block_right_front": 20 }, "tier": 3 },
-    { "name": "剛勇の戦斧",     "stats": { "power": 30, "block_right_front": 30 }, "tier": 3 }
+    { "name": "欠けた斧",       "stats": {}, "bonuses": {} },
+    { "name": "兵士の斧",       "stats": { "power": 10, "block_right_front": 10 }, "bonuses": { "power": 1, "block_right_front": 1 } },
+    { "name": "守りの斧",       "stats": { "power": 10, "block_right_front": 20 }, "bonuses": { "power": 1, "block_right_front": 2 } },
+    { "name": "守護の戦斧",     "stats": { "power": 10, "block_right_front": 30 }, "bonuses": { "power": 1, "block_right_front": 3 } },
+    { "name": "荒削りの斧",     "stats": { "power": 20, "block_right_front": 10 }, "bonuses": { "power": 2, "block_right_front": 1 } },
+    { "name": "武人の斧",       "stats": { "power": 20, "block_right_front": 20 }, "bonuses": { "power": 2, "block_right_front": 2 } },
+    { "name": "重装の斧",       "stats": { "power": 20, "block_right_front": 30 }, "bonuses": { "power": 2, "block_right_front": 3 } },
+    { "name": "鮮血の戦斧",     "stats": { "power": 30, "block_right_front": 10 }, "bonuses": { "power": 3, "block_right_front": 1 } },
+    { "name": "粉砕の鉄斧",     "stats": { "power": 30, "block_right_front": 20 }, "bonuses": { "power": 3, "block_right_front": 2 } },
+    { "name": "剛勇の戦斧",     "stats": { "power": 30, "block_right_front": 30 }, "bonuses": { "power": 3, "block_right_front": 3 } }
   ]
 }

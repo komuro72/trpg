@@ -7,8 +7,9 @@ extends Object
 ## 装備品: assets/master/items/generated/{item_type}.json の全エントリから
 ##   フロア基準 tier（GlobalConstants.FLOOR_X_Y_BASE_TIER）＋ 距離重み
 ##   （FLOOR_BASE_WEIGHT / NEIGHBOR_WEIGHT / FAR_WEIGHT）で重み付きランダム選択
-##   tier は 0=none / 1=low / 2=mid / 3=high の整数
-##   tier=0 エントリはドロップに出ない（初期装備専用）
+##   各エントリは `bonuses` フィールドを一次情報として持つ（各ステータスの 0=無 / 1=小 / 2=中 / 3=大）
+##   tier はドロップ重み付け用の派生値で、`calc_tier(item)` が ITEM_TIER_POLICY に従って bonuses から導出する
+##   tier=0（none）= 全 bonus が 0 なエントリ。ドロップに出ない（初期装備専用）
 ## 消耗品: assets/master/items/{item_type}.json（マスター JSON）の effect を
 ##   固定値で返す（depth_scale は設計判断で使用しない）
 ##   理由: 在庫管理問題を避けるため、ポーションは「使う時点の強さ」のみ重要
@@ -27,7 +28,7 @@ static var _master_cache:  Dictionary = {}
 
 ## item_type とフロアに応じた装備アイテムを返す（ドロップ用）
 ## tier=0（none）のエントリは選択候補から除外される
-## 戻り値: { item_type, category, item_name, stats } の辞書
+## 戻り値: { item_type, category, item_name, stats, bonuses } の辞書
 ## 未定義の item_type / 生成セット欠落時は {} を返す
 static func generate(item_type: String, floor_index: int) -> Dictionary:
 	# 消耗品は別経路
@@ -49,12 +50,12 @@ static func generate(item_type: String, floor_index: int) -> Dictionary:
 		"category":  category,
 		"item_name": str(picked.get("name", "")),
 		"stats":     (picked.get("stats", {}) as Dictionary).duplicate(),
-		"tier":      int(picked.get("tier", 2)),
+		"bonuses":   (picked.get("bonuses", {}) as Dictionary).duplicate(),
 	}
 
 
 ## 初期装備・初期消耗品を返す（主人公・NPC 共通）
-## 装備: 対応する item_type の tier=0（none）エントリを返す
+## 装備: 対応する item_type の tier=0（bonuses が空または全 0）エントリを返す
 ## 消耗品（potion_*）: 通常の消耗品生成ロジック（generate_consumable）に委譲
 ## 装備タイプで tier=0 エントリが見つからない場合は {} を返し push_error を出す
 static func generate_initial(item_type: String) -> Dictionary:
@@ -68,14 +69,14 @@ static func generate_initial(item_type: String) -> Dictionary:
 
 	for entry_v: Variant in entries:
 		var entry := entry_v as Dictionary
-		if int(entry.get("tier", -1)) == TIER_NONE:
+		if calc_tier(entry) == TIER_NONE:
 			var category := _load_category(item_type)
 			return {
 				"item_type": item_type,
 				"category":  category,
 				"item_name": str(entry.get("name", "")),
 				"stats":     (entry.get("stats", {}) as Dictionary).duplicate(),
-				"tier":      TIER_NONE,
+				"bonuses":   (entry.get("bonuses", {}) as Dictionary).duplicate(),
 				"equipped":  true,
 			}
 
@@ -95,6 +96,43 @@ static func generate_consumable(item_type: String) -> Dictionary:
 		"effect":    (master.get("effect", {}) as Dictionary).duplicate(),
 		"quantity":  1,
 	}
+
+
+## アイテム（または生成セットエントリ）の bonuses から tier を導出する
+## ITEM_TIER_POLICY（"max" / "min" / "avg"）に従う
+##   bonuses が空 → 0（TIER_NONE・初期装備）
+##   "max": 最大 bonus を採用（既定）
+##   "min": 最小 bonus を採用
+##   "avg": 平均（四捨五入）
+## ドロップ重み付け（_weighted_pick）と初期装備判定（generate_initial）から呼ばれる
+static func calc_tier(item: Dictionary) -> int:
+	var bonuses := item.get("bonuses", {}) as Dictionary
+	if bonuses.is_empty():
+		return TIER_NONE
+	var values: Array = []
+	for v: Variant in bonuses.values():
+		values.append(int(v))
+	if values.is_empty():
+		return TIER_NONE
+	var policy: String = str(GlobalConstants.ITEM_TIER_POLICY)
+	match policy:
+		"min":
+			var min_v: int = values[0]
+			for n: int in values:
+				if n < min_v:
+					min_v = n
+			return min_v
+		"avg":
+			var sum: int = 0
+			for n: int in values:
+				sum += n
+			return int(round(float(sum) / float(values.size())))
+		_:  # "max" 既定
+			var max_v: int = values[0]
+			for n: int in values:
+				if n > max_v:
+					max_v = n
+			return max_v
 
 
 # ============================================================================
@@ -154,7 +192,7 @@ static func _weighted_pick(entries: Array, floor_index: int) -> Dictionary:
 	var weights: Array[int] = []
 	for entry_v: Variant in entries:
 		var entry := entry_v as Dictionary
-		var entry_tier := int(entry.get("tier", 2))
+		var entry_tier := calc_tier(entry)
 		if entry_tier == TIER_NONE:
 			weights.append(0)  ## 初期装備専用なのでドロップ対象外
 			continue

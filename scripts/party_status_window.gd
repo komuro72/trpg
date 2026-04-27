@@ -2,12 +2,12 @@
 ## 現在フロアの全パーティー状態をリアルタイム表示（0.2秒ごと再描画）
 ## 上下キーでリーダー選択（カメラ追跡）・F3 で無敵化トグル
 ##
-## 戦力表示の凡例：`PB F(R+T)s C(R+T)s E(R+T)s`
+## 戦力表示の凡例：`PB F(R+B)s C(R+B)s E(R+B)s`
 ##   PB = PowerBalance（優劣ラベル・nearby_allied vs nearby_enemy のランク比）
 ##   F  = full_party（自パのみ・下層判定用絶対戦力）
 ##   C  = nearby_allied（自パ近接 + 同陣営他パ近接・戦況判断の味方連合）
 ##   E  = nearby_enemy（近接敵・戦況判断の敵）
-##   各括弧内: R=rank_sum / T=tier 平均の和 / 末尾 s=strength（= (R + T×WEIGHT) × HP率）
+##   各括弧内: R=rank_sum / B=bonus_sum（メンバーごとの装備 bonus 段階合計の平均をパーティー全員で合計） / 末尾 s=strength（= (R + B×WEIGHT) × HP率）
 ##   敵パーティー視点では F と C は同値（協力しない世界観）
 ##   範囲: 自パリーダーからマンハッタン距離 COALITION_RADIUS_TILES マス以内
 
@@ -1150,24 +1150,24 @@ func _power_balance_label(pb: int) -> String:
 
 
 ## 戦力内訳を 1 行の文字列にフォーマット
-## 形式: F(R+T)s C(R+T)s E(R+T)s
+## 形式: F(R+B)s C(R+B)s E(R+B)s
 ##   F = full_party / C = nearby_allied / E = nearby_enemy
-##   各括弧内: R=rank_sum / T=tier 平均の和 / 末尾 s=strength
+##   各括弧内: R=rank_sum / B=bonus_sum（装備 bonus 段階合計の平均をパーティー合計） / 末尾 s=strength
 ##   敵パーティー視点では F と C は同値（協力しない世界観）
 func _format_strength_breakdown(hint: Dictionary) -> String:
-	var f_rank: int   = hint.get("full_party_rank_sum",    0) as int
-	var f_tier: float = float(hint.get("full_party_tier_sum",    0.0))
-	var f_str:  float = float(hint.get("full_party_strength",    0.0))
-	var c_rank: int   = hint.get("nearby_allied_rank_sum", 0) as int
-	var c_tier: float = float(hint.get("nearby_allied_tier_sum", 0.0))
-	var c_str:  float = float(hint.get("nearby_allied_strength", 0.0))
-	var e_rank: int   = hint.get("nearby_enemy_rank_sum",  0) as int
-	var e_tier: float = float(hint.get("nearby_enemy_tier_sum",  0.0))
-	var e_str:  float = float(hint.get("nearby_enemy_strength",  0.0))
+	var f_rank:  int   = hint.get("full_party_rank_sum",    0) as int
+	var f_bonus: float = float(hint.get("full_party_bonus_sum",    0.0))
+	var f_str:   float = float(hint.get("full_party_strength",     0.0))
+	var c_rank:  int   = hint.get("nearby_allied_rank_sum", 0) as int
+	var c_bonus: float = float(hint.get("nearby_allied_bonus_sum", 0.0))
+	var c_str:   float = float(hint.get("nearby_allied_strength",  0.0))
+	var e_rank:  int   = hint.get("nearby_enemy_rank_sum",  0) as int
+	var e_bonus: float = float(hint.get("nearby_enemy_bonus_sum",  0.0))
+	var e_str:   float = float(hint.get("nearby_enemy_strength",   0.0))
 	return "F(%d+%.1f)%.1f C(%d+%.1f)%.1f E(%d+%.1f)%.1f" % [
-		f_rank, f_tier, f_str,
-		c_rank, c_tier, c_str,
-		e_rank, e_tier, e_str,
+		f_rank, f_bonus, f_str,
+		c_rank, c_bonus, c_str,
+		e_rank, e_bonus, e_str,
 	]
 
 

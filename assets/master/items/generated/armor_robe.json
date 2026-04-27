@@ -1,14 +1,14 @@
 {
   "armor_robe": [
-    { "name": "褪せた法衣",     "stats": {}, "tier": 0 },
-    { "name": "修行者の法衣",   "stats": { "physical_resistance": 5,  "magic_resistance": 10 }, "tier": 1 },
-    { "name": "魔術師の法衣",   "stats": { "physical_resistance": 5,  "magic_resistance": 20 }, "tier": 2 },
-    { "name": "秘儀の外套",     "stats": { "physical_resistance": 5,  "magic_resistance": 30 }, "tier": 3 },
-    { "name": "旅装の法衣",     "stats": { "physical_resistance": 10, "magic_resistance": 10 }, "tier": 2 },
-    { "name": "賢者の法衣",     "stats": { "physical_resistance": 10, "magic_resistance": 20 }, "tier": 2 },
-    { "name": "神秘の法衣",     "stats": { "physical_resistance": 10, "magic_resistance": 30 }, "tier": 3 },
-    { "name": "護りの法衣",     "stats": { "physical_resistance": 15, "magic_resistance": 10 }, "tier": 3 },
-    { "name": "魔除けの法衣",   "stats": { "physical_resistance": 15, "magic_resistance": 20 }, "tier": 3 },
-    { "name": "大賢者の法衣",   "stats": { "physical_resistance": 15, "magic_resistance": 30 }, "tier": 3 }
+    { "name": "褪せた法衣",     "stats": {}, "bonuses": {} },
+    { "name": "修行者の法衣",   "stats": { "physical_resistance": 5,  "magic_resistance": 10 }, "bonuses": { "physical_resistance": 1, "magic_resistance": 1 } },
+    { "name": "魔術師の法衣",   "stats": { "physical_resistance": 5,  "magic_resistance": 20 }, "bonuses": { "physical_resistance": 1, "magic_resistance": 2 } },
+    { "name": "秘儀の外套",     "stats": { "physical_resistance": 5,  "magic_resistance": 30 }, "bonuses": { "physical_resistance": 1, "magic_resistance": 3 } },
+    { "name": "旅装の法衣",     "stats": { "physical_resistance": 10, "magic_resistance": 10 }, "bonuses": { "physical_resistance": 2, "magic_resistance": 1 } },
+    { "name": "賢者の法衣",     "stats": { "physical_resistance": 10, "magic_resistance": 20 }, "bonuses": { "physical_resistance": 2, "magic_resistance": 2 } },
+    { "name": "神秘の法衣",     "stats": { "physical_resistance": 10, "magic_resistance": 30 }, "bonuses": { "physical_resistance": 2, "magic_resistance": 3 } },
+    { "name": "護りの法衣",     "stats": { "physical_resistance": 15, "magic_resistance": 10 }, "bonuses": { "physical_resistance": 3, "magic_resistance": 1 } },
+    { "name": "魔除けの法衣",   "stats": { "physical_resistance": 15, "magic_resistance": 20 }, "bonuses": { "physical_resistance": 3, "magic_resistance": 2 } },
+    { "name": "大賢者の法衣",   "stats": { "physical_resistance": 15, "magic_resistance": 30 }, "bonuses": { "physical_resistance": 3, "magic_resistance": 3 } }
   ]
 }

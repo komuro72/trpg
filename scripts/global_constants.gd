@@ -58,7 +58,7 @@ var ATTACK_TYPE_MULT_MAGIC:  float = 0.2
 var ATTACK_TYPE_MULT: Dictionary = {}
 
 ## フロア難易度ランク（各フロアの基準ランク和。NPC の下層降下判定で使用）
-## NPC の戦力（rank_sum + tier_sum × ITEM_TIER_STRENGTH_WEIGHT × HP率）がこの値以上になると
+## NPC の戦力（rank_sum + bonus_sum × ITEM_BONUS_STRENGTH_WEIGHT × HP率）がこの値以上になると
 ## 対応するフロアに進む。装備 tier 戦力反映後は同じ基準値でも降下しやすくなる可能性あり
 ## 設計当初の値（純粋 rank_sum ベース）：F1=8 / F2=13 / F3=18 / F4=24
 ## [ConfigEditor 対象・NpcLeaderAI カテゴリ]
@@ -297,12 +297,13 @@ var NPC_FLOOR_DOWNGRADE_HP_RATIO: float = 0.5
 ## [ConfigEditor 対象]
 var RANK_BASE_OFFSET: int = 3
 
-## 戦力計算に占める装備 tier の重み係数
-## strength_base = rank_sum + party_tier_sum × この値
+## 戦力計算に占める装備 bonus 段階の重み係数
+## strength_base = rank_sum + party_bonus_sum × この値
 ##   ※ rank_sum は Σ(RANK_BASE_OFFSET + RANK_VALUE[rank]) で算出
-## 装備 1 セット ≒ ランク 1 段階となる 0.33 が既定
+##   ※ bonus_sum は メンバーごとの装備 bonus 段階合計の平均をパーティー全員で合計（装備本数差の影響を吸収）
+## 既定値 0.165：旧 ITEM_TIER_STRENGTH_WEIGHT=0.33 × tier 平均 2 ≒ bonus 平均 4 × 0.165 と等価
 ## [ConfigEditor 対象]
-var ITEM_TIER_STRENGTH_WEIGHT: float = 0.33
+var ITEM_BONUS_STRENGTH_WEIGHT: float = 0.165
 
 ## 近接味方連合・近接敵の最大距離（マンハッタンマス数・自パリーダーからの距離）
 ## 戦況判断用の nearby_allied / nearby_enemy 集合に含めるメンバーの範囲を決める
@@ -525,7 +526,7 @@ const CONFIG_KEYS: Array[String] = [
 	"NPC_FLOOR_DOWNGRADE_HP_RATIO",
 	"SPECIAL_SKILL_DISADVANTAGE_HP_RATIO",
 	"RANK_BASE_OFFSET",
-	"ITEM_TIER_STRENGTH_WEIGHT",
+	"ITEM_BONUS_STRENGTH_WEIGHT",
 	"COALITION_RADIUS_TILES",
 	# NpcLeaderAI タブ
 	"FLOOR_0_RANK_THRESHOLD",

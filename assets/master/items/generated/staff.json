@@ -1,14 +1,14 @@
 {
   "staff": [
-    { "name": "粗末な杖",       "stats": {}, "tier": 0 },
-    { "name": "修行者の杖",     "stats": { "power": 10, "block_front": 10 }, "tier": 1 },
-    { "name": "護りの杖",       "stats": { "power": 10, "block_front": 20 }, "tier": 2 },
-    { "name": "守護の神杖",     "stats": { "power": 10, "block_front": 30 }, "tier": 3 },
-    { "name": "魔導の杖",       "stats": { "power": 20, "block_front": 10 }, "tier": 2 },
-    { "name": "賢者の杖",       "stats": { "power": 20, "block_front": 20 }, "tier": 2 },
-    { "name": "秘儀の杖",       "stats": { "power": 20, "block_front": 30 }, "tier": 3 },
-    { "name": "破魔の神杖",     "stats": { "power": 30, "block_front": 10 }, "tier": 3 },
-    { "name": "大賢者の杖",     "stats": { "power": 30, "block_front": 20 }, "tier": 3 },
-    { "name": "均整の神杖",     "stats": { "power": 30, "block_front": 30 }, "tier": 3 }
+    { "name": "粗末な杖",       "stats": {}, "bonuses": {} },
+    { "name": "修行者の杖",     "stats": { "power": 10, "block_front": 10 }, "bonuses": { "power": 1, "block_front": 1 } },
+    { "name": "護りの杖",       "stats": { "power": 10, "block_front": 20 }, "bonuses": { "power": 1, "block_front": 2 } },
+    { "name": "守護の神杖",     "stats": { "power": 10, "block_front": 30 }, "bonuses": { "power": 1, "block_front": 3 } },
+    { "name": "魔導の杖",       "stats": { "power": 20, "block_front": 10 }, "bonuses": { "power": 2, "block_front": 1 } },
+    { "name": "賢者の杖",       "stats": { "power": 20, "block_front": 20 }, "bonuses": { "power": 2, "block_front": 2 } },
+    { "name": "秘儀の杖",       "stats": { "power": 20, "block_front": 30 }, "bonuses": { "power": 2, "block_front": 3 } },
+    { "name": "破魔の神杖",     "stats": { "power": 30, "block_front": 10 }, "bonuses": { "power": 3, "block_front": 1 } },
+    { "name": "大賢者の杖",     "stats": { "power": 30, "block_front": 20 }, "bonuses": { "power": 3, "block_front": 2 } },
+    { "name": "均整の神杖",     "stats": { "power": 30, "block_front": 30 }, "bonuses": { "power": 3, "block_front": 3 } }
   ]
 }

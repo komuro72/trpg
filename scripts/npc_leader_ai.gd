@@ -414,10 +414,10 @@ func _auto_equip_members() -> void:
 		var entries: Array = pool_by_type[itype] as Array
 		if entries.is_empty():
 			continue
-		# 未装備品をステータス合計降順にソート
+		# 未装備品を bonus 段階合計降順にソート
 		entries.sort_custom(
 			func(a: Dictionary, b: Dictionary) -> bool:
-				return _item_stats_sum(a.item as Dictionary) > _item_stats_sum(b.item as Dictionary)
+				return _item_bonus_sum(a.item as Dictionary) > _item_bonus_sum(b.item as Dictionary)
 		)
 		for entry_var: Variant in entries:
 			var entry := entry_var as Dictionary
@@ -440,8 +440,8 @@ func _auto_equip_members() -> void:
 					continue
 				# 新装備が現装備より強い場合のみ候補にする
 				var cur := _get_equipped_for_type(cd2, itype)
-				var cur_sum := _item_stats_sum(cur)
-				if _item_stats_sum(new_item) <= cur_sum:
+				var cur_sum := _item_bonus_sum(cur)
+				if _item_bonus_sum(new_item) <= cur_sum:
 					continue
 				if cur_sum < lowest_cur_sum:
 					lowest_cur_sum = cur_sum
@@ -483,14 +483,15 @@ func _auto_share_potions() -> void:
 					cd.inventory.append(pot)
 
 
-## ステータス補正値の合計を返す（比較用）
-func _item_stats_sum(item: Dictionary) -> float:
+## 装備の bonus 段階合計を返す（比較用）
+## bonus 段階は 0=無 / 1=小 / 2=中 / 3=大 の整数。max 値の差を吸収するため stats 値合計より公平
+func _item_bonus_sum(item: Dictionary) -> int:
 	if item.is_empty():
-		return 0.0
-	var total := 0.0
-	var stats := item.get("stats", {}) as Dictionary
-	for v: Variant in stats.values():
-		total += float(v)
+		return 0
+	var total := 0
+	var bonuses := item.get("bonuses", {}) as Dictionary
+	for v: Variant in bonuses.values():
+		total += int(v)
 	return total
 
 

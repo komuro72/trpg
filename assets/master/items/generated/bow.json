@@ -1,14 +1,14 @@
 {
   "bow": [
-    { "name": "古びた弓",       "stats": {}, "tier": 0 },
-    { "name": "狩人の弓",       "stats": { "power": 10, "block_front": 10 }, "tier": 1 },
-    { "name": "守りの弓",       "stats": { "power": 10, "block_front": 20 }, "tier": 2 },
-    { "name": "護りの長弓",     "stats": { "power": 10, "block_front": 30 }, "tier": 3 },
-    { "name": "速射の弓",       "stats": { "power": 20, "block_front": 10 }, "tier": 2 },
-    { "name": "射手の弓",       "stats": { "power": 20, "block_front": 20 }, "tier": 2 },
-    { "name": "鉄壁の長弓",     "stats": { "power": 20, "block_front": 30 }, "tier": 3 },
-    { "name": "貫きの魔弓",     "stats": { "power": 30, "block_front": 10 }, "tier": 3 },
-    { "name": "歴戦の長弓",     "stats": { "power": 30, "block_front": 20 }, "tier": 3 },
-    { "name": "均整の長弓",     "stats": { "power": 30, "block_front": 30 }, "tier": 3 }
+    { "name": "古びた弓",       "stats": {}, "bonuses": {} },
+    { "name": "狩人の弓",       "stats": { "power": 10, "block_front": 10 }, "bonuses": { "power": 1, "block_front": 1 } },
+    { "name": "守りの弓",       "stats": { "power": 10, "block_front": 20 }, "bonuses": { "power": 1, "block_front": 2 } },
+    { "name": "護りの長弓",     "stats": { "power": 10, "block_front": 30 }, "bonuses": { "power": 1, "block_front": 3 } },
+    { "name": "速射の弓",       "stats": { "power": 20, "block_front": 10 }, "bonuses": { "power": 2, "block_front": 1 } },
+    { "name": "射手の弓",       "stats": { "power": 20, "block_front": 20 }, "bonuses": { "power": 2, "block_front": 2 } },
+    { "name": "鉄壁の長弓",     "stats": { "power": 20, "block_front": 30 }, "bonuses": { "power": 2, "block_front": 3 } },
+    { "name": "貫きの魔弓",     "stats": { "power": 30, "block_front": 10 }, "bonuses": { "power": 3, "block_front": 1 } },
+    { "name": "歴戦の長弓",     "stats": { "power": 30, "block_front": 20 }, "bonuses": { "power": 3, "block_front": 2 } },
+    { "name": "均整の長弓",     "stats": { "power": 30, "block_front": 30 }, "bonuses": { "power": 3, "block_front": 3 } }
   ]
 }

@@ -1,14 +1,14 @@
 {
   "sword": [
-    { "name": "朽ちた片手剣",   "stats": {}, "tier": 0 },
-    { "name": "兵士の剣",       "stats": { "power": 10, "block_right_front": 10 }, "tier": 1 },
-    { "name": "守りの剣",       "stats": { "power": 10, "block_right_front": 20 }, "tier": 2 },
-    { "name": "城壁の守護剣",   "stats": { "power": 10, "block_right_front": 30 }, "tier": 3 },
-    { "name": "鋭利な剣",       "stats": { "power": 20, "block_right_front": 10 }, "tier": 2 },
-    { "name": "騎士の剣",       "stats": { "power": 20, "block_right_front": 20 }, "tier": 2 },
-    { "name": "堅守の剣",       "stats": { "power": 20, "block_right_front": 30 }, "tier": 3 },
-    { "name": "断罪の魔剣",     "stats": { "power": 30, "block_right_front": 10 }, "tier": 3 },
-    { "name": "歴戦の業物",     "stats": { "power": 30, "block_right_front": 20 }, "tier": 3 },
-    { "name": "均整の剣",       "stats": { "power": 30, "block_right_front": 30 }, "tier": 3 }
+    { "name": "朽ちた片手剣",   "stats": {}, "bonuses": {} },
+    { "name": "兵士の剣",       "stats": { "power": 10, "block_right_front": 10 }, "bonuses": { "power": 1, "block_right_front": 1 } },
+    { "name": "守りの剣",       "stats": { "power": 10, "block_right_front": 20 }, "bonuses": { "power": 1, "block_right_front": 2 } },
+    { "name": "城壁の守護剣",   "stats": { "power": 10, "block_right_front": 30 }, "bonuses": { "power": 1, "block_right_front": 3 } },
+    { "name": "鋭利な剣",       "stats": { "power": 20, "block_right_front": 10 }, "bonuses": { "power": 2, "block_right_front": 1 } },
+    { "name": "騎士の剣",       "stats": { "power": 20, "block_right_front": 20 }, "bonuses": { "power": 2, "block_right_front": 2 } },
+    { "name": "堅守の剣",       "stats": { "power": 20, "block_right_front": 30 }, "bonuses": { "power": 2, "block_right_front": 3 } },
+    { "name": "断罪の魔剣",     "stats": { "power": 30, "block_right_front": 10 }, "bonuses": { "power": 3, "block_right_front": 1 } },
+    { "name": "歴戦の業物",     "stats": { "power": 30, "block_right_front": 20 }, "bonuses": { "power": 3, "block_right_front": 2 } },
+    { "name": "均整の剣",       "stats": { "power": 30, "block_right_front": 30 }, "bonuses": { "power": 3, "block_right_front": 3 } }
   ]
 }
