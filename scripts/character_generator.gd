@@ -73,17 +73,6 @@ static func generate_character(class_id: String = "") -> CharacterData:
 	var pool: Array = unused_sets if not unused_sets.is_empty() else sets
 	var chosen_set: Dictionary = pool[randi() % pool.size()]
 	var chosen_class: String   = chosen_set.get("class", "")
-	# [TEMP-AGE-DIST] NPC age 偏り調査用ログ（タスク完了後に削除予定）
-	# 実プレイ後 runtime.log で `[GEN]` を grep して age 分布を集計する
-	DebugLog.log("[GEN] class=%s folder=%s sex=%s age=%s build=%s pool_size=%d/%d" % [
-		chosen_class,
-		str(chosen_set.get("folder", "")),
-		str(chosen_set.get("sex", "")),
-		str(chosen_set.get("age", "")),
-		str(chosen_set.get("build", "")),
-		pool.size(),
-		sets.size(),
-	])
 
 	# 2. クラスデータ読み込み
 	var class_json := _load_class_json(chosen_class)
