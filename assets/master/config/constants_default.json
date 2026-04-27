@@ -388,6 +388,15 @@
     "type": "float",
     "value": 0.5
   },
+  "KEEP_DISTANCE_HOME_WEIGHT": {
+    "category": "UnitAI",
+    "description": "keep_distance goal 選定時の縄張り距離ペナルティ重み（敵専用・味方 rear では無効）。候補タイルが属するエリアと縄張りエリアの BFS 距離 × この値を加算。大きいほど縄張り内タイル優先・プレイヤー追跡時の引きずり出され防止",
+    "max": 50.0,
+    "min": 0.0,
+    "step": 1.0,
+    "type": "float",
+    "value": 10.0
+  },
   "FALL_BACK_MARGIN": {
     "category": "UnitAI",
     "description": "fall_back 停止判定：attack_range + これ以上マス敵から離れたら停止（2026-04-24 深夜 FLEE 再利用方式）",

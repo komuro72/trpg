@@ -1648,14 +1648,19 @@ func _find_fall_back_goal(threat) -> Vector2i:
 ## アルゴリズム：
 ##   1. ターゲットからのマンハッタン距離が [KEEP_DISTANCE_MIN, KEEP_DISTANCE_MAX] のタイル群を候補に列挙
 ##   2. 各候補について：
-##      - threat_cost = 候補タイルでの脅威累積（_build_threat_map 由来）
-##      - reach_cost  = 自分の現在位置 → 候補タイルの A* 距離
-##      - total_cost  = threat_cost + reach_cost × KEEP_DISTANCE_REACH_WEIGHT
+##      - threat_cost     = 候補タイルでの脅威累積（_build_threat_map 由来）
+##      - reach_cost      = 自分の現在位置 → 候補タイルの A* 距離
+##      - home_dist_cost  = 候補タイルが属するエリア → 縄張りエリアの BFS 距離 × WEIGHT（敵のみ・2026-04-27 追加）
+##      - total_cost      = threat_cost + reach_cost × KEEP_DISTANCE_REACH_WEIGHT + home_dist_cost
 ##   3. 最小 total_cost のタイルを返す
 ##   4. 候補がない / target 不在 → 自分の現在位置を返す（IDLE = 動かない）
 ##
 ## 候補タイルは _is_walkable_for_self() でフィルタ（壁・障害物・占有・敵の安全エリア進入禁止）。
 ## 現在位置が理想範囲内なら候補に含まれるため、無駄な移動を避けて自然に停止する。
+##
+## 2026-04-27 改訂：敵専用の縄張り距離ペナルティ追加。プレイヤー追跡時に弓兵が縄張りから
+## 引きずり出される現象（毎サイクル少しずつホームから離れる）を防ぐ。味方 rear 隊形には
+## 適用しない（is_friendly == false ガード）。
 func _find_keep_distance_goal(target: Character) -> Vector2i:
 	if _member == null or not is_instance_valid(_member) or _map_data == null:
 		if _member != null and is_instance_valid(_member):
@@ -1671,6 +1676,18 @@ func _find_keep_distance_goal(target: Character) -> Vector2i:
 
 	# 脅威マップを事前計算（候補タイル評価で Dictionary 参照のみに簡略化）
 	var threat_map: Dictionary = _build_threat_map()
+
+	# 敵の縄張りエリア ID を取得（味方は空文字でペナルティ無効化）
+	# UnitAI は PartyLeader の子・PartyLeader は PartyManager の子のため、get_parent() を 2 段遡る。
+	var home_area_id: String = ""
+	var home_weight: float   = 0.0
+	if not _member.is_friendly:
+		var leader_node := get_parent()
+		if leader_node != null:
+			var pm_node := leader_node.get_parent()
+			if pm_node != null and "_room_id" in pm_node:
+				home_area_id = pm_node._room_id as String
+				home_weight  = GlobalConstants.KEEP_DISTANCE_HOME_WEIGHT
 
 	var best: Vector2i = _member.grid_pos
 	var best_cost: float = INF
@@ -1703,7 +1720,15 @@ func _find_keep_distance_goal(target: Character) -> Vector2i:
 				else:
 					reach_cost = float(_manhattan(_member.grid_pos, tile))
 			var threat_cost: float = float(threat_map.get(tile, 0.0))
-			var total_cost: float = threat_cost + reach_cost * weight
+			# 縄張り距離ペナルティ（敵のみ・home_area_id が空 / 候補エリアが空 / 距離 -1 はペナルティ 0）
+			var home_dist_cost: float = 0.0
+			if not home_area_id.is_empty():
+				var tile_area: String = _map_data.get_area(tile)
+				if not tile_area.is_empty():
+					var area_dist := _map_data.get_area_distance(tile_area, home_area_id)
+					if area_dist > 0:
+						home_dist_cost = float(area_dist) * home_weight
+			var total_cost: float = threat_cost + reach_cost * weight + home_dist_cost
 			if total_cost < best_cost:
 				best_cost = total_cost
 				best = tile

@@ -109,6 +109,11 @@ var KEEP_DISTANCE_MAX: int              = 4
 ## keep_distance goal 選定で「自分の位置 → 候補タイル」の到達コストにかける重み
 ## 小さいほど脅威コストが支配的（より安全なタイルを選ぶ）・大きいほど近場優先
 var KEEP_DISTANCE_REACH_WEIGHT: float   = 0.5
+## keep_distance goal 選定で「候補タイルが属するエリア → 縄張りエリア」の BFS 距離にかける重み
+## 敵専用（味方 rear 隊形では無効）：プレイヤー追跡時の縄張り引きずり出され防止
+## 大きいほど縄張り内タイル優先・小さいほどターゲット追従（純カイティング）寄り
+## 縄張り内（距離 0）はペナルティ 0、通路 1 つ挟む = 距離 1、部屋 1 つ離れる = 距離 2 以上
+var KEEP_DISTANCE_HOME_WEIGHT: float    = 10.0
 
 ## fall_back 用：
 ## FLEE と同じ出口総合コスト評価（UnitAI._evaluate_exit_costs）を共用し、
@@ -547,6 +552,7 @@ const CONFIG_KEYS: Array[String] = [
 	"KEEP_DISTANCE_MIN",
 	"KEEP_DISTANCE_MAX",
 	"KEEP_DISTANCE_REACH_WEIGHT",
+	"KEEP_DISTANCE_HOME_WEIGHT",
 	"FALL_BACK_MARGIN",
 	"SPECIAL_ATTACK_MIN_ADJACENT_ENEMIES",
 	"SPECIAL_ATTACK_FIRE_ZONE_RANGE",
