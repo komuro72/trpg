@@ -1560,13 +1560,10 @@ func _transition_member_floor(ch: Character, direction: int) -> void:
 	if new_floor < 0 or new_floor >= _all_map_data.size():
 		return
 	var new_map := _all_map_data[new_floor] as MapData
-	# 着地位置: 遷移先フロアの階段タイルを基準に配置
+	# 階段ペアは上下階で同じ座標（マップデータ規約・2026-04-28）。
+	# メンバーが踏んだ階段の座標と一致する新フロアの階段マスに着地する。
 	var spawn_type := MapData.TileType.STAIRS_UP if direction > 0 else MapData.TileType.STAIRS_DOWN
-	var stair_tiles := new_map.find_stairs(spawn_type)
-	# デフォルトは hero と同位置（フォールバック）。hero が freed の場合は原点
-	var stair_center := hero.grid_pos if is_instance_valid(hero) else Vector2i.ZERO
-	if not stair_tiles.is_empty():
-		stair_center = stair_tiles[0]
+	var stair_center := _find_paired_stair_pos(ch.grid_pos, new_map, spawn_type)
 	# 階段着地占有チェック（修正 X・2026-04-28）
 	# 対応階段マスが占有されていたら遷移を見送る（次フレームで再チェック）
 	if _is_landing_tile_occupied(stair_center, new_floor, ch):
@@ -1710,17 +1707,13 @@ func _transition_npc_floor(nm: PartyManager, direction: int) -> void:
 		_setup_floor_enemies(new_floor)
 	if (_per_floor_npcs[new_floor] as Array).is_empty() and not new_map.npc_parties.is_empty():
 		_setup_floor_npcs(new_floor)
-	# 着地位置: リーダーが踏んでいた旧フロアの階段に最も近い新フロアの階段を選ぶ
+	# 階段ペアは上下階で同じ座標（マップデータ規約・2026-04-28）。
+	# リーダーが踏んだ階段の座標と一致する新フロアの階段マスに着地する。
 	var spawn_type := MapData.TileType.STAIRS_UP if direction > 0 else MapData.TileType.STAIRS_DOWN
-	var spawn_stairs := new_map.find_stairs(spawn_type)
-	var base_spawn := Vector2i(5, 5)
-	if not spawn_stairs.is_empty():
-		var best_dist := INF
-		for s: Vector2i in spawn_stairs:
-			var dist: float = float((s - leader_ch.grid_pos).length())
-			if dist < best_dist:
-				best_dist = dist
-				base_spawn = s
+	var base_spawn := _find_paired_stair_pos(leader_ch.grid_pos, new_map, spawn_type)
+	# ペア座標も spawns も取れない場合はフォールバックとして固定座標
+	if new_map.find_stairs(spawn_type).is_empty():
+		base_spawn = Vector2i(5, 5)
 	# 階段着地占有チェック（修正 X・2026-04-28）
 	# 対応階段マスが占有されていたら遷移を見送る（次フレームで再チェック）
 	if _is_landing_tile_occupied(base_spawn, new_floor, leader_ch):
@@ -1766,17 +1759,13 @@ func _transition_single_npc_member(nm: PartyManager, member: Character, directio
 	if new_floor < 0 or new_floor >= _all_map_data.size():
 		return
 	var new_map := _all_map_data[new_floor] as MapData
-	# 着地位置: メンバーが踏んでいた旧フロアの階段に最も近い新フロアの対応階段を選ぶ
+	# 階段ペアは上下階で同じ座標（マップデータ規約・2026-04-28）。
+	# メンバーが踏んだ階段の座標と一致する新フロアの階段マスに着地する。
 	var spawn_type := MapData.TileType.STAIRS_UP if direction > 0 else MapData.TileType.STAIRS_DOWN
-	var spawn_stairs := new_map.find_stairs(spawn_type)
-	var land_pos := Vector2i(5, 5)
-	if not spawn_stairs.is_empty():
-		var best_dist := INF
-		for s: Vector2i in spawn_stairs:
-			var dist: float = float((s - member.grid_pos).length())
-			if dist < best_dist:
-				best_dist = dist
-				land_pos = s
+	var land_pos := _find_paired_stair_pos(member.grid_pos, new_map, spawn_type)
+	# ペア座標も spawns も取れない場合はフォールバックとして固定座標
+	if new_map.find_stairs(spawn_type).is_empty():
+		land_pos = Vector2i(5, 5)
 	# 階段着地占有チェック（修正 X・2026-04-28）
 	# 対応階段マスが占有されていたら遷移を見送る（次フレームで再チェック）
 	if _is_landing_tile_occupied(land_pos, new_floor, member):
@@ -1938,6 +1927,23 @@ func _activate_enemies_on_npc_floors() -> void:
 					break  # 1体でも同エリアなら全員アクティブ化
 
 
+## 階段ペア対応の着地座標を求める（2026-04-28）
+## 階段ペアは「上下階で同じグローバル座標」を持つ前提（マップデータ規約）。
+## 踏んだ階段マス `taken_pos` と同座標の新フロア階段マスがあればその座標を返す。
+## 同座標が見つからない場合（マップデータ整合性問題のフォールバック）は新フロアの
+## `spawns[0]`（find_stairs の最初）を返す。新フロアに該当種別の階段がなければ
+## taken_pos をそのまま返す（最終フォールバック）。
+func _find_paired_stair_pos(taken_pos: Vector2i, new_map: MapData,
+		spawn_type: MapData.TileType) -> Vector2i:
+	var spawns := new_map.find_stairs(spawn_type)
+	for s: Vector2i in spawns:
+		if s == taken_pos:
+			return s
+	if not spawns.is_empty():
+		return spawns[0]
+	return taken_pos
+
+
 ## 階段着地マスの占有判定（修正 X・2026-04-28）
 ## 指定フロアの指定タイルに、自分以外の任意のキャラ（プレイヤーパーティー / 敵 / NPC）が
 ## 立っていれば true を返す。フロア遷移時の「対応階段マスに先客がいる場合は遷移を見送る」
@@ -2015,14 +2021,13 @@ func _transition_floor(direction: int) -> void:
 	# ターゲットフロアの MapData を取得
 	var new_map := _all_map_data[new_floor]
 
-	# スポーン位置を決定（反対方向の階段タイル）
+	# 階段ペアは上下階で同じ座標（マップデータ規約・2026-04-28）。
+	# 踏んだ階段の座標と一致する新フロアの階段マスを探す。
+	var active_char := player_controller.character if player_controller != null else hero
 	var spawn_tile_type := MapData.TileType.STAIRS_UP if direction > 0 else MapData.TileType.STAIRS_DOWN
-	var spawns := new_map.find_stairs(spawn_tile_type)
-	var spawn_pos: Vector2i
-	if not spawns.is_empty():
-		spawn_pos = spawns[0]
-	else:
-		# フォールバック：入口部屋の中心（MapData の player_parties から取得）
+	var spawn_pos := _find_paired_stair_pos(active_char.grid_pos, new_map, spawn_tile_type)
+	# ペア座標が見つからず spawns も空のときはマップデータ異常 → 入口部屋の中心へ
+	if new_map.find_stairs(spawn_tile_type).is_empty():
 		if not new_map.player_parties.is_empty():
 			var first_member: Variant = ((new_map.player_parties[0] as Dictionary).get("members", []) as Array)
 			if first_member is Array and (first_member as Array).size() > 0:
@@ -2036,7 +2041,6 @@ func _transition_floor(direction: int) -> void:
 	# 階段着地占有チェック（修正 X・2026-04-28）
 	# 対応する階段マスが他キャラに占有されていたら遷移を見送る。
 	# クールダウンを設定しないので、占有が解消され次第、次フレームで再チェックされる。
-	var active_char := player_controller.character if player_controller != null else hero
 	if _is_landing_tile_occupied(spawn_pos, new_floor, active_char):
 		return
 
