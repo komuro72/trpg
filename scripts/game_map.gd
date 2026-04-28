@@ -1561,27 +1561,19 @@ func _transition_member_floor(ch: Character, direction: int) -> void:
 		return
 	var new_map := _all_map_data[new_floor] as MapData
 	# 着地位置: 遷移先フロアの階段タイルを基準に配置
-	# hero と同じ階段タイルへ向かい、空いていればそこに、塞がっていれば隣接タイルに
 	var spawn_type := MapData.TileType.STAIRS_UP if direction > 0 else MapData.TileType.STAIRS_DOWN
 	var stair_tiles := new_map.find_stairs(spawn_type)
 	# デフォルトは hero と同位置（フォールバック）。hero が freed の場合は原点
 	var stair_center := hero.grid_pos if is_instance_valid(hero) else Vector2i.ZERO
 	if not stair_tiles.is_empty():
 		stair_center = stair_tiles[0]
-	# 階段タイル自体が空いていれば直接着地、塞がっていれば隣接タイルを探す
-	var spawn_pos := stair_center
-	for m_var: Variant in party.members:
-		if not is_instance_valid(m_var):
-			continue
-		var m := m_var as Character
-		if m != null and m.current_floor == new_floor and m.grid_pos == stair_center:
-			spawn_pos = _find_free_adjacent_to(stair_center, new_map, ch.is_flying)
-			if spawn_pos == Vector2i(-1, -1):
-				spawn_pos = stair_center
-			break
+	# 階段着地占有チェック（修正 X・2026-04-28）
+	# 対応階段マスが占有されていたら遷移を見送る（次フレームで再チェック）
+	if _is_landing_tile_occupied(stair_center, new_floor, ch):
+		return
 	# キャラのフロア・位置を更新
 	ch.current_floor = new_floor
-	ch.grid_pos      = spawn_pos
+	ch.grid_pos      = stair_center
 	ch.sync_position()
 	# 該当メンバーの UnitAI の map_data を更新（UnitAI の pathfinding に反映）
 	# 2026-04-24 深夜（Step 3）：旧 `_member_to_npc_manager.get(ch)` 経由から
@@ -1729,6 +1721,10 @@ func _transition_npc_floor(nm: PartyManager, direction: int) -> void:
 			if dist < best_dist:
 				best_dist = dist
 				base_spawn = s
+	# 階段着地占有チェック（修正 X・2026-04-28）
+	# 対応階段マスが占有されていたら遷移を見送る（次フレームで再チェック）
+	if _is_landing_tile_occupied(base_spawn, new_floor, leader_ch):
+		return
 	# リーダーのみ新フロアへ遷移
 	leader_ch.current_floor = new_floor
 	leader_ch.grid_pos = base_spawn
@@ -1781,14 +1777,10 @@ func _transition_single_npc_member(nm: PartyManager, member: Character, directio
 			if dist < best_dist:
 				best_dist = dist
 				land_pos = s
-		# 着地タイルが他のキャラに占有されていれば隣接タイルへ
-		for m2: Character in nm.get_members():
-			if is_instance_valid(m2) and m2 != member and m2.current_floor == new_floor \
-					and m2.grid_pos == land_pos:
-				var alt := _find_free_adjacent_to(land_pos, new_map, member.is_flying)
-				if alt != Vector2i(-1, -1):
-					land_pos = alt
-				break
+	# 階段着地占有チェック（修正 X・2026-04-28）
+	# 対応階段マスが占有されていたら遷移を見送る（次フレームで再チェック）
+	if _is_landing_tile_occupied(land_pos, new_floor, member):
+		return
 	# メンバーを新フロアに遷移
 	member.current_floor = new_floor
 	member.grid_pos = land_pos
@@ -1946,50 +1938,45 @@ func _activate_enemies_on_npc_floors() -> void:
 					break  # 1体でも同エリアなら全員アクティブ化
 
 
-## center からBFSで最近傍の空きタイルを探す（最大マンハッタン距離 5）
-## 階段タイルへの着地は避ける。空きがなければ Vector2i(-1, -1) を返す
-func _find_free_adjacent_to(center: Vector2i, map_ref: MapData,
-		is_flying: bool = false) -> Vector2i:
-	# 現フロア上の全キャラ位置を収集（party + enemy + npc）
-	var occupied: Dictionary = {}
+## 階段着地マスの占有判定（修正 X・2026-04-28）
+## 指定フロアの指定タイルに、自分以外の任意のキャラ（プレイヤーパーティー / 敵 / NPC）が
+## 立っていれば true を返す。フロア遷移時の「対応階段マスに先客がいる場合は遷移を見送る」
+## 判定で使用。
+##
+## 旧実装の `_find_free_adjacent_to()`（隣接マスへの「横出し」着地）は本判定への置換で廃止。
+## 占有時は遷移を見送り、次フレームで再チェックされる（既存の毎フレーム再チェック機構を利用）。
+func _is_landing_tile_occupied(tile: Vector2i, floor_idx: int,
+		exclude_char: Character) -> bool:
 	if party != null:
 		for m_var: Variant in party.members:
 			if not is_instance_valid(m_var):
 				continue
 			var m := m_var as Character
-			if m != null:
-				occupied[m.grid_pos] = true
-	for em: PartyManager in enemy_managers:
-		if is_instance_valid(em):
+			if m == null or m == exclude_char:
+				continue
+			if m.current_floor == floor_idx and m.grid_pos == tile:
+				return true
+	for fi: int in range(_per_floor_enemies.size()):
+		for em_v: Variant in (_per_floor_enemies[fi] as Array):
+			var em := em_v as PartyManager
+			if not is_instance_valid(em):
+				continue
 			for ch: Character in em.get_enemies():
-				if is_instance_valid(ch):
-					occupied[ch.grid_pos] = true
-	for nm: PartyManager in npc_managers:
-		if is_instance_valid(nm):
+				if not is_instance_valid(ch) or ch == exclude_char:
+					continue
+				if ch.current_floor == floor_idx and ch.grid_pos == tile:
+					return true
+	for fi: int in range(_per_floor_npcs.size()):
+		for nm_v: Variant in (_per_floor_npcs[fi] as Array):
+			var nm := nm_v as PartyManager
+			if not is_instance_valid(nm):
+				continue
 			for ch: Character in nm.get_members():
-				if is_instance_valid(ch):
-					occupied[ch.grid_pos] = true
-
-	var visited: Dictionary = {center: true}
-	var queue: Array[Vector2i] = [center]
-	var dirs: Array[Vector2i] = [
-		Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)
-	]
-	while not queue.is_empty():
-		var cur := queue.pop_front() as Vector2i
-		if cur != center:
-			var t := map_ref.get_tile(cur)
-			var is_stair := (t == MapData.TileType.STAIRS_DOWN or t == MapData.TileType.STAIRS_UP)
-			if map_ref.is_walkable_for(cur, is_flying) and not occupied.has(cur) and not is_stair:
-				return cur
-		if abs(cur.x - center.x) + abs(cur.y - center.y) >= 5:
-			continue
-		for d: Vector2i in dirs:
-			var nxt := cur + d
-			if not visited.has(nxt):
-				visited[nxt] = true
-				queue.append(nxt)
-	return Vector2i(-1, -1)
+				if not is_instance_valid(ch) or ch == exclude_char:
+					continue
+				if ch.current_floor == floor_idx and ch.grid_pos == tile:
+					return true
+	return false
 
 
 ## 階段を踏んでいるかチェックし、踏んでいれば遷移する
@@ -2025,9 +2012,6 @@ func _transition_floor(direction: int) -> void:
 	if new_floor < 0 or new_floor >= _all_map_data.size():
 		return
 
-	_stair_cooldown = 1.5  # 遷移直後の再遷移を防ぐ
-	SaveManager.update_floor(new_floor)
-
 	# ターゲットフロアの MapData を取得
 	var new_map := _all_map_data[new_floor]
 
@@ -2049,6 +2033,16 @@ func _transition_floor(direction: int) -> void:
 		else:
 			spawn_pos = Vector2i(5, 5)
 
+	# 階段着地占有チェック（修正 X・2026-04-28）
+	# 対応する階段マスが他キャラに占有されていたら遷移を見送る。
+	# クールダウンを設定しないので、占有が解消され次第、次フレームで再チェックされる。
+	var active_char := player_controller.character if player_controller != null else hero
+	if _is_landing_tile_occupied(spawn_pos, new_floor, active_char):
+		return
+
+	_stair_cooldown = 1.5  # 遷移直後の再遷移を防ぐ
+	SaveManager.update_floor(new_floor)
+
 	# 現在フロアのマネージャーを非表示・VisionSystem から除外
 	for em: PartyManager in enemy_managers:
 		if is_instance_valid(em):
@@ -2064,7 +2058,7 @@ func _transition_floor(direction: int) -> void:
 	_load_tile_textures()
 
 	# 操作キャラのフロア更新・移動（リーダー以外を操作中の場合はそのキャラを移動）
-	var active_char := player_controller.character if player_controller != null else hero
+	# active_char は冒頭の占有チェックで取得済み
 	active_char.current_floor = new_floor
 	active_char.grid_pos      = spawn_pos
 	active_char.sync_position()
