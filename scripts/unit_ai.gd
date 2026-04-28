@@ -705,13 +705,16 @@ func _get_next_step(goal: Vector2i) -> Vector2i:
 	var method := _get_path_method()
 	if method == PathMethod.DIRECT:
 		return _next_step_direct(goal)
+	# 占有考慮型 A*。中間タイルの占有を避けて経路を組むため、
+	# 経路が見つかれば path[0] は基本的に passable
 	var path := _astar(_member.grid_pos, goal)
 	if path.is_empty():
+		# 経路なし（地形的にも占有的にも到達不可）→ ゴール方向の direct fallback で最後の足掻き
 		return _next_step_direct(goal)
-	# A* の最初の1歩が通行可能ならそのまま使う
+	# レース対策の最終チェック：A* 構築後に他キャラが pending 状態を変えた場合に備える
 	if _is_passable(path[0]):
 		return path[0]
-	# 味方等にブロックされている場合: ゴール方向の別の隣接タイルを試す
+	# A* 上は通れたが直前で占有が変わった稀ケース：ゴール方向 direct fallback
 	return _next_step_direct(goal)
 
 
@@ -883,8 +886,14 @@ func _generate_queue(strategy: int, target: Character) -> Array:
 	# まだ避難先に到達していないときに `move_to_formation` を発火させ、メンバーが
 	# 避難先から出てリーダー方向に戻ってしまう問題があった（実プレイで確認）。
 	# 撤退中のメンバーは避難先到達後はその場に留まり、リーダーが追いつくのを待つ。
+	#
+	# 2026-04-28 改訂（案 G・フロア間 FLEE）：_move_policy が `stairs_up` / `stairs_down` の
+	# とき wait 特例を除外し、`_generate_move_queue()` 経由で階段ナビを継続する。
+	# F1+ で battle_policy=retreat → リーダーの _move_policy が `stairs_up` に上書きされ、
+	# 上り階段エリア進入時にも階段タイルへの移動を継続できるようにする。
 	if _member != null and is_instance_valid(_member) and _member.is_friendly \
-			and _combat == "flee" and _is_in_refuge_area():
+			and _combat == "flee" and _is_in_refuge_area() \
+			and not (_move_policy in ["stairs_up", "stairs_down"]):
 		return [{"action": "wait"}]
 	return _generate_move_queue()
 
@@ -1910,9 +1919,21 @@ func _find_flee_goal_legacy(threat: Character) -> Vector2i:
 # A* 経路探索
 # --------------------------------------------------------------------------
 
+## A* 経路探索（2026-04-28 改訂：動的占有考慮型）
+##
+## neighbor != goal のとき、他キャラ（自分以外・同フロア・同レイヤー）の占有タイルを
+## 障害物として扱う。これにより同パーティーメンバーや他パーティーが進路上に立つ
+## ケースで、迂回路がある限り A* が自然に避ける経路を返す。
+##
+## goal タイル自体は占有チェックの例外（goal がキャラ占有マスになるケースは
+## keep_distance / flee / fall_back / explore goal で発生しうるため）。
+##
+## `_is_passable()` と意味論を揃えるため、占有セットは `_build_occupied_set()` で
+## 事前構築（_floor_following 中の友好すり抜け・飛行/地上レイヤー分離・pending 予約も反映）
 func _astar(start: Vector2i, goal: Vector2i) -> Array[Vector2i]:
 	if start == goal:
 		return []
+	var occupied: Dictionary = _build_occupied_set()
 	var open_set:  Array[Vector2i] = [start]
 	var came_from: Dictionary      = {}
 	var g_score:   Dictionary      = {start: 0}
@@ -1938,6 +1959,9 @@ func _astar(start: Vector2i, goal: Vector2i) -> Array[Vector2i]:
 			# タイル（壁・障害物）チェック
 			if not _is_walkable_for_self(neighbor):
 				continue
+			# 占有チェック（neighbor != goal の中間タイルのみ）
+			if neighbor != goal and occupied.has(neighbor):
+				continue
 			# 階段タイルはゴール以外では中間経由地点として使わない
 			if _is_stair_tile(neighbor) and neighbor != goal \
 					and _move_policy != "stairs_down" and _move_policy != "stairs_up":
@@ -1950,6 +1974,44 @@ func _astar(start: Vector2i, goal: Vector2i) -> Array[Vector2i]:
 				if neighbor not in open_set:
 					open_set.append(neighbor)
 	return []
+
+
+## 占有タイル集合を構築する（A* で中間タイルの障害物として参照）
+##
+## `_is_passable()` と意味論を揃える：
+##   - 自分自身は除外
+##   - 別フロアのキャラは除外
+##   - _floor_following 中は友好キャラを除外（密集を抜けて階段に向かうため）
+##   - 飛行↔地上レイヤー違いは除外（同レイヤーのみブロック）
+##   - 占有タイル（get_occupied_tiles）と pending 予約タイルを両方登録
+##   - _player が _member 以外で同フロア・同レイヤーなら同じく登録
+func _build_occupied_set() -> Dictionary:
+	var occupied: Dictionary = {}
+	if _member == null or not is_instance_valid(_member):
+		return occupied
+	for other: Character in _all_members:
+		if not is_instance_valid(other):
+			continue
+		if other == _member:
+			continue
+		if other.current_floor != _member.current_floor:
+			continue
+		if _floor_following and other.is_friendly:
+			continue
+		if other.is_flying != _member.is_flying:
+			continue
+		for tile: Vector2i in other.get_occupied_tiles():
+			occupied[tile] = true
+		if other.is_pending():
+			occupied[other.get_pending_grid_pos()] = true
+	if _player != null and is_instance_valid(_player) and _player != _member \
+			and _player.current_floor == _member.current_floor \
+			and _player.is_flying == _member.is_flying:
+		for tile: Vector2i in _player.get_occupied_tiles():
+			occupied[tile] = true
+		if _player.is_pending():
+			occupied[_player.get_pending_grid_pos()] = true
+	return occupied
 
 
 ## 脅威コスト付き A*（2026-04-21 ステップ 3 追加）

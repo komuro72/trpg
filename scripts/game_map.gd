@@ -1994,11 +1994,11 @@ func _find_free_adjacent_to(center: Vector2i, map_ref: MapData,
 
 ## 階段を踏んでいるかチェックし、踏んでいれば遷移する
 func _check_stairs_step() -> void:
-	# 時間停止中（TARGETING ホールド等）はフロア遷移を発火させない。
-	# 操作キャラが time stop 中に動いて階段に乗るケースは通常ないが、
-	# 念のためガード（他 4 関数と挙動を揃える）。
-	if not GlobalConstants.world_time_running:
-		return
+	# 2026-04-28 改訂（修正 W）：旧実装は冒頭で `world_time_running` ガードを持っていたが、
+	# 階段マス到着 → `_move_buffer = ZERO`（player_controller:502）→ NORMAL idle で
+	# `world_time_running = false` → 本関数が永遠にスキップされ「プレイヤーが階段で止まる」
+	# 既存バグの原因だった。time stop 中の意図しない遷移は下記 3 ガード
+	# （_stair_cooldown / stair_just_transitioned / is_moving）で十分抑止される。
 	if _stair_cooldown > 0.0:
 		return
 	# 遷移直後、階段タイルから一度出るまでは再遷移を抑止する

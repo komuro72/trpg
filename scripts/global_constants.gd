@@ -68,11 +68,6 @@ var FLOOR_2_RANK_THRESHOLD: int = 13
 var FLOOR_3_RANK_THRESHOLD: int = 18
 var FLOOR_4_RANK_THRESHOLD: int = 24
 
-## 退避閾値比率：現フロアの基準ランク和の何倍未満で 1 階上に退避するか
-## 0.5 = 半分未満で退避（設計当初のハードコード値）
-## [ConfigEditor 対象・NpcLeaderAI カテゴリ]
-var FLOOR_RETREAT_RATIO: float = 0.5
-
 ## NpcLeaderAI の battle_policy 自動書き換えクールダウン（秒）
 ## 2026-04-21 追加（ステップ 2：CRITICAL 時 battle_policy 自動書き換え）
 ## 戦況 CRITICAL/SAFE が境界値で振動したときに battle_policy が頻繁に変わるのを抑制する。
@@ -545,7 +540,6 @@ const CONFIG_KEYS: Array[String] = [
 	"FLOOR_2_RANK_THRESHOLD",
 	"FLOOR_3_RANK_THRESHOLD",
 	"FLOOR_4_RANK_THRESHOLD",
-	"FLOOR_RETREAT_RATIO",
 	"NPC_POLICY_CHANGE_COOLDOWN",
 	# EnemyLeaderAI タブ
 	"PARTY_FLEE_ALIVE_RATIO",

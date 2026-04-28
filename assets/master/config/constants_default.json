@@ -231,7 +231,7 @@
   },
   "ITEM_BONUS_STRENGTH_WEIGHT": {
     "category": "PartyLeader",
-    "description": "戦力計算に占める装備 bonus 段階の重み係数。strength_base = rank_sum + party_bonus_sum × この値。bonus_sum はメンバーごとの装備 bonus 合計の平均をパーティー全員で合計。既定 0.165 ≒ 旧 ITEM_TIER_STRENGTH_WEIGHT=0.33 と互換",
+    "description": "戦力計算に占める装備 bonus 段階の重み係数。戦力 strength = rank_sum + party_bonus_sum × この値（HP 抜き）。bonus_sum はメンバーごとの装備 bonus 合計の平均をパーティー全員で合計。既定 0.165 ≒ 旧 ITEM_TIER_STRENGTH_WEIGHT=0.33 と互換。戦況計算では別途 × HP 率を適用",
     "max": 2.0,
     "min": 0.0,
     "step": 0.05,
@@ -249,7 +249,7 @@
   },
   "FLOOR_0_RANK_THRESHOLD": {
     "category": "NpcLeaderAI",
-    "description": "フロア 0 の基準ランク和。NPC はこれ以上の戦力ならフロア 0 滞在可能（戦力 = rank_sum + bonus_sum × ITEM_BONUS_STRENGTH_WEIGHT × HP率）",
+    "description": "フロア 0 の基準戦力。NPC は戦力（HP 抜き = rank_sum + bonus_sum × ITEM_BONUS_STRENGTH_WEIGHT）がこの値以上ならフロア 0 滞在可能。複数フロアの閾値を満たす場合は最上階を採用するラダー判定",
     "max": 100,
     "min": 0,
     "step": 1,
@@ -258,7 +258,7 @@
   },
   "FLOOR_1_RANK_THRESHOLD": {
     "category": "NpcLeaderAI",
-    "description": "フロア 1 の基準ランク和。NPC はこれ以上の戦力になるとフロア 1 に進む",
+    "description": "フロア 1 の基準戦力。NPC は戦力（HP 抜き）がこの値以上になるとフロア 1 に進む",
     "max": 100,
     "min": 0,
     "step": 1,
@@ -267,7 +267,7 @@
   },
   "FLOOR_2_RANK_THRESHOLD": {
     "category": "NpcLeaderAI",
-    "description": "フロア 2 の基準ランク和",
+    "description": "フロア 2 の基準戦力（HP 抜き）",
     "max": 100,
     "min": 0,
     "step": 1,
@@ -276,7 +276,7 @@
   },
   "FLOOR_3_RANK_THRESHOLD": {
     "category": "NpcLeaderAI",
-    "description": "フロア 3 の基準ランク和",
+    "description": "フロア 3 の基準戦力（HP 抜き）",
     "max": 100,
     "min": 0,
     "step": 1,
@@ -285,21 +285,12 @@
   },
   "FLOOR_4_RANK_THRESHOLD": {
     "category": "NpcLeaderAI",
-    "description": "フロア 4 の基準ランク和（最終フロア・事実上不達）",
+    "description": "フロア 4 の基準戦力（最終フロア・事実上不達）",
     "max": 100,
     "min": 0,
     "step": 1,
     "type": "int",
     "value": 24
-  },
-  "FLOOR_RETREAT_RATIO": {
-    "category": "NpcLeaderAI",
-    "description": "退避閾値比率：現フロアの基準ランク和の何倍未満で上階に退避するか（0.5 = 半分未満で退避）",
-    "max": 1.0,
-    "min": 0.1,
-    "step": 0.05,
-    "type": "float",
-    "value": 0.5
   },
   "NPC_POLICY_CHANGE_COOLDOWN": {
     "category": "NpcLeaderAI",

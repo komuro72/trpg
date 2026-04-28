@@ -123,29 +123,74 @@ func _is_in_explore_mode() -> bool:
 
 ## リーダー本人の `_move_policy` 上書き（`follow` 退化挙動の解消・2026-04-26 追加）
 ##
-## NPC リーダーの層 2 上書き経路：
-##   - 探索モード（敵未検知）：本フックは `""` を返す → `_is_in_explore_mode()` が true →
-##     `_get_explore_move_policy()` が `stairs_*` / `explore` を返す（既存経路を維持）
-##   - 戦闘モード（敵検知中）：本フックは `"explore"` を返す → 層 1 の `follow` 継承を防ぐ
+## 2026-04-28 改訂（案 G・フロア間 FLEE 経路の確立）：
+##   退避（battle_policy=retreat）時にリーダーが上り階段に向かう経路を確立する。
+##   旧実装は敵検知中に常に `"explore"` を返していたため、retreat 配布中も探索を続けて
+##   退避路に入れず、F1 上り階段エリアで停止する問題があった（マリアケース）。
 ##
-## NPC リーダーの `formation_ref` は null（player でも leader_char でもない）になるため
-## 自己参照ではないが、`_move_policy = "follow"` だと UnitAI の `_formation_satisfied()`
-## が `_leader_ref == null` 経路で常に true を返し、リーダーが立ち止まる退化挙動になる。
+## 新優先順位（上から順に判定）：
+##   1. battle_policy == "retreat" + F1+ + 現在地が refuge area 外 → "stairs_up"
+##      （リーダーを退避路に乗せる。F0 では下記 4 にフォールバック → 個体 FLEE で safe_tile へ）
+##   2. target_floor < current_floor → "stairs_up"
+##      （HP 補正等でフロア降格判定。retreat 中の refuge area 内も該当する）
+##   3. target_floor > current_floor → "stairs_down"
+##      （戦力余裕で昇格・敵検知中も一貫して動作）
+##   4. その他（敵検知中・通常時 etc.） → "explore"
 ##
-## 戦闘中の `_move_policy` は ATTACK strategy + target 存在時には `_battle_formation`
-## ベースで動くため実質バイパスされるが、ターゲット切替・戦闘ラル時の挙動を
-## 安定させるため explore フォールバックを入れる。
+## 旧実装（敵検知中 → "explore" 固定）は、層 1 ベースライン `follow` の自己参照退化を防ぐ
+## 目的だったが、新実装でも条件 4 で同等のフォールバックを保証する。
 func _decide_leader_move_override() -> String:
-	if _is_in_explore_mode():
-		return ""  # 既存の `_get_explore_move_policy()` 経路に委ねる
+	# 現在フロアとリーダー位置を取得
+	var current_floor := -1
+	var leader_pos: Vector2i = Vector2i.ZERO
+	for m: Character in _party_members:
+		if not is_instance_valid(m):
+			continue
+		if m.is_leader:
+			current_floor = m.current_floor
+			leader_pos = m.grid_pos
+			break
+	if current_floor < 0:
+		# リーダー不在時は先頭生存メンバーの位置を採用（フォールバック）
+		for m: Character in _party_members:
+			if is_instance_valid(m):
+				current_floor = m.current_floor
+				leader_pos = m.grid_pos
+				break
+	if current_floor < 0:
+		return "explore"
+
+	# 1. battle_policy="retreat" + F1+ + refuge area 外 → 上り階段に向かう
+	var battle_policy: String = _global_orders.get("battle_policy", "") as String
+	if battle_policy == "retreat" and current_floor >= 1 and _map_data != null:
+		var current_area: String = _map_data.get_area(leader_pos)
+		var refuge_areas: Array[String] = _map_data.get_refuge_area_ids(current_floor)
+		if not current_area.is_empty() and not refuge_areas.has(current_area):
+			return "stairs_up"
+
+	# 2-3. target_floor ベースの昇降判定（敵検知中も一貫して動作）
+	if not (suppress_floor_navigation or _party_members.is_empty()):
+		var target_floor: int = _get_target_floor()
+		if target_floor < current_floor:
+			return "stairs_up"
+		if target_floor > current_floor:
+			return "stairs_down"
+
+	# 4. デフォルト：探索（敵検知中の `follow` 退化防止 + 通常時の探索）
 	return "explore"
 
 
 ## 現在の状態に基づく目標フロアを返す（戦力値 + HP 補正）
-## 戦力値 = 自パのみの strength（装備 tier 込み・HP 充足率込み）
+## 戦力値 = 自パのみの strength（HP 抜き・装備 bonus 込み・rank_sum + bonus_sum × WEIGHT）
+## 適正フロア = strength が閾値以上の最上階（昇降ヒステリシスなし・ラダー判定）
 ## full_party の HP 充足率（ポーション込み・平均）が NPC_FLOOR_DOWNGRADE_HP_RATIO 未満の場合は適正フロア - 1
 ## suppress_floor_navigation = true またはメンバーなしの場合は現在フロアをそのまま返す
-## 値は _combat_situation から参照（_process 1.5 秒タイマーで更新済み）
+## 値は _combat_situation から参照（_process 1.5 秒タイマーで更新済み・メンバー死亡時は notify_situation_changed で即時更新）
+##
+## 2026-04-28 改訂（用語ガバナンス）：
+##   - strength を HP 抜きに変更したため、昇格判定と降格判定が同じ閾値で対称化
+##   - FLOOR_RETREAT_RATIO（0.5 倍未満で降格）を廃止。ラダー判定（threshold ≤ strength の最上階）に簡素化
+##   - HP 補正（NPC_FLOOR_DOWNGRADE_HP_RATIO）は残す（戦闘で疲弊した一時的退避を表現）
 func _get_target_floor() -> int:
 	var current_floor := 0
 	for m: Character in _party_members:
@@ -155,22 +200,17 @@ func _get_target_floor() -> int:
 	if suppress_floor_navigation or _party_members.is_empty():
 		return current_floor
 
-	# --- 1. 戦力値（自パのみ・装備 tier 込み・HP 充足率込み） ---
+	# --- 1. 戦力値（自パのみ・HP 抜き・装備 bonus 込み） ---
 	var strength: float = float(_combat_situation.get("full_party_strength", 0.0))
 	if strength <= 0.0:
 		return current_floor
 
-	# --- 2. 戦力値で適正フロアを決定 ---
+	# --- 2. 戦力値で適正フロアを決定（ラダー判定：threshold ≤ strength の最上階） ---
 	var floor_count: int = FLOOR_THRESHOLD_COUNT
-	var appropriate_floor := current_floor
-	if current_floor + 1 < floor_count:
-		var next_rank := _get_floor_threshold(current_floor + 1)
-		if strength >= float(next_rank):
-			appropriate_floor = current_floor + 1
-	if appropriate_floor == current_floor and current_floor > 0:
-		var this_rank := _get_floor_threshold(current_floor)
-		if strength < float(this_rank) * GlobalConstants.FLOOR_RETREAT_RATIO:
-			appropriate_floor = current_floor - 1
+	var appropriate_floor := 0
+	for f: int in range(floor_count):
+		if strength >= float(_get_floor_threshold(f)):
+			appropriate_floor = f
 
 	# --- 3. HP 充足率チェック（統合関数の full_party_hp_ratio を参照） ---
 	var hp_ratio: float = float(_combat_situation.get("full_party_hp_ratio", 0.0))
@@ -184,10 +224,8 @@ func _get_target_floor() -> int:
 	# --- 5. デバッグログ（初回 or 目標フロア変化時） ---
 	if _prev_target_floor != target_floor:
 		var leader_name := _get_leader_name()
-		var next_rank  := _get_floor_threshold(current_floor + 1)
-		var half_rank  := floori(float(_get_floor_threshold(current_floor)) * GlobalConstants.FLOOR_RETREAT_RATIO)
-		var score_part := "戦力%.1f（次F%d基準%d / 退避%d）" % [
-			strength, current_floor + 1, next_rank, half_rank]
+		var this_rank := _get_floor_threshold(appropriate_floor)
+		var score_part := "戦力%.1f（適正F%d基準%d）" % [strength, appropriate_floor, this_rank]
 		var hp_part := "HP充足率%.0f%%%s" % [hp_ratio * 100.0, "×" if hp_fail else "○"]
 		var adj_part := " →補正-1" if hp_fail else ""
 		MessageLog.add_ai(

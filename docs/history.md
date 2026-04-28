@@ -136,6 +136,145 @@
 - 「中央安全部屋に戻る」現象は CRITICAL 自動撤退（`battle_policy = "retreat"` への切替）が主因と判明。仕様意図通りの挙動・docs/history.md の `_evaluate_and_update_battle_policy` エントリ参照
 - リーダー `_move_policy = follow` 自己参照解消（4/26）の敵側未対応も継続観察案件として残置
 
+## 2026-04-28 セッション後半：A* 動的占有化 → 用語ガバナンス → 案 G → 修正 W
+
+同日の継続セッション。前半（戦力表示整理・Floor 0 拡張）の知見を踏まえ、(a) NPC が行く手をはばむ問題の構造的解消、(b) 戦力定義の用語整合性確立、(c) F1+ 退避経路の確立、(d) 既存ゲーム停止バグ修正を実施した。7 件の主要改修。
+
+### 主要変更（実装順）
+
+#### 1. A* 経路探索の動的占有考慮化（NPC が行く手をはばむ問題の構造的解消）
+
+**発端**：マリアパーティー（オフィア・斧戦士）がレオン（弓使い・follow 隊形で真南に立っている）に進路を塞がれて停止する snapshot を観測。
+
+**調査**：[unit_ai.gd:1927 `_astar()`](scripts/unit_ai.gd:1927) は地形のみを障害物として扱い、`_get_next_step()` の direct fallback `_next_step_direct()` も「主軸方向の 1 マス再試行」のみで、真の迂回をしていなかった（命名と実態の乖離）。
+
+**実装**：
+- `_astar()` に `occupied: Dictionary = _build_occupied_set()` 事前計算を追加
+- 新規 [`_build_occupied_set()`](scripts/unit_ai.gd:1982)：全パーティー全メンバーの `get_occupied_tiles()` + `get_pending_grid_pos()`（pending 予約）を 1 dict に集約
+- A* の各 neighbor 評価で `if neighbor != goal and occupied.has(neighbor): continue`
+- goal 例外：keep_distance / flee / explore goal は本質的にキャラ占有マスになりうるため通す
+- `_is_passable()` と意味論完全一致（自分自身除外・別フロア除外・`_floor_following` 友好すり抜け・飛行/地上レイヤー分離）
+
+**副作用**：パフォーマンス影響軽微（事前計算 ~150 体反復・A* 中は O(1) 参照）。狭い通路（迂回路なし）では依然 A* が経路なしを返す（構造的に避けられない）→ 残タスク。
+
+#### 2. 戦力（strength）の HP 抜き化・FLOOR_RETREAT_RATIO 廃止（用語ガバナンス適用）
+
+**発端**：実プレイで「メンバー死亡 → 戦力低下 → HP 回復で戦力が戻る → 目標フロアが揺らぐ」現象を観測。3 ソース整合性総点検の結果、CLAUDE.md 内部で「戦力（中長期判定用）」と「× HP率」が同セクション内で同居する記述の歪みが判明。
+
+**設計判断**：「戦力比 = 戦力 / 敵戦力」と読めるべきだが、戦力比はランク和のみ・戦力は HP 込みで非対称。3 指標（戦況 / 戦力 / 戦力比）の関係性を整理すべきという議論。
+
+**実装**：
+- 戦力 = `rank_sum + bonus_sum × ITEM_BONUS_STRENGTH_WEIGHT`（HP 抜き・装備込み）に変更
+- 戦況比 = `(my_strength × my_hp_ratio) / (enemy_strength × enemy_hp_ratio)`（戦況計算で別途 × HP 率を適用）
+- `my_combat_hp_ratio` 新フィールドを `_combat_situation` 辞書に追加（PartyStatusWindow 表示で使用）
+- `_get_target_floor()` の判定ロジックを「ラダー判定（戦力 ≥ 閾値の最上階）」に簡素化
+- `FLOOR_RETREAT_RATIO`（昇降ヒステリシス用 0.5 倍係数）を物理削除（GlobalConstants / constants.json / constants_default.json）
+- HP 補正（`NPC_FLOOR_DOWNGRADE_HP_RATIO`）は残置（戦闘で疲弊した一時的退避を表現）
+
+**4 ソース整合**：実装 / PartyStatusWindow / ConfigEditor 説明文 / CLAUDE.md の全てで HP 抜き定義に統一。`F=s(R+B)` で常に `R+B = s` が成立。
+
+#### 3. 用語ガバナンス（2026-04-28 確立）を CLAUDE.md「設計原則」に明文化
+
+**動機**：戦力定義の食い違いから生まれた反省。仕様書 / コード / デバッグ表示 / ConfigEditor 説明文の 4 ソース間で用語を一貫させるルールを明文化。
+
+**ルール（4 項）**：
+1. 同じ言葉を異なる意味で使わない
+2. 用語間の関係を素直に成立させる（戦力比はランク和ベースなら戦力もランク和ベース）
+3. 仕様変更時の用語整合性チェック
+4. CLAUDE.md / 実装 / デバッグ表示 / ConfigEditor 説明文の 4 者整合
+
+「命名制約」直後・「UI の表示原則」直前に新規セクションとして配置。
+
+#### 4. PartyStatusWindow 表示範囲仕様変更（味方系全フロア・敵は追跡対象フロア）
+
+**発端**：「追跡対象を切り替えると元のパーティーに戻る方法が分かりにくい」+「F7 スナップショットが操作キャラのフロア固定で画面表示と乖離」。
+
+**実装**：
+- 表示範囲：プレイヤー = 全メンバー全フロア・NPC = 全パーティー全フロア・敵 = 追跡対象がいるフロアのみ
+- `_get_tracking_target()` ヘルパが追跡対象の真実源（`_selected_leader if 有効 else _hero`）
+- `_process()` で `_selected_leader` が freed/dead なら自動クリア + `leader_selected.emit(null)` でカメラ復帰
+- F7 スナップショット同ロジック共有 + 追跡対象ヘッダー追加（`追跡対象: <名前>（<クラス>）@F<N> <area_id>` または「同上」）
+- タイトル行：`Floor: <N>  操作:<名前>@F<N>`（同フロア時）/ `操作:<名前>@F<N>  追跡:<名前>@F<N>`（別追跡時）
+
+#### 5. Floor 1〜3 マップ拡張（30 部屋・5 階段・29 敵パーティー）
+
+**動機**：Floor 0 拡張（4/28 前半）後に F1〜F3 が 20 部屋のままで密度差が生じる懸念。
+
+**実装**：
+- Python スクリプトで F0 レイアウトを基本テンプレートに F1/F2/F3 を生成
+- ID リネーム（`r0_X` → `rN_X`、`c0_X` → `cN_X`）・寸法 55×54 統一
+- 階段配分：3 上り + 2 下り（spawns[0] 規約準拠）
+- 安全部屋（旧 `r0_13` 相当）は通常部屋化、player_party / npc_parties_multi / is_safe_room / is_entrance フラグ除去
+- 敵 17 → 29 パーティー（密度を F0 と揃え）
+- 敵構成は各フロアの既存敵 mix を再分配（F1: ゴブリン系・F2: 中高難度 mix・F3: 高難度ダーク系）
+- 再現性確保：RNG seed = `1000 + floor_id` 固定
+
+#### 6. 案 G：NPC リーダーのフロア間 FLEE 経路確立（マリアケース）
+
+**発端**：F1 で `battle_policy=retreat` 配布中のマリアパーティーが上り階段エリア r1_11 で停止する snapshot を観測。
+
+**原因**：
+- (a) `_decide_leader_move_override()` が敵検知中に常に `"explore"` を返し、退避経路（stairs_up）を上書き
+- (b) wait 特例（`_combat=="flee"` + `_is_in_refuge_area()` で wait）が階段ナビ中の refuge エリア進入時にも発火
+
+**実装**：
+- `_decide_leader_move_override()` の優先順位を「retreat + F1+ + refuge 外 → stairs_up / target_floor < current → stairs_up / target_floor > current → stairs_down / それ以外 → explore」のラダー判定に変更
+- [unit_ai.gd:889](scripts/unit_ai.gd:889) の wait 特例に `_move_policy not in ["stairs_up","stairs_down"]` 除外を追加
+- 非リーダーは [unit_ai.gd:773](scripts/unit_ai.gd:773) の「リーダーが別フロアなら戦略無視で階段ナビ」既存経路で追従
+
+**事前確認**：3 案（F / G / H）から最小侵襲な G を採用。F は F0 で `safe_room` move_policy 未実装の問題が残り、H は UnitAI 大規模改修。
+
+#### 7. 修正 W：`_check_stairs_step` の `world_time_running` ガード除去（既存ゲーム停止バグ解消）
+
+**発端**：実プレイで「プレイヤー操作キャラが階段マスに乗るとゲームが止まる」現象を観測。再現性あり。
+
+**調査**：本セッションの修正（A* 動的占有化・案 G・wait 特例除外・F1〜F3 拡張）との関連が疑われたが、調査の結果すべて hero に直接影響しない（hero は `is_player_controlled=true` で UnitAI 早期 return / 案 G は NPC 専用 / wait 特例除外は friendly + combat=flee 限定）。
+
+**真因**：[game_map.gd:2000](scripts/game_map.gd:2000) の race condition バグ（既存）：
+- プレイヤーが階段マス到着 → [player_controller.gd:502](scripts/player_controller.gd:502) の `_move_buffer = ZERO; return`（既存ガード）
+- 無操作 → `world_time_running = false`（[player_controller.gd:1134](scripts/player_controller.gd:1134) の NORMAL idle 判定）
+- `_check_stairs_step` が永遠にスキップ → フロア遷移発火せず → プレイヤー永久停止
+
+**実装**：冒頭の `if not world_time_running: return` 2 行を削除のみ。time stop 中の意図しない遷移は既存の 3 ガード（`_stair_cooldown` / `stair_just_transitioned` / `is_moving()`）で十分抑止される。
+
+### 新規残タスク（observation pending）
+
+階段マス周辺の問題群を 5 件追加（CLAUDE.md「優先度：中」セクション）：
+- **階段マス占有問題（NPC 版・敵版）**：階段マスにキャラが居座り、別キャラのフロア遷移をブロック
+- **敵のフロア間移動の設計検討**：敵が階段を能動的に使う仕組みは未実装
+- **NPC が階段を素通りする現象の調査**：階段ナビ中の NPC が階段マスを通過して向こう側で立ち止まる現象（修正 W の NPC 版が必要か調査）
+- **プレイヤー戻り問題（修正 Y）**：階段マスに乗り続けると 1.5 秒後に再遷移する可能性（実プレイで未確認・監視継続）
+- **階段着地時の重なり問題（修正 X 関連）**：`_find_free_adjacent_to()` で隣接マスフォールバック → 別キャラと重なる現象
+
+その他（FLEE 派生課題に追記）：
+- **fall_back 戦略での階段ナビ未対応**：HP critical で `on_low_hp=fall_back` 発動時 FALL_BACK 戦略が優先され、リーダーの `_move_policy=stairs_up` 上書きが効かない
+
+### 廃止された残タスク（完了）
+
+- 「Floor 1〜3 のマップ拡張検討」（5. で完了）
+- 「`_calc_party_strength()` デッドコード削除」（前半セッションで言及・本セッションでは触れず・別タスクとして残置）
+
+### 採用しなかった案・経緯メモ
+
+- **案 F**：`_decide_leader_move_override()` で F0 retreat 時に `safe_room` move_policy を返す案。`safe_room` move_policy が未実装で新規ロジックが必要 → 不採用。F0 retreat は条件 4 にフォールバックし既存の個体 FLEE（`_find_flee_goal` → safe_tile）に委ねる方針（案 G）に決定
+- **案 H**：リーダー `_move_policy` override を廃止し UnitAI 個体 FLEE が階段ナビを担う案。設計は綺麗だが UnitAI 改修規模大 → 不採用
+- **修正 X 単独実装**：階段マス占有時の「下りない・横ずらし廃止」。NPC 永久ブロック懸念で先送り（NPC 居座り問題の解決とセットで検討）
+
+### 想定外の発見
+
+1. **戦力定義の CLAUDE.md 内部矛盾**：「中長期判定用」と「× HP率」が同セクション内に混在。用語ガバナンスのルール 1 違反として明文化のきっかけに
+2. **`stair_cooldown_active`（player_controller.gd）がデッドコード**：宣言されているが set される箇所なし。修正 W 調査時に発見
+3. **`_check_stairs_step` の `world_time_running` ガードが既存バグ**：本セッション修正と関連すると予測されたが、実は古くから存在していた race condition だった
+
+### 4 ソース整合の最終確認
+
+| ソース | 戦力定義 | 案 G | 修正 W |
+|---|---|---|---|
+| 実装 | rank_sum + bonus_sum × WEIGHT（HP 抜き） | npc_leader_ai.gd:138-191 ラダー判定 | game_map.gd:1996（ガード除去） |
+| PartyStatusWindow | `F=s(R+B)` で常に `R+B=s` | `move:` 列でラダー判定の結果を直読み | （該当なし） |
+| ConfigEditor | `ITEM_BONUS_STRENGTH_WEIGHT` 説明文・FLOOR_X_Y_RANK_THRESHOLD 説明文 HP 抜き化 | （該当定数なし） | （該当定数なし） |
+| CLAUDE.md | 「戦力計算の 3 指標と用途」表更新 | 「リーダー本人の `_move_policy` 自己参照回避」セクション更新 | 実装状況に新エントリ |
+
 ## 2026-04-26 セッションサマリー：`mv=` 不整合調査 → per-member ロジック統一 → 敵 GUARD_ROOM の area_id ベース実装
 
 本セッションは「PartyStatusWindow の `mv=追従` と非リーダー `move:密集` 不整合」の観察から始まり、調査・設計議論を経て、3 つの実装変更と複数の残タスク化につながった。各実装の詳細は本サマリー以降の個別エントリ（per-member ロジック統一 / 敵指示表示再構成 / 敵 GUARD_ROOM 再実装）を参照。

@@ -128,6 +128,31 @@ func _show_var(var_name: String) -> bool:
 	return pri <= _detail_level
 
 
+## 追跡対象を返す（PartyStatusWindow 内・F7 スナップショット共通の真実源）
+## _selected_leader（PSW で上下キー選択した対象）が有効ならそれ、無効なら操作キャラ（_hero）。
+## 追跡対象消失時のフォールバック：_selected_leader が freed/dead になったら自動で _hero に戻る。
+##
+## 2026-04-28 追加（表示範囲一元化）：
+##   - 敵パーティーの表示フロアフィルタに使用
+##   - 味方（プレイヤー / NPC）は全フロア表示なのでこの関数は使わない
+##   - F7 スナップショットも本関数で「追跡対象」を決定
+func _get_tracking_target() -> Character:
+	if _selected_leader != null and is_instance_valid(_selected_leader) and _selected_leader.hp > 0:
+		return _selected_leader
+	if _hero != null and is_instance_valid(_hero):
+		return _hero
+	return null
+
+
+## 追跡対象のフロアを返す（敵パーティーのフロアフィルタに使用）
+## 追跡対象が無効なら -1（呼出側で「フィルタなし」扱いにする）
+func _get_tracking_floor() -> int:
+	var tgt: Character = _get_tracking_target()
+	if tgt != null:
+		return tgt.current_floor
+	return -1
+
+
 ## リーダー選択が変わったとき発火（game_map がカメラを切り替えるために購読）
 signal leader_selected(leader: Character)
 
@@ -223,6 +248,13 @@ func select_default_leader() -> void:
 func _process(delta: float) -> void:
 	if not visible:
 		return
+	# 追跡対象（_selected_leader）が freed/死亡したら自動でクリアし、
+	# leader_selected(null) を emit してカメラを操作キャラに戻す
+	# （game_map._on_debug_leader_selected が null 受信で通常追跡に復帰する経路）
+	if _selected_leader != null and \
+			(not is_instance_valid(_selected_leader) or _selected_leader.hp <= 0):
+		_selected_leader = null
+		leader_selected.emit(null)
 	_redraw_timer += delta
 	if _redraw_timer >= REDRAW_INTERVAL:
 		_redraw_timer = 0.0
@@ -247,18 +279,11 @@ func _on_draw() -> void:
 	# 描画前にリーダー一覧を構築（上下キー選択用）
 	_leader_list = _build_leader_list()
 
-	# 表示フロアを決定：選択中リーダーのフロア > プレイヤーのフロア
-	var player_floor: int = int(_get_floor.call()) if _get_floor.is_valid() else 0
-	var display_floor: int = player_floor
-	if _selected_leader != null and is_instance_valid(_selected_leader):
-		display_floor = _selected_leader.current_floor
+	# 追跡対象を決定（敵パーティーのフロアフィルタに使用・味方は全フロア表示なので不使用）
+	var tracking_floor: int = _get_tracking_floor()
 
-	# タイトル行
-	var title: String
-	if display_floor != player_floor:
-		title = "■ PARTY STATUS  [F1で閉じる]  Player:F%d  表示:F%d" % [player_floor, display_floor]
-	else:
-		title = "■ PARTY STATUS  [F1で閉じる]  Floor: %d" % player_floor
+	# タイトル行（操作キャラ・追跡対象を併記）
+	var title: String = _build_title_text()
 	_control.draw_string(font, Vector2(px + PAD, py + PAD + HDR_FS),
 		title, HORIZONTAL_ALIGNMENT_LEFT, -1, HDR_FS, Color(0.8, 0.8, 1.0))
 
@@ -270,26 +295,57 @@ func _on_draw() -> void:
 	var c_top: float = title_bottom + 2.0
 	var c_h: float   = ph - (title_bottom - py) - 2.0
 
-	_draw_party_state(font, px + PAD, c_top + 2.0, pw - PAD * 2, c_h - 4.0, display_floor)
+	_draw_party_state(font, px + PAD, c_top + 2.0, pw - PAD * 2, c_h - 4.0, tracking_floor)
+
+
+## タイトル行の文字列を組み立てる（画面表示・F7 スナップショット共通）
+##
+## 仕様：
+##   - 追跡対象 = 操作キャラ（既定）：`Floor: 0  操作:ヘレン@F0`
+##   - 追跡対象 ≠ 操作キャラ（PSW で別キャラ選択中）：`操作:ヘレン@F0  追跡:クレア@F1`
+##   - 操作キャラまたは追跡対象が無効：`Floor: ?`（フォールバック）
+func _build_title_text() -> String:
+	var prefix: String = "■ PARTY STATUS  [F1で閉じる]  "
+	var hero_floor: int = int(_get_floor.call()) if _get_floor.is_valid() else 0
+	var hero_name: String = _hero.character_data.character_name \
+			if _hero != null and is_instance_valid(_hero) and _hero.character_data != null \
+			else "?"
+	var tracking_target: Character = _get_tracking_target()
+	# 追跡対象 == 操作キャラ（PSW で選択していない or 操作キャラ自身を選択）
+	if tracking_target == null or tracking_target == _hero:
+		return "%sFloor: %d  操作:%s@F%d" % [prefix, hero_floor, hero_name, hero_floor]
+	# 追跡対象が操作キャラと別のキャラ
+	var tgt_name: String = tracking_target.character_data.character_name \
+			if tracking_target.character_data != null else "?"
+	return "%s操作:%s@F%d  追跡:%s@F%d" % [
+		prefix, hero_name, hero_floor, tgt_name, tracking_target.current_floor]
 
 
 # --------------------------------------------------------------------------
 # パーティー状態
 # --------------------------------------------------------------------------
 
+## 表示範囲（2026-04-28 改訂）：
+##   - プレイヤー：全メンバー・全フロア表示（味方陣営の動向把握優先）
+##   - NPC：全パーティー・全フロア表示（協力勢力の動向把握）
+##   - 敵：追跡対象のフロアのみ（戦況集中）
+##
+## floor_idx 引数の意味論：
+##   - == -1 → フィルタなし（全フロア表示・味方系で使用）
+##   - >= 0  → そのフロアにメンバーがいるパーティーのみ表示（敵系で使用）
 func _draw_party_state(font: Font, x: float, y_start: float,
-		w: float, h: float, floor_idx: int) -> void:
+		w: float, h: float, tracking_floor: int) -> void:
 	var cy: float  = y_start
 	var bottom: float = y_start + h
 
 	var ems: Array = _get_enemy_managers.call() if _get_enemy_managers.is_valid() else []
 	var nms: Array = _get_npc_managers.call()   if _get_npc_managers.is_valid()   else []
 
-	# プレイヤーパーティーを先頭に表示（情報量が多く優先表示する）
+	# プレイヤーパーティー（全フロア表示・先頭に配置）
 	if _party != null and cy < bottom:
-		cy = _draw_player_party(font, x, cy, w, bottom, floor_idx)
+		cy = _draw_player_party(font, x, cy, w, bottom, -1)
 
-	# NPC パーティー
+	# NPC パーティー（全フロア表示）
 	for nm_v: Variant in nms:
 		if cy >= bottom:
 			break
@@ -297,9 +353,9 @@ func _draw_party_state(font: Font, x: float, y_start: float,
 		if nm == null or not is_instance_valid(nm):
 			continue
 		cy = _draw_party_block(font, nm, "NPC", Color(0.45, 1.0, 0.55),
-				x, cy, w, bottom, floor_idx, true)
+				x, cy, w, bottom, -1, true)
 
-	# 敵パーティー
+	# 敵パーティー（追跡対象のフロアのみ）
 	for em_v: Variant in ems:
 		if cy >= bottom:
 			break
@@ -307,7 +363,7 @@ func _draw_party_state(font: Font, x: float, y_start: float,
 		if em == null or not is_instance_valid(em):
 			continue
 		cy = _draw_party_block(font, em, "敵", Color(1.0, 0.45, 0.45),
-				x, cy, w, bottom, floor_idx, false)
+				x, cy, w, bottom, tracking_floor, false)
 
 
 ## 描画順のリーダーキャラ一覧を構築する（上下キー選択の対象リスト）
@@ -358,6 +414,10 @@ func _get_any_leader(members: Array) -> Character:
 
 
 ## show_orders: false=敵（`item=` 列を省略・敵は item_pickup 指示を持たないため）、true=NPC/プレイヤー（全列表示）
+##
+## floor_idx の意味論（2026-04-28 改訂）：
+##   == -1 → フィルタなし（味方系で使用・常にパーティー表示）
+##   >= 0  → そのフロアにメンバーがいるパーティーのみ表示（敵系で使用）
 func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 		header_color: Color, x: float, y: float, w: float, bottom: float,
 		floor_idx: int, show_orders: bool) -> float:
@@ -365,16 +425,17 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 	if members.is_empty():
 		return y
 
-	# パーティーブロック表示の条件: いずれかのメンバーが表示フロアにいる場合
-	# ただし表示するメンバー一覧は全フロアにまたがって含める（リーダーだけ別フロアでも全員見えるように）
-	var any_on_floor := false
-	for m_v: Variant in members:
-		var mc := m_v as Character
-		if is_instance_valid(mc) and mc.current_floor == floor_idx:
-			any_on_floor = true
-			break
-	if not any_on_floor:
-		return y
+	# パーティーブロック表示の条件: フィルタなし（floor_idx==-1）または
+	# いずれかのメンバーが指定フロアにいる場合
+	if floor_idx >= 0:
+		var any_on_floor := false
+		for m_v: Variant in members:
+			var mc := m_v as Character
+			if is_instance_valid(mc) and mc.current_floor == floor_idx:
+				any_on_floor = true
+				break
+		if not any_on_floor:
+			return y
 
 	# 表示対象は全生存メンバー（フロアに関わらず）
 	var floor_members: Array[Character] = []
@@ -463,23 +524,28 @@ func _draw_party_block(font: Font, pm: PartyManager, type_label: String,
 	return y
 
 
+## floor_idx の意味論（2026-04-28 改訂）：
+##   == -1 → フィルタなし（プレイヤーパーティーは常に全メンバー表示）
+##   >= 0  → そのフロアにメンバーがいるときのみ表示（旧仕様・現在は呼出側が常に -1 を渡す）
 func _draw_player_party(font: Font, x: float, y: float, w: float, bottom: float,
 		floor_idx: int) -> float:
 	if y >= bottom or _party == null:
 		return y
 
-	# 全メンバー（フロア問わず）を表示。表示条件はいずれか1人が表示フロアにいることのみ
+	# 全メンバー（フロア問わず）を表示
 	var sorted: Array = _party.sorted_members()
-	var any_on_floor := false
 	var floor_members: Array = []
+	var any_on_floor := false
 	for m_v: Variant in sorted:
 		var m := m_v as Character
 		if not is_instance_valid(m):
 			continue
 		floor_members.append(m)
-		if m.current_floor == floor_idx:
+		if floor_idx < 0 or m.current_floor == floor_idx:
 			any_on_floor = true
-	if not any_on_floor or floor_members.is_empty():
+	if floor_idx >= 0 and not any_on_floor:
+		return y
+	if floor_members.is_empty():
 		return y
 
 	var alive: int = 0
@@ -766,8 +832,14 @@ func _format_action_body(m: Character, display_floor: int) -> String:
 		var class_jp: String = GlobalConstants.CLASS_NAME_JP.get(cd.class_id, "") as String
 		if not class_jp.is_empty():
 			class_s = "(%s)" % class_jp
+	# [Fx] 表示は「操作キャラと別フロアにいる」場合の注釈
+	# display_floor < 0（フィルタなし）は 2026-04-28 改訂：味方系の「全フロア表示」モード。
+	# 操作キャラのフロアを参照値として使う（メンバー本人のフロアと比較して [Fx] を出す）
+	var ref_floor: int = display_floor
+	if ref_floor < 0 and _get_floor.is_valid():
+		ref_floor = int(_get_floor.call())
 	var floor_s: String = ""
-	if display_floor >= 0 and m.current_floor != display_floor:
+	if ref_floor >= 0 and m.current_floor != ref_floor:
 		floor_s = "[F%d]" % m.current_floor
 	var move_dur: float = m.get_move_duration()
 	var status: String = ""
@@ -1227,10 +1299,10 @@ func _power_balance_label(pb: int) -> String:
 ## 戦力内訳を 1 行の文字列にフォーマット
 ## 形式: F=s(R+B) C=s(R+B) E=s(R+B)
 ##   F = full_party / C = nearby_allied / E = nearby_enemy
-##   s = strength（= (rank_sum + bonus_sum × WEIGHT) × HP率）
+##   s = strength（= rank_sum + bonus_sum × WEIGHT・HP 抜き）
 ##   R = rank_sum（素値）
 ##   B = bonus_sum × ITEM_BONUS_STRENGTH_WEIGHT（strength への寄与値・WEIGHT 込み）
-##   → HP 率 1.0 のとき R + B = s が成立する設計（読み手が直感的に検算できる）
+##   → 常に R + B = s が成立する（2026-04-28 用語ガバナンス改訂で HP 率を strength から分離）
 ##   敵パーティー視点では F と C は同値（協力しない世界観）
 func _format_strength_breakdown(hint: Dictionary) -> String:
 	var w: float = GlobalConstants.ITEM_BONUS_STRENGTH_WEIGHT
@@ -1306,27 +1378,24 @@ func _hp_color_for(ch: Character) -> Color:
 ## 2026-04-25 改訂：HpStatus 廃止に伴い、戦況比に HP 率を組み込む構造化表示に変更
 ## 2026-04-28 改訂：用語統一（旧コメントの「戦力比」は CombatSituation の根拠を指していたが、
 ##   PowerBalance のヘッダーラベル「戦力比:」と衝突するため「戦況比」に表記変更）
+## 2026-04-28 改訂（用語ガバナンス）：strength を HP 抜きに変更したため、表示の `my_s` `enemy_s`
+##   は base そのもの。HP 率は別途 hint から取得して × で乗算する素直な式に変わった
 ## 例: "EVEN(9.0×1.00 / 9.0×0.85 = 1.18)"
 ##   形式：<enum 名>(<自軍戦力>×<自軍 HP 率> / <敵戦力>×<敵 HP 率> = <戦況比>)
-##   `_combat_situation` の strength 値は既に hp_ratio 込みで計算されているため、
-##   表示の「× hp_ratio」は計算過程を明示するための再構成（実際の strength から逆算）
 ## 敵なし or 戦力ゼロ時は SAFE ラベルのみ返す（比は省略）
 func _combat_situation_label_with_ratio(hint: Dictionary) -> String:
 	var label := _combat_situation_label(hint.get("combat_situation", 0) as int)
 	var ratio: float = float(hint.get("combat_ratio", -1.0))
 	if ratio < 0.0:
 		return label
-	# strength = base × hp_ratio から base を逆算して表示する
-	# （PartyStatusWindow の趣旨は「計算過程の可視化」のため、構成要素を露出する）
+	# strength は HP 抜き（base = rank_sum + bonus_sum × WEIGHT）。HP 率を別途乗算する
+	# my_combat_hp_ratio は戦況計算で使われた HP 率（敵パは full_party / 味方は nearby_allied 由来）
 	var my_s: float = float(hint.get("my_combat_strength", 0.0))
 	var enemy_s: float = float(hint.get("nearby_enemy_strength", 0.0))
-	var ally_hp_ratio: float = float(hint.get("nearby_allied_hp_ratio", 1.0))
+	var my_hp_ratio: float = float(hint.get("my_combat_hp_ratio", 1.0))
 	var enemy_hp_ratio: float = float(hint.get("nearby_enemy_hp_ratio", 1.0))
-	# base = strength / hp_ratio（hp_ratio が 0 なら 0 として扱う）
-	var my_base: float = my_s / ally_hp_ratio if ally_hp_ratio > 0.0 else 0.0
-	var enemy_base: float = enemy_s / enemy_hp_ratio if enemy_hp_ratio > 0.0 else 0.0
 	return "%s(%.1f×%.2f / %.1f×%.2f = %.2f)" % [
-		label, my_base, ally_hp_ratio, enemy_base, enemy_hp_ratio, ratio]
+		label, my_s, my_hp_ratio, enemy_s, enemy_hp_ratio, ratio]
 
 
 ## FLEE 時の避難先情報 suffix を返す（戦況判断ブロック末尾に付加）
@@ -1424,9 +1493,11 @@ func snapshot_to_log() -> void:
 
 
 ## スナップショット全体のテキストを組み立てる
-## 構造：ヘッダー部（区切り線・時刻・フロア・操作キャラ・速度）
+## 構造：ヘッダー部（区切り線・時刻・フロア・操作キャラ・追跡対象・速度）
 ##       + プレイヤーパーティー + NPC パーティー + 敵パーティー
 ##       + フッター（区切り線）
+##
+## 表示範囲は画面表示と同じ（味方は全フロア・敵は追跡対象のフロア・2026-04-28 改訂）
 func _build_snapshot_text() -> String:
 	var lines: PackedStringArray = []
 	lines.append("================================================================")
@@ -1440,7 +1511,7 @@ func _build_snapshot_text() -> String:
 		int(d.get("year",   0)), int(d.get("month",  0)), int(d.get("day",    0)),
 		int(d.get("hour",   0)), int(d.get("minute", 0)), int(d.get("second", 0)), ms])
 	var player_floor: int = int(_get_floor.call()) if _get_floor.is_valid() else 0
-	lines.append("フロア: %d" % player_floor)
+	lines.append("操作キャラフロア: %d" % player_floor)
 	var active_name: String = "?"
 	if _hero != null and is_instance_valid(_hero) and _hero.character_data != null:
 		var cd: CharacterData = _hero.character_data
@@ -1449,35 +1520,51 @@ func _build_snapshot_text() -> String:
 		if not class_jp.is_empty():
 			active_name += "（%s）" % class_jp
 	lines.append("操作キャラ: %s" % active_name)
+	# 追跡対象（PSW で選択中のキャラ・操作キャラと同じ場合は「同上」）
+	var tracking_target: Character = _get_tracking_target()
+	var tracking_label: String = "同上"
+	var tracking_floor: int = _get_tracking_floor()
+	if tracking_target != null and tracking_target != _hero \
+			and tracking_target.character_data != null:
+		var tcd: CharacterData = tracking_target.character_data
+		var tclass_jp: String = GlobalConstants.CLASS_NAME_JP.get(tcd.class_id, "") as String
+		var area_id: String = _area_id_at(tracking_target)
+		tracking_label = tcd.character_name
+		if not tclass_jp.is_empty():
+			tracking_label += "（%s）" % tclass_jp
+		tracking_label += "@F%d %s" % [tracking_target.current_floor, area_id]
+	lines.append("追跡対象: %s" % tracking_label)
 	lines.append("ゲーム速度: %.1fx" % GlobalConstants.game_speed)
 	lines.append("----------------------------------------------------------------")
 
-	# プレイヤーパーティー
+	# プレイヤーパーティー（全フロア表示）
 	if _party != null:
-		lines.append_array(_snapshot_player_party_lines(player_floor))
+		lines.append_array(_snapshot_player_party_lines(-1))
 
-	# NPC パーティー
+	# NPC パーティー（全フロア表示）
 	var nms: Array = _get_npc_managers.call() if _get_npc_managers.is_valid() else []
 	for nm_v: Variant in nms:
 		var nm := nm_v as PartyManager
 		if nm == null or not is_instance_valid(nm):
 			continue
-		lines.append_array(_snapshot_party_block_lines(nm, "NPC", player_floor, true))
+		lines.append_array(_snapshot_party_block_lines(nm, "NPC", -1, true))
 
-	# 敵パーティー
+	# 敵パーティー（追跡対象のフロアのみ）
 	var ems: Array = _get_enemy_managers.call() if _get_enemy_managers.is_valid() else []
 	for em_v: Variant in ems:
 		var em := em_v as PartyManager
 		if em == null or not is_instance_valid(em):
 			continue
-		lines.append_array(_snapshot_party_block_lines(em, "敵", player_floor, false))
+		lines.append_array(_snapshot_party_block_lines(em, "敵", tracking_floor, false))
 
 	lines.append("================================================================")
 	return "\n".join(lines)
 
 
 ## プレイヤーパーティーブロックのテキスト行を返す（`_draw_player_party` と対応）
-## 表示フロアにメンバーが 1 人もいなければ空配列を返す（画面表示と同じ条件）
+## floor_idx の意味論（2026-04-28 改訂）：
+##   == -1 → フィルタなし（全メンバー表示・F7 スナップショットで使用）
+##   >= 0  → 指定フロアにメンバーがいる場合のみ表示
 func _snapshot_player_party_lines(floor_idx: int) -> PackedStringArray:
 	var out: PackedStringArray = []
 	if _party == null:
@@ -1490,9 +1577,11 @@ func _snapshot_player_party_lines(floor_idx: int) -> PackedStringArray:
 		if not is_instance_valid(m):
 			continue
 		floor_members.append(m)
-		if m.current_floor == floor_idx:
+		if floor_idx < 0 or m.current_floor == floor_idx:
 			any_on_floor = true
-	if not any_on_floor or floor_members.is_empty():
+	if floor_idx >= 0 and not any_on_floor:
+		return out
+	if floor_members.is_empty():
 		return out
 
 	var alive: int = 0
@@ -1539,6 +1628,9 @@ func _snapshot_player_party_lines(floor_idx: int) -> PackedStringArray:
 
 ## NPC / 敵パーティーブロックのテキスト行を返す（`_draw_party_block` と対応）
 ## show_orders: false=敵（item= 列省略）、true=NPC（全列表示）
+## floor_idx の意味論（2026-04-28 改訂）：
+##   == -1 → フィルタなし（NPC は全フロア表示）
+##   >= 0  → 指定フロアにメンバーがいる場合のみ表示（敵は追跡対象のフロア）
 func _snapshot_party_block_lines(pm: PartyManager, type_label: String,
 		floor_idx: int, show_orders: bool) -> PackedStringArray:
 	var out: PackedStringArray = []
@@ -1546,14 +1638,15 @@ func _snapshot_party_block_lines(pm: PartyManager, type_label: String,
 	if members.is_empty():
 		return out
 
-	var any_on_floor: bool = false
-	for m_v: Variant in members:
-		var mc := m_v as Character
-		if is_instance_valid(mc) and mc.current_floor == floor_idx:
-			any_on_floor = true
-			break
-	if not any_on_floor:
-		return out
+	if floor_idx >= 0:
+		var any_on_floor: bool = false
+		for m_v: Variant in members:
+			var mc := m_v as Character
+			if is_instance_valid(mc) and mc.current_floor == floor_idx:
+				any_on_floor = true
+				break
+		if not any_on_floor:
+			return out
 
 	var floor_members: Array[Character] = []
 	for m_v: Variant in members:

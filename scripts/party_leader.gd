@@ -713,6 +713,7 @@ func get_global_orders_hint() -> Dictionary:
 	hint["hp_max"]        = _combat_situation.get("hp_max", 0)
 	# 戦況比の内訳（デバッグ表示用・my_strength / enemy_strength）
 	hint["my_combat_strength"] = _combat_situation.get("my_combat_strength", 0.0)
+	hint["my_combat_hp_ratio"] = _combat_situation.get("my_combat_hp_ratio", 1.0)
 	hint["combat_ratio"]       = _combat_situation.get("combat_ratio", -1.0)
 	# full_party / nearby_allied / nearby_enemy の 3 系統（PartyStatusWindow 表示用）
 	hint["full_party_strength"]    = _combat_situation.get("full_party_strength", 0.0)
@@ -1082,12 +1083,14 @@ func _calc_stats(members: Array, use_estimated_hp: bool) -> Dictionary:
 	if alive_count <= 0:
 		return {"rank_sum": 0, "bonus_sum": 0.0, "hp_ratio": 0.0, "strength": 0.0, "alive_count": 0}
 	var avg_hp_ratio := hp_ratio_sum / float(alive_count)
-	var base := float(rank_sum) + bonus_sum * GlobalConstants.ITEM_BONUS_STRENGTH_WEIGHT
+	# 戦力（strength）は HP 抜き：rank_sum + bonus_sum × WEIGHT のみ（2026-04-28 用語ガバナンス改訂）
+	# HP 率は別フィールドで保持し、戦況（CombatSituation）計算でのみ × hp_ratio を適用する
+	var strength := float(rank_sum) + bonus_sum * GlobalConstants.ITEM_BONUS_STRENGTH_WEIGHT
 	return {
 		"rank_sum":    rank_sum,
 		"bonus_sum":   bonus_sum,
 		"hp_ratio":    avg_hp_ratio,
-		"strength":    base * avg_hp_ratio,
+		"strength":    strength,
 		"alive_count": alive_count,
 	}
 
@@ -1106,12 +1109,13 @@ func _calc_stats_mixed(self_members: Array, other_members: Array) -> Dictionary:
 		# HP 率は生存メンバー加重平均（rank_sum 側を重みにしない）
 		avg_hp_ratio = (float(self_stats.hp_ratio) * float(self_stats.alive_count)
 				+ float(other_stats.hp_ratio) * float(other_stats.alive_count)) / float(alive)
-	var base := float(rank_sum) + bonus_sum * GlobalConstants.ITEM_BONUS_STRENGTH_WEIGHT
+	# 戦力（strength）は HP 抜き：rank_sum + bonus_sum × WEIGHT のみ（2026-04-28 用語ガバナンス改訂）
+	var strength := float(rank_sum) + bonus_sum * GlobalConstants.ITEM_BONUS_STRENGTH_WEIGHT
 	return {
 		"rank_sum":    rank_sum,
 		"bonus_sum":   bonus_sum,
 		"hp_ratio":    avg_hp_ratio,
-		"strength":    base * avg_hp_ratio,
+		"strength":    strength,
 		"alive_count": alive,
 	}
 
@@ -1196,14 +1200,18 @@ func _evaluate_strategic_status() -> Dictionary:
 	# ==================== 敵の非対称設計 ====================
 	# 敵パーティー: 自軍戦力 = full_party（協力しない）
 	# 味方（player/npc）: 自軍戦力 = nearby_allied（連合）
+	# strength は HP 抜き（2026-04-28 用語ガバナンス改訂）。戦況計算で × hp_ratio を別途適用する
 	var my_combat_strength: float
 	var my_combat_rank_sum: int
+	var my_combat_hp_ratio: float
 	if is_enemy_party:
 		my_combat_strength = float(full_stats.strength)
 		my_combat_rank_sum = int(full_stats.rank_sum)
+		my_combat_hp_ratio = float(full_stats.hp_ratio)
 	else:
 		my_combat_strength = float(nearby_allied_stats.strength)
 		my_combat_rank_sum = int(nearby_allied_stats.rank_sum)
+		my_combat_hp_ratio = float(nearby_allied_stats.hp_ratio)
 
 	# ==================== 戦況判断 ====================
 	# HP 充足率は自パーティーのみで算出（他パーティーのポーション所持は把握不可）
@@ -1216,12 +1224,16 @@ func _evaluate_strategic_status() -> Dictionary:
 		situation = int(GlobalConstants.CombatSituation.SAFE)
 		power_balance = int(GlobalConstants.PowerBalance.OVERWHELMING)
 	else:
-		# 戦力比（strength 比）で situation を分類
+		# 戦況比（戦力 × HP 率の比）で situation を分類
+		# strength は HP 抜きなので、戦況計算ではここで × hp_ratio を適用する
 		var enemy_s: float = float(nearby_enemy_stats.strength)
-		if enemy_s <= 0.0:
+		var enemy_hp: float = float(nearby_enemy_stats.hp_ratio)
+		var enemy_combat: float = enemy_s * enemy_hp
+		if enemy_combat <= 0.0:
 			situation = int(GlobalConstants.CombatSituation.SAFE)
 		else:
-			var ratio := my_combat_strength / enemy_s
+			var my_combat: float = my_combat_strength * my_combat_hp_ratio
+			var ratio := my_combat / enemy_combat
 			combat_ratio = ratio
 			if ratio >= GlobalConstants.COMBAT_RATIO_OVERWHELMING:
 				situation = int(GlobalConstants.CombatSituation.OVERWHELMING)
@@ -1260,8 +1272,9 @@ func _evaluate_strategic_status() -> Dictionary:
 		"hp_potion":      int(hp_breakdown.get("potion", 0)),
 		"hp_max":         int(hp_breakdown.get("max", 0)),
 
-		# 戦況判定に使った戦力比の内訳（デバッグ表示用・my_strength / enemy_strength）
+		# 戦況判定に使った戦力比の内訳（デバッグ表示用・my_strength × my_hp / enemy_strength × enemy_hp）
 		"my_combat_strength": my_combat_strength,
+		"my_combat_hp_ratio": my_combat_hp_ratio,
 		"combat_ratio":       combat_ratio,
 
 		# full_party（自パ全員・下層判定用・絶対戦力）
