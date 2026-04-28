@@ -19,8 +19,8 @@ signal switch_requested(new_character: Character)
 ## 全体方針の行定義（key: Party.global_orders のキー）
 const GLOBAL_ROWS: Array = [
 	{"key": "move",          "label": "移動方針",
-	 "options": ["follow", "cluster", "same_room", "standby", "explore"],
-	 "labels":  ["追従", "密集", "同じ部屋", "待機", "探索"]},
+	 "options": ["follow", "cluster", "same_room", "standby"],
+	 "labels":  ["追従", "密集", "同じ部屋", "待機"]},
 	{"key": "battle_policy", "label": "戦闘方針",
 	 "options": ["attack", "defense", "retreat"],
 	 "labels":  ["攻撃", "防衛", "撤退"]},

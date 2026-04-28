@@ -11,7 +11,8 @@ var active_character: Character = null
 var _next_join_index: int = 0
 
 ## パーティー全体の方針（OrderWindow の全体方針行が管理。AI の move_policy・各種行動条件に反映）
-## move:         全員の移動方針（move_policy と対応。follow/same_room/cluster/explore/standby）
+## move:         全員の移動方針（move_policy と対応。follow/same_room/cluster/standby）
+##               ※ `explore` は 2026-04-28 に OrderWindow から削除・層 2 専用値（リーダー個別行動）に純化
 ## target:       全員のデフォルトターゲット方針（nearest/weakest/same_as_leader/support）
 ## on_low_hp:    低HP時の行動（keep_fighting/fall_back/flee。状態ラベル "critical" で発動）
 ##               ※ 2026-04-21 リネーム：retreat → fall_back（battle_policy="retreat" との重複解消）

@@ -3,6 +3,139 @@
 > CLAUDE.md フェーズセクションの圧縮時に抽出した変更履歴。
 > 正常に完了した新規実装の詳細は docs/spec.md を参照。
 
+## 2026-04-28 セッションサマリー：戦力表示の整理 → Floor 0 拡張 → NPC 探索ロジックの概念分離
+
+本セッションは「戦力表示の B 部分が WEIGHT 込みでないため `R+B ≠ s` に見える」という claude.ai 側からのバグ疑念から始まり、表示整理 → 規約整理 → 部屋数拡張 → NPC 探索ロジック深掘り → OrderWindow 値域整理 → ハッシュオフセット撤廃へと連鎖した。9 件の改修が同日にまとまっている。
+
+### 主要変更（実装順・ほぼ依存順）
+
+#### 1. PartyStatusWindow に持ち物グループを追加（詳細度：低）
+
+**動機**：戦力表示 `F=s(R+B)` の `+B` 部分（装備 bonus 寄与）の検証手段がなく、ConfigEditor で値を変えてもどの装備が反映されているか可視化できなかった。
+
+**実装**：
+- `_build_inventory_parts()` 新設（[party_status_window.gd:1024](scripts/party_status_window.gd:1024)）
+- フォーマット：`[剣:bs2 鎧:bs0 盾:bs0] hp×N mp×N`
+- 装備種別の日本語ラベル（剣/斧/弓/ダガー/杖/鎧/服/ローブ/盾）を `EQUIPMENT_LABELS_JP` 定数に集約
+- `bsN` = `bonuses` 辞書値合計（例：`{power:3, block_right_front:1}` → `bs4`）
+- ポーションは `potion_heal` → `hp×N` / `potion_energy` → `mp×N`（0 本でも常時表示）
+- 詳細度「低」（>= 2）で表示・味方限定（敵には出さない）
+- 12 ステータスグループ直後・敵静的属性グループの代替位置に配置
+
+#### 2. 戦力表示の B 部分を WEIGHT 込みに変更・戦力 / 戦力比 の用語整理
+
+**発見**：claude.ai が `F(14+0.7)14.1` の `+0.7` を「素値」と誤読しバグ疑念を提起。実装を読んでみると WEIGHT (`0.165`) は適用済みで、`+0.7` が `bonus_sum` 素値、`14.1` が strength（WEIGHT 込み・HP 込み）の正しい数値だった。表示の役割分担が読み手に伝わっていなかった。
+
+**実装**：
+- `_format_strength_breakdown` の B 部分を `bonus_sum × ITEM_BONUS_STRENGTH_WEIGHT` に変更
+- フォーマットを `F(R+B)s` → `F=s(R+B)` に変更（s が主役・(R+B) が内訳）
+- 旧 `戦力:OVERWHELMING F(...) C(...) E(...)` を `戦力: F=s(R+B) ... 戦力比:OVERWHELMING` に分離
+- HP 率 1.0 のとき `R + B = s` が成立し、見た目で検算が通る設計
+
+**用語整理**：3 つの指標を CLAUDE.md「戦力計算の 3 指標と用途」表で明文化
+- 戦況（CombatSituation・HP 込み戦力比 → enum 6 段階・NPC battle_policy 自動切替）
+- 戦力（strength・絶対値・NPC フロア降下判定の `FLOOR_*_RANK_THRESHOLD` と直接比較）
+- 戦力比（PowerBalance・rank_sum のみ・特殊攻撃「強敵なら使う」発動判定）
+
+旧コメント「戦力比」が CombatSituation の根拠を指していた箇所を「戦況比」に表記変更（PowerBalance との衝突解消）。
+
+#### 3. PartyStatusWindow に目標フロア表示・全体指示の優先度対称化
+
+**動機**：戦力 F が NPC フロア降下判定（`FLOOR_X_Y_RANK_THRESHOLD` との比較）に使われているが、判定結果が不可視だった。あわせて全体指示が「高」優先度・対応する個別指示が「中」という非対称も整理。
+
+**実装**：
+- `NpcLeaderAI._build_orders_part()` 末尾に `hint["target_floor"] = _get_target_floor()` 追加
+- `_build_target_floor_part(hint, party_type)` ヘルパ新設（NPC 限定で `目標F:N` 表示）
+- 全体指示（`mv=` / `battle=` / `tgt=` / `hp=` / `item=` / 敵 `strategy=`）の優先度を「高」→「中」に降格
+- 詳細度 0（高のみ）モードでは戦況・戦力・戦力比・目標F の戦力情報に集約される構造に整理
+
+#### 4. Floor 0 部屋数を 20 → 30 に拡張
+
+**動機**：NPC が視界ベース階段探索を完了する前に敵を全滅させてしまい、適正フロアサイクル（弱 NPC が上階で装備を集める → 降りる）が機能しなかった。事前に処理性能調査を実施し、1.5 倍は問題なしと結論。
+
+**実装**：
+- 5 列 × 6 行 = 30 部屋（旧 4 列 × 5 行 = 20 部屋）
+- 階段 3 個 → 5 個（4 方向 + SE に分散：`r0_3` 北 / `r0_15` 東 / `r0_28` 南 / `r0_11` 西 / `r0_30` SE）
+- 安全部屋（`r0_13`・`entrance_room`）は中央 row 3 col 3 に再配置（15×11・原型と同サイズ）
+- マップ寸法 44×45 → 55×54（約 25% 拡大）
+- 敵パーティー 19 → 29（密度同等）。NPC パーティー 9 構成（14 人）は維持
+- フロア 1〜4 は未変更（プレイヤー/NPC 遷移は `find_stairs(spawn_type)` の `spawns[0]` を一律使用するため、F1+ の階段数とは独立に動作することを確認済み）
+
+#### 5. `_find_explore_target` の visited 判定をパーティー固有に
+
+**発見**：NPC explore の挙動調査で、`_find_explore_target()` が `VisionSystem.is_area_visited()`（プレイヤーパーティー視点）に依存していることが判明。NPC が自パで踏んだ部屋を「未訪問」扱いし続ける副作用、複数 NPC パーティーが共通の `unvisited` リストから選ぶ問題、NPC の探索計画がプレイヤーの探索進度に左右される問題があった。
+
+**実装**：
+- `PartyLeader._visited_areas`（パーティー固有・既存の `_generate_stair_queue` と同一 dict）を参照するよう変更
+- `_visited_areas` の単一管理ルールを CLAUDE.md に明文化（書き込み = `_generate_queue` 冒頭の `_visited_areas[cur_area] = true`・1.5 秒間隔・読み込み 2 経路 = `_generate_stair_queue` / `_find_explore_target`）
+
+#### 6. `move_to_explore` 表示にエリア ID 併記
+
+**動機**：座標のみだと NPC がどの部屋を目指しているか読み取れない。
+
+**実装**：
+- `_format_goal_with_area(g)` ヘルパ新設（[unit_ai.gd:141](scripts/unit_ai.gd:141)）
+- `move_to_explore:r0_22(23,47)` 形式で表示
+- `[explore]queue_empty(IDLE) target:r0_18(20,40)` で次回目標を peek 表示
+- 階段タイル（`STAIRS_DOWN` / `STAIRS_UP`）は既存の `stairs_down` / `stairs_up` ラベルを維持
+
+#### 7. OrderWindow から `explore` 削除・概念分離（層 2 専用値に純化）
+
+**発見**：`_find_explore_target` が「パーティー固有」になったのに、なぜ非リーダーがバラバラに探索するか調査した結果、`NpcLeaderAI._build_orders_part()` が `hint["move"] = "explore"` を書き込み、これが層 1 ベースラインとして非リーダーにも継承されていることが判明。`explore` 文字列が層 1（OrderWindow 全体指示）と層 2（リーダー個別行動）の **2 つの異なる概念に同時使用**されていた。
+
+**実装**：
+- OrderWindow から `explore` 値を削除（5 値 → 4 値：`follow / cluster / same_room / standby`）
+- `GlobalConstants.GLOBAL_MOVE` / `GLOBAL_COMBAT` も 4 値化
+- `NpcLeaderAI._build_orders_part` の `hint["move"] = "explore"` 書き込みを撤去
+- `explore` を層 2 専用値に純化（`stairs_*` / `guard_room` と同じ位置づけ）
+- `PartyStatusWindow._label("move", ...)` の特例リストに `explore` 追加（旧 `_label_cache` 経由から個別処理に移管）
+- `PartyManager.set_global_orders` に旧仕様セーブ互換の正規化（`"explore"` → `"follow"`）を追加（防御的）
+
+#### 8. `_find_explore_target` のハッシュオフセット選択撤廃
+
+**発見**：実プレイで「リーダーが中央安全部屋を突っ切って反対側に向かう → 殲滅 → 戻る」挙動が観察された。原因は `offset = abs(_member.name.hash()) % candidates.size()` のメンバー間分散ロジックで、遠方候補（マップ反対側）が選ばれていた。
+
+**判断**：
+- (a) OrderWindow から `explore` 削除後、`_find_explore_target` を呼ぶのはリーダーのみ → メンバー間分散は不要
+- (b) NPC パーティーの初期配置がフロア全体に散らばるため、ハッシュなしでもパーティー間分散は緩やかに成立する見込み
+- (c) 中央経由問題の解消が優先
+
+**実装**：`return candidates[0].pos`（純粋な最寄り選択）に変更。集中現象観察時は同点候補のランダム要素導入を「NPC スタック問題」タスクで検討する旨を残タスクに追記。
+
+### 新規残タスク（observation pending）
+
+- **NPC が行く手をはばむ問題**（優先度：中）：プレイヤーや NPC リーダーの進路を立ち止まっている味方がブロックする現象。「NPC スタック問題」とは別現象（当事者本人は動ける）。swap や「通せんぼ検知」が候補
+- **アイテム取得サイクル動作観察に Floor 0 拡張後の項目追加**：探索完遂時間・敵殲滅率・適正フロアサイクル成立度・パーティー間目的地集中
+- **Floor 1〜3 のマップ拡張検討**（優先度：中）：F0 のみ拡張で密度差ができるかは実プレイで判断
+- **VisionSystem の別フロアスキップ**（優先度：中）：性能予測調査で発見・1/5 削減
+- **`_all_members` のフロア別分離**（優先度：中）：同 1/5 削減
+- **REEVAL_INTERVAL のジッタ分散**（優先度：低）：負荷時間軸均一化
+- **`FLOOR_X_Y_RANK_THRESHOLD` の命名乖離**（優先度：中・適正フロア算出と統合可能）
+- **`_calc_party_strength()` デッドコード削除**（優先度：低）
+
+### 採用しなかった案・経緯メモ
+
+- **VisionSystem を NPC explore でも使い続ける案**：NPC が他パーティー（プレイヤー）の探索進度に依存する不自然な設計が残るため不採用
+- **`explore` を OrderWindow に残しつつ NpcLeaderAI から書き込みのみ撤去する案**：OrderWindow ユーザーが `explore` を選ぶと「全員バラバラ探索」が再発するため不採用。値域から削除して根本解消
+- **ハッシュオフセットを残しつつ「最寄りに重み付け」する案**：複雑になる割に効果が読みにくい。集中現象が観察されたら同点候補のランダム要素という別アプローチを検討する方針
+
+### 想定外の発見
+
+1. **`_visited_areas` と `VisionSystem.is_area_visited()` の使い分けが整合しない設計問題**
+   - `_generate_stair_queue` は `_visited_areas`（パーティー固有）を使うのに、`_find_explore_target` は VisionSystem を使っていた
+   - 設計意図は不明（単に流用したコードの差異か、意図的な使い分けか）
+   - 視界ベース思想（自パが見たエリアを既知扱い）と整合させるため `_visited_areas` に統一
+2. **`_calc_party_strength()`（game_map.gd:1228）がデッドコード**
+   - grep で呼び出し元なし。`max_hp` 合計を返す独自実装で、`_combat_situation` 系の strength と紛らわしい命名
+3. **`hint["move"] = "explore"` 経路の存在を見逃していた**
+   - 4/25 NPC 階段ナビ修正時に `stairs_*` だけ撤去し、`explore` は OrderWindow 定義値だから残しても問題ないと判断していた
+   - 実際は層 1 ベースラインへの「全員バラバラ探索」の漏出になっていた
+
+### 観察で確認した既知の課題（深掘り保留）
+
+- 「中央安全部屋に戻る」現象は CRITICAL 自動撤退（`battle_policy = "retreat"` への切替）が主因と判明。仕様意図通りの挙動・docs/history.md の `_evaluate_and_update_battle_policy` エントリ参照
+- リーダー `_move_policy = follow` 自己参照解消（4/26）の敵側未対応も継続観察案件として残置
+
 ## 2026-04-26 セッションサマリー：`mv=` 不整合調査 → per-member ロジック統一 → 敵 GUARD_ROOM の area_id ベース実装
 
 本セッションは「PartyStatusWindow の `mv=追従` と非リーダー `move:密集` 不整合」の観察から始まり、調査・設計議論を経て、3 つの実装変更と複数の残タスク化につながった。各実装の詳細は本サマリー以降の個別エントリ（per-member ロジック統一 / 敵指示表示再構成 / 敵 GUARD_ROOM 再実装）を参照。

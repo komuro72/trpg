@@ -136,6 +136,17 @@ func set_visited_areas(d: Dictionary) -> void:
 
 ## デバッグウィンドウ用: 現在の目的地・行動の短い説明文を返す
 ## 例: "→F1階段(15,3)" / "→explore(8,3)" / "→敵Goblin(10,5)" / "wait"
+## 目的タイル座標を `<area_id>(x,y)` 形式に整形する（PartyStatusWindow デバッグ表示用・2026-04-28 追加）
+## area_id が空（壁・境界・未割り当てタイル）のときは座標のみ返す（`(x,y)`）
+func _format_goal_with_area(g: Vector2i) -> String:
+	if _map_data == null:
+		return "(%d,%d)" % [g.x, g.y]
+	var area := _map_data.get_area(g)
+	if area.is_empty():
+		return "(%d,%d)" % [g.x, g.y]
+	return "%s(%d,%d)" % [area, g.x, g.y]
+
+
 func get_debug_goal_str() -> String:
 	if _member == null or not is_instance_valid(_member):
 		return "?"
@@ -158,6 +169,12 @@ func get_debug_goal_str() -> String:
 			var dir_lbl: String = "DOWN" if _leader_ref.current_floor > _member.current_floor \
 				else "UP"
 			return "follow_leader(%s)/queue_empty(%s)" % [dir_lbl, state_lbl]
+		# explore 方針 + queue 空：次回 _find_explore_target が選ぶ目標を peek 表示
+		# （実際の発行は次フレームの receive_order なので「もし今選ぶなら」の予測値）
+		if pol_str == "explore" and _map_data != null:
+			var peek := _find_explore_target()
+			if peek != Vector2i(-1, -1) and peek != _member.grid_pos:
+				return "[%s]queue_empty(%s) target:%s" % [pol_str, state_lbl, _format_goal_with_area(peek)]
 		return "[%s]queue_empty(%s)" % [pol_str, state_lbl]
 	var head := _queue[0] as Dictionary
 	var act: String = head.get("action", "?") as String
@@ -172,7 +189,7 @@ func get_debug_goal_str() -> String:
 					return "move_to_explore:stairs_down(%d,%d)" % [g.x, g.y]
 				if tile == MapData.TileType.STAIRS_UP:
 					return "move_to_explore:stairs_up(%d,%d)" % [g.x, g.y]
-			return "move_to_explore:(%d,%d)" % [g.x, g.y]
+			return "move_to_explore:%s" % _format_goal_with_area(g)
 		"move_to_attack":
 			if _target != null and is_instance_valid(_target) \
 					and _target.character_data != null:
@@ -1044,10 +1061,17 @@ func _find_explore_target() -> Vector2i:
 	if all_areas.is_empty():
 		return Vector2i(-1, -1)
 
-	# 未訪問エリアを収集
+	# 未訪問エリアを収集（パーティー固有 _visited_areas 経由・2026-04-28 改訂）
+	## 旧実装は `_vision_system.is_area_visited()`（プレイヤーパーティー視点）に依存し、
+	## NPC が自パで踏んだ部屋を「未訪問」扱いし続ける副作用があった。さらに自パとは
+	## 無関係なプレイヤーの探索進度に explore 計画が左右される問題もあった。
+	## 本改訂で `_visited_areas`（PartyLeader 単位で共有・`_generate_stair_queue` と同一 dict）
+	## を参照し、「自パが見たエリアを既知扱いする」視界ベース思想と整合させる。
+	## `_visited_areas` は `_generate_queue` 冒頭で `_member.grid_pos` の area_id が毎回追加される
+	## ため、パーティー内のいずれかのメンバーが訪れたエリアは即座に既知扱いになる。
 	var unvisited: Array[String] = []
 	for area_id: String in all_areas:
-		if _vision_system == null or not _vision_system.is_area_visited(area_id):
+		if not _visited_areas.has(area_id):
 			unvisited.append(area_id)
 
 	if unvisited.is_empty():
@@ -1060,8 +1084,18 @@ func _find_explore_target() -> Vector2i:
 		var pool: Array[Vector2i] = non_stair if not non_stair.is_empty() else tiles
 		return pool[randi() % pool.size()]
 
-	# 未訪問エリアを距離順にソートして候補リストを作る
-	# NPC ごとに異なるインデックスを選ぶことで、全員が同じ目標に集中するのを防ぐ
+	# 未訪問エリアを距離順にソートして最寄り候補を採用する
+	# 2026-04-28 改訂：旧実装では NPC 名のハッシュでオフセットを取り「全員が同じ目標に集中する
+	# のを防ぐ」ためにメンバー間分散を行っていたが、以下の理由で撤廃した：
+	#   (a) OrderWindow から `explore` 削除後（4/28）、`_find_explore_target` を呼ぶのは
+	#       リーダーのみ（非リーダーは `follow` で追従）。メンバー間分散は不要。
+	#   (b) 中央安全部屋を持つマップで、ハッシュオフセットにより遠方候補（マップ反対側）が
+	#       選ばれた結果、リーダーが「中央部屋を突っ切って反対側に向かう → 殲滅 → 戻る」
+	#       のように見える挙動が観察された。
+	#   (c) 各 NPC リーダーの初期位置がフロア全体に散らばっているため、ハッシュなしでも
+	#       「最寄りの未訪問」が自然と異なり、パーティー間分散は緩やかに成立する見込み。
+	# 同点候補がある場合は sort_custom の安定性に従う（暗黙の決定論的選択）。
+	# 集中現象が観察されたら同点候補のランダム要素導入を検討（残タスク参照）。
 	var candidates: Array[Dictionary] = []
 	for area_id: String in unvisited:
 		var tiles := _map_data.get_tiles_in_area(area_id)
@@ -1077,9 +1111,7 @@ func _find_explore_target() -> Vector2i:
 	if candidates.is_empty():
 		return Vector2i(-1, -1)
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.dist < b.dist)
-	# メンバー名のハッシュでオフセットを決定 → 各 NPC が異なるエリアを担当
-	var offset: int = abs(_member.name.hash()) % candidates.size()
-	return candidates[offset].get("pos", Vector2i(-1, -1)) as Vector2i
+	return candidates[0].get("pos", Vector2i(-1, -1)) as Vector2i
 
 
 func _pop_action() -> Dictionary:

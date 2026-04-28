@@ -249,18 +249,19 @@ func _build_orders_part() -> Dictionary:
 	# `_global_orders` の内容を上書きマージ（例：CRITICAL 時の battle_policy="retreat"）
 	for k: Variant in _global_orders.keys():
 		hint[k] = _global_orders[k]
-	# 探索モード（敵未検知）時の move 上書き。
-	# 2026-04-24 深夜：合流済み NPC は除外（プレイヤーの global_orders に従うべき）。
-	# 2026-04-25 改訂：`stairs_down` / `stairs_up` / `target_floor` は `_global_orders.move`
-	# （パーティー全体指示）に書き込まない方針に変更。これらは OrderWindow 定義外の値であり、
-	# パーティー全体の指示ではなく「リーダー個人の動的目標」として扱う。階段ナビへの per-member
-	# 配布は `_assign_orders()` 側で `_get_explore_move_policy()` を直接呼ぶ既存ロジック
-	# （リーダー → stairs_* / 非リーダー → cluster）が担当する。本関数では OrderWindow 定義値
-	# の範囲内（`explore`）のみ hint["move"] に反映し、ヘッダー行の表示が規約に準拠するようにする。
-	if not joined_to_player and _is_in_explore_mode():
-		var pol := _get_explore_move_policy()
-		if pol == "explore":
-			hint["move"] = pol
+	# 2026-04-28 改訂：探索モード時の `hint["move"] = "explore"` 書き込みを廃止。
+	#   旧実装は探索モードで全体指示の `move` を `"explore"` に上書きしていたが、これは
+	#   層 1 ベースラインとして非リーダーにも継承され、非リーダーが独自に
+	#   `_find_explore_target` を呼んで分散する隊形崩壊の原因になっていた。
+	#   `explore` は層 2 専用値（`stairs_*` / `guard_room` と同じ・リーダー個別行動）として
+	#   純化し、層 1 ベースラインは NPC 既定の `"follow"` のまま維持する。リーダー個別の
+	#   `_move_policy = "explore"` 上書きは `_assign_orders()` 経由で `_get_explore_move_policy()`
+	#   を直接呼ぶ既存ロジック（[party_leader.gd:413](party_leader.gd) 層 2）が担当する。
+	# PartyStatusWindow の `目標F:` 表示用（2026-04-28 追加）。
+	# `_get_target_floor()` は `_combat_situation` を読むだけの安価な計算。
+	# joined_to_player でも suppress_floor_navigation でも、内部で current_floor を
+	# 返すフォールバックが効くため一律呼んでよい。
+	hint["target_floor"] = _get_target_floor()
 	return hint
 
 

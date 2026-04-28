@@ -153,6 +153,11 @@ func set_friendly_list(friendlies: Array[Character]) -> void:
 
 ## Party.global_orders dict への参照を LeaderAI に渡す（hp_potion / sp_mp_potion 設定の反映に使用）
 func set_global_orders(orders: Dictionary) -> void:
+	# 2026-04-28 改訂：`explore` は OrderWindow 4 値から削除され層 2 専用値になった。
+	# 旧仕様セーブ・古い指示プリセットからの "explore" は NPC 既定 "follow" にマップする
+	# （非リーダーが独自に分散探索する隊形崩壊を防ぐ・リーダーは層 2 で改めて explore に上書きされる）
+	if orders.get("move", "") == "explore":
+		orders["move"] = "follow"
 	_global_orders = orders
 	if _leader_ai != null:
 		_leader_ai.set_global_orders(orders)
