@@ -1379,30 +1379,7 @@
             "height": 7,
             "type": "normal",
             "wall_tiles": [],
-            "obstacle_tiles": [],
-            "enemy_party": {
-              "party_id": 103,
-              "members": [
-                {
-                  "enemy_id": "wolf",
-                  "x": 28,
-                  "y": 5
-                },
-                {
-                  "enemy_id": "wolf",
-                  "x": 30,
-                  "y": 5
-                },
-                {
-                  "enemy_id": "wolf",
-                  "x": 26,
-                  "y": 5
-                }
-              ],
-              "items": [
-                "axe"
-              ]
-            }
+            "obstacle_tiles": []
           },
           {
             "id": "r1_4",
@@ -1621,30 +1598,7 @@
             "height": 7,
             "type": "normal",
             "wall_tiles": [],
-            "obstacle_tiles": [],
-            "enemy_party": {
-              "party_id": 111,
-              "members": [
-                {
-                  "enemy_id": "wolf",
-                  "x": 6,
-                  "y": 23
-                },
-                {
-                  "enemy_id": "wolf",
-                  "x": 8,
-                  "y": 23
-                },
-                {
-                  "enemy_id": "wolf",
-                  "x": 4,
-                  "y": 23
-                }
-              ],
-              "items": [
-                "dagger"
-              ]
-            }
+            "obstacle_tiles": []
           },
           {
             "id": "r1_12",
@@ -2199,30 +2153,7 @@
             "height": 7,
             "type": "normal",
             "wall_tiles": [],
-            "obstacle_tiles": [],
-            "enemy_party": {
-              "party_id": 129,
-              "members": [
-                {
-                  "enemy_id": "wolf",
-                  "x": 50,
-                  "y": 50
-                },
-                {
-                  "enemy_id": "wolf",
-                  "x": 52,
-                  "y": 50
-                },
-                {
-                  "enemy_id": "wolf",
-                  "x": 48,
-                  "y": 50
-                }
-              ],
-              "items": [
-                "sword"
-              ]
-            }
+            "obstacle_tiles": []
           }
         ],
         "entrance_room": "r1_3",
@@ -2626,25 +2557,7 @@
             "height": 7,
             "type": "normal",
             "wall_tiles": [],
-            "obstacle_tiles": [],
-            "enemy_party": {
-              "party_id": 203,
-              "members": [
-                {
-                  "enemy_id": "salamander",
-                  "x": 28,
-                  "y": 5
-                },
-                {
-                  "enemy_id": "salamander",
-                  "x": 30,
-                  "y": 5
-                }
-              ],
-              "items": [
-                "armor_robe"
-              ]
-            }
+            "obstacle_tiles": []
           },
           {
             "id": "r2_4",
@@ -2868,25 +2781,7 @@
             "height": 7,
             "type": "normal",
             "wall_tiles": [],
-            "obstacle_tiles": [],
-            "enemy_party": {
-              "party_id": 211,
-              "members": [
-                {
-                  "enemy_id": "salamander",
-                  "x": 6,
-                  "y": 23
-                },
-                {
-                  "enemy_id": "salamander",
-                  "x": 8,
-                  "y": 23
-                }
-              ],
-              "items": [
-                "shield"
-              ]
-            }
+            "obstacle_tiles": []
           },
           {
             "id": "r2_12",
@@ -3426,25 +3321,7 @@
             "height": 7,
             "type": "normal",
             "wall_tiles": [],
-            "obstacle_tiles": [],
-            "enemy_party": {
-              "party_id": 229,
-              "members": [
-                {
-                  "enemy_id": "salamander",
-                  "x": 50,
-                  "y": 50
-                },
-                {
-                  "enemy_id": "salamander",
-                  "x": 52,
-                  "y": 50
-                }
-              ],
-              "items": [
-                "sword"
-              ]
-            }
+            "obstacle_tiles": []
           }
         ],
         "entrance_room": "r2_3",
@@ -3848,20 +3725,7 @@
             "height": 7,
             "type": "normal",
             "wall_tiles": [],
-            "obstacle_tiles": [],
-            "enemy_party": {
-              "party_id": 303,
-              "members": [
-                {
-                  "enemy_id": "lich",
-                  "x": 28,
-                  "y": 5
-                }
-              ],
-              "items": [
-                "armor_robe"
-              ]
-            }
+            "obstacle_tiles": []
           },
           {
             "id": "r3_4",
@@ -4075,25 +3939,7 @@
             "height": 7,
             "type": "normal",
             "wall_tiles": [],
-            "obstacle_tiles": [],
-            "enemy_party": {
-              "party_id": 311,
-              "members": [
-                {
-                  "enemy_id": "dark_priest",
-                  "x": 6,
-                  "y": 23
-                },
-                {
-                  "enemy_id": "dark_priest",
-                  "x": 8,
-                  "y": 23
-                }
-              ],
-              "items": [
-                "armor_plate"
-              ]
-            }
+            "obstacle_tiles": []
           },
           {
             "id": "r3_12",
@@ -4173,20 +4019,7 @@
             "height": 7,
             "type": "normal",
             "wall_tiles": [],
-            "obstacle_tiles": [],
-            "enemy_party": {
-              "party_id": 314,
-              "members": [
-                {
-                  "enemy_id": "lich",
-                  "x": 50,
-                  "y": 23
-                }
-              ],
-              "items": [
-                "sword"
-              ]
-            }
+            "obstacle_tiles": []
           },
           {
             "id": "r3_16",
